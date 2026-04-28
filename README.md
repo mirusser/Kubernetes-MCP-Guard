@@ -96,14 +96,25 @@ Use this shape for a local stdio MCP client:
 
 Approval flow:
 
-```bash
-# 1. Ask the MCP server for a plan with request_apply_manifest, request_scale_deployment, etc.
-# 2. Approve the returned PlanId out of band:
-./scripts/approve-plan.sh <plan-id>
-# 3. Ask the MCP server to run apply_approved_plan with that same planId.
-```
+1. Ask the MCP server for a plan with `request_apply_manifest`, `request_scale_deployment`, etc.
+2. Call `apply_approved_plan` with the returned `PlanId`.
+3. The MCP server requests user approval through MCP elicitation before it writes the approval hash and applies anything.
+
+The approval prompt requires an MCP client that supports elicitation. Codex CLI has been verified with this repo and routes elicitation prompts to its TUI for user input. Other clients vary; the community-maintained MCP client list can be filtered by `Elicitation`: <https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/docs/clients.mdx>.
 
 The approval file stores the SHA-256 hash of the pending plan. If the pending plan changes after approval, the MCP server refuses to apply it. Audit events are written under `.mcp-approvals/audit.jsonl`.
+
+### Future: Codex/OAuth login
+
+Adding MCP OAuth login support to the HTTP gateway would improve connection ergonomics for clients such as Codex CLI, but it would not replace the approval prompt path. Applying a pending Kubernetes plan would still require an elicitation-capable client.
+
+Plan:
+
+1. Confirm the desired MCP OAuth flow and discovery metadata shape for the HTTP gateway -> verify: Codex CLI can discover that the gateway requires login instead of only seeing raw bearer-token auth.
+2. Add OAuth protected-resource metadata and authorization-server discovery to the gateway while keeping the local bearer-token path available for demos -> verify: unauthenticated HTTP MCP requests return useful auth discovery headers or metadata, and existing bearer-token setup still works.
+3. Validate accepted OAuth access tokens at the gateway boundary before forwarding tool calls downstream -> verify: invalid tokens are rejected, valid tokens can call read-only tools, and audit logs preserve the authenticated subject where available.
+4. Keep Kubernetes mutation approval on MCP elicitation, independent of OAuth login -> verify: `apply_approved_plan` still prompts in Codex CLI, and clients without elicitation receive a clear refusal instead of silently applying.
+5. Document client requirements and add focused tests for auth discovery, token rejection, bearer-token compatibility, and the elicitation-required apply path -> verify: `dotnet test InfraGate.slnx` passes.
 
 ### Verification
 
