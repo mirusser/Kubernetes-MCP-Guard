@@ -3,8 +3,9 @@
 This repo contains a narrow Kubernetes governance slice for the larger Open WebUI/LibreChat + remote MCP idea:
 
 - `src/InfraGate.McpServer` is a .NET 10 stdio MCP server using the official C# MCP SDK.
+- `src/InfraGate.McpGateway` is a local HTTP MCP gateway that fronts the stdio server with bearer-token auth and warn+redact prompt-injection guardrails.
 - The MCP server uses the Kubernetes API through `KubernetesClient`, not runtime `kubectl` process execution.
-- Mutating actions are two-step: request a plan through MCP, approve the exact plan file out of band, then apply it through MCP.
+- Mutating actions are two-step: request a plan through MCP, then call apply so the MCP server can request user approval before changing Kubernetes.
 - The server allows only configured namespaces and only these manifest kinds for mutation: `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap`.
 - `deploy/minikube/rbac.yaml` creates a namespace-scoped ServiceAccount, Role, and RoleBinding.
 - `scripts/create-demo-kubeconfig.sh` creates a short-lived service-account kubeconfig at `.kube/mcp-nginx-demo.config`.
@@ -42,7 +43,24 @@ kubectl --kubeconfig .kube/mcp-nginx-demo.config auth can-i create deployments -
 
 Expected: `yes`, `yes`, `no`, then `no`.
 
-### Run the MCP
+### Run the HTTP MCP gateway
+
+The gateway is the recommended client-facing local MCP endpoint. It listens on `http://127.0.0.1:3001/mcp` by default, requires `Authorization: Bearer <token>`, and starts the downstream stdio server itself.
+
+```bash
+export REPO_ROOT="$(pwd)"
+export INFRA_GATE_GATEWAY_BEARER_TOKEN="change-me"
+export INFRA_GATE_DOWNSTREAM_PROJECT="${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
+export KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config"
+export K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals"
+export K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo
+
+dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
+```
+
+Guardrail audit events are written to `.mcp-guardrails/audit.jsonl` by default. Set `INFRA_GATE_GUARD_AUDIT_ROOT` to choose another directory.
+
+### Run the stdio MCP server directly
 
 From the repo directory run:
 
@@ -61,7 +79,7 @@ Next time, with the same environment, run:
 dotnet run --project src/InfraGate.McpServer/InfraGate.McpServer.csproj
 ```
 
-### MCP client config
+### Stdio MCP client config
 
 Use this shape for a local stdio MCP client:
 
@@ -86,6 +104,8 @@ Use this shape for a local stdio MCP client:
 ```
 
 ### Available MCP tools
+
+The HTTP gateway exposes the same tool names and arguments as the stdio server:
 
 - `get_k8s_status(namespace, labelSelector = null)`
 - `request_apply_manifest(namespace, manifest)`

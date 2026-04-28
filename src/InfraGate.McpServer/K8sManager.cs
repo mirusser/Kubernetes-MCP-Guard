@@ -1,8 +1,11 @@
 using System.Net;
+using System.ComponentModel;
 using System.Text.Json;
 using k8s;
 using k8s.Autorest;
 using k8s.Models;
+using ModelContextProtocol;
+using ModelContextProtocol.Server;
 
 namespace InfraGate.McpServer;
 
@@ -236,9 +239,20 @@ public sealed class K8sManager
         return CreateAndFormatPlanAsync(plan, cancellationToken);
     }
 
-    public async Task<string> ApplyApprovedPlanAsync(string planId, CancellationToken cancellationToken)
+    public Task<string> ApplyApprovedPlanAsync(string planId, CancellationToken cancellationToken) =>
+        ApplyApprovedPlanAsync(planId, server: null, cancellationToken);
+
+    public async Task<string> ApplyApprovedPlanAsync(
+        string planId,
+        ModelContextProtocol.Server.McpServer? server,
+        CancellationToken cancellationToken)
     {
         var approved = await _approvalStore.GetApprovedPlanAsync(planId, cancellationToken);
+        if (!approved.IsApproved && server is not null)
+        {
+            approved = await RequestServerApprovalAsync(planId, server, cancellationToken);
+        }
+
         if (!approved.IsApproved || approved.Plan is null || approved.Hash is null)
         {
             await _approvalStore.WriteAuditAsync("apply_denied", new
@@ -282,6 +296,62 @@ public sealed class K8sManager
 
                Current status:
                {status}
+               """;
+    }
+
+    private async Task<ApprovedPlanResult> RequestServerApprovalAsync(
+        string planId,
+        ModelContextProtocol.Server.McpServer server,
+        CancellationToken cancellationToken)
+    {
+        var pending = await _approvalStore.GetPendingPlanAsync(planId, cancellationToken);
+        if (!pending.IsPending || pending.Plan is null || pending.Hash is null)
+        {
+            return ApprovedPlanResult.Denied(pending.Message);
+        }
+
+        var message = FormatApprovalRequest(pending.Plan, pending.Hash);
+        PlanApprovalInput approval;
+        try
+        {
+            var result = await server.ElicitAsync<PlanApprovalInput>(message, cancellationToken: cancellationToken);
+            if (!result.IsAccepted || result.Content is not { Approve: true })
+            {
+                return ApprovedPlanResult.Denied($"Plan '{planId}' was not approved through MCP elicitation.");
+            }
+
+            approval = result.Content;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or McpException)
+        {
+            return ApprovedPlanResult.Denied(
+                $"Plan '{planId}' requires MCP server approval, but the client could not complete elicitation: {ex.Message}");
+        }
+
+        if (!string.Equals(approval.PlanId, planId, StringComparison.Ordinal))
+        {
+            return ApprovedPlanResult.Denied($"Plan '{planId}' approval did not echo the matching plan id.");
+        }
+
+        return await _approvalStore.ApprovePendingPlanAsync(planId, pending.Hash, cancellationToken);
+    }
+
+    private static string FormatApprovalRequest(K8sPlan plan, string hash)
+    {
+        var objects = string.Join(
+            Environment.NewLine,
+            plan.Objects.Select(obj => $"- {obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}"));
+
+        return $"""
+               Approve this Kubernetes plan before applying it.
+
+               PlanId: {plan.Id}
+               Operation: {plan.Operation}
+               Namespace: {plan.Namespace}
+               Description: {plan.Description}
+               Objects:
+               {objects}
+               Plan hash: {hash}
                """;
     }
 
@@ -516,19 +586,16 @@ public sealed class K8sManager
 
         return $"""
                PlanId: {result.Plan.Id}
-               Status: pending human approval
+               Status: pending MCP server approval
                Operation: {result.Plan.Operation}
                Namespace: {result.Plan.Namespace}
                Objects:
                {objects}
                Pending file: {result.PendingPath}
-               Approval file: {result.ApprovedPath}
                Plan hash: {result.Hash}
 
-               Human approval:
-                 ./scripts/approve-plan.sh {result.Plan.Id}
-
-               After approval, call apply_approved_plan with planId '{result.Plan.Id}'.
+               Next step:
+                 Call apply_approved_plan with planId '{result.Plan.Id}'. The MCP server will request user approval before applying it.
                {manifestBlock}
                """;
     }
@@ -619,5 +686,14 @@ public sealed class K8sManager
         public static ApplyResult Success(string message) => new(true, message);
 
         public static ApplyResult Failed(string message) => new(false, message);
+    }
+
+    private sealed class PlanApprovalInput
+    {
+        [Description("Set to true to approve applying this Kubernetes plan.")]
+        public bool Approve { get; set; }
+
+        [Description("Echo the PlanId from the approval prompt.")]
+        public string PlanId { get; set; } = string.Empty;
     }
 }

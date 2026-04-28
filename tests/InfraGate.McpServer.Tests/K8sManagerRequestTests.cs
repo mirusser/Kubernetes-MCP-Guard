@@ -37,6 +37,18 @@ public sealed class K8sManagerRequestTests
         Assert.Contains("Replicas must be between 0 and 5", result);
     }
 
+    [Fact]
+    public async Task RequestScaleDeploymentAsync_DirectsApprovalThroughMcpServer()
+    {
+        var manager = CreateManager("demo");
+
+        var result = await manager.RequestScaleDeploymentAsync("demo", "demo", 4, CancellationToken.None);
+
+        Assert.Contains("Status: pending MCP server approval", result);
+        Assert.Contains("The MCP server will request user approval before applying it", result);
+        Assert.DoesNotContain("./scripts/approve-plan.sh", result);
+    }
+
     private static K8sManager CreateManager(string namespaceName)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));

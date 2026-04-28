@@ -1,0 +1,11 @@
+interface:
+  display_name: "InfraGate MCP Gateway"
+  short_description: "Use this repo-local InfraGate MCP gateway"
+  default_prompt: "Use $infragate-mcp-gateway to inspect the allowed Kubernetes namespace through the local MCP gateway."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "infra_gate"
+      description: "Repository-local InfraGate MCP gateway for guarded Kubernetes operations"
+      transport: "streamable_http"
+      url: "http://127.0.0.1:3001/mcp"

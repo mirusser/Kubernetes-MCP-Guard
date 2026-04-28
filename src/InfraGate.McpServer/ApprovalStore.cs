@@ -100,6 +100,68 @@ public sealed class ApprovalStore
             : ApprovedPlanResult.Approved(plan, actualHash);
     }
 
+    public async Task<PendingPlanResult> GetPendingPlanAsync(string planId, CancellationToken cancellationToken)
+    {
+        if (!IsSafePlanId(planId))
+        {
+            return PendingPlanResult.Denied("Plan id contains unsupported characters.");
+        }
+
+        var pendingPath = GetPendingPath(planId);
+        if (!File.Exists(pendingPath))
+        {
+            return PendingPlanResult.Denied($"No pending plan exists for '{planId}'.");
+        }
+
+        var appliedPath = GetAppliedPath(planId);
+        if (File.Exists(appliedPath))
+        {
+            return PendingPlanResult.Denied($"Plan '{planId}' was already applied.");
+        }
+
+        var actualHash = await ComputeSha256Async(pendingPath, cancellationToken);
+        var json = await File.ReadAllTextAsync(pendingPath, cancellationToken);
+        var plan = JsonSerializer.Deserialize<K8sPlan>(json, _jsonOptions);
+
+        return plan is null
+            ? PendingPlanResult.Denied($"Plan '{planId}' could not be read.")
+            : PendingPlanResult.Found(plan, pendingPath, GetApprovedPath(planId), actualHash);
+    }
+
+    public async Task<ApprovedPlanResult> ApprovePendingPlanAsync(
+        string planId,
+        string expectedHash,
+        CancellationToken cancellationToken)
+    {
+        var pending = await GetPendingPlanAsync(planId, cancellationToken);
+        if (!pending.IsPending || pending.Plan is null || pending.Hash is null)
+        {
+            return ApprovedPlanResult.Denied(pending.Message);
+        }
+
+        if (!StringComparer.OrdinalIgnoreCase.Equals(expectedHash, pending.Hash))
+        {
+            await WriteAuditAsync("approval_hash_mismatch", new
+            {
+                planId,
+                approvedHash = expectedHash,
+                actualHash = pending.Hash
+            }, cancellationToken);
+
+            return ApprovedPlanResult.Denied($"Plan '{planId}' changed during approval; refusing to apply it.");
+        }
+
+        await File.WriteAllTextAsync(pending.ApprovedPath, pending.Hash, cancellationToken);
+        await WriteAuditAsync("plan_approved", new
+        {
+            planId,
+            hash = pending.Hash,
+            source = "mcp_elicitation"
+        }, cancellationToken);
+
+        return ApprovedPlanResult.Approved(pending.Plan, pending.Hash);
+    }
+
     public async Task MarkAppliedAsync(K8sPlan plan, string hash, CancellationToken cancellationToken)
     {
         EnsureDirectories();
@@ -172,6 +234,21 @@ public sealed class ApprovalStore
 }
 
 public sealed record ApprovalPlanResult(K8sPlan Plan, string PendingPath, string ApprovedPath, string Hash);
+
+public sealed record PendingPlanResult(
+    bool IsPending,
+    K8sPlan? Plan,
+    string? Hash,
+    string PendingPath,
+    string ApprovedPath,
+    string Message)
+{
+    public static PendingPlanResult Found(K8sPlan plan, string pendingPath, string approvedPath, string hash) =>
+        new(true, plan, hash, pendingPath, approvedPath, "Pending.");
+
+    public static PendingPlanResult Denied(string message) =>
+        new(false, null, null, string.Empty, string.Empty, message);
+}
 
 public sealed record ApprovedPlanResult(bool IsApproved, K8sPlan? Plan, string? Hash, string Message)
 {

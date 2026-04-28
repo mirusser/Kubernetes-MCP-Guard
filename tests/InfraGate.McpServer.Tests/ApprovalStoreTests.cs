@@ -33,6 +33,22 @@ public sealed class ApprovalStoreTests
     }
 
     [Fact]
+    public async Task ApprovePendingPlanAsync_WritesServerApprovalForMatchingHash()
+    {
+        var store = CreateStore();
+        var plan = CreatePlan();
+        var created = await store.CreatePlanAsync(plan, CancellationToken.None);
+
+        var approved = await store.ApprovePendingPlanAsync(created.Plan.Id, created.Hash, CancellationToken.None);
+
+        Assert.True(approved.IsApproved);
+        Assert.Equal(plan.Id, approved.Plan?.Id);
+        Assert.Equal(created.Hash, approved.Hash);
+        Assert.True(File.Exists(created.ApprovedPath));
+        Assert.Equal(created.Hash, (await File.ReadAllTextAsync(created.ApprovedPath)).Trim());
+    }
+
+    [Fact]
     public async Task GetApprovedPlanAsync_DeniesPlanChangedAfterApproval()
     {
         var store = CreateStore();
@@ -45,6 +61,21 @@ public sealed class ApprovalStoreTests
 
         Assert.False(approved.IsApproved);
         Assert.Contains("changed after approval", approved.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ApprovePendingPlanAsync_DeniesPlanChangedDuringApproval()
+    {
+        var store = CreateStore();
+        var plan = CreatePlan();
+        var created = await store.CreatePlanAsync(plan, CancellationToken.None);
+        await File.AppendAllTextAsync(created.PendingPath, Environment.NewLine, CancellationToken.None);
+
+        var approved = await store.ApprovePendingPlanAsync(created.Plan.Id, created.Hash, CancellationToken.None);
+
+        Assert.False(approved.IsApproved);
+        Assert.Contains("changed during approval", approved.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(created.ApprovedPath));
     }
 
     private static ApprovalStore CreateStore()

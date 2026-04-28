@@ -1,8 +1,10 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/InfraGate.McpGateway/InfraGate.McpGateway.csproj" />
     <Project Path="src/InfraGate.McpServer/InfraGate.McpServer.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj" />
     <Project Path="tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj" />
   </Folder>
 </Solution>
