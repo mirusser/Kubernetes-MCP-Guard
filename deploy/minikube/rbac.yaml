@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp-nginx-demo
+  labels:
+    app.kubernetes.io/managed-by: infra-gate-mcp
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: infra-gate-mcp
+  namespace: mcp-nginx-demo
+  labels:
+    app.kubernetes.io/managed-by: infra-gate-mcp
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: infra-gate-mcp-manager
+  namespace: mcp-nginx-demo
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: infra-gate-mcp-manager
+  namespace: mcp-nginx-demo
+subjects:
+  - kind: ServiceAccount
+    name: infra-gate-mcp
+    namespace: mcp-nginx-demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: infra-gate-mcp-manager

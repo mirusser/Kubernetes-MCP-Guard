@@ -1,0 +1,35 @@
+using InfraGate.McpServer;
+using k8s;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Server;
+
+var builder = Host.CreateApplicationBuilder(args);
+
+builder.Logging.AddConsole(options =>
+{
+    options.LogToStandardErrorThreshold = LogLevel.Trace;
+});
+
+builder.Services.AddSingleton(K8sMcpOptions.FromEnvironment());
+builder.Services.AddSingleton<ApprovalStore>();
+builder.Services.AddSingleton<IKubernetes>(_ =>
+{
+    var kubeconfig = Environment.GetEnvironmentVariable("KUBECONFIG");
+    var config = string.IsNullOrWhiteSpace(kubeconfig)
+        ? KubernetesClientConfiguration.BuildDefaultConfig()
+        : KubernetesClientConfiguration.BuildConfigFromConfigFile(kubeconfig);
+
+    config.UserAgent = "infra-gate-mcp";
+
+    return new Kubernetes(config);
+});
+builder.Services.AddSingleton<K8sManager>();
+
+builder.Services
+    .AddMcpServer()
+    .WithStdioServerTransport()
+    .WithToolsFromAssembly();
+
+await builder.Build().RunAsync();
