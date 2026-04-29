@@ -11,9 +11,9 @@ namespace InfraGate.McpServer;
 
 public sealed class K8sManager
 {
-    private const int MaxReplicas = 5;
-    private const string FieldManager = "infra-gate-mcp";
-    private const string RestartedAtAnnotation = "kubectl.kubernetes.io/restartedAt";
+    private const int MaxReplicas = K8sConventions.MaxReplicas;
+    private const string FieldManager = K8sConventions.ServiceName;
+    private const string RestartedAtAnnotation = K8sConventions.K8sResources.RestartedAtAnnotation;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -147,12 +147,12 @@ public sealed class K8sManager
         }
 
         var plan = CreatePlan(
-            operation: "apply",
+            operation: K8sConventions.PlanOperations.Apply,
             namespaceName,
             description: $"Apply {parsed.ObjectRefs.Length} supported Kubernetes object(s) in namespace '{namespaceName}'.",
             parameters: new Dictionary<string, string>
             {
-                ["objectCount"] = parsed.ObjectRefs.Length.ToString()
+                [K8sConventions.PlanParameters.ObjectCount] = parsed.ObjectRefs.Length.ToString()
             },
             objects: parsed.ObjectRefs,
             manifest);
@@ -179,12 +179,12 @@ public sealed class K8sManager
         }
 
         var plan = CreatePlan(
-            operation: "delete",
+            operation: K8sConventions.PlanOperations.Delete,
             namespaceName,
             description: $"Delete {parsed.ObjectRefs.Length} supported Kubernetes object(s) from namespace '{namespaceName}'.",
             parameters: new Dictionary<string, string>
             {
-                ["objectCount"] = parsed.ObjectRefs.Length.ToString()
+                [K8sConventions.PlanParameters.ObjectCount] = parsed.ObjectRefs.Length.ToString()
             },
             objects: parsed.ObjectRefs,
             manifest);
@@ -201,15 +201,15 @@ public sealed class K8sManager
         }
 
         var plan = CreatePlan(
-            operation: "scale",
+            operation: K8sConventions.PlanOperations.Scale,
             namespaceName,
             description: $"Scale Deployment '{name}' in namespace '{namespaceName}' to {replicas} replicas.",
             parameters: new Dictionary<string, string>
             {
-                ["name"] = name,
-                ["replicas"] = replicas.ToString()
+                [K8sConventions.PlanParameters.Name] = name,
+                [K8sConventions.PlanParameters.Replicas] = replicas.ToString()
             },
-            objects: [new K8sObjectRef("apps/v1", "Deployment", namespaceName, name)],
+            objects: [K8sConventions.K8sResources.DeploymentRef(namespaceName, name)],
             manifest: null);
 
         return CreateAndFormatPlanAsync(plan, cancellationToken);
@@ -223,17 +223,17 @@ public sealed class K8sManager
             return Task.FromResult(validation);
         }
 
-        var restartedAtUtc = DateTimeOffset.UtcNow.ToString("O");
+        var restartedAtUtc = DateTimeOffset.UtcNow.ToString(K8sConventions.DateTimeFormats.RoundTrip);
         var plan = CreatePlan(
-            operation: "restart",
+            operation: K8sConventions.PlanOperations.Restart,
             namespaceName,
             description: $"Restart Deployment '{name}' in namespace '{namespaceName}'.",
             parameters: new Dictionary<string, string>
             {
-                ["name"] = name,
-                ["restartedAtUtc"] = restartedAtUtc
+                [K8sConventions.PlanParameters.Name] = name,
+                [K8sConventions.PlanParameters.RestartedAtUtc] = restartedAtUtc
             },
-            objects: [new K8sObjectRef("apps/v1", "Deployment", namespaceName, name)],
+            objects: [K8sConventions.K8sResources.DeploymentRef(namespaceName, name)],
             manifest: null);
 
         return CreateAndFormatPlanAsync(plan, cancellationToken);
@@ -255,7 +255,7 @@ public sealed class K8sManager
 
         if (!approved.IsApproved || approved.Plan is null || approved.Hash is null)
         {
-            await _approvalStore.WriteAuditAsync("apply_denied", new
+            await _approvalStore.WriteAuditAsync(K8sConventions.AuditEvents.ApplyDenied, new
             {
                 planId,
                 approved.Message
@@ -267,7 +267,7 @@ public sealed class K8sManager
         var applyResult = await ApplyPlanAsync(approved.Plan, cancellationToken);
         if (!applyResult.Succeeded)
         {
-            await _approvalStore.WriteAuditAsync("apply_failed", new
+            await _approvalStore.WriteAuditAsync(K8sConventions.AuditEvents.ApplyFailed, new
             {
                 approved.Plan.Id,
                 approved.Plan.Operation,
@@ -279,7 +279,7 @@ public sealed class K8sManager
 
         await _approvalStore.MarkAppliedAsync(approved.Plan, approved.Hash, cancellationToken);
 
-        var rollout = approved.Plan.Operation == "delete"
+        var rollout = approved.Plan.Operation == K8sConventions.PlanOperations.Delete
             ? "No rollout wait for delete operations."
             : await WaitForDeploymentsAsync(approved.Plan.Namespace, DeploymentNames(approved.Plan), cancellationToken);
         var status = await GetStatusAsync(approved.Plan.Namespace, labelSelector: null, cancellationToken);
@@ -361,10 +361,10 @@ public sealed class K8sManager
         {
             return plan.Operation switch
             {
-                "apply" => await ApplyManifestPlanAsync(plan, cancellationToken),
-                "delete" => await DeleteManifestPlanAsync(plan, cancellationToken),
-                "scale" => await ScaleDeploymentPlanAsync(plan, cancellationToken),
-                "restart" => await RestartDeploymentPlanAsync(plan, cancellationToken),
+                K8sConventions.PlanOperations.Apply => await ApplyManifestPlanAsync(plan, cancellationToken),
+                K8sConventions.PlanOperations.Delete => await DeleteManifestPlanAsync(plan, cancellationToken),
+                K8sConventions.PlanOperations.Scale => await ScaleDeploymentPlanAsync(plan, cancellationToken),
+                K8sConventions.PlanOperations.Restart => await RestartDeploymentPlanAsync(plan, cancellationToken),
                 _ => ApplyResult.Failed($"Unsupported plan operation '{plan.Operation}'.")
             };
         }
@@ -410,8 +410,8 @@ public sealed class K8sManager
 
     private async Task<ApplyResult> ScaleDeploymentPlanAsync(K8sPlan plan, CancellationToken cancellationToken)
     {
-        var name = plan.Parameters["name"];
-        var replicas = int.Parse(plan.Parameters["replicas"]);
+        var name = plan.Parameters[K8sConventions.PlanParameters.Name];
+        var replicas = int.Parse(plan.Parameters[K8sConventions.PlanParameters.Replicas]);
         var patch = new
         {
             spec = new
@@ -427,13 +427,14 @@ public sealed class K8sManager
             fieldManager: FieldManager,
             cancellationToken: cancellationToken);
 
-        return ApplyResult.Success($"Scaled apps/v1 Deployment {plan.Namespace}/{name} to {replicas} replicas.");
+        return ApplyResult.Success(
+            $"Scaled {K8sConventions.K8sResources.DeploymentDisplayName} {plan.Namespace}/{name} to {replicas} replicas.");
     }
 
     private async Task<ApplyResult> RestartDeploymentPlanAsync(K8sPlan plan, CancellationToken cancellationToken)
     {
-        var name = plan.Parameters["name"];
-        var restartedAtUtc = plan.Parameters["restartedAtUtc"];
+        var name = plan.Parameters[K8sConventions.PlanParameters.Name];
+        var restartedAtUtc = plan.Parameters[K8sConventions.PlanParameters.RestartedAtUtc];
         var patch = new
         {
             spec = new
@@ -458,7 +459,8 @@ public sealed class K8sManager
             fieldManager: FieldManager,
             cancellationToken: cancellationToken);
 
-        return ApplyResult.Success($"Restarted apps/v1 Deployment {plan.Namespace}/{name} at {restartedAtUtc}.");
+        return ApplyResult.Success(
+            $"Restarted {K8sConventions.K8sResources.DeploymentDisplayName} {plan.Namespace}/{name} at {restartedAtUtc}.");
     }
 
     private async Task ApplyObjectAsync(IKubernetesObject<V1ObjectMeta> obj, CancellationToken cancellationToken)
@@ -501,19 +503,19 @@ public sealed class K8sManager
         {
             switch (obj.ApiVersion, obj.Kind)
             {
-                case ("apps/v1", "Deployment"):
+                case (K8sConventions.K8sResources.AppsV1, K8sConventions.K8sResources.Deployment):
                     await _client.AppsV1.DeleteNamespacedDeploymentAsync(
                         obj.Name,
                         obj.Namespace,
                         cancellationToken: cancellationToken);
                     break;
-                case ("v1", "Service"):
+                case (K8sConventions.K8sResources.V1, K8sConventions.K8sResources.Service):
                     await _client.CoreV1.DeleteNamespacedServiceAsync(
                         obj.Name,
                         obj.Namespace,
                         cancellationToken: cancellationToken);
                     break;
-                case ("v1", "ConfigMap"):
+                case (K8sConventions.K8sResources.V1, K8sConventions.K8sResources.ConfigMap):
                     await _client.CoreV1.DeleteNamespacedConfigMapAsync(
                         obj.Name,
                         obj.Namespace,
@@ -595,7 +597,7 @@ public sealed class K8sManager
                Plan hash: {result.Hash}
 
                Next step:
-                 Call apply_approved_plan with planId '{result.Plan.Id}'. The MCP server will request user approval before applying it.
+                 Call {K8sConventions.ToolNames.ApplyApprovedPlan} with {K8sConventions.ToolArguments.PlanId} '{result.Plan.Id}'. The MCP server will request user approval before applying it.
                {manifestBlock}
                """;
     }
@@ -651,7 +653,7 @@ public sealed class K8sManager
     private static IEnumerable<string> DeploymentNames(K8sPlan plan)
     {
         return plan.Objects
-            .Where(obj => obj is { ApiVersion: "apps/v1", Kind: "Deployment" })
+            .Where(K8sConventions.K8sResources.IsDeployment)
             .Select(obj => obj.Name);
     }
 

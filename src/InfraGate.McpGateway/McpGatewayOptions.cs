@@ -6,23 +6,27 @@ public sealed record McpGatewayOptions(
     string GuardAuditRoot,
     string WorkingDirectory)
 {
-    public const string DefaultUrl = "http://127.0.0.1:3001";
+    public const string DefaultUrl = McpGatewayConventions.DefaultUrl;
 
     public static McpGatewayOptions FromEnvironment()
     {
-        var token = Environment.GetEnvironmentVariable("INFRA_GATE_GATEWAY_BEARER_TOKEN");
+        var token = Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.BearerToken);
         if (string.IsNullOrWhiteSpace(token))
         {
-            throw new InvalidOperationException("INFRA_GATE_GATEWAY_BEARER_TOKEN is required.");
+            throw new InvalidOperationException($"{McpGatewayConventions.EnvironmentVariables.BearerToken} is required.");
         }
 
         var workingDirectory = Directory.GetCurrentDirectory();
         var downstreamProject =
-            Environment.GetEnvironmentVariable("INFRA_GATE_DOWNSTREAM_PROJECT") ??
-            Path.Combine(workingDirectory, "src", "InfraGate.McpServer", "InfraGate.McpServer.csproj");
+            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.DownstreamProject) ??
+            Path.Combine(
+                workingDirectory,
+                McpGatewayConventions.Paths.SourceDirectory,
+                McpGatewayConventions.Paths.DefaultDownstreamProjectDirectory,
+                McpGatewayConventions.Paths.DefaultDownstreamProjectFileName);
         var auditRoot =
-            Environment.GetEnvironmentVariable("INFRA_GATE_GUARD_AUDIT_ROOT") ??
-            Path.Combine(workingDirectory, ".mcp-guardrails");
+            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.GuardAuditRoot) ??
+            Path.Combine(workingDirectory, McpGatewayConventions.Paths.DefaultGuardAuditRootDirectory);
 
         return new McpGatewayOptions(token, downstreamProject, auditRoot, workingDirectory);
     }

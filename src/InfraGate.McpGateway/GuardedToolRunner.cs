@@ -31,8 +31,8 @@ public sealed partial class GuardedToolRunner(
             await auditStore.WriteAsync(
                 new GuardrailAuditEvent(
                     toolName,
-                    "request",
-                    "warn",
+                    McpGatewayConventions.GuardrailAudit.RequestDirection,
+                    McpGatewayConventions.GuardrailAudit.WarnAction,
                     requestScan.Categories,
                     ExtractPlanId(arguments, null)),
                 cancellationToken);
@@ -45,9 +45,13 @@ public sealed partial class GuardedToolRunner(
             await auditStore.WriteAsync(
                 new GuardrailAuditEvent(
                     toolName,
-                    "response",
-                    response.HasFindings ? "warn_redact" : "redact_manifest",
-                    response.HasFindings ? response.Categories : ["manifest-echo"],
+                    McpGatewayConventions.GuardrailAudit.ResponseDirection,
+                    response.HasFindings
+                        ? McpGatewayConventions.GuardrailAudit.WarnRedactAction
+                        : McpGatewayConventions.GuardrailAudit.RedactManifestAction,
+                    response.HasFindings
+                        ? response.Categories
+                        : [McpGatewayConventions.GuardrailCategories.ManifestEchoCategory],
                     ExtractPlanId(arguments, response.Text)),
                 cancellationToken);
         }
@@ -62,7 +66,7 @@ public sealed partial class GuardedToolRunner(
 
     private static string? ExtractPlanId(IReadOnlyDictionary<string, object?> arguments, string? text)
     {
-        if (arguments.TryGetValue("planId", out var planId) &&
+        if (arguments.TryGetValue(McpGatewayConventions.ToolArguments.PlanId, out var planId) &&
             planId is string planIdText &&
             !string.IsNullOrWhiteSpace(planIdText))
         {
@@ -76,7 +80,7 @@ public sealed partial class GuardedToolRunner(
 
         var match = PlanIdRegex().Match(text);
 
-        return match.Success ? match.Groups["id"].Value : null;
+        return match.Success ? match.Groups[McpGatewayConventions.RegexGroups.Id].Value : null;
     }
 
     [GeneratedRegex(@"(?:PlanId|Applied plan):\s+(?<id>[0-9a-z-]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

@@ -3,8 +3,8 @@ using InfraGate.McpGateway;
 var options = McpGatewayOptions.FromEnvironment();
 var builder = WebApplication.CreateBuilder(args);
 
-if (string.IsNullOrWhiteSpace(builder.Configuration["urls"]) &&
-    string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
+if (string.IsNullOrWhiteSpace(builder.Configuration[McpGatewayConventions.ConfigurationKeys.Urls]) &&
+    string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.AspNetCoreUrls)))
 {
     builder.WebHost.UseUrls(McpGatewayOptions.DefaultUrl);
 }
@@ -23,6 +23,6 @@ builder.Services
 var app = builder.Build();
 
 app.UseMiddleware<BearerTokenMiddleware>();
-app.MapMcp("/mcp");
+app.MapMcp(McpGatewayConventions.McpPath);
 
 await app.RunAsync();

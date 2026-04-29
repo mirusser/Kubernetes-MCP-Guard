@@ -7,9 +7,9 @@ public static class K8sManifestParser
 {
     private static readonly Dictionary<string, Type> TypeMap = new(StringComparer.Ordinal)
     {
-        ["apps/v1/Deployment"] = typeof(V1Deployment),
-        ["v1/Service"] = typeof(V1Service),
-        ["v1/ConfigMap"] = typeof(V1ConfigMap)
+        [K8sConventions.K8sResources.DeploymentTypeKey] = typeof(V1Deployment),
+        [K8sConventions.K8sResources.ServiceTypeKey] = typeof(V1Service),
+        [K8sConventions.K8sResources.ConfigMapTypeKey] = typeof(V1ConfigMap)
     };
 
     public static K8sParsedManifest ParseSupported(string manifest, string namespaceName)
@@ -43,11 +43,23 @@ public static class K8sManifestParser
         {
             var supportedObject = obj switch
             {
-                V1Deployment deployment => (IKubernetesObject<V1ObjectMeta>)ValidateAndPrepare(deployment, "apps/v1", "Deployment", namespaceName),
-                V1Service service => ValidateAndPrepare(service, "v1", "Service", namespaceName),
-                V1ConfigMap configMap => ValidateAndPrepare(configMap, "v1", "ConfigMap", namespaceName),
+                V1Deployment deployment => (IKubernetesObject<V1ObjectMeta>)ValidateAndPrepare(
+                    deployment,
+                    K8sConventions.K8sResources.AppsV1,
+                    K8sConventions.K8sResources.Deployment,
+                    namespaceName),
+                V1Service service => ValidateAndPrepare(
+                    service,
+                    K8sConventions.K8sResources.V1,
+                    K8sConventions.K8sResources.Service,
+                    namespaceName),
+                V1ConfigMap configMap => ValidateAndPrepare(
+                    configMap,
+                    K8sConventions.K8sResources.V1,
+                    K8sConventions.K8sResources.ConfigMap,
+                    namespaceName),
                 IKubernetesObject<V1ObjectMeta> kubernetesObject => throw new K8sValidationException(
-                    $"Unsupported Kubernetes kind '{kubernetesObject.ApiVersion}/{kubernetesObject.Kind}'. Supported kinds: apps/v1 Deployment, v1 Service, v1 ConfigMap."),
+                    $"Unsupported Kubernetes kind '{kubernetesObject.ApiVersion}/{kubernetesObject.Kind}'. Supported kinds: {K8sConventions.K8sResources.SupportedKindsDescription}."),
                 _ => throw new K8sValidationException("Manifest contains an unsupported Kubernetes document.")
             };
 

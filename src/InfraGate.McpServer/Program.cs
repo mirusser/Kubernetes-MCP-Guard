@@ -16,12 +16,12 @@ builder.Services.AddSingleton(K8sMcpOptions.FromEnvironment());
 builder.Services.AddSingleton<ApprovalStore>();
 builder.Services.AddSingleton<IKubernetes>(_ =>
 {
-    var kubeconfig = Environment.GetEnvironmentVariable("KUBECONFIG");
+    var kubeconfig = Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.KubeConfig);
     var config = string.IsNullOrWhiteSpace(kubeconfig)
         ? KubernetesClientConfiguration.BuildDefaultConfig()
         : KubernetesClientConfiguration.BuildConfigFromConfigFile(kubeconfig);
 
-    config.UserAgent = "infra-gate-mcp";
+    config.UserAgent = K8sConventions.ServiceName;
 
     return new Kubernetes(config);
 });

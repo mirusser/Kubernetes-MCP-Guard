@@ -7,18 +7,18 @@ public sealed class BearerTokenMiddleware(RequestDelegate next, McpGatewayOption
 {
     public async Task InvokeAsync(HttpContext context)
     {
-        if (!context.Request.Path.StartsWithSegments("/mcp"))
+        if (!context.Request.Path.StartsWithSegments(McpGatewayConventions.McpPath))
         {
             await next(context);
             return;
         }
 
-        var expected = $"Bearer {options.BearerToken}";
+        var expected = $"{McpGatewayConventions.AuthorizationScheme} {options.BearerToken}";
         var actual = context.Request.Headers.Authorization.ToString();
         if (!ConstantTimeEquals(actual, expected))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            context.Response.Headers.WWWAuthenticate = "Bearer";
+            context.Response.Headers.WWWAuthenticate = McpGatewayConventions.AuthorizationScheme;
             return;
         }
 

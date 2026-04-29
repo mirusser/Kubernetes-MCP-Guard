@@ -63,9 +63,14 @@ public sealed class DownstreamMcpClient(McpGatewayOptions options) : IDownstream
 
             var transport = new StdioClientTransport(new StdioClientTransportOptions
             {
-                Name = "infra-gate-downstream",
-                Command = "dotnet",
-                Arguments = ["run", "--project", options.DownstreamProject],
+                Name = McpGatewayConventions.DownstreamProcess.Name,
+                Command = McpGatewayConventions.DownstreamProcess.Command,
+                Arguments =
+                [
+                    McpGatewayConventions.DownstreamProcess.RunArgument,
+                    McpGatewayConventions.DownstreamProcess.ProjectArgument,
+                    options.DownstreamProject
+                ],
                 WorkingDirectory = options.WorkingDirectory,
                 ShutdownTimeout = TimeSpan.FromSeconds(10)
             });
@@ -102,7 +107,7 @@ public sealed class DownstreamMcpClient(McpGatewayOptions options) : IDownstream
     {
         if (activeUpstreamServer is null || requestParams is null)
         {
-            return new ElicitResult { Action = "decline" };
+            return new ElicitResult { Action = McpGatewayConventions.DownstreamProcess.DeclineAction };
         }
 
         try
@@ -111,7 +116,7 @@ public sealed class DownstreamMcpClient(McpGatewayOptions options) : IDownstream
         }
         catch (Exception ex) when (ex is InvalidOperationException or ModelContextProtocol.McpException)
         {
-            return new ElicitResult { Action = "decline" };
+            return new ElicitResult { Action = McpGatewayConventions.DownstreamProcess.DeclineAction };
         }
     }
 }

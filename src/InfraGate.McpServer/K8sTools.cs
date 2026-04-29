@@ -6,7 +6,7 @@ namespace InfraGate.McpServer;
 [McpServerToolType]
 public static class K8sTools
 {
-    [McpServerTool(Name = "get_k8s_status", ReadOnly = true, OpenWorld = false)]
+    [McpServerTool(Name = K8sConventions.ToolNames.GetK8sStatus, ReadOnly = true, OpenWorld = false)]
     [Description("Shows a JSON summary of supported Kubernetes resources in an allowed namespace.")]
     public static Task<string> GetK8sStatus(
         K8sManager manager,
@@ -15,7 +15,7 @@ public static class K8sTools
         CancellationToken cancellationToken = default) =>
         manager.GetStatusAsync(@namespace, labelSelector, cancellationToken);
 
-    [McpServerTool(Name = "request_apply_manifest", Destructive = false, OpenWorld = false)]
+    [McpServerTool(Name = K8sConventions.ToolNames.RequestApplyManifest, Destructive = false, OpenWorld = false)]
     [Description("Creates a pending approval plan to server-side apply supported Kubernetes YAML or JSON manifests.")]
     public static Task<string> RequestApplyManifest(
         K8sManager manager,
@@ -24,7 +24,7 @@ public static class K8sTools
         CancellationToken cancellationToken = default) =>
         manager.RequestApplyManifestAsync(@namespace, manifest, cancellationToken);
 
-    [McpServerTool(Name = "request_delete_manifest", Destructive = false, OpenWorld = false)]
+    [McpServerTool(Name = K8sConventions.ToolNames.RequestDeleteManifest, Destructive = false, OpenWorld = false)]
     [Description("Creates a pending approval plan to delete each supported Kubernetes object named in a manifest.")]
     public static Task<string> RequestDeleteManifest(
         K8sManager manager,
@@ -33,7 +33,7 @@ public static class K8sTools
         CancellationToken cancellationToken = default) =>
         manager.RequestDeleteManifestAsync(@namespace, manifest, cancellationToken);
 
-    [McpServerTool(Name = "request_scale_deployment", Destructive = false, OpenWorld = false)]
+    [McpServerTool(Name = K8sConventions.ToolNames.RequestScaleDeployment, Destructive = false, OpenWorld = false)]
     [Description("Creates a pending approval plan to scale a Deployment in an allowed namespace.")]
     public static Task<string> RequestScaleDeployment(
         K8sManager manager,
@@ -43,7 +43,7 @@ public static class K8sTools
         CancellationToken cancellationToken = default) =>
         manager.RequestScaleDeploymentAsync(@namespace, name, replicas, cancellationToken);
 
-    [McpServerTool(Name = "request_restart_deployment", Destructive = false, OpenWorld = false)]
+    [McpServerTool(Name = K8sConventions.ToolNames.RequestRestartDeployment, Destructive = false, OpenWorld = false)]
     [Description("Creates a pending approval plan to restart a Deployment in an allowed namespace.")]
     public static Task<string> RequestRestartDeployment(
         K8sManager manager,
@@ -52,7 +52,7 @@ public static class K8sTools
         CancellationToken cancellationToken = default) =>
         manager.RequestRestartDeploymentAsync(@namespace, name, cancellationToken);
 
-    [McpServerTool(Name = "apply_approved_plan", Destructive = true, OpenWorld = false)]
+    [McpServerTool(Name = K8sConventions.ToolNames.ApplyApprovedPlan, Destructive = true, OpenWorld = false)]
     [Description("Requests MCP user approval for a pending Kubernetes plan, then applies the exact approved plan.")]
     public static Task<string> ApplyApprovedPlan(
         K8sManager manager,

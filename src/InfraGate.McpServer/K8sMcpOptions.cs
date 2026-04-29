@@ -2,21 +2,21 @@ namespace InfraGate.McpServer;
 
 public sealed record K8sMcpOptions(IReadOnlySet<string> AllowedNamespaces, string ApprovalRoot)
 {
-    public const string DefaultNamespace = "mcp-nginx-demo";
+    public const string DefaultNamespace = K8sConventions.DefaultNamespace;
 
     public bool IsNamespaceAllowed(string namespaceName) =>
         AllowedNamespaces.Contains(namespaceName);
 
     public static K8sMcpOptions FromEnvironment()
     {
-        var approvalRoot = Environment.GetEnvironmentVariable("K8S_MCP_APPROVAL_ROOT");
+        var approvalRoot = Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.ApprovalRoot);
         if (string.IsNullOrWhiteSpace(approvalRoot))
         {
-            approvalRoot = Path.Combine(Directory.GetCurrentDirectory(), ".mcp-approvals");
+            approvalRoot = Path.Combine(Directory.GetCurrentDirectory(), K8sConventions.ApprovalStorage.DefaultRootDirectory);
         }
 
         var allowedNamespaces = ParseAllowedNamespaces(
-            Environment.GetEnvironmentVariable("K8S_MCP_ALLOWED_NAMESPACES"));
+            Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.AllowedNamespaces));
 
         return new K8sMcpOptions(allowedNamespaces, approvalRoot);
     }

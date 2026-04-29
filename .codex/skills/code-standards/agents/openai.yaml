@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code Standards"
+  short_description: "Apply this repo's coding conventions"
+  default_prompt: "Use $code-standards when making code changes in this repository."

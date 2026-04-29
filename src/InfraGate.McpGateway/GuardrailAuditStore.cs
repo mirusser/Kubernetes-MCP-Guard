@@ -22,7 +22,7 @@ public sealed class GuardrailAuditStore(McpGatewayOptions options) : IGuardrailA
     public async Task WriteAsync(GuardrailAuditEvent auditEvent, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(options.GuardAuditRoot);
-        var path = Path.Combine(options.GuardAuditRoot, "audit.jsonl");
+        var path = Path.Combine(options.GuardAuditRoot, McpGatewayConventions.Paths.AuditFileName);
         var entry = new
         {
             timestamp = DateTimeOffset.UtcNow,
