@@ -76,6 +76,31 @@ That makes the project a practical slice of a bigger direction: MCP-native infra
   - Guardrail audit JSONL output.
   - MCP compliance notes for streamable HTTP and authorization behavior.
 
+## What It Looks Like In Practice
+
+A local MCP client can connect to the stdio server with explicit Kubernetes boundaries:
+
+```json
+{
+  "mcpServers": {
+    "infra-gate": {
+      "command": "dotnet",
+      "args": [
+        "run", "--project",
+        "/workspace/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
+      ],
+      "env": {
+        "KUBECONFIG": "/workspace/.kube/mcp-nginx-demo.config",
+        "K8S_MCP_APPROVAL_ROOT": "/workspace/.mcp-approvals",
+        "K8S_MCP_ALLOWED_NAMESPACES": "mcp-nginx-demo"
+      }
+    }
+  }
+}
+```
+
+*For the recommended HTTP gateway path with OAuth, prompt guardrails, and audit behavior, see the [Setup Guide](docs/setup-guide.md).*
+
 ## Explore The Project
 
 - Developer runbook: [docs/devs-readme.md](docs/devs-readme.md)
