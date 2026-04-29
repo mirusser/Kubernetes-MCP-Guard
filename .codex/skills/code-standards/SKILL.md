@@ -34,3 +34,37 @@ When changing existing literals, preserve behavior and public contracts. Do not 
 Keep conventions local to the project unless there is already a shared project or the same contract is intentionally shared across projects. Avoid creating shared abstractions only to remove a small amount of duplication.
 
 After replacing magic strings, run the narrowest useful build or tests for the touched project.
+
+## Field Naming
+
+Use lower camel case for private fields. Do not prefix private fields with `_`.
+
+Example:
+
+```csharp
+private readonly JsonSerializerOptions jsonOptions;
+```
+
+Do not introduce:
+
+```csharp
+private readonly JsonSerializerOptions _jsonOptions;
+```
+
+When touching existing code, prefer aligning fields you edit with this convention. Do not churn unrelated fields just to rename them.
+
+## Type Organization
+
+Prefer one meaningful top-level type per file. If a file contains multiple classes, handlers, helpers, records, or stores that are not tightly coupled, split them into separate files with matching type names.
+
+Keeping multiple types in one file is acceptable when the extra types are tiny implementation details that are tightly bound to the primary type and are not useful elsewhere. Avoid broad "grab bag" files that collect loosely related auth, storage, transport, or validation types together.
+
+## .NET Norms
+
+- Async methods should end in `Async`.
+- Pass `CancellationToken` through async I/O and external calls.
+- Keep public surface minimal; prefer `internal` unless cross-project use is intentional.
+- Use nullable reference types honestly; avoid `!` unless there is a clear invariant.
+- Prefer constructor injection for dependencies and options records for configuration.
+- Keep DTOs/contracts separate from behavior-heavy services when they grow.
+- Name tests by behavior using `Method_State_ExpectedResult`.
