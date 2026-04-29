@@ -28,6 +28,18 @@ public static class GatewayAuthConventions
         public const string ResourceName = "InfraGate MCP Gateway";
     }
 
+    public static class OAuthErrors
+    {
+        public const string InsufficientScope = "insufficient_scope";
+    }
+
+    public static class ChallengeParameters
+    {
+        public const string Error = "error";
+        public const string Scope = "scope";
+        public const string ResourceMetadata = "resource_metadata";
+    }
+
     public static class Claims
     {
         public const string Scope = "scope";

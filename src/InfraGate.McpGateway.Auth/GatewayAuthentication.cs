@@ -22,6 +22,7 @@ public static class GatewayAuthentication
                 authenticationOptions.DefaultChallengeScheme = options.OAuthEnabled
                     ? McpAuthenticationDefaults.AuthenticationScheme
                     : GatewayAuthConventions.Schemes.StaticBearer;
+                authenticationOptions.DefaultForbidScheme = GatewayAuthConventions.Schemes.PolicyScheme;
             })
             .AddPolicyScheme(
                 GatewayAuthConventions.Schemes.PolicyScheme,
@@ -58,6 +59,19 @@ public static class GatewayAuthentication
                         ValidateIssuerSigningKey = true,
                         ValidIssuers = DistinctValues(oauthAuthority, TrimTrailingSlash(oauthAuthority)),
                         AudienceValidator = (audiences, _, _) => HasAudience(audiences, options.OAuthResource)
+                    };
+                    jwtOptions.Events = new JwtBearerEvents
+                    {
+                        OnForbidden = context =>
+                        {
+                            var request = context.Request;
+                            var resourceMetadata = $"{request.Scheme}://{request.Host}{request.PathBase}{GatewayAuthConventions.Metadata.ProtectedResourcePath}";
+
+                            context.Response.Headers.WWWAuthenticate =
+                                BuildInsufficientScopeChallenge(options.OAuthScope, resourceMetadata);
+
+                            return Task.CompletedTask;
+                        }
                     };
                 })
                 .AddMcp(mcpOptions =>
@@ -108,6 +122,14 @@ public static class GatewayAuthentication
     }
 
     private static string TrimTrailingSlash(string value) => value.TrimEnd('/');
+
+    private static string BuildInsufficientScopeChallenge(string scope, string resourceMetadata)
+    {
+        return $"{GatewayAuthConventions.AuthorizationScheme} " +
+               $"{GatewayAuthConventions.ChallengeParameters.Error}=\"{GatewayAuthConventions.OAuthErrors.InsufficientScope}\", " +
+               $"{GatewayAuthConventions.ChallengeParameters.Scope}=\"{scope}\", " +
+               $"{GatewayAuthConventions.ChallengeParameters.ResourceMetadata}=\"{resourceMetadata}\"";
+    }
 
     private static string[] DistinctValues(params string[] values) =>
         values

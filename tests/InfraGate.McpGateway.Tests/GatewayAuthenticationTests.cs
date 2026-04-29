@@ -156,17 +156,36 @@ public sealed class GatewayAuthenticationTests
     }
 
     [Fact]
-    public async Task McpEndpoint_ForbidsJwtWithoutRequiredScope()
+    public async Task McpEndpoint_JwtWithoutRequiredScope_ReturnsStepUpAuthorizationChallenge()
     {
         using var server = CreateOAuthServer(out var signingKey);
         using var client = server.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            "Bearer",
+            GatewayAuthConventions.AuthorizationScheme,
             CreateJwt(signingKey, scope: "other:scope"));
 
         var response = await client.GetAsync(McpGatewayConventions.McpPath);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        if (client.BaseAddress is null)
+        {
+            throw new InvalidOperationException("Test client base address is required.");
+        }
+
+        var expectedResourceMetadata = new Uri(
+            client.BaseAddress,
+            GatewayAuthConventions.Metadata.ProtectedResourcePath).ToString();
+        var challenge = Assert.Single(response.Headers.WwwAuthenticate);
+        Assert.Equal(GatewayAuthConventions.AuthorizationScheme, challenge.Scheme);
+        Assert.Contains(
+            $"{GatewayAuthConventions.ChallengeParameters.Error}=\"{GatewayAuthConventions.OAuthErrors.InsufficientScope}\"",
+            challenge.Parameter);
+        Assert.Contains(
+            $"{GatewayAuthConventions.ChallengeParameters.Scope}=\"{Scope}\"",
+            challenge.Parameter);
+        Assert.Contains(
+            $"{GatewayAuthConventions.ChallengeParameters.ResourceMetadata}=\"{expectedResourceMetadata}\"",
+            challenge.Parameter);
     }
 
     private static TestServer CreateOAuthServer() =>
