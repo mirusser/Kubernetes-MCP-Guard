@@ -2,39 +2,44 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.AspNetCore.Authentication;
 using ModelContextProtocol.Authentication;
 
-namespace InfraGate.McpGateway;
+namespace InfraGate.McpGateway.Auth;
 
 public static class GatewayAuthentication
 {
-    public static IServiceCollection AddGatewayAuthentication(this IServiceCollection services, McpGatewayOptions options)
+    public static IServiceCollection AddGatewayAuthentication(this IServiceCollection services, GatewayAuthOptions options)
     {
+        services.AddSingleton(options);
+
         var authBuilder = services
             .AddAuthentication(authenticationOptions =>
             {
-                authenticationOptions.DefaultAuthenticateScheme = McpGatewayConventions.Authentication.PolicyScheme;
+                authenticationOptions.DefaultAuthenticateScheme = GatewayAuthConventions.Schemes.PolicyScheme;
                 authenticationOptions.DefaultChallengeScheme = options.OAuthEnabled
                     ? McpAuthenticationDefaults.AuthenticationScheme
-                    : McpGatewayConventions.Authentication.StaticBearerScheme;
+                    : GatewayAuthConventions.Schemes.StaticBearer;
             })
             .AddPolicyScheme(
-                McpGatewayConventions.Authentication.PolicyScheme,
+                GatewayAuthConventions.Schemes.PolicyScheme,
                 displayName: null,
                 policyOptions =>
                 {
                     policyOptions.ForwardDefaultSelector = context =>
                         GatewayAuthToken.IsStaticBearerToken(context.Request.Headers.Authorization.ToString(), options)
-                            ? McpGatewayConventions.Authentication.StaticBearerScheme
+                            ? GatewayAuthConventions.Schemes.StaticBearer
                             : options.OAuthEnabled
                                 ? JwtBearerDefaults.AuthenticationScheme
-                                : McpGatewayConventions.Authentication.StaticBearerScheme;
+                                : GatewayAuthConventions.Schemes.StaticBearer;
                 })
             .AddScheme<AuthenticationSchemeOptions, StaticBearerAuthenticationHandler>(
-                McpGatewayConventions.Authentication.StaticBearerScheme,
+                GatewayAuthConventions.Schemes.StaticBearer,
                 displayName: null,
                 configureOptions: null);
 
@@ -60,12 +65,12 @@ public static class GatewayAuthentication
                 .AddMcp(mcpOptions =>
                 {
                     mcpOptions.ResourceMetadataUri = new Uri(
-                        McpGatewayConventions.Authentication.ProtectedResourceMetadataPath,
+                        GatewayAuthConventions.Metadata.ProtectedResourcePath,
                         UriKind.Relative);
                     mcpOptions.ResourceMetadata = new ProtectedResourceMetadata
                     {
                         Resource = options.OAuthResource,
-                        ResourceName = McpGatewayConventions.Authentication.ResourceName,
+                        ResourceName = GatewayAuthConventions.Metadata.ResourceName,
                         AuthorizationServers = { options.OAuthAuthority! },
                         ScopesSupported = { options.OAuthScope }
                     };
@@ -74,7 +79,7 @@ public static class GatewayAuthentication
 
         services
             .AddAuthorizationBuilder()
-            .AddPolicy(McpGatewayConventions.Authentication.PolicyName, policy =>
+            .AddPolicy(GatewayAuthConventions.Schemes.PolicyName, policy =>
             {
                 policy.RequireAuthenticatedUser();
                 policy.RequireAssertion(context => HasRequiredScope(context.User, options.OAuthScope));
@@ -86,7 +91,7 @@ public static class GatewayAuthentication
     private static bool HasRequiredScope(ClaimsPrincipal user, string requiredScope)
     {
         return user.Claims
-            .Where(claim => claim.Type is McpGatewayConventions.Authentication.ScopeClaim or McpGatewayConventions.Authentication.ScpClaim)
+            .Where(claim => claim.Type is GatewayAuthConventions.Claims.Scope or GatewayAuthConventions.Claims.Scp)
             .SelectMany(claim => claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             .Any(scope => string.Equals(scope, requiredScope, StringComparison.Ordinal));
     }
@@ -117,7 +122,7 @@ public sealed class StaticBearerAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
     System.Text.Encodings.Web.UrlEncoder encoder,
-    McpGatewayOptions gatewayOptions)
+    GatewayAuthOptions gatewayOptions)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -141,9 +146,9 @@ public sealed class StaticBearerAuthenticationHandler(
         var claims = new[]
         {
             new Claim(
-                McpGatewayConventions.Authentication.SubjectClaim,
-                McpGatewayConventions.GuardrailAudit.LocalBearerSubject),
-            new Claim(McpGatewayConventions.Authentication.ScopeClaim, gatewayOptions.OAuthScope)
+                GatewayAuthConventions.Claims.Subject,
+                GatewayAuthConventions.Audit.LocalBearerSubject),
+            new Claim(GatewayAuthConventions.Claims.Scope, gatewayOptions.OAuthScope)
         };
         var identity = new ClaimsIdentity(claims, Scheme.Name);
         var principal = new ClaimsPrincipal(identity);
@@ -155,7 +160,7 @@ public sealed class StaticBearerAuthenticationHandler(
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)
     {
         Response.StatusCode = StatusCodes.Status401Unauthorized;
-        Response.Headers.WWWAuthenticate = McpGatewayConventions.AuthorizationScheme;
+        Response.Headers.WWWAuthenticate = GatewayAuthConventions.AuthorizationScheme;
 
         return Task.CompletedTask;
     }
@@ -163,7 +168,7 @@ public sealed class StaticBearerAuthenticationHandler(
 
 internal static class GatewayAuthToken
 {
-    public static bool IsStaticBearerToken(string authorization, McpGatewayOptions options)
+    public static bool IsStaticBearerToken(string authorization, GatewayAuthOptions options)
     {
         if (!options.StaticBearerEnabled || !TryGetBearerToken(authorization, out var token))
         {
@@ -175,7 +180,7 @@ internal static class GatewayAuthToken
 
     private static bool TryGetBearerToken(string authorization, out string token)
     {
-        var prefix = McpGatewayConventions.AuthorizationScheme + " ";
+        var prefix = GatewayAuthConventions.AuthorizationScheme + " ";
         if (!authorization.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
         {
             token = string.Empty;

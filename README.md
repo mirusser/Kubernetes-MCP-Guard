@@ -4,6 +4,7 @@ This repo contains a narrow Kubernetes governance slice for the larger Open WebU
 
 - `src/InfraGate.McpServer` is a .NET 10 stdio MCP server using the official C# MCP SDK.
 - `src/InfraGate.McpGateway` is a local HTTP MCP gateway that fronts the stdio server with OAuth/static bearer auth and warn+redact prompt-injection guardrails.
+- `src/InfraGate.DevIssuer` is a dev-only localhost OAuth issuer with OIDC-style discovery metadata for testing Codex MCP OAuth login without an external provider.
 - The MCP server uses the Kubernetes API through `KubernetesClient`, not runtime `kubectl` process execution.
 - Mutating actions are two-step: request a plan through MCP, then call apply so the MCP server can request user approval before changing Kubernetes.
 - The server allows only configured namespaces and only these manifest kinds for mutation: `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap`.
@@ -60,13 +61,22 @@ export K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo
 dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
 ```
 
-For OAuth/Codex login, configure an external OAuth/OIDC issuer that can issue JWT access tokens for this protected resource. The gateway does not implement an authorization server, token endpoint, dynamic client registration, or local user login.
+For local OAuth/Codex login without an external issuer, run the repo-local dev issuer in a separate terminal:
+
+```bash
+dotnet run --project src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj
+```
+
+The dev issuer listens on `http://127.0.0.1:3011` by default, exposes OAuth/OIDC discovery metadata, dynamic client registration, authorization-code + PKCE, and JWKS endpoints, and issues ephemeral JWT access tokens for `http://127.0.0.1:3001/mcp` with `mcp:tools`. It is for localhost development only; registrations, authorization codes, and signing keys are in memory and are reset on restart.
+
+Then start the gateway with OAuth enabled:
 
 ```bash
 export REPO_ROOT="$(pwd)"
-export INFRA_GATE_OAUTH_AUTHORITY="https://issuer.example.com"
+export INFRA_GATE_OAUTH_AUTHORITY="http://127.0.0.1:3011"
 export INFRA_GATE_OAUTH_RESOURCE="http://127.0.0.1:3001/mcp"
 export INFRA_GATE_OAUTH_SCOPE="mcp:tools"
+export INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false
 export INFRA_GATE_DOWNSTREAM_PROJECT="${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
 export KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config"
 export K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals"
@@ -76,6 +86,19 @@ dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
 ```
 
 Set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` only for a localhost-only issuer during development. If `INFRA_GATE_GATEWAY_BEARER_TOKEN` is also set, the static token remains accepted for local demos while OAuth discovery is advertised to clients.
+
+For an external OAuth/OIDC issuer, use its issuer URL for `INFRA_GATE_OAUTH_AUTHORITY`. The gateway remains a resource server only; external issuer setup, users, clients, login, consent, PKCE policy, and token issuance stay outside the gateway.
+
+Optional dev issuer settings:
+
+```bash
+export INFRA_GATE_DEV_ISSUER_ISSUER="http://127.0.0.1:3011"
+export INFRA_GATE_DEV_ISSUER_RESOURCE="http://127.0.0.1:3001/mcp"
+export INFRA_GATE_DEV_ISSUER_SCOPE="mcp:tools"
+export INFRA_GATE_DEV_ISSUER_SUBJECT="infra-gate-dev-user"
+```
+
+Use `ASPNETCORE_URLS` to bind the dev issuer to a different URL, and keep `INFRA_GATE_DEV_ISSUER_ISSUER` aligned with the URL clients use for discovery.
 
 Codex CLI HTTP MCP config:
 

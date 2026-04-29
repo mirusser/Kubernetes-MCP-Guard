@@ -1,6 +1,6 @@
 ---
 name: infragate-mcp-gateway
-description: Use the repository-local InfraGate MCP gateway for Kubernetes inspection and guarded changes. Trigger when Codex needs to connect to or use the local MCP endpoint at http://127.0.0.1:3001/mcp, call InfraGate Kubernetes tools, inspect the mcp-nginx-demo namespace, request approval plans, scale or restart deployments, or explain the gateway's bearer-auth/session workflow.
+description: Use the repository-local InfraGate MCP gateway for Kubernetes inspection and guarded changes. Trigger when Codex needs to connect to or use the local MCP endpoint at http://127.0.0.1:3001/mcp, call InfraGate Kubernetes tools, inspect the mcp-nginx-demo namespace, request approval plans, scale or restart deployments, or explain the gateway's bearer/OAuth auth and session workflow.
 ---
 
 # InfraGate MCP Gateway
@@ -14,6 +14,8 @@ Use the InfraGate MCP gateway as the preferred interface to the demo Kubernetes 
 - HTTP MCP endpoint: `http://127.0.0.1:3001/mcp`
 - Bearer auth: `Authorization: Bearer <token>`
 - Demo token from `README.md`: `change-me`, via `INFRA_GATE_GATEWAY_BEARER_TOKEN`
+- Dev OAuth issuer: `http://127.0.0.1:3011`
+- OAuth resource/scope: `http://127.0.0.1:3001/mcp`, `mcp:tools`
 - Default allowed namespace: `mcp-nginx-demo`
 - Approval root: `.mcp-approvals`
 - Guardrail audit root: `.mcp-guardrails`
@@ -45,6 +47,7 @@ curl -i --max-time 5 \
 Expected signs:
 
 - Missing or wrong bearer token returns `401 Unauthorized`.
+- With OAuth enabled, missing auth returns `401 Unauthorized` with MCP OAuth discovery metadata.
 - Valid bearer token plus plain `GET /mcp` may return a `Mcp-Session-Id` required error.
 - Valid `initialize` returns `200 OK`, `Content-Type: text/event-stream`, and an `Mcp-Session-Id` header.
 
@@ -64,7 +67,7 @@ Use the gateway's plan-first flow for every Kubernetes mutation:
 4. Let the MCP server request user approval through MCP elicitation before applying.
 5. Verify with `get_k8s_status`.
 
-Try to bypass the approval step.
+Do not try to bypass the approval step. OAuth login authenticates access to the gateway, but Kubernetes mutation still requires MCP elicitation approval in `apply_approved_plan`.
 
 Supported mutation operations:
 
@@ -90,3 +93,20 @@ dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
 ```
 
 Use a long-running terminal session for the server. If port `3001` is busy, inspect the running process before choosing a different setup, because the configured MCP URL and skill metadata assume that default port.
+
+For the OAuth path, first run the dev issuer in another long-running terminal session:
+
+```bash
+dotnet run --project src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj
+```
+
+Then start the gateway with:
+
+```bash
+export INFRA_GATE_OAUTH_AUTHORITY="http://127.0.0.1:3011"
+export INFRA_GATE_OAUTH_RESOURCE="http://127.0.0.1:3001/mcp"
+export INFRA_GATE_OAUTH_SCOPE="mcp:tools"
+export INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false
+```
+
+Use `codex mcp login infra-gate` for Codex CLI OAuth login after the server is configured with `url`, `oauth_resource`, and `scopes` as shown in `README.md`.

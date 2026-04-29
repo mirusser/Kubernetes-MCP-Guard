@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using InfraGate.McpGateway;
+using InfraGate.McpGateway.Auth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -41,7 +42,7 @@ public sealed class GatewayAuthenticationTests
         using var server = CreateOAuthServer();
         using var client = server.CreateClient();
 
-        var response = await client.GetAsync(McpGatewayConventions.Authentication.ProtectedResourceMetadataPath);
+        var response = await client.GetAsync(GatewayAuthConventions.Metadata.ProtectedResourcePath);
 
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync();
@@ -181,11 +182,8 @@ public sealed class GatewayAuthenticationTests
             KeyId = "test-key"
         };
         signingKey = key;
-        var options = new McpGatewayOptions(
+        var options = new GatewayAuthOptions(
             staticBearerToken,
-            "downstream.csproj",
-            Path.Combine(Path.GetTempPath(), "infra-gate-guard-tests", Guid.NewGuid().ToString("N")),
-            Directory.GetCurrentDirectory(),
             Issuer,
             Resource,
             Scope,
@@ -217,24 +215,20 @@ public sealed class GatewayAuthenticationTests
                 app.UseEndpoints(endpoints =>
                 {
                     endpoints.MapGet(McpGatewayConventions.McpPath, () => "ok")
-                        .RequireAuthorization(McpGatewayConventions.Authentication.PolicyName);
+                        .RequireAuthorization(GatewayAuthConventions.Schemes.PolicyName);
                 });
             }));
     }
 
     private static TestServer CreateStaticBearerServer(string staticBearerToken)
     {
-        var options = new McpGatewayOptions(
-            staticBearerToken,
-            "downstream.csproj",
-            Path.Combine(Path.GetTempPath(), "infra-gate-guard-tests", Guid.NewGuid().ToString("N")),
-            Directory.GetCurrentDirectory());
+        var options = new GatewayAuthOptions(staticBearerToken);
 
         return CreateServer(options, configureJwt: null);
     }
 
     private static TestServer CreateServer(
-        McpGatewayOptions options,
+        GatewayAuthOptions options,
         Action<IServiceCollection>? configureJwt)
     {
         return new TestServer(new WebHostBuilder()
@@ -253,7 +247,7 @@ public sealed class GatewayAuthenticationTests
                 app.UseEndpoints(endpoints =>
                 {
                     endpoints.MapGet(McpGatewayConventions.McpPath, () => "ok")
-                        .RequireAuthorization(McpGatewayConventions.Authentication.PolicyName);
+                        .RequireAuthorization(GatewayAuthConventions.Schemes.PolicyName);
                 });
             }));
     }
@@ -272,8 +266,8 @@ public sealed class GatewayAuthenticationTests
             Expires = expires ?? DateTime.UtcNow.AddMinutes(30),
             Claims = new Dictionary<string, object>
             {
-                [McpGatewayConventions.Authentication.SubjectClaim] = "subject-1",
-                [McpGatewayConventions.Authentication.ScopeClaim] = scope
+                [GatewayAuthConventions.Claims.Subject] = "subject-1",
+                [GatewayAuthConventions.Claims.Scope] = scope
             },
             SigningCredentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256)
         };

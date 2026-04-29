@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using InfraGate.McpGateway.Auth;
 using ModelContextProtocol.Server;
 
 namespace InfraGate.McpGateway;
@@ -93,30 +94,9 @@ public sealed partial class GuardedToolRunner
 
     private AuditIdentity GetAuditIdentity()
     {
-        var user = httpContextAccessor?.HttpContext?.User;
-        if (user?.Identity?.IsAuthenticated is not true)
-        {
-            return new AuditIdentity(null, null);
-        }
+        var identity = GatewayAuditIdentityResolver.Resolve(httpContextAccessor?.HttpContext?.User);
 
-        if (string.Equals(user.Identity.AuthenticationType, McpGatewayConventions.Authentication.StaticBearerScheme, StringComparison.Ordinal))
-        {
-            return new AuditIdentity(
-                McpGatewayConventions.GuardrailAudit.LocalBearerSubject,
-                McpGatewayConventions.GuardrailAudit.StaticBearerAuthenticationType);
-        }
-
-        var subject = ClaimValue(McpGatewayConventions.Authentication.PreferredUsernameClaim) ??
-                      ClaimValue(McpGatewayConventions.Authentication.EmailClaim) ??
-                      ClaimValue(McpGatewayConventions.Authentication.SubjectClaim) ??
-                      ClaimValue(McpGatewayConventions.Authentication.ClientIdClaim);
-
-        return new AuditIdentity(subject, McpGatewayConventions.GuardrailAudit.OAuthAuthenticationType);
-
-        string? ClaimValue(string claimType)
-        {
-            return user.FindFirst(claimType)?.Value;
-        }
+        return new AuditIdentity(identity.Subject, identity.AuthenticationType);
     }
 
     private static string? ExtractPlanId(IReadOnlyDictionary<string, object?> arguments, string? text)

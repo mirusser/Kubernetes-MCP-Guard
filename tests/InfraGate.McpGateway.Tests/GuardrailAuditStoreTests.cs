@@ -1,5 +1,6 @@
 using System.Text.Json;
 using InfraGate.McpGateway;
+using InfraGate.McpGateway.Auth;
 
 namespace InfraGate.McpGateway.Tests;
 
@@ -10,7 +11,7 @@ public sealed class GuardrailAuditStoreTests
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-guard-tests", Guid.NewGuid().ToString("N"));
         var store = new GuardrailAuditStore(new McpGatewayOptions(
-            "secret",
+            new GatewayAuthOptions("secret"),
             "downstream.csproj",
             root,
             Directory.GetCurrentDirectory()));

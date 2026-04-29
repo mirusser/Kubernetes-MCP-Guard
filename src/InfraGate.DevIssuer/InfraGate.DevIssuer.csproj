@@ -9,12 +9,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="InfraGate.DevIssuer.Tests" />
-    <InternalsVisibleTo Include="InfraGate.McpGateway.Tests" />
-    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.2.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\InfraGate.McpGateway.Auth\InfraGate.McpGateway.Auth.csproj" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.0.1" />
   </ItemGroup>
 
 </Project>

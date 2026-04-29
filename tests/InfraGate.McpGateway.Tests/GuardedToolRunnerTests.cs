@@ -1,4 +1,5 @@
 using InfraGate.McpGateway;
+using InfraGate.McpGateway.Auth;
 using Microsoft.AspNetCore.Http;
 using ModelContextProtocol.Server;
 using System.Security.Claims;
@@ -100,7 +101,7 @@ public sealed class GuardedToolRunnerTests
                 User = new ClaimsPrincipal(new ClaimsIdentity(
                     new[]
                     {
-                        new Claim(McpGatewayConventions.Authentication.PreferredUsernameClaim, "ada")
+                        new Claim(GatewayAuthConventions.Claims.PreferredUsername, "ada")
                     },
                     "Bearer"))
             }
@@ -132,7 +133,7 @@ public sealed class GuardedToolRunnerTests
             {
                 User = new ClaimsPrincipal(new ClaimsIdentity(
                     Array.Empty<Claim>(),
-                    McpGatewayConventions.Authentication.StaticBearerScheme))
+                    GatewayAuthConventions.Schemes.StaticBearer))
             }
         };
         var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), audit, httpContextAccessor);
