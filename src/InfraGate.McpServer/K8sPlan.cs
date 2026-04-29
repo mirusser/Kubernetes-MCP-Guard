@@ -9,9 +9,3 @@ public sealed record K8sPlan(
     Dictionary<string, string> Parameters,
     K8sObjectRef[] Objects,
     string? Manifest);
-
-public sealed record K8sObjectRef(
-    string ApiVersion,
-    string Kind,
-    string Namespace,
-    string Name);

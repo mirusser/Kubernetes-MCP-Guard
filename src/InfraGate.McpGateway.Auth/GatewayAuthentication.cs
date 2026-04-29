@@ -2,10 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.AspNetCore.Authentication;
 using ModelContextProtocol.Authentication;
@@ -43,12 +40,13 @@ public static class GatewayAuthentication
                 displayName: null,
                 configureOptions: null);
 
-        if (options.OAuthEnabled)
+        if (!string.IsNullOrWhiteSpace(options.OAuthAuthority))
         {
+            var oauthAuthority = options.OAuthAuthority;
             authBuilder
                 .AddJwtBearer(jwtOptions =>
                 {
-                    jwtOptions.Authority = options.OAuthAuthority;
+                    jwtOptions.Authority = oauthAuthority;
                     jwtOptions.Audience = options.OAuthResource;
                     jwtOptions.MapInboundClaims = false;
                     jwtOptions.RequireHttpsMetadata = options.OAuthRequireHttpsMetadata;
@@ -58,7 +56,7 @@ public static class GatewayAuthentication
                         ValidateAudience = true,
                         ValidateLifetime = true,
                         ValidateIssuerSigningKey = true,
-                        ValidIssuers = DistinctValues(options.OAuthAuthority!, TrimTrailingSlash(options.OAuthAuthority!)),
+                        ValidIssuers = DistinctValues(oauthAuthority, TrimTrailingSlash(oauthAuthority)),
                         AudienceValidator = (audiences, _, _) => HasAudience(audiences, options.OAuthResource)
                     };
                 })
@@ -71,7 +69,7 @@ public static class GatewayAuthentication
                     {
                         Resource = options.OAuthResource,
                         ResourceName = GatewayAuthConventions.Metadata.ResourceName,
-                        AuthorizationServers = { options.OAuthAuthority! },
+                        AuthorizationServers = { oauthAuthority },
                         ScopesSupported = { options.OAuthScope }
                     };
                 });
@@ -116,87 +114,4 @@ public static class GatewayAuthentication
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-}
-
-public sealed class StaticBearerAuthenticationHandler(
-    IOptionsMonitor<AuthenticationSchemeOptions> options,
-    ILoggerFactory logger,
-    System.Text.Encodings.Web.UrlEncoder encoder,
-    GatewayAuthOptions gatewayOptions)
-    : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
-{
-    protected override Task<AuthenticateResult> HandleAuthenticateAsync()
-    {
-        var authorization = Request.Headers.Authorization.ToString();
-        if (string.IsNullOrWhiteSpace(authorization))
-        {
-            return Task.FromResult(AuthenticateResult.NoResult());
-        }
-
-        if (!gatewayOptions.StaticBearerEnabled)
-        {
-            return Task.FromResult(AuthenticateResult.NoResult());
-        }
-
-        if (!GatewayAuthToken.IsStaticBearerToken(authorization, gatewayOptions))
-        {
-            return Task.FromResult(AuthenticateResult.Fail("Invalid static bearer token."));
-        }
-
-        var claims = new[]
-        {
-            new Claim(
-                GatewayAuthConventions.Claims.Subject,
-                GatewayAuthConventions.Audit.LocalBearerSubject),
-            new Claim(GatewayAuthConventions.Claims.Scope, gatewayOptions.OAuthScope)
-        };
-        var identity = new ClaimsIdentity(claims, Scheme.Name);
-        var principal = new ClaimsPrincipal(identity);
-        var ticket = new AuthenticationTicket(principal, Scheme.Name);
-
-        return Task.FromResult(AuthenticateResult.Success(ticket));
-    }
-
-    protected override Task HandleChallengeAsync(AuthenticationProperties properties)
-    {
-        Response.StatusCode = StatusCodes.Status401Unauthorized;
-        Response.Headers.WWWAuthenticate = GatewayAuthConventions.AuthorizationScheme;
-
-        return Task.CompletedTask;
-    }
-}
-
-internal static class GatewayAuthToken
-{
-    public static bool IsStaticBearerToken(string authorization, GatewayAuthOptions options)
-    {
-        if (!options.StaticBearerEnabled || !TryGetBearerToken(authorization, out var token))
-        {
-            return false;
-        }
-
-        return ConstantTimeEquals(token, options.BearerToken!);
-    }
-
-    private static bool TryGetBearerToken(string authorization, out string token)
-    {
-        var prefix = GatewayAuthConventions.AuthorizationScheme + " ";
-        if (!authorization.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-        {
-            token = string.Empty;
-            return false;
-        }
-
-        token = authorization[prefix.Length..].Trim();
-        return !string.IsNullOrWhiteSpace(token);
-    }
-
-    private static bool ConstantTimeEquals(string actual, string expected)
-    {
-        var actualBytes = System.Text.Encoding.UTF8.GetBytes(actual);
-        var expectedBytes = System.Text.Encoding.UTF8.GetBytes(expected);
-
-        return actualBytes.Length == expectedBytes.Length &&
-               System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(actualBytes, expectedBytes);
-    }
 }

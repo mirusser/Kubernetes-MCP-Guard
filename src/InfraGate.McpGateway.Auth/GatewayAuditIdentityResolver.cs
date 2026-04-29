@@ -2,8 +2,6 @@ using System.Security.Claims;
 
 namespace InfraGate.McpGateway.Auth;
 
-public sealed record GatewayAuditIdentity(string? Subject, string? AuthenticationType);
-
 public static class GatewayAuditIdentityResolver
 {
     public static GatewayAuditIdentity Resolve(ClaimsPrincipal? user)

@@ -2,20 +2,6 @@ using System.Text.Json;
 
 namespace InfraGate.McpGateway;
 
-public interface IGuardrailAuditStore
-{
-    Task WriteAsync(GuardrailAuditEvent auditEvent, CancellationToken cancellationToken);
-}
-
-public sealed record GuardrailAuditEvent(
-    string ToolName,
-    string Direction,
-    string Action,
-    string[] Categories,
-    string? PlanId,
-    string? Subject,
-    string? AuthenticationType);
-
 public sealed class GuardrailAuditStore(McpGatewayOptions options) : IGuardrailAuditStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);

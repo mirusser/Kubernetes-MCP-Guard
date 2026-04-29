@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.IdentityModel.Tokens;
 
 namespace InfraGate.DevIssuer;
@@ -55,15 +56,22 @@ internal sealed class DevIssuerStore
     public bool TryConsumeAuthorizationCode(
         string code,
         Func<AuthorizationCode, bool> validator,
-        out AuthorizationCode authorizationCode)
+        [NotNullWhen(true)] out AuthorizationCode? authorizationCode)
     {
-        if (!authorizationCodes.TryGetValue(code, out authorizationCode!) ||
-            !validator(authorizationCode))
+        if (!authorizationCodes.TryGetValue(code, out var pendingCode) ||
+            !validator(pendingCode))
         {
+            authorizationCode = null;
             return false;
         }
 
-        return authorizationCodes.TryRemove(code, out _);
+        if (!authorizationCodes.TryRemove(code, out authorizationCode))
+        {
+            authorizationCode = null;
+            return false;
+        }
+
+        return true;
     }
 
     private static string NewRandomValue(int byteLength)
@@ -74,17 +82,3 @@ internal sealed class DevIssuerStore
         return Base64UrlEncoder.Encode(bytes);
     }
 }
-
-internal sealed record DevClient(
-    string ClientId,
-    string? ClientName,
-    IReadOnlyCollection<string> RedirectUris);
-
-internal sealed record AuthorizationCode(
-    string Code,
-    string ClientId,
-    string RedirectUri,
-    string CodeChallenge,
-    string Resource,
-    string Scope,
-    DateTimeOffset ExpiresAt);

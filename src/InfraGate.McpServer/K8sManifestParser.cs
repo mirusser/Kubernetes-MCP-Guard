@@ -106,15 +106,3 @@ public static class K8sManifestParser
         return obj;
     }
 }
-
-public sealed record K8sParsedManifest(
-    IReadOnlyList<IKubernetesObject<V1ObjectMeta>> Objects,
-    K8sObjectRef[] ObjectRefs);
-
-public sealed class K8sValidationException : Exception
-{
-    public K8sValidationException(string message)
-        : base(message)
-    {
-    }
-}

@@ -7,24 +7,24 @@ public sealed class ApprovalStore
 {
     private const int PlanIdRandomByteCount = 4;
 
-    private readonly K8sMcpOptions _options;
-    private readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web)
+    private readonly K8sMcpOptions options;
+    private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true
     };
 
     public ApprovalStore(K8sMcpOptions options)
     {
-        _options = options;
+        this.options = options;
     }
 
-    public string PendingDirectory => Path.Combine(_options.ApprovalRoot, K8sConventions.ApprovalStorage.PendingDirectory);
+    public string PendingDirectory => Path.Combine(options.ApprovalRoot, K8sConventions.ApprovalStorage.PendingDirectory);
 
-    public string ApprovedDirectory => Path.Combine(_options.ApprovalRoot, K8sConventions.ApprovalStorage.ApprovedDirectory);
+    public string ApprovedDirectory => Path.Combine(options.ApprovalRoot, K8sConventions.ApprovalStorage.ApprovedDirectory);
 
-    public string AppliedDirectory => Path.Combine(_options.ApprovalRoot, K8sConventions.ApprovalStorage.AppliedDirectory);
+    public string AppliedDirectory => Path.Combine(options.ApprovalRoot, K8sConventions.ApprovalStorage.AppliedDirectory);
 
-    public string AuditPath => Path.Combine(_options.ApprovalRoot, K8sConventions.ApprovalStorage.AuditFileName);
+    public string AuditPath => Path.Combine(options.ApprovalRoot, K8sConventions.ApprovalStorage.AuditFileName);
 
     public static string NewPlanId()
     {
@@ -39,7 +39,7 @@ public sealed class ApprovalStore
         EnsureDirectories();
 
         var pendingPath = GetPendingPath(plan.Id);
-        var json = JsonSerializer.Serialize(plan, _jsonOptions);
+        var json = JsonSerializer.Serialize(plan, jsonOptions);
         await File.WriteAllTextAsync(pendingPath, json, cancellationToken);
 
         var hash = await ComputeSha256Async(pendingPath, cancellationToken);
@@ -95,7 +95,7 @@ public sealed class ApprovalStore
         }
 
         var json = await File.ReadAllTextAsync(pendingPath, cancellationToken);
-        var plan = JsonSerializer.Deserialize<K8sPlan>(json, _jsonOptions);
+        var plan = JsonSerializer.Deserialize<K8sPlan>(json, jsonOptions);
 
         return plan is null
             ? ApprovedPlanResult.Denied($"Plan '{planId}' could not be read.")
@@ -123,7 +123,7 @@ public sealed class ApprovalStore
 
         var actualHash = await ComputeSha256Async(pendingPath, cancellationToken);
         var json = await File.ReadAllTextAsync(pendingPath, cancellationToken);
-        var plan = JsonSerializer.Deserialize<K8sPlan>(json, _jsonOptions);
+        var plan = JsonSerializer.Deserialize<K8sPlan>(json, jsonOptions);
 
         return plan is null
             ? PendingPlanResult.Denied($"Plan '{planId}' could not be read.")
@@ -176,7 +176,7 @@ public sealed class ApprovalStore
             plan.Namespace,
             hash,
             appliedAtUtc = DateTimeOffset.UtcNow
-        }, _jsonOptions);
+        }, jsonOptions);
 
         await File.WriteAllTextAsync(appliedPath, json, cancellationToken);
         await WriteAuditAsync(K8sConventions.AuditEvents.PlanApplied, new
@@ -197,7 +197,7 @@ public sealed class ApprovalStore
             timestampUtc = DateTimeOffset.UtcNow,
             eventName,
             payload
-        }, _jsonOptions);
+        }, jsonOptions);
 
         return File.AppendAllTextAsync(AuditPath, line + Environment.NewLine, cancellationToken);
     }
@@ -233,30 +233,4 @@ public sealed class ApprovalStore
 
         return planId.All(c => c is >= 'a' and <= 'z' || c is >= '0' and <= '9' || c == '-');
     }
-}
-
-public sealed record ApprovalPlanResult(K8sPlan Plan, string PendingPath, string ApprovedPath, string Hash);
-
-public sealed record PendingPlanResult(
-    bool IsPending,
-    K8sPlan? Plan,
-    string? Hash,
-    string PendingPath,
-    string ApprovedPath,
-    string Message)
-{
-    public static PendingPlanResult Found(K8sPlan plan, string pendingPath, string approvedPath, string hash) =>
-        new(true, plan, hash, pendingPath, approvedPath, "Pending.");
-
-    public static PendingPlanResult Denied(string message) =>
-        new(false, null, null, string.Empty, string.Empty, message);
-}
-
-public sealed record ApprovedPlanResult(bool IsApproved, K8sPlan? Plan, string? Hash, string Message)
-{
-    public static ApprovedPlanResult Approved(K8sPlan plan, string hash) =>
-        new(true, plan, hash, "Approved.");
-
-    public static ApprovedPlanResult Denied(string message) =>
-        new(false, null, null, message);
 }
