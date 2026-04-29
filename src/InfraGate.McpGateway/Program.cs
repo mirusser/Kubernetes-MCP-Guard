@@ -14,6 +14,8 @@ builder.Services.AddSingleton<PromptInjectionGuard>();
 builder.Services.AddSingleton<IGuardrailAuditStore, GuardrailAuditStore>();
 builder.Services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
 builder.Services.AddSingleton<GuardedToolRunner>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddGatewayAuthentication(options);
 
 builder.Services
     .AddMcpServer()
@@ -22,7 +24,9 @@ builder.Services
 
 var app = builder.Build();
 
-app.UseMiddleware<BearerTokenMiddleware>();
-app.MapMcp(McpGatewayConventions.McpPath);
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapMcp(McpGatewayConventions.McpPath)
+    .RequireAuthorization(McpGatewayConventions.Authentication.PolicyName);
 
 await app.RunAsync();

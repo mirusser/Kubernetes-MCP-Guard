@@ -3,13 +3,35 @@ using ModelContextProtocol.Server;
 
 namespace InfraGate.McpGateway;
 
-public sealed partial class GuardedToolRunner(
-    IDownstreamMcpClient downstream,
-    PromptInjectionGuard guard,
-    IGuardrailAuditStore auditStore)
+public sealed partial class GuardedToolRunner
 {
     private const string Warning =
         "Guardrail warning: Potential prompt-injection content was detected. Model-visible high-risk text was redacted where applicable.";
+
+    private readonly IDownstreamMcpClient downstream;
+    private readonly PromptInjectionGuard guard;
+    private readonly IGuardrailAuditStore auditStore;
+    private readonly IHttpContextAccessor? httpContextAccessor;
+
+    public GuardedToolRunner(
+        IDownstreamMcpClient downstream,
+        PromptInjectionGuard guard,
+        IGuardrailAuditStore auditStore)
+        : this(downstream, guard, auditStore, httpContextAccessor: null)
+    {
+    }
+
+    public GuardedToolRunner(
+        IDownstreamMcpClient downstream,
+        PromptInjectionGuard guard,
+        IGuardrailAuditStore auditStore,
+        IHttpContextAccessor? httpContextAccessor)
+    {
+        this.downstream = downstream;
+        this.guard = guard;
+        this.auditStore = auditStore;
+        this.httpContextAccessor = httpContextAccessor;
+    }
 
     public async Task<string> CallAsync(
         string toolName,
@@ -25,6 +47,7 @@ public sealed partial class GuardedToolRunner(
         McpServer? upstreamServer,
         CancellationToken cancellationToken)
     {
+        var auditIdentity = GetAuditIdentity();
         var requestScan = guard.ScanArguments(arguments);
         if (requestScan.HasFindings)
         {
@@ -34,7 +57,9 @@ public sealed partial class GuardedToolRunner(
                     McpGatewayConventions.GuardrailAudit.RequestDirection,
                     McpGatewayConventions.GuardrailAudit.WarnAction,
                     requestScan.Categories,
-                    ExtractPlanId(arguments, null)),
+                    ExtractPlanId(arguments, null),
+                    auditIdentity.Subject,
+                    auditIdentity.AuthenticationType),
                 cancellationToken);
         }
 
@@ -52,7 +77,9 @@ public sealed partial class GuardedToolRunner(
                     response.HasFindings
                         ? response.Categories
                         : [McpGatewayConventions.GuardrailCategories.ManifestEchoCategory],
-                    ExtractPlanId(arguments, response.Text)),
+                    ExtractPlanId(arguments, response.Text),
+                    auditIdentity.Subject,
+                    auditIdentity.AuthenticationType),
                 cancellationToken);
         }
 
@@ -62,6 +89,34 @@ public sealed partial class GuardedToolRunner(
         }
 
         return $"{Warning}{Environment.NewLine}{Environment.NewLine}{response.Text}";
+    }
+
+    private AuditIdentity GetAuditIdentity()
+    {
+        var user = httpContextAccessor?.HttpContext?.User;
+        if (user?.Identity?.IsAuthenticated is not true)
+        {
+            return new AuditIdentity(null, null);
+        }
+
+        if (string.Equals(user.Identity.AuthenticationType, McpGatewayConventions.Authentication.StaticBearerScheme, StringComparison.Ordinal))
+        {
+            return new AuditIdentity(
+                McpGatewayConventions.GuardrailAudit.LocalBearerSubject,
+                McpGatewayConventions.GuardrailAudit.StaticBearerAuthenticationType);
+        }
+
+        var subject = ClaimValue(McpGatewayConventions.Authentication.PreferredUsernameClaim) ??
+                      ClaimValue(McpGatewayConventions.Authentication.EmailClaim) ??
+                      ClaimValue(McpGatewayConventions.Authentication.SubjectClaim) ??
+                      ClaimValue(McpGatewayConventions.Authentication.ClientIdClaim);
+
+        return new AuditIdentity(subject, McpGatewayConventions.GuardrailAudit.OAuthAuthenticationType);
+
+        string? ClaimValue(string claimType)
+        {
+            return user.FindFirst(claimType)?.Value;
+        }
     }
 
     private static string? ExtractPlanId(IReadOnlyDictionary<string, object?> arguments, string? text)
@@ -85,4 +140,6 @@ public sealed partial class GuardedToolRunner(
 
     [GeneratedRegex(@"(?:PlanId|Applied plan):\s+(?<id>[0-9a-z-]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex PlanIdRegex();
+
+    private sealed record AuditIdentity(string? Subject, string? AuthenticationType);
 }

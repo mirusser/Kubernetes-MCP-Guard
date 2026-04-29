@@ -49,6 +49,22 @@ public sealed class K8sManagerRequestTests
         Assert.DoesNotContain("./scripts/approve-plan.sh", result);
     }
 
+    [Fact]
+    public async Task ApplyApprovedPlanAsync_RefusesPendingPlanWithoutApproval()
+    {
+        var manager = CreateManager("demo");
+        var request = await manager.RequestScaleDeploymentAsync("demo", "demo", 4, CancellationToken.None);
+        var planId = request
+            .Split(Environment.NewLine)
+            .Single(line => line.StartsWith("PlanId:", StringComparison.Ordinal))
+            ["PlanId: ".Length..];
+
+        var result = await manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
+
+        Assert.Contains("Refused:", result);
+        Assert.Contains("not approved", result, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static K8sManager CreateManager(string namespaceName)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));

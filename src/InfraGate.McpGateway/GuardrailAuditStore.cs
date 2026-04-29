@@ -12,7 +12,9 @@ public sealed record GuardrailAuditEvent(
     string Direction,
     string Action,
     string[] Categories,
-    string? PlanId);
+    string? PlanId,
+    string? Subject,
+    string? AuthenticationType);
 
 public sealed class GuardrailAuditStore(McpGatewayOptions options) : IGuardrailAuditStore
 {
@@ -30,7 +32,9 @@ public sealed class GuardrailAuditStore(McpGatewayOptions options) : IGuardrailA
             direction = auditEvent.Direction,
             action = auditEvent.Action,
             categories = auditEvent.Categories,
-            planId = auditEvent.PlanId
+            planId = auditEvent.PlanId,
+            subject = auditEvent.Subject,
+            authenticationType = auditEvent.AuthenticationType
         };
         var line = JsonSerializer.Serialize(entry, JsonOptions) + Environment.NewLine;
 

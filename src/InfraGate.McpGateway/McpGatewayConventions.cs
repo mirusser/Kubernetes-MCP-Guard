@@ -3,6 +3,8 @@ namespace InfraGate.McpGateway;
 internal static class McpGatewayConventions
 {
     public const string DefaultUrl = "http://127.0.0.1:3001";
+    public const string DefaultOAuthResource = "http://127.0.0.1:3001/mcp";
+    public const string DefaultOAuthScope = "mcp:tools";
     public const string McpPath = "/mcp";
     public const string AuthorizationScheme = "Bearer";
 
@@ -17,6 +19,10 @@ internal static class McpGatewayConventions
         public const string BearerToken = "INFRA_GATE_GATEWAY_BEARER_TOKEN";
         public const string DownstreamProject = "INFRA_GATE_DOWNSTREAM_PROJECT";
         public const string GuardAuditRoot = "INFRA_GATE_GUARD_AUDIT_ROOT";
+        public const string OAuthAuthority = "INFRA_GATE_OAUTH_AUTHORITY";
+        public const string OAuthResource = "INFRA_GATE_OAUTH_RESOURCE";
+        public const string OAuthScope = "INFRA_GATE_OAUTH_SCOPE";
+        public const string OAuthRequireHttpsMetadata = "INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA";
     }
 
     public static class Paths
@@ -59,6 +65,9 @@ internal static class McpGatewayConventions
 
     public static class GuardrailAudit
     {
+        public const string LocalBearerSubject = "local-bearer-demo";
+        public const string StaticBearerAuthenticationType = "static-bearer";
+        public const string OAuthAuthenticationType = "oauth-jwt";
         public const string RequestDirection = "request";
         public const string ResponseDirection = "response";
         public const string WarnAction = "warn";
@@ -94,5 +103,20 @@ internal static class McpGatewayConventions
     {
         public const string PromptInjectionRisk = "[redacted: prompt-injection-risk]";
         public const string InspectPendingPlan = "[redacted: inspect the pending plan file before approval]";
+    }
+
+    public static class Authentication
+    {
+        public const string PolicyName = "InfraGateMcpGateway";
+        public const string PolicyScheme = "InfraGateGatewayBearer";
+        public const string StaticBearerScheme = "InfraGateStaticBearer";
+        public const string ProtectedResourceMetadataPath = "/.well-known/oauth-protected-resource";
+        public const string ResourceName = "InfraGate MCP Gateway";
+        public const string ScopeClaim = "scope";
+        public const string ScpClaim = "scp";
+        public const string PreferredUsernameClaim = "preferred_username";
+        public const string EmailClaim = "email";
+        public const string SubjectClaim = "sub";
+        public const string ClientIdClaim = "client_id";
     }
 }
