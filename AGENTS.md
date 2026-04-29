@@ -54,7 +54,7 @@ For multi-step tasks, state a brief plan:
 
 ## Solution Map
 
-Start with the root [README.md](README.md) for setup and operational examples. For project-level context, use these guides:
+Start with the root [README.md](README.md) for project intent and high-level architecture. Use [devs-readme.md](docs/devs-readme.md) for setup, local runs, tool contracts, and verification. For project-level context, use these guides:
 
 - Runtime projects:
   - [InfraGate.McpServer](src/InfraGate.McpServer/README.md): stdio MCP server, Kubernetes validation, approval plans, and plan application.
