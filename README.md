@@ -14,25 +14,35 @@ The core idea: let AI help with real infrastructure work while keeping the dange
 - Limits Kubernetes blast radius with namespace-scoped RBAC and typed, bounded tool surfaces.
 
 ```mermaid
-graph LR
-    Client["MCP Client<br/>Codex / Open WebUI / LibreChat"]
-    Gateway["HTTP MCP Gateway"]
-    Auth["OAuth / Bearer Auth"]
-    Guardrails["Prompt Guardrails"]
-    Audit["Audit Log"]
-    Server["stdio MCP Server"]
-    Approval["Approval Plans"]
-    RBAC["Namespace RBAC"]
-    API["Kubernetes API"]
+flowchart TB
+    Client["MCP client<br/>Codex / Open WebUI / LibreChat"]
 
-    Client --> Gateway
-    Gateway --> Auth
-    Auth --> Guardrails
-    Guardrails --> Audit
-    Guardrails --> Server
-    Server --> Approval
-    Approval --> RBAC
-    RBAC --> API
+    subgraph Gateway["HTTP MCP Gateway"]
+        Auth["OAuth or bearer auth"]
+        Guardrails["Prompt-injection guardrails"]
+        Audit["Guardrail audit log"]
+        Auth --> Guardrails
+        Guardrails --> Audit
+    end
+
+    subgraph Server["stdio Kubernetes MCP Server"]
+        Tools["Typed Kubernetes tools"]
+        ReadOnly["Bounded read-only observability"]
+        Plans["Approval-gated mutation plans"]
+        Tools --> ReadOnly
+        Tools --> Plans
+    end
+
+    subgraph Kubernetes["Kubernetes boundary"]
+        RBAC["Namespace-scoped RBAC"]
+        API["Kubernetes API"]
+        RBAC --> API
+    end
+
+    Client --> Auth
+    Guardrails --> Tools
+    ReadOnly --> RBAC
+    Plans --> RBAC
 ```
 
 ## Why It Matters 🔐
