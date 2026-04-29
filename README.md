@@ -186,11 +186,16 @@ Use this shape for a local stdio MCP client:
 The HTTP gateway exposes the same tool names and arguments as the stdio server:
 
 - `get_k8s_status(namespace, labelSelector = null)`
+- `get_k8s_events(namespace, labelSelector = null, fieldSelector = null, limit = 50)`
+- `get_pod_logs(namespace, podName, container = null, tailLines = 200, previous = false)`
+- `get_k8s_resource(namespace, kind, name)`
 - `request_apply_manifest(namespace, manifest)`
 - `request_delete_manifest(namespace, manifest)`
 - `request_scale_deployment(namespace, name, replicas)`
 - `request_restart_deployment(namespace, name)`
 - `apply_approved_plan(planId)`
+
+Logs and Events are untrusted Kubernetes workload/cluster output. The HTTP gateway sanitizes suspicious model-visible output before returning it; direct stdio use of `InfraGate.McpServer` bypasses that gateway guardrail layer.
 
 Approval flow:
 

@@ -5,6 +5,11 @@ internal static class K8sConventions
     public const string ServiceName = "infra-gate-mcp";
     public const string DefaultNamespace = "mcp-nginx-demo";
     public const int MaxReplicas = 5;
+    public const int DefaultEventLimit = 50;
+    public const int MaxEventLimit = 100;
+    public const int DefaultLogTailLines = 200;
+    public const int MaxLogTailLines = 500;
+    public const int LogLimitBytes = 65536;
 
     public static class EnvironmentVariables
     {
@@ -64,11 +69,22 @@ internal static class K8sConventions
     public static class ToolArguments
     {
         public const string PlanId = "planId";
+        public const string PodName = "podName";
+        public const string Container = "container";
+        public const string TailLines = "tailLines";
+        public const string Previous = "previous";
+        public const string Kind = "kind";
+        public const string Name = "name";
+        public const string FieldSelector = "fieldSelector";
+        public const string Limit = "limit";
     }
 
     public static class ToolNames
     {
         public const string GetK8sStatus = "get_k8s_status";
+        public const string GetK8sEvents = "get_k8s_events";
+        public const string GetPodLogs = "get_pod_logs";
+        public const string GetK8sResource = "get_k8s_resource";
         public const string RequestApplyManifest = "request_apply_manifest";
         public const string RequestDeleteManifest = "request_delete_manifest";
         public const string RequestScaleDeployment = "request_scale_deployment";
@@ -81,8 +97,11 @@ internal static class K8sConventions
         public const string AppsV1 = "apps/v1";
         public const string V1 = "v1";
         public const string Deployment = "Deployment";
+        public const string ReplicaSet = "ReplicaSet";
+        public const string Pod = "Pod";
         public const string Service = "Service";
         public const string ConfigMap = "ConfigMap";
+        public const string Secret = "Secret";
         public const string RestartedAtAnnotation = "kubectl.kubernetes.io/restartedAt";
 
         public const string DeploymentTypeKey = AppsV1 + "/" + Deployment;
@@ -91,6 +110,8 @@ internal static class K8sConventions
         public const string DeploymentDisplayName = AppsV1 + " " + Deployment;
         public const string SupportedKindsDescription =
             DeploymentDisplayName + ", " + V1 + " " + Service + ", " + V1 + " " + ConfigMap;
+        public const string SupportedResourceSummaryKindsDescription =
+            Deployment + ", " + ReplicaSet + ", " + Pod + ", " + Service + ", " + ConfigMap;
 
         public static K8sObjectRef DeploymentRef(string namespaceName, string name) =>
             new(AppsV1, Deployment, namespaceName, name);

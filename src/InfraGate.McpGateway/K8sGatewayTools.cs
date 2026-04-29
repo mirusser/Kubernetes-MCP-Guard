@@ -22,6 +22,66 @@ public static class K8sGatewayTools
             },
             cancellationToken);
 
+    [McpServerTool(Name = McpGatewayConventions.ToolNames.GetK8sEvents, ReadOnly = true, OpenWorld = false)]
+    [Description("Shows a bounded JSON summary of Kubernetes events in an allowed namespace.")]
+    public static Task<string> GetK8sEvents(
+        GuardedToolRunner runner,
+        [Description("Allowed Kubernetes namespace to inspect.")] string @namespace,
+        [Description("Optional Kubernetes label selector, for example app=my-app.")] string? labelSelector = null,
+        [Description("Optional Kubernetes field selector, for example regarding.name=my-pod.")] string? fieldSelector = null,
+        [Description("Maximum events to return, from 1 to 100.")] int limit = McpGatewayConventions.DefaultEventLimit,
+        CancellationToken cancellationToken = default) =>
+        runner.CallAsync(
+            McpGatewayConventions.ToolNames.GetK8sEvents,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.Namespace] = @namespace,
+                [McpGatewayConventions.ToolArguments.LabelSelector] = labelSelector,
+                [McpGatewayConventions.ToolArguments.FieldSelector] = fieldSelector,
+                [McpGatewayConventions.ToolArguments.Limit] = limit
+            },
+            cancellationToken);
+
+    [McpServerTool(Name = McpGatewayConventions.ToolNames.GetPodLogs, ReadOnly = true, OpenWorld = false)]
+    [Description("Shows bounded logs for a Pod in an allowed namespace.")]
+    public static Task<string> GetPodLogs(
+        GuardedToolRunner runner,
+        [Description("Allowed Kubernetes namespace to inspect.")] string @namespace,
+        [Description("Pod name.")] string podName,
+        [Description("Optional container name.")] string? container = null,
+        [Description("Number of log lines from the end, from 1 to 500.")] int tailLines = McpGatewayConventions.DefaultLogTailLines,
+        [Description("Whether to read previous terminated container logs.")] bool previous = false,
+        CancellationToken cancellationToken = default) =>
+        runner.CallAsync(
+            McpGatewayConventions.ToolNames.GetPodLogs,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.Namespace] = @namespace,
+                [McpGatewayConventions.ToolArguments.PodName] = podName,
+                [McpGatewayConventions.ToolArguments.Container] = container,
+                [McpGatewayConventions.ToolArguments.TailLines] = tailLines,
+                [McpGatewayConventions.ToolArguments.Previous] = previous
+            },
+            cancellationToken);
+
+    [McpServerTool(Name = McpGatewayConventions.ToolNames.GetK8sResource, ReadOnly = true, OpenWorld = false)]
+    [Description("Shows a focused JSON summary of one supported Kubernetes resource in an allowed namespace.")]
+    public static Task<string> GetK8sResource(
+        GuardedToolRunner runner,
+        [Description("Allowed Kubernetes namespace to inspect.")] string @namespace,
+        [Description("Resource kind: Deployment, ReplicaSet, Pod, Service, or ConfigMap.")] string kind,
+        [Description("Resource name.")] string name,
+        CancellationToken cancellationToken = default) =>
+        runner.CallAsync(
+            McpGatewayConventions.ToolNames.GetK8sResource,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.Namespace] = @namespace,
+                [McpGatewayConventions.ToolArguments.Kind] = kind,
+                [McpGatewayConventions.ToolArguments.Name] = name
+            },
+            cancellationToken);
+
     [McpServerTool(Name = McpGatewayConventions.ToolNames.RequestApplyManifest, Destructive = false, OpenWorld = false)]
     [Description("Creates a pending approval plan to server-side apply supported Kubernetes YAML or JSON manifests.")]
     public static Task<string> RequestApplyManifest(

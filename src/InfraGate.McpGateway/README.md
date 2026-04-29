@@ -15,6 +15,7 @@
 ## Important Contracts
 
 - Gateway tool names and argument names must stay compatible with `InfraGate.McpServer`.
+- Logs and Events are untrusted Kubernetes output; keep observability reads routed through `GuardedToolRunner` so response sanitization still applies.
 - Suspicious input is warned and audited, but still forwarded to the downstream server.
 - Suspicious response text and echoed manifest blocks are redacted before returning to the MCP client.
 - Authentication behavior is provided by `InfraGate.McpGateway.Auth`; this project should not duplicate auth rules.

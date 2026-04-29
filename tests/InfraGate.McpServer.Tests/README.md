@@ -6,6 +6,7 @@
 
 - `ApprovalStoreTests.cs`: approval hash matching, denied unapproved plans, changed-plan protection, and server approval writes.
 - `K8sManifestParserTests.cs`: supported Kubernetes manifests, namespace defaulting, unsupported kinds, missing names, and namespace mismatch rejection.
+- `K8sManagerObservabilityTests.cs`: bounded Events, Pod logs, focused resource summaries, and sensitive-resource rejection.
 - `K8sManagerRequestTests.cs`: request-plan formatting, namespace validation, replica bounds, approval guidance, and unapproved apply refusal.
 - `K8sMcpOptionsTests.cs`: allowed namespace parsing defaults and comma-separated values.
 - `McpServerIntegrationTests.cs`: opt-in stdio MCP client flow that creates, approves, applies, scales, restarts, and deletes demo Kubernetes resources.

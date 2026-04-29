@@ -152,6 +152,69 @@ public sealed class GuardedToolRunnerTests
         Assert.Equal("static-bearer", audit.Events[0].AuthenticationType);
     }
 
+    [Fact]
+    public async Task GetK8sEvents_ForwardsExpectedToolNameAndArguments()
+    {
+        var downstream = new FakeDownstream("events");
+        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), new InMemoryAuditStore());
+
+        await K8sGatewayTools.GetK8sEvents(
+            runner,
+            "demo",
+            "app=demo",
+            "regarding.name=demo-pod",
+            3,
+            CancellationToken.None);
+
+        Assert.Equal("get_k8s_events", downstream.ToolName);
+        Assert.Equal("demo", downstream.Arguments["namespace"]);
+        Assert.Equal("app=demo", downstream.Arguments["labelSelector"]);
+        Assert.Equal("regarding.name=demo-pod", downstream.Arguments["fieldSelector"]);
+        Assert.Equal(3, downstream.Arguments["limit"]);
+    }
+
+    [Fact]
+    public async Task GetPodLogs_ForwardsExpectedToolNameAndArguments()
+    {
+        var downstream = new FakeDownstream("logs");
+        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), new InMemoryAuditStore());
+
+        await K8sGatewayTools.GetPodLogs(
+            runner,
+            "demo",
+            "demo-pod",
+            "web",
+            7,
+            previous: true,
+            CancellationToken.None);
+
+        Assert.Equal("get_pod_logs", downstream.ToolName);
+        Assert.Equal("demo", downstream.Arguments["namespace"]);
+        Assert.Equal("demo-pod", downstream.Arguments["podName"]);
+        Assert.Equal("web", downstream.Arguments["container"]);
+        Assert.Equal(7, downstream.Arguments["tailLines"]);
+        Assert.Equal(true, downstream.Arguments["previous"]);
+    }
+
+    [Fact]
+    public async Task GetK8sResource_ForwardsExpectedToolNameAndArguments()
+    {
+        var downstream = new FakeDownstream("resource");
+        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), new InMemoryAuditStore());
+
+        await K8sGatewayTools.GetK8sResource(
+            runner,
+            "demo",
+            "ConfigMap",
+            "demo-config",
+            CancellationToken.None);
+
+        Assert.Equal("get_k8s_resource", downstream.ToolName);
+        Assert.Equal("demo", downstream.Arguments["namespace"]);
+        Assert.Equal("ConfigMap", downstream.Arguments["kind"]);
+        Assert.Equal("demo-config", downstream.Arguments["name"]);
+    }
+
     private sealed class FakeDownstream(string response) : IDownstreamMcpClient
     {
         public string? ToolName { get; private set; }

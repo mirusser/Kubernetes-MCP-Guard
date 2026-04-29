@@ -15,6 +15,39 @@ public static class K8sTools
         CancellationToken cancellationToken = default) =>
         manager.GetStatusAsync(@namespace, labelSelector, cancellationToken);
 
+    [McpServerTool(Name = K8sConventions.ToolNames.GetK8sEvents, ReadOnly = true, OpenWorld = false)]
+    [Description("Shows a bounded JSON summary of Kubernetes events in an allowed namespace.")]
+    public static Task<string> GetK8sEvents(
+        K8sManager manager,
+        [Description("Allowed Kubernetes namespace to inspect.")] string @namespace,
+        [Description("Optional Kubernetes label selector, for example app=my-app.")] string? labelSelector = null,
+        [Description("Optional Kubernetes field selector, for example regarding.name=my-pod.")] string? fieldSelector = null,
+        [Description("Maximum events to return, from 1 to 100.")] int limit = K8sConventions.DefaultEventLimit,
+        CancellationToken cancellationToken = default) =>
+        manager.GetEventsAsync(@namespace, labelSelector, fieldSelector, limit, cancellationToken);
+
+    [McpServerTool(Name = K8sConventions.ToolNames.GetPodLogs, ReadOnly = true, OpenWorld = false)]
+    [Description("Shows bounded logs for a Pod in an allowed namespace.")]
+    public static Task<string> GetPodLogs(
+        K8sManager manager,
+        [Description("Allowed Kubernetes namespace to inspect.")] string @namespace,
+        [Description("Pod name.")] string podName,
+        [Description("Optional container name.")] string? container = null,
+        [Description("Number of log lines from the end, from 1 to 500.")] int tailLines = K8sConventions.DefaultLogTailLines,
+        [Description("Whether to read previous terminated container logs.")] bool previous = false,
+        CancellationToken cancellationToken = default) =>
+        manager.GetPodLogsAsync(@namespace, podName, container, tailLines, previous, cancellationToken);
+
+    [McpServerTool(Name = K8sConventions.ToolNames.GetK8sResource, ReadOnly = true, OpenWorld = false)]
+    [Description("Shows a focused JSON summary of one supported Kubernetes resource in an allowed namespace.")]
+    public static Task<string> GetK8sResource(
+        K8sManager manager,
+        [Description("Allowed Kubernetes namespace to inspect.")] string @namespace,
+        [Description("Resource kind: Deployment, ReplicaSet, Pod, Service, or ConfigMap.")] string kind,
+        [Description("Resource name.")] string name,
+        CancellationToken cancellationToken = default) =>
+        manager.GetResourceAsync(@namespace, kind, name, cancellationToken);
+
     [McpServerTool(Name = K8sConventions.ToolNames.RequestApplyManifest, Destructive = false, OpenWorld = false)]
     [Description("Creates a pending approval plan to server-side apply supported Kubernetes YAML or JSON manifests.")]
     public static Task<string> RequestApplyManifest(
