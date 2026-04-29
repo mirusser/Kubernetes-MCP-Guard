@@ -4,7 +4,7 @@ This document details the compliance of the **InfraGate** project against the of
 
 ## Architecture & Request Flow
 
-The following diagram illustrates the lifecycle of a tool call in Mode C, emphasizing how authentication, guardrails, and transport layers interact.
+The following diagram illustrates the OAuth login path and a representative tool call in Mode C, emphasizing how authentication, guardrails, and transport layers interact.
 
 ```mermaid
 sequenceDiagram
@@ -15,27 +15,52 @@ sequenceDiagram
     participant K8s as Kubernetes API
 
     %% Discovery and Authorization Phase
-    Client->>Gateway: Initial Request (Missing/Invalid Scope)
-    Gateway-->>Client: 403 Forbidden + WWW-Authenticate (Resource Metadata)
-    Client->>Issuer: GET /.well-known/openid-configuration (Discovery)
-    Issuer-->>Client: Discovery Document (PKCE S256 Supported)
-    
+    Client->>Gateway: Initial /mcp request without token or with insufficient scope
+    alt Missing or invalid token
+        Gateway-->>Client: 401 Unauthorized + OAuth challenge
+    else Valid token missing required scope
+        Gateway-->>Client: 403 Forbidden + WWW-Authenticate insufficient_scope
+    end
+
+    Client->>Gateway: GET /.well-known/oauth-protected-resource
+    Gateway-->>Client: Protected resource metadata (authorization server + scopes)
+    Client->>Issuer: GET /.well-known/openid-configuration
+    Issuer-->>Client: OAuth/OIDC metadata (authorize/token/register/JWKS)
+
+    opt Dynamic client registration
+        Client->>Issuer: POST /register (loopback redirect URI)
+        Issuer-->>Client: client_id
+    end
+
     Client->>Issuer: GET /authorize (PKCE + resource + scope)
-    Issuer-->>Client: Authorization Code
-    Client->>Issuer: POST /token (code_verifier + grant_type)
-    Issuer-->>Client: JWT Access Token (Audience Bounded)
+    Issuer-->>Client: Redirect to loopback callback with code + state
+    Client->>Issuer: POST /token (code + redirect_uri + client_id + code_verifier + optional resource)
+    Issuer-->>Client: JWT access token (audience/resource bounded)
 
     %% Transport and Execution Phase
     Client->>Gateway: POST /mcp (JSON-RPC + JWT Bearer)
-    Note over Gateway: JWT Validation & Audience Check
-    Gateway->>Gateway: GuardedToolRunner (Scan Request)
-    Gateway->>Downstream: Spawn Stdio Process (NO Token Passthrough)
-    Note over Downstream: K8sTools Plugin
-    Downstream->>K8s: Execute Kubernetes API Call
-    K8s-->>Downstream: API Response
-    Downstream-->>Gateway: Stdio Response
-    Gateway->>Gateway: GuardedToolRunner (Sanitize Response + Audit Log)
-    Gateway-->>Client: SSE Stream Response
+    Note over Gateway: JWT issuer/audience/lifetime/signature/scope validation
+    Gateway->>Gateway: GuardedToolRunner scans request arguments
+    Gateway->>Downstream: Start or reuse stdio McpServer (no token passthrough)
+    Note over Downstream: K8sTools tool handlers
+
+    alt Read/status or approved apply tool
+        Downstream->>K8s: KubernetesClient API request
+        K8s-->>Downstream: Kubernetes API response
+    else request_* planning tool
+        Downstream->>Downstream: Write pending approval plan + audit entry
+    end
+
+    opt apply_approved_plan requires MCP elicitation
+        Downstream->>Gateway: Elicitation request
+        Gateway->>Client: Approval prompt
+        Client-->>Gateway: Approval response
+        Gateway-->>Downstream: Elicitation result
+    end
+
+    Downstream-->>Gateway: Tool result text
+    Gateway->>Gateway: Sanitize response + write guardrail audit when needed
+    Gateway-->>Client: MCP response (JSON or SSE via Streamable HTTP)
 ```
 
 ---
@@ -47,7 +72,7 @@ The Gateway delegates the transport layer to the official `ModelContextProtocol.
 * **Key Mechanisms:**
   * Uses `.WithHttpTransport()` in `Program.cs`.
   * Clients send `POST` requests with JSON-RPC messages to `/mcp`.
-  * The server acknowledges with `202 Accepted` and streams responses back asynchronously via Server-Sent Events (SSE).
+  * Streamable HTTP response handling is delegated to the official SDK, including JSON-RPC responses and Server-Sent Events (SSE) where appropriate.
 
 ---
 
@@ -63,7 +88,7 @@ The MCP Authorization standard is built heavily on Draft OAuth 2.1, emphasizing 
 
 ### B. Resource Parameter Binding (RFC 8707)
 * **Methods:** `DevIssuerApplication.Authorize`, `DevIssuerApplication.TokenAsync`
-* **Implementation:** The DevIssuer strictly validates the `resource` parameter during the authorization flow. Tokens are issued with a specific `Audience` (`aud`) claim bounded to that exact resource URI, mitigating the Confused Deputy problem.
+* **Implementation:** The DevIssuer strictly validates the `resource` parameter during authorization. The authorization code is bound to that resource, so token exchange may omit `resource` for client compatibility, but an explicitly wrong token-exchange resource is rejected. Tokens are issued with a specific `Audience` (`aud`) claim bounded to that exact resource URI, mitigating the Confused Deputy problem.
 
 ### C. Authorization Code Protection (PKCE)
 * **Methods:** `DevIssuerApplication.TokenAsync` (specifically `PkceMatches`)
@@ -75,7 +100,7 @@ The MCP Authorization standard is built heavily on Draft OAuth 2.1, emphasizing 
 
 ### E. Open Redirection & Localhost Risks
 * **Methods:** `DevIssuerApplication.RegisterClientAsync`, `DevIssuerStore.ClientAllowsRedirectUri`
-* **Implementation:** Validates that dynamic client registrations use `http://127.0.0.1` or `http://localhost` (`IsLoopbackHttpUri`) to prevent attackers from phishing authorization codes to external domains.
+* **Implementation:** Validates that dynamic client registrations use loopback `http` redirect URIs (`IsLoopbackHttpUri`) to prevent attackers from phishing authorization codes to external domains.
 
 ---
 

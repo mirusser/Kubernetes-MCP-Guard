@@ -10,6 +10,7 @@ This repo contains a narrow Kubernetes governance slice for the larger Open WebU
 - The server allows only configured namespaces and only these manifest kinds for mutation: `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap`.
 - `deploy/minikube/rbac.yaml` creates a namespace-scoped ServiceAccount, Role, and RoleBinding.
 - `scripts/create-demo-kubeconfig.sh` creates a short-lived service-account kubeconfig at `.kube/mcp-nginx-demo.config`.
+- MCP transport and OAuth compliance notes for the HTTP gateway path are tracked in [MCP-COMPLIANCE.md](docs/MCP-COMPLIANCE.md).
 
 General idea:
 

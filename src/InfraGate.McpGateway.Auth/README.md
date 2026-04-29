@@ -5,7 +5,7 @@
 ## Runtime Flow
 
 - `GatewayAuthOptions.cs` reads authentication settings from environment variables.
-- `GatewayAuthentication.cs` registers the policy scheme, JWT bearer auth, MCP metadata challenge support, and the gateway authorization policy.
+- `GatewayAuthentication.cs` registers the policy scheme, JWT bearer auth, MCP protected-resource metadata, 403 step-up challenges, and the gateway authorization policy.
 - `StaticBearerAuthenticationHandler.cs` authenticates the local demo bearer token path.
 - `GatewayAuthToken.cs` parses bearer tokens and compares static tokens in constant time.
 - `GatewayAuditIdentityResolver.cs` maps the authenticated principal to audit-safe subject and authentication-type values.
@@ -16,6 +16,7 @@
 - At least one of static bearer auth or OAuth authority must be configured.
 - Static bearer auth is intended for local demos; OAuth is the real resource-server path.
 - OAuth tokens must contain the configured audience/resource and required scope.
+- Valid OAuth tokens that lack the required scope return `403 Forbidden` with a `WWW-Authenticate` Bearer challenge containing `error="insufficient_scope"`, the required `scope`, and `resource_metadata`.
 - Static bearer and OAuth identities are normalized for guardrail audit entries.
 - Do not move auth env var names or scheme names without updating gateway setup and tests.
 

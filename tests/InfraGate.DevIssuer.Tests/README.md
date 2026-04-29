@@ -9,6 +9,7 @@
 - Authorization-code flow with PKCE `S256`.
 - JWT access tokens accepted by gateway auth validation.
 - Rejection of reused authorization codes, wrong PKCE verifiers, wrong resources, and missing required scopes.
+- Token exchange compatibility when the authorization code is already resource-bound and the token request omits `resource`.
 
 ## Running Tests
 

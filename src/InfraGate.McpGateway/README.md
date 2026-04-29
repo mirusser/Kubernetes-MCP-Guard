@@ -10,6 +10,7 @@
 - `DownstreamMcpClient.cs` starts and reuses the downstream `InfraGate.McpServer` process via the Model Context Protocol client.
 - `PromptInjectionGuard*.cs` contains argument scanning, response redaction, operational-line allow-listing, and regex patterns.
 - `GuardrailAuditStore.cs` appends JSONL audit entries under the configured guardrail audit root.
+- MCP transport and OAuth compliance details for this gateway path are summarized in [MCP-COMPLIANCE.md](../../docs/MCP-COMPLIANCE.md).
 
 ## Important Contracts
 
@@ -17,6 +18,7 @@
 - Suspicious input is warned and audited, but still forwarded to the downstream server.
 - Suspicious response text and echoed manifest blocks are redacted before returning to the MCP client.
 - Authentication behavior is provided by `InfraGate.McpGateway.Auth`; this project should not duplicate auth rules.
+- OAuth access tokens are terminated at the gateway. The downstream stdio server receives tool calls, not bearer tokens.
 - Guardrail audit entries must not include bearer tokens or raw credentials.
 
 ## Configuration
