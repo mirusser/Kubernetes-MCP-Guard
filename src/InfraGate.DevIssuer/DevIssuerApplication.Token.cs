@@ -38,10 +38,9 @@ internal static partial class DevIssuerApplication
         if (string.IsNullOrWhiteSpace(code) ||
             string.IsNullOrWhiteSpace(redirectUri) ||
             string.IsNullOrWhiteSpace(clientId) ||
-            string.IsNullOrWhiteSpace(codeVerifier) ||
-            string.IsNullOrWhiteSpace(resource))
+            string.IsNullOrWhiteSpace(codeVerifier))
         {
-            return OAuthError(DevIssuerConventions.Errors.InvalidRequest, "code, redirect_uri, client_id, code_verifier, and resource are required.");
+            return OAuthError(DevIssuerConventions.Errors.InvalidRequest, "code, redirect_uri, client_id, and code_verifier are required.");
         }
 
         if (!store.TryConsumeAuthorizationCode(code, IsValidAuthorizationCode, out var authorizationCode))
@@ -84,9 +83,14 @@ internal static partial class DevIssuerApplication
             return authorizationCode.ExpiresAt > DateTimeOffset.UtcNow &&
                    string.Equals(authorizationCode.ClientId, clientId, StringComparison.Ordinal) &&
                    string.Equals(authorizationCode.RedirectUri, redirectUri, StringComparison.Ordinal) &&
-                   ResourceMatches(resource, authorizationCode.Resource) &&
+                   TokenResourceMatches(resource, authorizationCode.Resource) &&
                    PkceMatches(codeVerifier, authorizationCode.CodeChallenge);
         }
+    }
+
+    private static bool TokenResourceMatches(string? actual, string expected)
+    {
+        return string.IsNullOrWhiteSpace(actual) || ResourceMatches(actual, expected);
     }
 
     private static bool PkceMatches(string codeVerifier, string codeChallenge)

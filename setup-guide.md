@@ -1,0 +1,358 @@
+# InfraGate — Local Dev Environment Guide
+
+## Architecture at a Glance
+
+```mermaid
+graph LR
+    Client["MCP Client<br/>(Codex CLI / Open WebUI)"]
+    Gateway["InfraGate.McpGateway<br/>HTTP :3001/mcp"]
+    Auth["McpGateway.Auth<br/>bearer / OAuth JWT"]
+    Server["InfraGate.McpServer<br/>stdio process"]
+    DevIssuer["InfraGate.DevIssuer<br/>localhost OAuth :3011"]
+    K8s["Kubernetes API<br/>(minikube)"]
+
+    Client -- "HTTP MCP + token" --> Gateway
+    Gateway --> Auth
+    Gateway -- "stdio" --> Server
+    Server -- ".NET KubernetesClient" --> K8s
+    Client -. "OAuth discovery/login" .-> DevIssuer
+    DevIssuer -. "JWT validation" .-> Gateway
+```
+
+**Four source projects, three runtime processes:**
+
+| Project | Role | Runs as |
+|---|---|---|
+| `InfraGate.McpServer` | Kubernetes MCP server (tools, plans, approvals) | stdio child process (spawned by gateway) |
+| `InfraGate.McpGateway` | HTTP MCP endpoint + guardrails + audit | HTTP server `:3001` |
+| `InfraGate.McpGateway.Auth` | Auth library (static bearer + OAuth JWT) | Linked into Gateway |
+| `InfraGate.DevIssuer` | Dev-only OAuth/OIDC issuer | HTTP server `:3011` (optional) |
+
+---
+
+## Prerequisites
+
+### 1. .NET 10 SDK
+
+All projects target `net10.0`. Install the .NET 10 SDK:
+
+```bash
+# Check if installed
+dotnet --version   # must be 10.x
+
+# Install (Ubuntu/Debian)
+# See https://learn.microsoft.com/dotnet/core/install/linux
+# or use the dotnet-install script:
+curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0
+export PATH="$HOME/.dotnet:$PATH"
+```
+
+### 2. Minikube + kubectl
+
+The MCP server talks to Kubernetes via the .NET `KubernetesClient` library. For local dev, use minikube:
+
+```bash
+# Install minikube (if not present)
+# https://minikube.sigs.k8s.io/docs/start/
+
+minikube start
+
+# Verify kubectl context
+kubectl cluster-info
+```
+
+### 3. Verify tools
+
+```bash
+dotnet --version          # → 10.x.x
+minikube status           # → Running
+kubectl version --client  # → any recent version
+```
+
+---
+
+## Step-by-Step Setup
+
+### Step 1 — Bootstrap RBAC & Kubeconfig
+
+This creates the `mcp-nginx-demo` namespace, a scoped ServiceAccount + Role + RoleBinding, and a short-lived (24h) kubeconfig:
+
+```bash
+cd /workspace
+./scripts/create-demo-kubeconfig.sh
+```
+
+**Output:** `.kube/mcp-nginx-demo.config`
+
+**Verify RBAC:**
+
+```bash
+KC=".kube/mcp-nginx-demo.config"
+
+kubectl --kubeconfig $KC auth can-i create deployments -n mcp-nginx-demo  # → yes
+kubectl --kubeconfig $KC auth can-i patch configmaps   -n mcp-nginx-demo  # → yes
+kubectl --kubeconfig $KC auth can-i create namespaces                     # → no
+kubectl --kubeconfig $KC auth can-i create deployments -n default         # → no
+```
+
+> [!NOTE]
+> The token expires after 24 hours. Re-run `./scripts/create-demo-kubeconfig.sh` to refresh.
+
+### Step 2 — Build the Solution
+
+```bash
+dotnet build InfraGate.slnx
+```
+
+### Step 3 — Run Unit Tests
+
+```bash
+dotnet test InfraGate.slnx --no-build
+```
+
+All tests should pass without a Kubernetes cluster. Integration tests are opt-in (see [Verification](#verification) below).
+
+---
+
+## Running the Solution
+
+You have **three modes** depending on what you need. Pick whichever suits your current workflow:
+
+---
+
+### Mode A — Stdio MCP Server Only (Simplest)
+
+Use this when you want to connect a local MCP client (e.g. Codex CLI) directly to the server without HTTP or auth.
+
+**Terminal 1:**
+
+```bash
+export REPO_ROOT="$(pwd)"
+export KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config"
+export K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals"
+export K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo
+
+dotnet run --project src/InfraGate.McpServer/InfraGate.McpServer.csproj
+```
+
+**Client config** (for Codex, VS Code MCP, etc.):
+
+```json
+{
+  "mcpServers": {
+    "infra-gate": {
+      "command": "dotnet",
+      "args": [
+        "run", "--project",
+        "/workspace/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
+      ],
+      "env": {
+        "KUBECONFIG": "/workspace/.kube/mcp-nginx-demo.config",
+        "K8S_MCP_APPROVAL_ROOT": "/workspace/.mcp-approvals",
+        "K8S_MCP_ALLOWED_NAMESPACES": "mcp-nginx-demo"
+      }
+    }
+  }
+}
+```
+
+Or register with Codex CLI:
+
+```bash
+REPO_ROOT="$(pwd)"
+codex mcp add infra-gate \
+  --env KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config" \
+  --env K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals" \
+  --env K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo \
+  -- dotnet run --project "${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
+```
+
+---
+
+### Mode B — HTTP Gateway + Static Bearer Token
+
+Use this when you want the full HTTP MCP endpoint with guardrails but don't need OAuth.
+
+**Single terminal — Gateway spawns the Server process automatically:**
+
+```bash
+export REPO_ROOT="$(pwd)"
+export INFRA_GATE_GATEWAY_BEARER_TOKEN="change-me"
+export INFRA_GATE_DOWNSTREAM_PROJECT="${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
+export KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config"
+export K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals"
+export K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo
+
+dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
+```
+
+**Endpoint:** `http://127.0.0.1:3001/mcp`
+**Auth:** `Authorization: Bearer change-me`
+
+> [!TIP]
+> The gateway starts the stdio server as a child process via `INFRA_GATE_DOWNSTREAM_PROJECT` — you don't need to run the server separately.
+
+---
+
+### Mode C — HTTP Gateway + OAuth (DevIssuer)
+
+Use this for the full OAuth/OIDC flow (e.g., testing Codex CLI `mcp login`).
+
+**Terminal 1 — Dev Issuer:**
+
+```bash
+dotnet run --project src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj
+```
+
+Listens on `http://127.0.0.1:3011`. Provides OAuth discovery, PKCE authorization-code flow, JWKS, and dynamic client registration — all in-memory, ephemeral.
+
+**Terminal 2 — Gateway with OAuth:**
+
+```bash
+export REPO_ROOT="$(pwd)"
+export INFRA_GATE_OAUTH_AUTHORITY="http://127.0.0.1:3011"
+export INFRA_GATE_OAUTH_RESOURCE="http://127.0.0.1:3001/mcp"
+export INFRA_GATE_OAUTH_SCOPE="mcp:tools"
+export INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false
+export INFRA_GATE_DOWNSTREAM_PROJECT="${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
+export KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config"
+export K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals"
+export K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo
+
+dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
+```
+
+**Codex CLI config** (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.infra-gate]
+url = "http://127.0.0.1:3001/mcp"
+oauth_resource = "http://127.0.0.1:3001/mcp"
+scopes = ["mcp:tools"]
+```
+
+```bash
+codex mcp login infra-gate
+```
+
+> [!IMPORTANT]
+> Set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` **only** for localhost dev with DevIssuer. Never in production.
+
+> [!TIP]
+> You can set `INFRA_GATE_GATEWAY_BEARER_TOKEN` alongside OAuth to accept both static tokens *and* OAuth JWTs simultaneously.
+
+---
+
+## Available MCP Tools
+
+Once running, the server exposes these tools:
+
+| Tool | Purpose |
+|---|---|
+| `get_k8s_status(namespace, labelSelector?)` | Read deployments, services, pods status |
+| `request_apply_manifest(namespace, manifest)` | Create a plan to apply a YAML/JSON manifest |
+| `request_delete_manifest(namespace, manifest)` | Create a plan to delete a resource |
+| `request_scale_deployment(namespace, name, replicas)` | Create a plan to scale a deployment |
+| `request_restart_deployment(namespace, name)` | Create a plan to restart a deployment |
+| `apply_approved_plan(planId)` | Apply a previously approved plan |
+
+**Approval flow:** `request_*` → returns `planId` → `apply_approved_plan(planId)` → MCP elicitation prompt → user approves → applied.
+
+Allowed manifest kinds: `apps/v1 Deployment`, `v1 Service`, `v1 ConfigMap`.
+
+---
+
+## Verification
+
+```bash
+# Build
+dotnet build InfraGate.slnx
+
+# Unit tests (no cluster needed)
+dotnet test InfraGate.slnx --no-build
+
+# Integration tests (requires minikube + RBAC from Step 1)
+INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build
+
+# Check cluster state after integration tests
+kubectl --kubeconfig .kube/mcp-nginx-demo.config \
+  -n mcp-nginx-demo get deployment,service,configmap,pods,replicasets -o wide
+```
+
+---
+
+## Environment Variable Reference
+
+### McpServer
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `KUBECONFIG` | No | SDK default discovery | Path to kubeconfig |
+| `K8S_MCP_APPROVAL_ROOT` | No | `.mcp-approvals` | Approval file storage root |
+| `K8S_MCP_ALLOWED_NAMESPACES` | No | `mcp-nginx-demo` | Comma-separated allowed namespaces |
+
+### McpGateway
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `INFRA_GATE_DOWNSTREAM_PROJECT` | No | — | Path to McpServer `.csproj` |
+| `INFRA_GATE_GUARD_AUDIT_ROOT` | No | `.mcp-guardrails` | Guardrail audit JSONL output |
+| `ASPNETCORE_URLS` | No | `http://127.0.0.1:3001` | HTTP bind address |
+
+### McpGateway.Auth
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `INFRA_GATE_GATEWAY_BEARER_TOKEN` | One of bearer/OAuth | — | Static bearer token |
+| `INFRA_GATE_OAUTH_AUTHORITY` | One of bearer/OAuth | — | OAuth issuer URL |
+| `INFRA_GATE_OAUTH_RESOURCE` | No | `http://127.0.0.1:3001/mcp` | JWT audience |
+| `INFRA_GATE_OAUTH_SCOPE` | No | `mcp:tools` | Required JWT scope |
+| `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA` | No | `true` | HTTPS metadata check |
+
+### DevIssuer
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `INFRA_GATE_DEV_ISSUER_ISSUER` | No | `http://127.0.0.1:3011` | Issuer URL |
+| `INFRA_GATE_DEV_ISSUER_RESOURCE` | No | `http://127.0.0.1:3001/mcp` | Token audience |
+| `INFRA_GATE_DEV_ISSUER_SCOPE` | No | `mcp:tools` | Token scope |
+| `INFRA_GATE_DEV_ISSUER_SUBJECT` | No | `infra-gate-dev-user` | Token subject claim |
+| `ASPNETCORE_URLS` | No | (framework default) | HTTP bind; keep aligned with issuer URL |
+
+---
+
+## File Layout Quick Reference
+
+```
+/workspace
+├── InfraGate.slnx                        # Solution file (all 7 projects)
+├── src/
+│   ├── InfraGate.McpServer/              # Stdio MCP server (Kubernetes tools)
+│   ├── InfraGate.McpGateway/             # HTTP gateway (guardrails, downstream client)
+│   ├── InfraGate.McpGateway.Auth/        # Auth library (bearer + OAuth JWT)
+│   └── InfraGate.DevIssuer/             # Dev-only OAuth issuer
+├── tests/
+│   ├── InfraGate.McpServer.Tests/
+│   ├── InfraGate.McpGateway.Tests/
+│   └── InfraGate.DevIssuer.Tests/
+├── deploy/minikube/rbac.yaml             # Namespace + ServiceAccount + Role + RoleBinding
+├── scripts/
+│   ├── create-demo-kubeconfig.sh         # Bootstrap RBAC & generate kubeconfig
+│   └── approve-plan.sh                   # Manual plan approval (for non-elicitation clients)
+├── .kube/                                # Generated kubeconfig (gitignored)
+└── .mcp-approvals/                       # Plan files: pending/, approved/, applied/ (gitignored)
+```
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `dotnet: command not found` | .NET 10 SDK not installed | Install SDK, ensure `~/.dotnet` is on `$PATH` |
+| `error NETSDK1045: target framework 'net10.0' not installed` | Wrong SDK version | Install .NET 10 preview/RC SDK |
+| RBAC `can-i` returns `no` for allowed operations | Token expired or RBAC not applied | Re-run `./scripts/create-demo-kubeconfig.sh` |
+| Gateway returns `401 Unauthorized` | No `Authorization` header, wrong token, or no auth env vars set | Set `INFRA_GATE_GATEWAY_BEARER_TOKEN` or OAuth vars |
+| `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA` error | Trying to reach HTTP issuer with HTTPS check | Set to `false` for localhost DevIssuer only |
+| `apply_approved_plan` refuses with hash mismatch | Plan changed after approval | Re-request the plan and re-approve |
+| DevIssuer registrations lost on restart | By design — all state is in-memory | Re-register the client (Codex does this automatically) |

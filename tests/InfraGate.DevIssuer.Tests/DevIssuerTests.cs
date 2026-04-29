@@ -88,6 +88,22 @@ public sealed class DevIssuerTests
     }
 
     [Fact]
+    public async Task Token_AllowsMissingResource_WhenAuthorizationCodeIsResourceBound()
+    {
+        using var server = CreateIssuerServer();
+        using var client = server.CreateClient();
+        var clientId = await RegisterClientAsync(client);
+        var code = await AuthorizeAsync(client, clientId);
+
+        var response = await PostTokenAsync(client, clientId, code, CodeVerifier, resource: null);
+
+        response.EnsureSuccessStatusCode();
+        var json = await ReadJsonAsync(response);
+        Assert.Equal(DevIssuerConventions.OAuth.BearerTokenType, json.GetProperty(DevIssuerConventions.Json.TokenType).GetString());
+        Assert.Equal(Scope, json.GetProperty(DevIssuerConventions.Json.Scope).GetString());
+    }
+
+    [Fact]
     public async Task Token_RejectsWrongPkceVerifier()
     {
         using var server = CreateIssuerServer();
@@ -257,19 +273,24 @@ public sealed class DevIssuerTests
         string clientId,
         string code,
         string codeVerifier,
-        string resource)
+        string? resource)
     {
+        var form = new Dictionary<string, string>
+        {
+            [DevIssuerConventions.Parameters.GrantType] = DevIssuerConventions.OAuth.AuthorizationCodeGrantType,
+            [DevIssuerConventions.Parameters.Code] = code,
+            [DevIssuerConventions.Parameters.RedirectUri] = RedirectUri,
+            [DevIssuerConventions.Parameters.ClientId] = clientId,
+            [DevIssuerConventions.Parameters.CodeVerifier] = codeVerifier
+        };
+        if (resource is not null)
+        {
+            form[DevIssuerConventions.Parameters.Resource] = resource;
+        }
+
         return client.PostAsync(
             DevIssuerConventions.Endpoints.Token,
-            new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                [DevIssuerConventions.Parameters.GrantType] = DevIssuerConventions.OAuth.AuthorizationCodeGrantType,
-                [DevIssuerConventions.Parameters.Code] = code,
-                [DevIssuerConventions.Parameters.RedirectUri] = RedirectUri,
-                [DevIssuerConventions.Parameters.ClientId] = clientId,
-                [DevIssuerConventions.Parameters.CodeVerifier] = codeVerifier,
-                [DevIssuerConventions.Parameters.Resource] = resource
-            }));
+            new FormUrlEncodedContent(form));
     }
 
     private static async Task<JsonElement> GetJsonAsync(HttpClient client, string path)

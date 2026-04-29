@@ -1,0 +1,1 @@
+{"timestamp":"2026-04-29T16:57:38.3567463+00:00","toolName":"request_delete_manifest","direction":"response","action":"redact_manifest","categories":["manifest-echo"],"planId":"20260429165738-9587b8b4","subject":"local-bearer-demo","authenticationType":"static-bearer"}
