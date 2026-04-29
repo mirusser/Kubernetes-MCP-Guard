@@ -15,15 +15,35 @@ This repo contains a narrow Kubernetes governance slice for the larger Open WebU
 General idea:
 
 ```text
-Open WebUI/LibreChat
+Open WebUI (or/and LibreChat)
 + remote MCP
 + gateway/proxy
-+ Docker/Kubernetes MCP
++ Kubernetes MCP (and maybe Docker MCP)
 + strict Kubernetes RBAC
 + auth
 + audit
 + multi-user isolation
 + approvals
+```
+
+```mermaid
+graph LR
+    Client["Open WebUI / LibreChat"]
+    RemoteMcp["Remote MCP"]
+    Gateway["Gateway / Proxy"]
+    Auth["Auth"]
+    Guardrails["Guardrails + Audit"]
+    Isolation["Multi-user Isolation"]
+    Approval["Approval Flow"]
+    DockerMcp["Docker MCP"]
+    K8sMcp["Kubernetes MCP"]
+    Rbac["Strict Kubernetes RBAC"]
+    K8s["Kubernetes API"]
+
+    Client --> RemoteMcp --> Gateway
+    Gateway --> Auth --> Guardrails --> Isolation --> Approval
+    Approval --> DockerMcp
+    Approval --> K8sMcp --> Rbac --> K8s
 ```
 
 ### Bootstrap Minikube RBAC
