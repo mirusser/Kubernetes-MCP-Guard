@@ -30,6 +30,20 @@ public sealed class K8sManagerDiagnosticsTests
     }
 
     [Fact]
+    public async Task GetDiagnosticsAsync_RejectsLimitBelowBounds()
+    {
+        var manager = CreateManager().Manager;
+
+        var deploymentResult = await manager.GetDeploymentDiagnosticsAsync("demo", "demo", 0, CancellationToken.None);
+        var podResult = await manager.GetPodDiagnosticsAsync("demo", "demo-pod", 0, CancellationToken.None);
+        var serviceResult = await manager.GetServiceDiagnosticsAsync("demo", "demo", 0, CancellationToken.None);
+
+        Assert.Contains("Limit must be between 1 and 100", deploymentResult);
+        Assert.Contains("Limit must be between 1 and 100", podResult);
+        Assert.Contains("Limit must be between 1 and 100", serviceResult);
+    }
+
+    [Fact]
     public async Task GetDeploymentDiagnosticsAsync_ReturnsBoundedRelatedSummaries()
     {
         await using var api = new TestKubernetesApi(request => request.Path switch
@@ -43,18 +57,18 @@ public sealed class K8sManagerDiagnosticsTests
                                                                                       "kind": "EventList",
                                                                                       "items": [
                                                                                         {
-                                                                                          "metadata": { "name": "pod-warning" },
-                                                                                          "type": "Warning",
-                                                                                          "reason": "BackOff",
-                                                                                          "note": "container back-off",
-                                                                                          "regarding": { "kind": "Pod", "name": "demo-pod-1", "namespace": "demo" }
-                                                                                        },
-                                                                                        {
                                                                                           "metadata": { "name": "other-warning" },
                                                                                           "type": "Warning",
                                                                                           "reason": "Other",
                                                                                           "note": "unrelated",
                                                                                           "regarding": { "kind": "Pod", "name": "other-pod", "namespace": "demo" }
+                                                                                        },
+                                                                                        {
+                                                                                          "metadata": { "name": "pod-warning" },
+                                                                                          "type": "Warning",
+                                                                                          "reason": "BackOff",
+                                                                                          "note": "container back-off",
+                                                                                          "regarding": { "kind": "Pod", "name": "demo-pod-1", "namespace": "demo" }
                                                                                         }
                                                                                       ]
                                                                                     }
@@ -83,7 +97,39 @@ public sealed class K8sManagerDiagnosticsTests
             request.Query.Contains("labelSelector=app%3Ddemo", StringComparison.Ordinal));
         Assert.Contains(api.Requests, request =>
             request.Path == "/apis/events.k8s.io/v1/namespaces/demo/events" &&
-            request.Query.Contains("limit=10", StringComparison.Ordinal));
+            request.Query.Contains("limit=100", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetDeploymentDiagnosticsAsync_ForwardsMatchExpressionSelector()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/apis/apps/v1/namespaces/demo/deployments/demo" => TestResponse.Json(DeploymentWithMatchExpressionsJson()),
+            "/apis/apps/v1/namespaces/demo/replicasets" => TestResponse.Json(ListJson("ReplicaSetList", [])),
+            "/api/v1/namespaces/demo/pods" => TestResponse.Json(ListJson("PodList", [])),
+            "/apis/events.k8s.io/v1/namespaces/demo/events" => TestResponse.Json("""
+                                                                                    {
+                                                                                      "apiVersion": "events.k8s.io/v1",
+                                                                                      "kind": "EventList",
+                                                                                      "items": []
+                                                                                    }
+                                                                                    """),
+            _ => TestResponse.Json("{}")
+        });
+        var manager = CreateManager(api).Manager;
+
+        var result = await manager.GetDeploymentDiagnosticsAsync("demo", "demo", 10, CancellationToken.None);
+
+        using var document = JsonDocument.Parse(result);
+        var root = document.RootElement;
+
+        Assert.Equal("app=demo,tier in (api,worker),!debug", root.GetProperty("selector").GetString());
+        Assert.Contains(api.Requests, request =>
+            request.Path == "/api/v1/namespaces/demo/pods" &&
+            DecodeQuery(request.Query).Contains(
+                "labelSelector=app=demo,tier in (api,worker),!debug",
+                StringComparison.Ordinal));
     }
 
     [Fact]
@@ -122,7 +168,7 @@ public sealed class K8sManagerDiagnosticsTests
         Assert.DoesNotContain("\"log\"", result);
         Assert.Contains(api.Requests, request =>
             request.Path == "/apis/events.k8s.io/v1/namespaces/demo/events" &&
-            request.Query.Contains("limit=3", StringComparison.Ordinal));
+            request.Query.Contains("limit=100", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -148,7 +194,29 @@ public sealed class K8sManagerDiagnosticsTests
                                                                                     {
                                                                                       "apiVersion": "events.k8s.io/v1",
                                                                                       "kind": "EventList",
-                                                                                      "items": []
+                                                                                      "items": [
+                                                                                        {
+                                                                                          "metadata": { "name": "service-event" },
+                                                                                          "type": "Normal",
+                                                                                          "reason": "ServiceUpdated",
+                                                                                          "note": "service updated",
+                                                                                          "regarding": { "kind": "Service", "name": "demo", "namespace": "demo" }
+                                                                                        },
+                                                                                        {
+                                                                                          "metadata": { "name": "pod-event" },
+                                                                                          "type": "Normal",
+                                                                                          "reason": "Started",
+                                                                                          "note": "pod started",
+                                                                                          "regarding": { "kind": "Pod", "name": "demo-pod-1", "namespace": "demo" }
+                                                                                        },
+                                                                                        {
+                                                                                          "metadata": { "name": "unrelated-event" },
+                                                                                          "type": "Warning",
+                                                                                          "reason": "Unrelated",
+                                                                                          "note": "ignore me",
+                                                                                          "regarding": { "kind": "Deployment", "name": "other", "namespace": "demo" }
+                                                                                        }
+                                                                                      ]
                                                                                     }
                                                                                     """),
             _ => TestResponse.Json("{}")
@@ -163,8 +231,14 @@ public sealed class K8sManagerDiagnosticsTests
         Assert.Equal("Service", root.GetProperty("kind").GetString());
         Assert.Equal("app=demo", root.GetProperty("selector").GetString());
         Assert.Single(root.GetProperty("pods").EnumerateArray());
+        Assert.Equal(2, root.GetProperty("events").GetArrayLength());
+        Assert.Equal("service-event", root.GetProperty("events")[0].GetProperty("name").GetString());
+        Assert.Equal("pod-event", root.GetProperty("events")[1].GetProperty("name").GetString());
         Assert.DoesNotContain(api.Requests, request =>
             request.Path.Contains("endpoints", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(api.Requests, request =>
+            request.Path == "/apis/events.k8s.io/v1/namespaces/demo/events" &&
+            request.Query.Contains("limit=100", StringComparison.Ordinal));
     }
 
     private static ManagerContext CreateManager(TestKubernetesApi? api = null)
@@ -213,6 +287,49 @@ public sealed class K8sManagerDiagnosticsTests
             }
           }
           """;
+
+    private static string DeploymentWithMatchExpressionsJson() =>
+        """
+        {
+          "apiVersion": "apps/v1",
+          "kind": "Deployment",
+          "metadata": {
+            "name": "demo",
+            "namespace": "demo",
+            "generation": 1,
+            "labels": { "app": "demo" }
+          },
+          "spec": {
+            "replicas": 1,
+            "selector": {
+              "matchLabels": { "app": "demo" },
+              "matchExpressions": [
+                {
+                  "key": "tier",
+                  "operator": "In",
+                  "values": ["worker", "api"]
+                },
+                {
+                  "key": "debug",
+                  "operator": "DoesNotExist"
+                }
+              ]
+            },
+            "template": {
+              "metadata": { "labels": { "app": "demo", "tier": "api" } },
+              "spec": {
+                "containers": [{ "name": "nginx", "image": "nginx:1.27-alpine" }]
+              }
+            }
+          },
+          "status": {
+            "observedGeneration": 1,
+            "readyReplicas": 1,
+            "availableReplicas": 1,
+            "updatedReplicas": 1
+          }
+        }
+        """;
 
     private static string PodJson(string name) =>
         $$"""
@@ -272,6 +389,11 @@ public sealed class K8sManagerDiagnosticsTests
     private static IEnumerable<string> PodItems(int count)
     {
         return Enumerable.Range(1, count).Select(index => PodJson($"demo-pod-{index}"));
+    }
+
+    private static string DecodeQuery(string query)
+    {
+        return Uri.UnescapeDataString(query.Replace("+", " ", StringComparison.Ordinal));
     }
 
     private sealed record ManagerContext(K8sManager Manager, string ApprovalRoot);

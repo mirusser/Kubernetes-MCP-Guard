@@ -30,11 +30,31 @@ public sealed class K8sManagerObservabilityTests
     }
 
     [Fact]
+    public async Task GetEventsAsync_RejectsLimitBelowBounds()
+    {
+        var manager = CreateManager();
+
+        var result = await manager.GetEventsAsync("demo", null, null, 0, CancellationToken.None);
+
+        Assert.Contains("Limit must be between 1 and 100", result);
+    }
+
+    [Fact]
     public async Task GetPodLogsAsync_RejectsTailLinesOutsideBounds()
     {
         var manager = CreateManager();
 
         var result = await manager.GetPodLogsAsync("demo", "demo-pod", null, 501, previous: false, CancellationToken.None);
+
+        Assert.Contains("TailLines must be between 1 and 500", result);
+    }
+
+    [Fact]
+    public async Task GetPodLogsAsync_RejectsTailLinesBelowBounds()
+    {
+        var manager = CreateManager();
+
+        var result = await manager.GetPodLogsAsync("demo", "demo-pod", null, 0, previous: false, CancellationToken.None);
 
         Assert.Contains("TailLines must be between 1 and 500", result);
     }
@@ -176,6 +196,96 @@ public sealed class K8sManagerObservabilityTests
         Assert.DoesNotContain("enabled", result);
         Assert.DoesNotContain("AAAA", result);
         Assert.Equal("/api/v1/namespaces/demo/configmaps/demo-config", api.LastRequest?.Path);
+    }
+
+    [Fact]
+    public async Task GetResourceAsync_ReturnsSupportedResourceSummaries()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/apis/apps/v1/namespaces/demo/deployments/demo" => TestResponse.Json("""
+                                                                                   {
+                                                                                     "apiVersion": "apps/v1",
+                                                                                     "kind": "Deployment",
+                                                                                     "metadata": { "name": "demo", "namespace": "demo", "labels": { "app": "demo" } },
+                                                                                     "spec": {
+                                                                                       "replicas": 2,
+                                                                                       "selector": { "matchLabels": { "app": "demo" } }
+                                                                                     },
+                                                                                     "status": { "readyReplicas": 1, "availableReplicas": 1, "updatedReplicas": 1 }
+                                                                                   }
+                                                                                   """),
+            "/apis/apps/v1/namespaces/demo/replicasets/demo-rs" => TestResponse.Json("""
+                                                                                     {
+                                                                                       "apiVersion": "apps/v1",
+                                                                                       "kind": "ReplicaSet",
+                                                                                       "metadata": { "name": "demo-rs", "namespace": "demo", "labels": { "app": "demo" } },
+                                                                                       "spec": {
+                                                                                         "replicas": 2,
+                                                                                         "selector": { "matchLabels": { "app": "demo" } }
+                                                                                       },
+                                                                                       "status": { "readyReplicas": 1, "availableReplicas": 1 }
+                                                                                     }
+                                                                                     """),
+            "/api/v1/namespaces/demo/pods/demo-pod" => TestResponse.Json("""
+                                                                         {
+                                                                           "apiVersion": "v1",
+                                                                           "kind": "Pod",
+                                                                           "metadata": { "name": "demo-pod", "namespace": "demo", "labels": { "app": "demo" } },
+                                                                           "status": {
+                                                                             "phase": "Running",
+                                                                             "containerStatuses": [{
+                                                                               "name": "nginx",
+                                                                               "ready": true,
+                                                                               "restartCount": 0,
+                                                                               "state": { "running": {} }
+                                                                             }]
+                                                                           },
+                                                                           "spec": {
+                                                                             "containers": [{
+                                                                               "name": "nginx",
+                                                                               "image": "nginx:1.27-alpine",
+                                                                               "env": [{ "name": "PASSWORD", "value": "secret-env" }]
+                                                                             }]
+                                                                           }
+                                                                         }
+                                                                         """),
+            "/api/v1/namespaces/demo/services/demo" => TestResponse.Json("""
+                                                                          {
+                                                                            "apiVersion": "v1",
+                                                                            "kind": "Service",
+                                                                            "metadata": { "name": "demo", "namespace": "demo", "labels": { "app": "demo" } },
+                                                                            "spec": {
+                                                                              "type": "ClusterIP",
+                                                                              "clusterIP": "10.0.0.1",
+                                                                              "selector": { "app": "demo" },
+                                                                              "ports": [{ "name": "http", "port": 80, "targetPort": 80, "protocol": "TCP" }]
+                                                                            }
+                                                                          }
+                                                                          """),
+            _ => TestResponse.Json("{}")
+        });
+        var manager = CreateManager(api);
+
+        var deployment = await manager.GetResourceAsync("demo", "Deployment", "demo", CancellationToken.None);
+        var replicaSet = await manager.GetResourceAsync("demo", "ReplicaSet", "demo-rs", CancellationToken.None);
+        var pod = await manager.GetResourceAsync("demo", "Pod", "demo-pod", CancellationToken.None);
+        var service = await manager.GetResourceAsync("demo", "Service", "demo", CancellationToken.None);
+
+        AssertResourceSummary(deployment, "Deployment", "demo");
+        AssertResourceSummary(replicaSet, "ReplicaSet", "demo-rs");
+        AssertResourceSummary(pod, "Pod", "demo-pod");
+        AssertResourceSummary(service, "Service", "demo");
+        Assert.DoesNotContain("secret-env", pod);
+    }
+
+    private static void AssertResourceSummary(string json, string kind, string name)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+
+        Assert.Equal(kind, root.GetProperty("kind").GetString());
+        Assert.Equal(name, root.GetProperty("name").GetString());
     }
 
     private static K8sManager CreateManager(TestKubernetesApi? api = null)

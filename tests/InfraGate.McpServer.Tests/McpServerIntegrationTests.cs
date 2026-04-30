@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using InfraGate.McpServer;
 using ModelContextProtocol.Client;
@@ -80,6 +81,132 @@ public sealed partial class McpServerIntegrationTests
 
         Assert.Contains("mcp-api-demo", statusText);
         Assert.Contains("demo-config", statusText);
+
+        var podName = TryGetFirstPodName(statusText);
+
+        var eventsText = await CallTextAsync(
+            client,
+            "get_k8s_events",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = namespaceName,
+                ["labelSelector"] = "app=mcp-api-demo",
+                ["limit"] = 5
+            },
+            cancellationToken: CancellationToken.None);
+
+        AssertJsonArrayProperty(eventsText, "events");
+
+        var deploymentResourceText = await CallTextAsync(
+            client,
+            "get_k8s_resource",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = namespaceName,
+                ["kind"] = "Deployment",
+                ["name"] = "mcp-api-demo"
+            },
+            cancellationToken: CancellationToken.None);
+        AssertJsonKindName(deploymentResourceText, "Deployment", "mcp-api-demo");
+
+        var serviceResourceText = await CallTextAsync(
+            client,
+            "get_k8s_resource",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = namespaceName,
+                ["kind"] = "Service",
+                ["name"] = "mcp-api-demo"
+            },
+            cancellationToken: CancellationToken.None);
+        AssertJsonKindName(serviceResourceText, "Service", "mcp-api-demo");
+
+        var configMapResourceText = await CallTextAsync(
+            client,
+            "get_k8s_resource",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = namespaceName,
+                ["kind"] = "ConfigMap",
+                ["name"] = "demo-config"
+            },
+            cancellationToken: CancellationToken.None);
+        AssertJsonKindName(configMapResourceText, "ConfigMap", "demo-config");
+
+        var deploymentDiagnosticsText = await CallTextAsync(
+            client,
+            "get_deployment_diagnostics",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = namespaceName,
+                ["name"] = "mcp-api-demo",
+                ["limit"] = 5
+            },
+            cancellationToken: CancellationToken.None);
+        AssertJsonKindName(deploymentDiagnosticsText, "Deployment", "mcp-api-demo");
+
+        var serviceDiagnosticsText = await CallTextAsync(
+            client,
+            "get_service_diagnostics",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = namespaceName,
+                ["name"] = "mcp-api-demo",
+                ["limit"] = 5
+            },
+            cancellationToken: CancellationToken.None);
+        AssertJsonKindName(serviceDiagnosticsText, "Service", "mcp-api-demo");
+
+        if (!string.IsNullOrWhiteSpace(podName))
+        {
+            var podDiagnosticsText = await CallTextAsync(
+                client,
+                "get_pod_diagnostics",
+                new Dictionary<string, object?>
+                {
+                    ["namespace"] = namespaceName,
+                    ["podName"] = podName,
+                    ["limit"] = 5
+                },
+                cancellationToken: CancellationToken.None);
+            AssertJsonKindName(podDiagnosticsText, "Pod", podName);
+
+            var podLogsText = await CallTextAsync(
+                client,
+                "get_pod_logs",
+                new Dictionary<string, object?>
+                {
+                    ["namespace"] = namespaceName,
+                    ["podName"] = podName,
+                    ["container"] = "nginx",
+                    ["tailLines"] = 10
+                },
+                cancellationToken: CancellationToken.None);
+            AssertJsonProperty(podLogsText, "podName", podName);
+        }
+
+        var setImageRequestText = await CallTextAsync(
+            client,
+            "request_set_deployment_image",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = namespaceName,
+                ["name"] = "mcp-api-demo",
+                ["container"] = "nginx",
+                ["image"] = "nginx:1.27-alpine"
+            },
+            cancellationToken: CancellationToken.None);
+        var setImagePlanId = await ApprovePlanAsync(approvalRoot, setImageRequestText);
+        var setImageText = await CallTextAsync(
+            client,
+            "apply_approved_plan",
+            new Dictionary<string, object?>
+            {
+                ["planId"] = setImagePlanId
+            },
+            cancellationToken: CancellationToken.None);
+
+        Assert.Contains("Updated apps/v1 Deployment", setImageText);
 
         var scaleRequestText = await CallTextAsync(
             client,
@@ -174,6 +301,44 @@ public sealed partial class McpServerIntegrationTests
 
     private static string GetText(CallToolResult result) =>
         string.Join(Environment.NewLine, result.Content.OfType<TextContentBlock>().Select(content => content.Text));
+
+    private static string? TryGetFirstPodName(string statusText)
+    {
+        using var document = JsonDocument.Parse(statusText);
+        foreach (var pod in document.RootElement.GetProperty("pods").EnumerateArray())
+        {
+            var podName = pod.GetProperty("name").GetString();
+            if (!string.IsNullOrWhiteSpace(podName))
+            {
+                return podName;
+            }
+        }
+
+        return null;
+    }
+
+    private static void AssertJsonKindName(string json, string kind, string name)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+
+        Assert.Equal(kind, root.GetProperty("kind").GetString());
+        Assert.Equal(name, root.GetProperty("name").GetString());
+    }
+
+    private static void AssertJsonProperty(string json, string propertyName, string expectedValue)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        Assert.Equal(expectedValue, document.RootElement.GetProperty(propertyName).GetString());
+    }
+
+    private static void AssertJsonArrayProperty(string json, string propertyName)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        Assert.Equal(JsonValueKind.Array, document.RootElement.GetProperty(propertyName).ValueKind);
+    }
 
     private static string FindRepoRoot()
     {

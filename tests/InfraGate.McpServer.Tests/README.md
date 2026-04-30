@@ -11,7 +11,7 @@
 - `K8sManagerRequestTests.cs`: request-plan formatting, namespace validation, replica bounds, approval guidance, and unapproved apply refusal.
 - `K8sManagerSetImageTests.cs`: Deployment image update planning, stale-plan refusal, and patch shape.
 - `K8sMcpOptionsTests.cs`: allowed namespace parsing defaults and comma-separated values.
-- `McpServerIntegrationTests.cs`: opt-in stdio MCP client flow that creates, approves, applies, scales, restarts, and deletes demo Kubernetes resources.
+- `McpServerIntegrationTests.cs`: opt-in stdio MCP client flow that reads demo Kubernetes resources and Events, then creates, approves, applies, updates images, scales, restarts, and deletes demo resources.
 
 ## Running Tests
 

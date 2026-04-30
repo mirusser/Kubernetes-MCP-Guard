@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify README Docs"
+  short_description: "Check README files against code and tests."
+  default_prompt: "Verify repository README files against implementation and tests, then make minimal documentation fixes."

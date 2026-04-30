@@ -227,4 +227,4 @@ INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build
 kubectl --kubeconfig .kube/mcp-nginx-demo.config -n mcp-nginx-demo get deployment,service,configmap,pods,replicasets -o wide
 ```
 
-The integration test drives the MCP server over stdio, requests supported manifest, scale, restart, and delete plans, approves each exact pending file, applies them through MCP, and verifies the Kubernetes API path works end to end.
+The integration test drives the MCP server over stdio, requests supported read tools plus manifest, set-image, scale, restart, and delete plans, approves each exact pending file, applies them through MCP, and verifies the Kubernetes API path works end to end.

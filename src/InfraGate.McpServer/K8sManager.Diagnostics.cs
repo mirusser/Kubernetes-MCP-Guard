@@ -170,7 +170,7 @@ public sealed partial class K8sManager
     {
         var events = await client.EventsV1.ListNamespacedEventAsync(
             namespaceName,
-            limit: limit,
+            limit: K8sConventions.MaxEventLimit,
             cancellationToken: cancellationToken);
 
         return events.Items
