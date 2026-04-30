@@ -9,10 +9,12 @@
 - `ResponseSanitizationTests.cs`: manifest-block redaction, suspicious JSON value redaction, suspicious text line redaction, and clean text passthrough.
 - `GuardedToolRunnerTests.cs`: downstream forwarding, request warnings, response redaction, and audit identity capture for OAuth and static bearer users.
 - `GuardrailAuditStoreTests.cs`: JSONL audit output without credential leakage.
+- `GatewayHttpMcpIntegrationTests.cs`: real HTTP MCP transport wiring with static bearer auth, fake-downstream forwarding, guardrail audit capture, response redaction, downstream stdio startup smoke coverage, MCP elicitation forwarding, and an opt-in live gateway-to-Kubernetes flow.
 
 ## Running Tests
 
 - Gateway suite: `dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj`
+- Live gateway integration: `INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj`
 - Full solution: `dotnet test InfraGate.slnx`
 
-Most tests run against in-memory or fake dependencies rather than a live downstream MCP server.
+Most tests run against in-memory or fake dependencies. The default suite also starts the real downstream stdio server for a cluster-free request-plan smoke test; only `INFRA_GATE_RUN_GATEWAY_INTEGRATION=1` requires a live Kubernetes demo namespace.

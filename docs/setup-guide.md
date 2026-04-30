@@ -283,10 +283,15 @@ dotnet test InfraGate.slnx --no-build
 # Integration tests (requires minikube + RBAC from Step 1)
 INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build
 
+# HTTP gateway integration tests (requires minikube + RBAC from Step 1)
+INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build
+
 # Check cluster state after integration tests
 kubectl --kubeconfig .kube/mcp-nginx-demo.config \
   -n mcp-nginx-demo get deployment,service,configmap,pods,replicasets -o wide
 ```
+
+The stdio integration flag verifies the direct MCP server path. The gateway integration flag verifies the HTTP MCP endpoint, downstream stdio bridge, gateway guardrails, approval plans, and Kubernetes path through the same demo namespace.
 
 ---
 

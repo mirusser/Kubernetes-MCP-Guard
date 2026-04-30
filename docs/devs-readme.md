@@ -224,7 +224,10 @@ The approval file stores the SHA-256 hash of the pending plan. If the pending pl
 dotnet build InfraGate.slnx
 dotnet test InfraGate.slnx --no-build
 INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build
+INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build
+./scripts/coverage.sh
 kubectl --kubeconfig .kube/mcp-nginx-demo.config -n mcp-nginx-demo get deployment,service,configmap,pods,replicasets -o wide
 ```
 
-The integration test drives the MCP server over stdio, requests supported read tools plus manifest, set-image, scale, restart, and delete plans, approves each exact pending file, applies them through MCP, and verifies the Kubernetes API path works end to end.
+The stdio integration test drives the MCP server directly, while the gateway integration test drives the HTTP MCP endpoint, downstream stdio bridge, gateway guardrails, approval plans, and Kubernetes path. Both live integration modes expect a usable kubeconfig, defaulting to `.kube/mcp-nginx-demo.config` when `KUBECONFIG` is unset.
+Code coverage HTML reports are generated at `coverage-report/index.html` by running `./scripts/coverage.sh`.

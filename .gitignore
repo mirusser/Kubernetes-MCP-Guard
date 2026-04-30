@@ -3,3 +3,4 @@ obj/
 .kube/
 .mcp-approvals/
 TestResults/
+coverage-report/
