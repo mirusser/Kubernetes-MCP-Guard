@@ -68,9 +68,10 @@ That makes the project a practical slice of a bigger direction: MCP-native infra
   - `get_k8s_events` for bounded `events.k8s.io/v1` diagnostics.
   - `get_pod_logs` for bounded Pod log reads.
   - `get_k8s_resource` for focused summaries without Secret values, ConfigMap values, or raw manifests.
+  - `get_deployment_diagnostics`, `get_pod_diagnostics`, and `get_service_diagnostics` for bounded troubleshooting summaries.
 - Approval-gated mutations:
   - Server-side apply and delete plans for `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap`.
-  - Deployment scale and restart plans.
+  - Deployment scale, restart, and container image update plans.
   - Exact-plan hash checks before application.
 - Gateway protections:
   - OAuth JWT or local static bearer auth.

@@ -10,6 +10,7 @@ internal static class K8sConventions
     public const int DefaultLogTailLines = 200;
     public const int MaxLogTailLines = 500;
     public const int LogLimitBytes = 65536;
+    public const int MaxDiagnosticsRelatedItems = 50;
 
     public static class EnvironmentVariables
     {
@@ -56,6 +57,7 @@ internal static class K8sConventions
         public const string Delete = "delete";
         public const string Scale = "scale";
         public const string Restart = "restart";
+        public const string SetImage = "set-image";
     }
 
     public static class PlanParameters
@@ -64,6 +66,9 @@ internal static class K8sConventions
         public const string Name = "name";
         public const string Replicas = "replicas";
         public const string RestartedAtUtc = "restartedAtUtc";
+        public const string Container = "container";
+        public const string CurrentImage = "currentImage";
+        public const string Image = "image";
     }
 
     public static class ToolArguments
@@ -77,6 +82,7 @@ internal static class K8sConventions
         public const string Name = "name";
         public const string FieldSelector = "fieldSelector";
         public const string Limit = "limit";
+        public const string Image = "image";
     }
 
     public static class ToolNames
@@ -85,11 +91,23 @@ internal static class K8sConventions
         public const string GetK8sEvents = "get_k8s_events";
         public const string GetPodLogs = "get_pod_logs";
         public const string GetK8sResource = "get_k8s_resource";
+        public const string GetDeploymentDiagnostics = "get_deployment_diagnostics";
+        public const string GetPodDiagnostics = "get_pod_diagnostics";
+        public const string GetServiceDiagnostics = "get_service_diagnostics";
         public const string RequestApplyManifest = "request_apply_manifest";
         public const string RequestDeleteManifest = "request_delete_manifest";
         public const string RequestScaleDeployment = "request_scale_deployment";
         public const string RequestRestartDeployment = "request_restart_deployment";
+        public const string RequestSetDeploymentImage = "request_set_deployment_image";
         public const string ApplyApprovedPlan = "apply_approved_plan";
+    }
+
+    public static class LabelSelectorOperators
+    {
+        public const string In = "In";
+        public const string NotIn = "NotIn";
+        public const string Exists = "Exists";
+        public const string DoesNotExist = "DoesNotExist";
     }
 
     public static class K8sResources

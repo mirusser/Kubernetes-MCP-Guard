@@ -28,6 +28,13 @@ public sealed partial class K8sManager
             : null;
     }
 
+    private static string? ValidateRequiredText(string value, string name)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? $"{name} is required."
+            : null;
+    }
+
     private static string? ValidateReplicas(int replicas)
     {
         return replicas is < 0 or > MaxReplicas

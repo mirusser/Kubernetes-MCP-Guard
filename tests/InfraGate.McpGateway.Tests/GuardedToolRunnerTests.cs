@@ -215,6 +215,82 @@ public sealed class GuardedToolRunnerTests
         Assert.Equal("demo-config", downstream.Arguments["name"]);
     }
 
+    [Fact]
+    public async Task DiagnosticTools_ForwardExpectedToolNamesAndArguments()
+    {
+        var deploymentDownstream = new FakeDownstream("deployment diagnostics");
+        var deploymentRunner = new GuardedToolRunner(
+            deploymentDownstream,
+            new PromptInjectionGuard(),
+            new InMemoryAuditStore());
+
+        await K8sGatewayTools.GetDeploymentDiagnostics(
+            deploymentRunner,
+            "demo",
+            "demo-api",
+            7,
+            CancellationToken.None);
+
+        Assert.Equal("get_deployment_diagnostics", deploymentDownstream.ToolName);
+        Assert.Equal("demo", deploymentDownstream.Arguments["namespace"]);
+        Assert.Equal("demo-api", deploymentDownstream.Arguments["name"]);
+        Assert.Equal(7, deploymentDownstream.Arguments["limit"]);
+
+        var podDownstream = new FakeDownstream("pod diagnostics");
+        var podRunner = new GuardedToolRunner(podDownstream, new PromptInjectionGuard(), new InMemoryAuditStore());
+
+        await K8sGatewayTools.GetPodDiagnostics(
+            podRunner,
+            "demo",
+            "demo-pod",
+            5,
+            CancellationToken.None);
+
+        Assert.Equal("get_pod_diagnostics", podDownstream.ToolName);
+        Assert.Equal("demo", podDownstream.Arguments["namespace"]);
+        Assert.Equal("demo-pod", podDownstream.Arguments["podName"]);
+        Assert.Equal(5, podDownstream.Arguments["limit"]);
+
+        var serviceDownstream = new FakeDownstream("service diagnostics");
+        var serviceRunner = new GuardedToolRunner(
+            serviceDownstream,
+            new PromptInjectionGuard(),
+            new InMemoryAuditStore());
+
+        await K8sGatewayTools.GetServiceDiagnostics(
+            serviceRunner,
+            "demo",
+            "demo-service",
+            3,
+            CancellationToken.None);
+
+        Assert.Equal("get_service_diagnostics", serviceDownstream.ToolName);
+        Assert.Equal("demo", serviceDownstream.Arguments["namespace"]);
+        Assert.Equal("demo-service", serviceDownstream.Arguments["name"]);
+        Assert.Equal(3, serviceDownstream.Arguments["limit"]);
+    }
+
+    [Fact]
+    public async Task RequestSetDeploymentImage_ForwardsExpectedToolNameAndArguments()
+    {
+        var downstream = new FakeDownstream("set image");
+        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), new InMemoryAuditStore());
+
+        await K8sGatewayTools.RequestSetDeploymentImage(
+            runner,
+            "demo",
+            "demo-api",
+            "web",
+            "nginx:1.28-alpine",
+            CancellationToken.None);
+
+        Assert.Equal("request_set_deployment_image", downstream.ToolName);
+        Assert.Equal("demo", downstream.Arguments["namespace"]);
+        Assert.Equal("demo-api", downstream.Arguments["name"]);
+        Assert.Equal("web", downstream.Arguments["container"]);
+        Assert.Equal("nginx:1.28-alpine", downstream.Arguments["image"]);
+    }
+
     private sealed class FakeDownstream(string response) : IDownstreamMcpClient
     {
         public string? ToolName { get; private set; }

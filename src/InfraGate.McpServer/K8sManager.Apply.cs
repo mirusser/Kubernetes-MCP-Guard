@@ -134,6 +134,7 @@ public sealed partial class K8sManager
                 K8sConventions.PlanOperations.Delete => await DeleteManifestPlanAsync(plan, cancellationToken),
                 K8sConventions.PlanOperations.Scale => await ScaleDeploymentPlanAsync(plan, cancellationToken),
                 K8sConventions.PlanOperations.Restart => await RestartDeploymentPlanAsync(plan, cancellationToken),
+                K8sConventions.PlanOperations.SetImage => await SetDeploymentImagePlanAsync(plan, cancellationToken),
                 _ => ApplyResult.Failed($"Unsupported plan operation '{plan.Operation}'.")
             };
         }
@@ -230,6 +231,63 @@ public sealed partial class K8sManager
 
         return ApplyResult.Success(
             $"Restarted {K8sConventions.K8sResources.DeploymentDisplayName} {plan.Namespace}/{name} at {restartedAtUtc}.");
+    }
+
+    private async Task<ApplyResult> SetDeploymentImagePlanAsync(K8sPlan plan, CancellationToken cancellationToken)
+    {
+        var name = plan.Parameters[K8sConventions.PlanParameters.Name];
+        var container = plan.Parameters[K8sConventions.PlanParameters.Container];
+        var currentImage = plan.Parameters[K8sConventions.PlanParameters.CurrentImage];
+        var image = plan.Parameters[K8sConventions.PlanParameters.Image];
+        var deployment = await client.AppsV1.ReadNamespacedDeploymentAsync(
+            name,
+            plan.Namespace,
+            cancellationToken: cancellationToken);
+        var deploymentContainer = deployment.Spec?.Template?.Spec?.Containers?
+            .FirstOrDefault(item => string.Equals(item.Name, container, StringComparison.Ordinal));
+        if (deploymentContainer is null)
+        {
+            return ApplyResult.Failed(
+                $"Deployment '{plan.Namespace}/{name}' does not contain container '{container}'. Re-request the plan.");
+        }
+
+        var actualImage = deploymentContainer.Image ?? string.Empty;
+        if (!string.Equals(actualImage, currentImage, StringComparison.Ordinal))
+        {
+            return ApplyResult.Failed(
+                $"Deployment '{plan.Namespace}/{name}' container '{container}' image changed from planned '{currentImage}' to '{actualImage}'. Re-request the plan.");
+        }
+
+        var patch = new
+        {
+            spec = new
+            {
+                template = new
+                {
+                    spec = new
+                    {
+                        containers = new[]
+                        {
+                            new
+                            {
+                                name = container,
+                                image
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        await client.AppsV1.PatchNamespacedDeploymentAsync(
+            new V1Patch(patch, V1Patch.PatchType.StrategicMergePatch),
+            name,
+            plan.Namespace,
+            fieldManager: FieldManager,
+            cancellationToken: cancellationToken);
+
+        return ApplyResult.Success(
+            $"Updated {K8sConventions.K8sResources.DeploymentDisplayName} {plan.Namespace}/{name} container '{container}' image from '{currentImage}' to '{image}'.");
     }
 
     private async Task ApplyObjectAsync(IKubernetesObject<V1ObjectMeta> obj, CancellationToken cancellationToken)

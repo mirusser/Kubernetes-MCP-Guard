@@ -1,3 +1,5 @@
+using k8s;
+
 namespace InfraGate.McpServer;
 
 public sealed partial class K8sManager
@@ -111,6 +113,58 @@ public sealed partial class K8sManager
             manifest: null);
 
         return CreateAndFormatPlanAsync(plan, cancellationToken);
+    }
+
+    public async Task<string> RequestSetDeploymentImageAsync(
+        string namespaceName,
+        string name,
+        string container,
+        string image,
+        CancellationToken cancellationToken)
+    {
+        var validation = ValidateNamespace(namespaceName) ??
+            ValidateName(name) ??
+            ValidateRequiredText(container, "Container name") ??
+            ValidateRequiredText(image, "Image");
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        try
+        {
+            var deployment = await client.AppsV1.ReadNamespacedDeploymentAsync(
+                name,
+                namespaceName,
+                cancellationToken: cancellationToken);
+            var deploymentContainer = deployment.Spec?.Template?.Spec?.Containers?
+                .FirstOrDefault(item => string.Equals(item.Name, container, StringComparison.Ordinal));
+            if (deploymentContainer is null)
+            {
+                return $"Deployment '{namespaceName}/{name}' does not contain container '{container}'.";
+            }
+
+            var currentImage = deploymentContainer.Image ?? string.Empty;
+            var plan = CreatePlan(
+                operation: K8sConventions.PlanOperations.SetImage,
+                namespaceName,
+                description: $"Update Deployment '{name}' container '{container}' image from '{currentImage}' to '{image}'.",
+                parameters: new Dictionary<string, string>
+                {
+                    [K8sConventions.PlanParameters.Name] = name,
+                    [K8sConventions.PlanParameters.Container] = container,
+                    [K8sConventions.PlanParameters.CurrentImage] = currentImage,
+                    [K8sConventions.PlanParameters.Image] = image
+                },
+                objects: [K8sConventions.K8sResources.DeploymentRef(namespaceName, name)],
+                manifest: null);
+
+            return await CreateAndFormatPlanAsync(plan, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return FormatApiException("Deployment image plan failed", ex);
+        }
     }
 
     private async Task<string> CreateAndFormatPlanAsync(K8sPlan plan, CancellationToken cancellationToken)

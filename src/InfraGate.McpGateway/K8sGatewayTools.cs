@@ -82,6 +82,60 @@ public static class K8sGatewayTools
             },
             cancellationToken);
 
+    [McpServerTool(Name = McpGatewayConventions.ToolNames.GetDeploymentDiagnostics, ReadOnly = true, OpenWorld = false)]
+    [Description("Shows bounded Deployment diagnostics with related ReplicaSets, Pods, and Events in an allowed namespace.")]
+    public static Task<string> GetDeploymentDiagnostics(
+        GuardedToolRunner runner,
+        [Description("Allowed Kubernetes namespace to inspect.")] string @namespace,
+        [Description("Deployment name.")] string name,
+        [Description("Maximum related events to return, from 1 to 100.")] int limit = McpGatewayConventions.DefaultEventLimit,
+        CancellationToken cancellationToken = default) =>
+        runner.CallAsync(
+            McpGatewayConventions.ToolNames.GetDeploymentDiagnostics,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.Namespace] = @namespace,
+                [McpGatewayConventions.ToolArguments.Name] = name,
+                [McpGatewayConventions.ToolArguments.Limit] = limit
+            },
+            cancellationToken);
+
+    [McpServerTool(Name = McpGatewayConventions.ToolNames.GetPodDiagnostics, ReadOnly = true, OpenWorld = false)]
+    [Description("Shows bounded Pod diagnostics with related Events in an allowed namespace.")]
+    public static Task<string> GetPodDiagnostics(
+        GuardedToolRunner runner,
+        [Description("Allowed Kubernetes namespace to inspect.")] string @namespace,
+        [Description("Pod name.")] string podName,
+        [Description("Maximum related events to return, from 1 to 100.")] int limit = McpGatewayConventions.DefaultEventLimit,
+        CancellationToken cancellationToken = default) =>
+        runner.CallAsync(
+            McpGatewayConventions.ToolNames.GetPodDiagnostics,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.Namespace] = @namespace,
+                [McpGatewayConventions.ToolArguments.PodName] = podName,
+                [McpGatewayConventions.ToolArguments.Limit] = limit
+            },
+            cancellationToken);
+
+    [McpServerTool(Name = McpGatewayConventions.ToolNames.GetServiceDiagnostics, ReadOnly = true, OpenWorld = false)]
+    [Description("Shows bounded Service diagnostics with matching Pods and related Events in an allowed namespace.")]
+    public static Task<string> GetServiceDiagnostics(
+        GuardedToolRunner runner,
+        [Description("Allowed Kubernetes namespace to inspect.")] string @namespace,
+        [Description("Service name.")] string name,
+        [Description("Maximum related events to return, from 1 to 100.")] int limit = McpGatewayConventions.DefaultEventLimit,
+        CancellationToken cancellationToken = default) =>
+        runner.CallAsync(
+            McpGatewayConventions.ToolNames.GetServiceDiagnostics,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.Namespace] = @namespace,
+                [McpGatewayConventions.ToolArguments.Name] = name,
+                [McpGatewayConventions.ToolArguments.Limit] = limit
+            },
+            cancellationToken);
+
     [McpServerTool(Name = McpGatewayConventions.ToolNames.RequestApplyManifest, Destructive = false, OpenWorld = false)]
     [Description("Creates a pending approval plan to server-side apply supported Kubernetes YAML or JSON manifests.")]
     public static Task<string> RequestApplyManifest(
@@ -145,6 +199,26 @@ public static class K8sGatewayTools
             {
                 [McpGatewayConventions.ToolArguments.Namespace] = @namespace,
                 [McpGatewayConventions.ToolArguments.Name] = name
+            },
+            cancellationToken);
+
+    [McpServerTool(Name = McpGatewayConventions.ToolNames.RequestSetDeploymentImage, Destructive = false, OpenWorld = false)]
+    [Description("Creates a pending approval plan to update one Deployment container image in an allowed namespace.")]
+    public static Task<string> RequestSetDeploymentImage(
+        GuardedToolRunner runner,
+        [Description("Allowed Kubernetes namespace.")] string @namespace,
+        [Description("Deployment name.")] string name,
+        [Description("Container name.")] string container,
+        [Description("Target container image.")] string image,
+        CancellationToken cancellationToken = default) =>
+        runner.CallAsync(
+            McpGatewayConventions.ToolNames.RequestSetDeploymentImage,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.Namespace] = @namespace,
+                [McpGatewayConventions.ToolArguments.Name] = name,
+                [McpGatewayConventions.ToolArguments.Container] = container,
+                [McpGatewayConventions.ToolArguments.Image] = image
             },
             cancellationToken);
 

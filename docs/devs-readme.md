@@ -9,8 +9,8 @@ This repo contains a narrow Kubernetes governance slice for the larger Open WebU
 - `src/InfraGate.DevIssuer` is a dev-only localhost OAuth issuer with OIDC-style discovery metadata for testing Codex MCP OAuth login without an external provider.
 - The MCP server uses the Kubernetes API through `KubernetesClient`, not runtime `kubectl` process execution.
 - Mutating actions are two-step: request a plan through MCP, then call apply so the MCP server can request user approval before changing Kubernetes.
-- The server allows only configured namespaces and only these manifest kinds for mutation: `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap`.
-- Read-only observability tools expose bounded Events, Pod logs, and focused resource summaries without exposing Secret values, ConfigMap values, raw manifests, exec, attach, or port-forward.
+- The server allows only configured namespaces. Manifest apply/delete is limited to `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap`; other mutating tools are narrow Deployment operations.
+- Read-only observability tools expose bounded Events, Pod logs, focused resource summaries, and diagnostics without exposing Secret values, ConfigMap values, raw manifests, exec, attach, or port-forward.
 - `deploy/minikube/rbac.yaml` creates a namespace-scoped ServiceAccount, Role, and RoleBinding.
 - `scripts/create-demo-kubeconfig.sh` creates a short-lived service-account kubeconfig at `.kube/mcp-nginx-demo.config`.
 - MCP transport and OAuth compliance notes for the HTTP gateway path are tracked in [MCP-COMPLIANCE.md](MCP-COMPLIANCE.md).
@@ -194,15 +194,19 @@ The HTTP gateway exposes the same tool names and arguments as the stdio server:
 - `get_k8s_events(namespace, labelSelector = null, fieldSelector = null, limit = 50)`
 - `get_pod_logs(namespace, podName, container = null, tailLines = 200, previous = false)`
 - `get_k8s_resource(namespace, kind, name)`
+- `get_deployment_diagnostics(namespace, name, limit = 50)`
+- `get_pod_diagnostics(namespace, podName, limit = 50)`
+- `get_service_diagnostics(namespace, name, limit = 50)`
 - `request_apply_manifest(namespace, manifest)`
 - `request_delete_manifest(namespace, manifest)`
 - `request_scale_deployment(namespace, name, replicas)`
 - `request_restart_deployment(namespace, name)`
+- `request_set_deployment_image(namespace, name, container, image)`
 - `apply_approved_plan(planId)`
 
 Logs and Events are untrusted Kubernetes workload/cluster output. The HTTP gateway sanitizes suspicious model-visible output before returning it; direct stdio use of `InfraGate.McpServer` bypasses that gateway guardrail layer.
 
-Observability bounds: Events default to `limit = 50` and allow up to `100`; Pod logs default to `tailLines = 200`, allow up to `500`, and use a fixed `65536` byte cap. Focused resource summaries support `Deployment`, `ReplicaSet`, `Pod`, `Service`, and `ConfigMap`; `Secret` details are intentionally rejected.
+Observability bounds: Events and diagnostics default to `limit = 50` and allow up to `100`; diagnostics cap related Pods and ReplicaSets to `50`; Pod logs default to `tailLines = 200`, allow up to `500`, and use a fixed `65536` byte cap. Focused resource summaries support `Deployment`, `ReplicaSet`, `Pod`, `Service`, and `ConfigMap`; `Secret` details are intentionally rejected.
 
 Approval flow:
 

@@ -1,0 +1,365 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Text.Json;
+using InfraGate.McpServer;
+using k8s;
+
+namespace InfraGate.McpServer.Tests;
+
+public sealed class K8sManagerDiagnosticsTests
+{
+    [Fact]
+    public async Task GetPodDiagnosticsAsync_RejectsDisallowedNamespace()
+    {
+        var manager = CreateManager().Manager;
+
+        var result = await manager.GetPodDiagnosticsAsync("other", "demo-pod", 50, CancellationToken.None);
+
+        Assert.Contains("Namespace 'other' is not allowed", result);
+    }
+
+    [Fact]
+    public async Task GetDeploymentDiagnosticsAsync_RejectsLimitOutsideBounds()
+    {
+        var manager = CreateManager().Manager;
+
+        var result = await manager.GetDeploymentDiagnosticsAsync("demo", "demo", 101, CancellationToken.None);
+
+        Assert.Contains("Limit must be between 1 and 100", result);
+    }
+
+    [Fact]
+    public async Task GetDeploymentDiagnosticsAsync_ReturnsBoundedRelatedSummaries()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/apis/apps/v1/namespaces/demo/deployments/demo" => TestResponse.Json(DeploymentJson("nginx:1.27-alpine")),
+            "/apis/apps/v1/namespaces/demo/replicasets" => TestResponse.Json(ListJson("ReplicaSetList", ReplicaSetItems(55))),
+            "/api/v1/namespaces/demo/pods" => TestResponse.Json(ListJson("PodList", PodItems(55))),
+            "/apis/events.k8s.io/v1/namespaces/demo/events" => TestResponse.Json("""
+                                                                                    {
+                                                                                      "apiVersion": "events.k8s.io/v1",
+                                                                                      "kind": "EventList",
+                                                                                      "items": [
+                                                                                        {
+                                                                                          "metadata": { "name": "pod-warning" },
+                                                                                          "type": "Warning",
+                                                                                          "reason": "BackOff",
+                                                                                          "note": "container back-off",
+                                                                                          "regarding": { "kind": "Pod", "name": "demo-pod-1", "namespace": "demo" }
+                                                                                        },
+                                                                                        {
+                                                                                          "metadata": { "name": "other-warning" },
+                                                                                          "type": "Warning",
+                                                                                          "reason": "Other",
+                                                                                          "note": "unrelated",
+                                                                                          "regarding": { "kind": "Pod", "name": "other-pod", "namespace": "demo" }
+                                                                                        }
+                                                                                      ]
+                                                                                    }
+                                                                                    """),
+            _ => TestResponse.Json("{}")
+        });
+        var manager = CreateManager(api).Manager;
+
+        var result = await manager.GetDeploymentDiagnosticsAsync("demo", "demo", 10, CancellationToken.None);
+
+        using var document = JsonDocument.Parse(result);
+        var root = document.RootElement;
+
+        Assert.Equal("Deployment", root.GetProperty("kind").GetString());
+        Assert.Equal("app=demo", root.GetProperty("selector").GetString());
+        Assert.Equal(50, root.GetProperty("replicaSets").GetArrayLength());
+        Assert.Equal(50, root.GetProperty("pods").GetArrayLength());
+        Assert.Single(root.GetProperty("events").EnumerateArray());
+        Assert.Equal("pod-warning", root.GetProperty("events")[0].GetProperty("name").GetString());
+        Assert.DoesNotContain("supersecret", result);
+        Assert.Contains(api.Requests, request =>
+            request.Path == "/apis/apps/v1/namespaces/demo/replicasets" &&
+            request.Query.Contains("labelSelector=app%3Ddemo", StringComparison.Ordinal));
+        Assert.Contains(api.Requests, request =>
+            request.Path == "/api/v1/namespaces/demo/pods" &&
+            request.Query.Contains("labelSelector=app%3Ddemo", StringComparison.Ordinal));
+        Assert.Contains(api.Requests, request =>
+            request.Path == "/apis/events.k8s.io/v1/namespaces/demo/events" &&
+            request.Query.Contains("limit=10", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetPodDiagnosticsAsync_ReturnsPodAndRelatedEventsWithoutLogs()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/api/v1/namespaces/demo/pods/demo-pod" => TestResponse.Json(PodJson("demo-pod")),
+            "/apis/events.k8s.io/v1/namespaces/demo/events" => TestResponse.Json("""
+                                                                                    {
+                                                                                      "apiVersion": "events.k8s.io/v1",
+                                                                                      "kind": "EventList",
+                                                                                      "items": [
+                                                                                        {
+                                                                                          "metadata": { "name": "pod-event" },
+                                                                                          "type": "Normal",
+                                                                                          "reason": "Started",
+                                                                                          "note": "started",
+                                                                                          "regarding": { "kind": "Pod", "name": "demo-pod", "namespace": "demo" }
+                                                                                        }
+                                                                                      ]
+                                                                                    }
+                                                                                    """),
+            _ => TestResponse.Json("{}")
+        });
+        var manager = CreateManager(api).Manager;
+
+        var result = await manager.GetPodDiagnosticsAsync("demo", "demo-pod", 3, CancellationToken.None);
+
+        using var document = JsonDocument.Parse(result);
+        var root = document.RootElement;
+
+        Assert.Equal("Pod", root.GetProperty("kind").GetString());
+        Assert.Equal("demo-pod", root.GetProperty("pod").GetProperty("name").GetString());
+        Assert.Single(root.GetProperty("events").EnumerateArray());
+        Assert.DoesNotContain("\"log\"", result);
+        Assert.Contains(api.Requests, request =>
+            request.Path == "/apis/events.k8s.io/v1/namespaces/demo/events" &&
+            request.Query.Contains("limit=3", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetServiceDiagnosticsAsync_UsesServiceSelectorWithoutReadingEndpoints()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/api/v1/namespaces/demo/services/demo" => TestResponse.Json("""
+                                                                          {
+                                                                            "apiVersion": "v1",
+                                                                            "kind": "Service",
+                                                                            "metadata": { "name": "demo", "namespace": "demo" },
+                                                                            "spec": {
+                                                                              "type": "ClusterIP",
+                                                                              "clusterIP": "10.0.0.1",
+                                                                              "selector": { "app": "demo" },
+                                                                              "ports": [{ "name": "http", "port": 80, "targetPort": 80, "protocol": "TCP" }]
+                                                                            }
+                                                                          }
+                                                                          """),
+            "/api/v1/namespaces/demo/pods" => TestResponse.Json(ListJson("PodList", PodItems(1))),
+            "/apis/events.k8s.io/v1/namespaces/demo/events" => TestResponse.Json("""
+                                                                                    {
+                                                                                      "apiVersion": "events.k8s.io/v1",
+                                                                                      "kind": "EventList",
+                                                                                      "items": []
+                                                                                    }
+                                                                                    """),
+            _ => TestResponse.Json("{}")
+        });
+        var manager = CreateManager(api).Manager;
+
+        var result = await manager.GetServiceDiagnosticsAsync("demo", "demo", 5, CancellationToken.None);
+
+        using var document = JsonDocument.Parse(result);
+        var root = document.RootElement;
+
+        Assert.Equal("Service", root.GetProperty("kind").GetString());
+        Assert.Equal("app=demo", root.GetProperty("selector").GetString());
+        Assert.Single(root.GetProperty("pods").EnumerateArray());
+        Assert.DoesNotContain(api.Requests, request =>
+            request.Path.Contains("endpoints", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static ManagerContext CreateManager(TestKubernetesApi? api = null)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
+        var options = new K8sMcpOptions(
+            new HashSet<string>(StringComparer.Ordinal) { "demo" },
+            root);
+        var client = api is null
+            ? null
+            : new Kubernetes(new KubernetesClientConfiguration
+            {
+                Host = api.Url,
+                SkipTlsVerify = true
+            });
+
+        return new ManagerContext(new K8sManager(options, new ApprovalStore(options), client!), root);
+    }
+
+    private static string DeploymentJson(string image) =>
+        $$"""
+          {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+              "name": "demo",
+              "namespace": "demo",
+              "generation": 1,
+              "labels": { "app": "demo" }
+            },
+            "spec": {
+              "replicas": 1,
+              "selector": { "matchLabels": { "app": "demo" } },
+              "template": {
+                "metadata": { "labels": { "app": "demo" } },
+                "spec": {
+                  "containers": [{ "name": "nginx", "image": "{{image}}" }]
+                }
+              }
+            },
+            "status": {
+              "observedGeneration": 1,
+              "readyReplicas": 1,
+              "availableReplicas": 1,
+              "updatedReplicas": 1
+            }
+          }
+          """;
+
+    private static string PodJson(string name) =>
+        $$"""
+          {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+              "name": "{{name}}",
+              "namespace": "demo",
+              "labels": { "app": "demo" }
+            },
+            "spec": {
+              "nodeName": "minikube",
+              "containers": [{ "name": "nginx", "image": "nginx:1.27-alpine" }]
+            },
+            "status": {
+              "phase": "Running",
+              "podIP": "10.1.0.1",
+              "hostIP": "192.168.49.2",
+              "containerStatuses": [{
+                "name": "nginx",
+                "ready": true,
+                "restartCount": 0,
+                "image": "nginx:1.27-alpine",
+                "state": { "running": {} }
+              }]
+            }
+          }
+          """;
+
+    private static string ListJson(string kind, IEnumerable<string> items) =>
+        $$"""
+          {
+            "apiVersion": "v1",
+            "kind": "{{kind}}",
+            "items": [
+              {{string.Join(",", items)}}
+            ]
+          }
+          """;
+
+    private static IEnumerable<string> ReplicaSetItems(int count)
+    {
+        return Enumerable.Range(1, count)
+            .Select(index =>
+                $$"""
+                  {
+                    "apiVersion": "apps/v1",
+                    "kind": "ReplicaSet",
+                    "metadata": { "name": "demo-rs-{{index}}", "namespace": "demo", "labels": { "app": "demo" } },
+                    "spec": { "replicas": 1 },
+                    "status": { "readyReplicas": 1, "availableReplicas": 1 }
+                  }
+                  """);
+    }
+
+    private static IEnumerable<string> PodItems(int count)
+    {
+        return Enumerable.Range(1, count).Select(index => PodJson($"demo-pod-{index}"));
+    }
+
+    private sealed record ManagerContext(K8sManager Manager, string ApprovalRoot);
+
+    private sealed class TestKubernetesApi : IAsyncDisposable
+    {
+        private readonly HttpListener listener = new();
+        private readonly Func<CapturedRequest, TestResponse> handler;
+        private readonly Task listenTask;
+
+        public TestKubernetesApi(Func<CapturedRequest, TestResponse> handler)
+        {
+            this.handler = handler;
+            Url = $"http://127.0.0.1:{GetFreePort()}";
+            listener.Prefixes.Add($"{Url}/");
+            listener.Start();
+            listenTask = Task.Run(ListenAsync);
+        }
+
+        public string Url { get; }
+
+        public List<CapturedRequest> Requests { get; } = [];
+
+        public async ValueTask DisposeAsync()
+        {
+            listener.Stop();
+            listener.Close();
+
+            try
+            {
+                await listenTask.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or TimeoutException)
+            {
+            }
+        }
+
+        private async Task ListenAsync()
+        {
+            while (listener.IsListening)
+            {
+                HttpListenerContext context;
+                try
+                {
+                    context = await listener.GetContextAsync();
+                }
+                catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException)
+                {
+                    break;
+                }
+
+                await HandleAsync(context);
+            }
+        }
+
+        private async Task HandleAsync(HttpListenerContext context)
+        {
+            using var reader = new StreamReader(context.Request.InputStream, context.Request.ContentEncoding);
+            var body = await reader.ReadToEndAsync();
+            var request = new CapturedRequest(
+                context.Request.HttpMethod,
+                context.Request.Url?.AbsolutePath ?? string.Empty,
+                context.Request.Url?.Query.TrimStart('?') ?? string.Empty,
+                body);
+            Requests.Add(request);
+
+            var response = handler(request);
+            var responseBody = Encoding.UTF8.GetBytes(response.Body);
+            context.Response.StatusCode = response.StatusCode;
+            context.Response.ContentType = response.ContentType;
+            context.Response.ContentLength64 = responseBody.Length;
+            await context.Response.OutputStream.WriteAsync(responseBody);
+            context.Response.Close();
+        }
+
+        private static int GetFreePort()
+        {
+            using var socket = new TcpListener(IPAddress.Loopback, port: 0);
+            socket.Start();
+
+            return ((IPEndPoint)socket.LocalEndpoint).Port;
+        }
+    }
+
+    private sealed record CapturedRequest(string Method, string Path, string Query, string Body);
+
+    private sealed record TestResponse(int StatusCode, string ContentType, string Body)
+    {
+        public static TestResponse Json(string body) => new((int)HttpStatusCode.OK, "application/json", body);
+    }
+}

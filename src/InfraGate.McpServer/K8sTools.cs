@@ -48,6 +48,36 @@ public static class K8sTools
         CancellationToken cancellationToken = default) =>
         manager.GetResourceAsync(@namespace, kind, name, cancellationToken);
 
+    [McpServerTool(Name = K8sConventions.ToolNames.GetDeploymentDiagnostics, ReadOnly = true, OpenWorld = false)]
+    [Description("Shows bounded Deployment diagnostics with related ReplicaSets, Pods, and Events in an allowed namespace.")]
+    public static Task<string> GetDeploymentDiagnostics(
+        K8sManager manager,
+        [Description("Allowed Kubernetes namespace to inspect.")] string @namespace,
+        [Description("Deployment name.")] string name,
+        [Description("Maximum related events to return, from 1 to 100.")] int limit = K8sConventions.DefaultEventLimit,
+        CancellationToken cancellationToken = default) =>
+        manager.GetDeploymentDiagnosticsAsync(@namespace, name, limit, cancellationToken);
+
+    [McpServerTool(Name = K8sConventions.ToolNames.GetPodDiagnostics, ReadOnly = true, OpenWorld = false)]
+    [Description("Shows bounded Pod diagnostics with related Events in an allowed namespace.")]
+    public static Task<string> GetPodDiagnostics(
+        K8sManager manager,
+        [Description("Allowed Kubernetes namespace to inspect.")] string @namespace,
+        [Description("Pod name.")] string podName,
+        [Description("Maximum related events to return, from 1 to 100.")] int limit = K8sConventions.DefaultEventLimit,
+        CancellationToken cancellationToken = default) =>
+        manager.GetPodDiagnosticsAsync(@namespace, podName, limit, cancellationToken);
+
+    [McpServerTool(Name = K8sConventions.ToolNames.GetServiceDiagnostics, ReadOnly = true, OpenWorld = false)]
+    [Description("Shows bounded Service diagnostics with matching Pods and related Events in an allowed namespace.")]
+    public static Task<string> GetServiceDiagnostics(
+        K8sManager manager,
+        [Description("Allowed Kubernetes namespace to inspect.")] string @namespace,
+        [Description("Service name.")] string name,
+        [Description("Maximum related events to return, from 1 to 100.")] int limit = K8sConventions.DefaultEventLimit,
+        CancellationToken cancellationToken = default) =>
+        manager.GetServiceDiagnosticsAsync(@namespace, name, limit, cancellationToken);
+
     [McpServerTool(Name = K8sConventions.ToolNames.RequestApplyManifest, Destructive = false, OpenWorld = false)]
     [Description("Creates a pending approval plan to server-side apply supported Kubernetes YAML or JSON manifests.")]
     public static Task<string> RequestApplyManifest(
@@ -84,6 +114,17 @@ public static class K8sTools
         [Description("Deployment name.")] string name,
         CancellationToken cancellationToken = default) =>
         manager.RequestRestartDeploymentAsync(@namespace, name, cancellationToken);
+
+    [McpServerTool(Name = K8sConventions.ToolNames.RequestSetDeploymentImage, Destructive = false, OpenWorld = false)]
+    [Description("Creates a pending approval plan to update one Deployment container image in an allowed namespace.")]
+    public static Task<string> RequestSetDeploymentImage(
+        K8sManager manager,
+        [Description("Allowed Kubernetes namespace.")] string @namespace,
+        [Description("Deployment name.")] string name,
+        [Description("Container name.")] string container,
+        [Description("Target container image.")] string image,
+        CancellationToken cancellationToken = default) =>
+        manager.RequestSetDeploymentImageAsync(@namespace, name, container, image, cancellationToken);
 
     [McpServerTool(Name = K8sConventions.ToolNames.ApplyApprovedPlan, Destructive = true, OpenWorld = false)]
     [Description("Requests MCP user approval for a pending Kubernetes plan, then applies the exact approved plan.")]

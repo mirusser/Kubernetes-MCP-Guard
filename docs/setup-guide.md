@@ -253,10 +253,14 @@ Once running, the server exposes these tools:
 | `get_k8s_events(namespace, labelSelector?, fieldSelector?, limit?)` | Read bounded Kubernetes events |
 | `get_pod_logs(namespace, podName, container?, tailLines?, previous?)` | Read bounded pod logs |
 | `get_k8s_resource(namespace, kind, name)` | Read a focused resource summary |
+| `get_deployment_diagnostics(namespace, name, limit?)` | Read bounded Deployment troubleshooting context |
+| `get_pod_diagnostics(namespace, podName, limit?)` | Read bounded Pod troubleshooting context |
+| `get_service_diagnostics(namespace, name, limit?)` | Read bounded Service troubleshooting context |
 | `request_apply_manifest(namespace, manifest)` | Create a plan to apply a YAML/JSON manifest |
 | `request_delete_manifest(namespace, manifest)` | Create a plan to delete a resource |
 | `request_scale_deployment(namespace, name, replicas)` | Create a plan to scale a deployment |
 | `request_restart_deployment(namespace, name)` | Create a plan to restart a deployment |
+| `request_set_deployment_image(namespace, name, container, image)` | Create a plan to update a Deployment container image |
 | `apply_approved_plan(planId)` | Apply a previously approved plan |
 
 Logs and Events are untrusted Kubernetes workload/cluster output. Prefer the HTTP gateway for model-visible diagnostics because it sanitizes suspicious output before returning it; direct stdio use bypasses that gateway guardrail layer.

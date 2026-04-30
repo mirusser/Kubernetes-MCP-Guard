@@ -39,26 +39,7 @@ public sealed partial class K8sManager
                 labelSelector,
                 fieldSelector,
                 limit,
-                events = events.Items.Select(k8sEvent => new
-                {
-                    name = k8sEvent.Metadata?.Name,
-                    type = k8sEvent.Type,
-                    reason = k8sEvent.Reason,
-                    action = k8sEvent.Action,
-                    note = k8sEvent.Note,
-                    eventTime = FormatK8sTime(k8sEvent.EventTime),
-                    reportingController = k8sEvent.ReportingController,
-                    reportingInstance = k8sEvent.ReportingInstance,
-                    regarding = k8sEvent.Regarding is null
-                        ? null
-                        : new
-                        {
-                            apiVersion = k8sEvent.Regarding.ApiVersion,
-                            kind = k8sEvent.Regarding.Kind,
-                            name = k8sEvent.Regarding.Name,
-                            @namespace = k8sEvent.Regarding.NamespaceProperty
-                        }
-                })
+                events = events.Items.Select(EventSummary)
             }, JsonOptions);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -357,6 +338,27 @@ public sealed partial class K8sManager
         status = condition.Status,
         reason = condition.Reason,
         message = condition.Message
+    };
+
+    private static object EventSummary(Eventsv1Event k8sEvent) => new
+    {
+        name = k8sEvent.Metadata?.Name,
+        type = k8sEvent.Type,
+        reason = k8sEvent.Reason,
+        action = k8sEvent.Action,
+        note = k8sEvent.Note,
+        eventTime = FormatK8sTime(k8sEvent.EventTime),
+        reportingController = k8sEvent.ReportingController,
+        reportingInstance = k8sEvent.ReportingInstance,
+        regarding = k8sEvent.Regarding is null
+            ? null
+            : new
+            {
+                apiVersion = k8sEvent.Regarding.ApiVersion,
+                kind = k8sEvent.Regarding.Kind,
+                name = k8sEvent.Regarding.Name,
+                @namespace = k8sEvent.Regarding.NamespaceProperty
+            }
     };
 
     private static string? ContainerStateSummary(V1ContainerState? state)
