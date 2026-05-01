@@ -16,7 +16,7 @@ using Microsoft.IdentityModel.Tokens;
 #pragma warning disable ASPDEPR004
 #pragma warning disable ASPDEPR008
 
-namespace InfraGate.McpGateway.Tests;
+namespace InfraGate.McpGateway.Tests.UnitTests;
 
 public sealed class GatewayAuthenticationTests
 {

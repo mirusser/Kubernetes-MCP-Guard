@@ -5,7 +5,7 @@ using System.Text.Json;
 using InfraGate.McpServer;
 using k8s;
 
-namespace InfraGate.McpServer.Tests;
+namespace InfraGate.McpServer.Tests.UnitTests;
 
 public sealed class K8sManagerObservabilityTests
 {

@@ -1,6 +1,6 @@
 using InfraGate.McpGateway;
 
-namespace InfraGate.McpGateway.Tests;
+namespace InfraGate.McpGateway.Tests.UnitTests;
 
 public sealed class ResponseSanitizationTests
 {

@@ -1,6 +1,6 @@
 using InfraGate.McpServer;
 
-namespace InfraGate.McpServer.Tests;
+namespace InfraGate.McpServer.Tests.UnitTests;
 
 public sealed class K8sManagerRequestTests
 {

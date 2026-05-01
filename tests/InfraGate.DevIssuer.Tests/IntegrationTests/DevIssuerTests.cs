@@ -16,7 +16,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 #pragma warning disable ASPDEPR004
 #pragma warning disable ASPDEPR008
-namespace InfraGate.DevIssuer.Tests;
+namespace InfraGate.DevIssuer.Tests.IntegrationTests;
 
 public sealed class DevIssuerTests
 {

@@ -18,7 +18,7 @@ using ModelContextProtocol.Protocol;
 #pragma warning disable ASPDEPR004
 #pragma warning disable ASPDEPR008
 
-namespace InfraGate.McpGateway.Tests;
+namespace InfraGate.McpGateway.Tests.IntegrationTests;
 
 public sealed partial class GatewayHttpMcpIntegrationTests
 {

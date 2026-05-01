@@ -1,7 +1,7 @@
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 
-namespace InfraGate.McpGateway.Tests;
+namespace InfraGate.McpGateway.Tests.UnitTests;
 
 public sealed class McpGatewayOptionsTests
 {

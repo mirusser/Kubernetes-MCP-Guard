@@ -1,7 +1,7 @@
 using InfraGate.McpServer;
 using k8s.Models;
 
-namespace InfraGate.McpServer.Tests;
+namespace InfraGate.McpServer.Tests.UnitTests;
 
 public sealed class K8sManifestParserTests
 {

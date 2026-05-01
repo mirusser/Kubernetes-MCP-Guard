@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Http;
 using ModelContextProtocol.Server;
 using System.Security.Claims;
 
-namespace InfraGate.McpGateway.Tests;
+namespace InfraGate.McpGateway.Tests.UnitTests;
 
 public sealed class GuardedToolRunnerTests
 {

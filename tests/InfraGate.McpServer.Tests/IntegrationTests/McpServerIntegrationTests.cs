@@ -3,8 +3,11 @@ using System.Text.RegularExpressions;
 using InfraGate.McpServer;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
+using InfraGate.McpServer.Tests;
 
-namespace InfraGate.McpServer.Tests;
+#pragma warning disable ASPDEPR004
+#pragma warning disable ASPDEPR008
+namespace InfraGate.McpServer.Tests.IntegrationTests;
 
 public sealed partial class McpServerIntegrationTests
 {
