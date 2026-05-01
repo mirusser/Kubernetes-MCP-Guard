@@ -1,6 +1,8 @@
-# Kubernetes MCP Guard: AI-safe Kubernetes operations through MCP
+# Kubernetes MCP Guard 🛡️: AI-safe Kubernetes operations through MCP
 
-Kubernetes MCP Guard is a .NET 10 gateway/server for AI-assisted Kubernetes operations through the Model Context Protocol. It lets MCP clients such as Codex, Open WebUI, and LibreChat inspect clusters, propose changes, and apply only approved mutations through OAuth-aware authentication, prompt-injection guardrails, audit logging, namespace-scoped RBAC, bounded observability, and exact-plan approval checks.
+Kubernetes MCP Guard is a .NET 10 gateway/server for AI-assisted Kubernetes operations through the Model Context Protocol.
+
+It lets MCP clients such as Codex, Open WebUI, and LibreChat inspect clusters, propose changes, and apply only approved mutations through OAuth-aware authentication, prompt-injection guardrails, audit logging, namespace-scoped RBAC, bounded observability, and exact-plan approval checks.
 
 ## What It Does ⚙️
 
@@ -42,6 +44,7 @@ flowchart TB
     ReadOnly --> RBAC
     Plans --> RBAC
 ```
+<sub><em>Simplified architectural graph. Full version [here](docs/MCP-compliance.md)</em></sub>
 
 ## Why It Matters 🔐
 
@@ -57,25 +60,7 @@ That makes the project a practical slice of a bigger direction: MCP-native infra
 - Product engineering taste: small operational surface, clear user flows, safety defaults, and readable documentation for humans and agents.
 - Modern .NET implementation: .NET 10, dependency injection, async APIs, focused tests, and project-level separation of auth, gateway, server, issuer, and test concerns.
 
-## Current Capabilities
-
-- Read-only observability:
-  - `get_k8s_status` for deployments, services, config maps, pods, and replica sets.
-  - `get_k8s_events` for bounded `events.k8s.io/v1` diagnostics.
-  - `get_pod_logs` for bounded Pod log reads.
-  - `get_k8s_resource` for focused summaries without Secret values, ConfigMap values, or raw manifests.
-  - `get_deployment_diagnostics`, `get_pod_diagnostics`, and `get_service_diagnostics` for bounded troubleshooting summaries.
-- Approval-gated mutations:
-  - Server-side apply and delete plans for `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap`.
-  - Deployment scale, restart, and container image update plans.
-  - Exact-plan hash checks before application.
-- Gateway protections:
-  - OAuth JWT or local static bearer auth.
-  - Prompt-injection warning/redaction.
-  - Guardrail audit JSONL output.
-  - MCP compliance notes for streamable HTTP and authorization behavior.
-
-## What It Looks Like In Practice
+## How To Run ▶️
 
 The recommended local OAuth setup runs the gateway and dev issuer with Docker Compose; the gateway launches the Kubernetes MCP server privately over stdio:
 
@@ -99,7 +84,41 @@ codex mcp login infra-gate
 
 *For source-based run modes and verification details, see the [Setup Guide](docs/setup-guide.md).*
 
-## Explore The Project
+## Current Capabilities 🧰
+
+### Gateway Protections 🛡️
+
+| Layer | Behavior |
+|---|---|
+| Authentication | OAuth 2.1 JWT or local static bearer token |
+| Prompt-injection guardrails | Warn and redact suspicious model-visible input/output |
+| Audit logging | JSONL guardrail audit with identity resolution |
+| MCP compliance | Streamable HTTP transport, protected-resource metadata, step-up authorization |
+
+### Read-Only Observability 🔎
+
+| Tool | Purpose |
+|---|---|
+| `get_k8s_status` | Deployments, Services, ConfigMaps, Pods, and ReplicaSets in a namespace |
+| `get_k8s_events` | Bounded `events.k8s.io/v1` cluster diagnostics |
+| `get_pod_logs` | Bounded Pod log reads (tail lines + byte cap) |
+| `get_k8s_resource` | Focused resource summary — no Secret values, ConfigMap data, or raw manifests |
+| `get_deployment_diagnostics` | Deployment health, related Pods, ReplicaSets, and Events |
+| `get_pod_diagnostics` | Pod status, conditions, container state, and Events |
+| `get_service_diagnostics` | Service endpoints, backing Pods, and Events |
+
+### Approval-Gated Mutations ✅
+
+| Tool | Purpose |
+|---|---|
+| `request_apply_manifest` | Plan a server-side apply for `Deployment`, `Service`, or `ConfigMap` |
+| `request_delete_manifest` | Plan a resource deletion |
+| `request_scale_deployment` | Plan a replica count change |
+| `request_restart_deployment` | Plan a rollout restart |
+| `request_set_deployment_image` | Plan a container image update |
+| `apply_approved_plan` | Apply an exact-hash-verified, user-approved plan |
+
+## Explore The Project 🧭
 
 - Developer runbook: [docs/devs-readme.md](docs/devs-readme.md)
 - Setup guide: [docs/setup-guide.md](docs/setup-guide.md)
