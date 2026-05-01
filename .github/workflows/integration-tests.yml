@@ -1,0 +1,46 @@
+name: Integration Tests
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-tests
+  cancel-in-progress: false
+
+jobs:
+  integration-tests:
+    runs-on:
+      - self-hosted
+      - linux
+    env:
+      KUBECONFIG: ${{ github.workspace }}/.kube/mcp-nginx-demo.config
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore InfraGate.slnx
+
+      - name: Build
+        run: dotnet build InfraGate.slnx --configuration Release --no-restore
+
+      - name: Create demo kubeconfig
+        run: ./scripts/create-demo-kubeconfig.sh
+
+      - name: Run MCP server integration tests
+        run: INFRA_GATE_RUN_INTEGRATION=1 dotnet test tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj --configuration Release --no-build
+
+      - name: Run gateway integration tests
+        run: INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --configuration Release --no-build
