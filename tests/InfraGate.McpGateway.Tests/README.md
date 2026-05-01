@@ -4,12 +4,13 @@
 
 ## What It Covers
 
-- `GatewayAuthenticationTests.cs`: OAuth discovery challenges, protected-resource metadata, static bearer auth, valid JWTs, invalid JWTs, malformed JWTs, and missing-scope step-up `WWW-Authenticate` challenges.
+- `GatewayAuthenticationTests.cs`: OAuth discovery challenges, protected-resource metadata, metadata override configuration, static bearer auth, valid JWTs, invalid JWTs, malformed JWTs, and missing-scope step-up `WWW-Authenticate` challenges.
 - `PromptInjectionGuardTests.cs`: inbound argument scanning for clean Kubernetes text, injected ConfigMap data, risky metadata values, and allowed ordinary Kubernetes strings.
 - `ResponseSanitizationTests.cs`: manifest-block redaction, suspicious JSON value redaction, suspicious text line redaction, and clean text passthrough.
 - `GuardedToolRunnerTests.cs`: downstream forwarding, request warnings, response redaction, and audit identity capture for OAuth and static bearer users.
 - `GuardrailAuditStoreTests.cs`: JSONL audit output without credential leakage.
 - `GatewayHttpMcpIntegrationTests.cs`: real HTTP MCP transport wiring with static bearer auth, fake-downstream forwarding, guardrail audit capture, response redaction, downstream stdio startup smoke coverage, MCP elicitation forwarding, and an opt-in live gateway-to-Kubernetes flow.
+- `McpGatewayOptionsTests.cs`: downstream assembly defaults and subprocess arguments.
 
 ## Running Tests
 

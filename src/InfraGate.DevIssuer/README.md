@@ -26,6 +26,7 @@
 - `INFRA_GATE_DEV_ISSUER_RESOURCE`: token audience/resource. Defaults to `http://127.0.0.1:3001/mcp`.
 - `INFRA_GATE_DEV_ISSUER_SCOPE`: issued scope. Defaults to `mcp:tools`.
 - `INFRA_GATE_DEV_ISSUER_SUBJECT`: subject claim. Defaults to `infra-gate-dev-user`.
+- `INFRA_GATE_DEV_ISSUER_INTERNAL_ENDPOINT_BASE`: optional endpoint base for metadata requested through an internal network host, while preserving the public issuer value in tokens.
 - `ASPNETCORE_URLS`: optional HTTP binding. Keep it aligned with the issuer URL clients use.
 
 ## Verification

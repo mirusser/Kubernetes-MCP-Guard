@@ -4,15 +4,15 @@ This is the developer/runbook guide. Unless noted otherwise, run commands from t
 
 This repo contains a narrow Kubernetes governance slice for the larger Open WebUI/LibreChat + remote MCP idea:
 
-- `src/InfraGate.McpServer` is a .NET 10 stdio MCP server using the official C# MCP SDK.
-- `src/InfraGate.McpGateway` is a local HTTP MCP gateway that fronts the stdio server with OAuth/static bearer auth and warn+redact prompt-injection guardrails.
+- `src/InfraGate.McpServer` is a .NET 10 stdio Kubernetes MCP server using the official C# MCP SDK.
+- `src/InfraGate.McpGateway` is a local HTTP MCP gateway that fronts the MCP server with OAuth/static bearer auth and warn+redact prompt-injection guardrails.
 - `src/InfraGate.DevIssuer` is a dev-only localhost OAuth issuer with OIDC-style discovery metadata for testing Codex MCP OAuth login without an external provider.
 - The MCP server uses the Kubernetes API through `KubernetesClient`, not runtime `kubectl` process execution.
 - Mutating actions are two-step: request a plan through MCP, then call apply so the MCP server can request user approval before changing Kubernetes.
 - The server allows only configured namespaces. Manifest apply/delete is limited to `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap`; other mutating tools are narrow Deployment operations.
 - Read-only observability tools expose bounded Events, Pod logs, focused resource summaries, and diagnostics without exposing Secret values, ConfigMap values, raw manifests, exec, attach, or port-forward.
 - `deploy/minikube/rbac.yaml` creates a namespace-scoped ServiceAccount, Role, and RoleBinding.
-- `scripts/create-demo-kubeconfig.sh` creates a short-lived service-account kubeconfig at `.kube/mcp-nginx-demo.config`.
+- `scripts/create-demo-kubeconfig.sh` creates a short-lived service-account kubeconfig at `.kube/mcp-nginx-demo.config`; `--compose` also writes `.kube/mcp-nginx-demo.compose.config`.
 - MCP transport and OAuth compliance notes for the HTTP gateway path are tracked in [MCP-COMPLIANCE.md](MCP-COMPLIANCE.md).
 
 General idea:
@@ -70,9 +70,35 @@ kubectl --kubeconfig .kube/mcp-nginx-demo.config auth can-i create deployments -
 
 Expected: `yes`, `yes`, `yes`, `yes`, `no`, then `no`.
 
+### Run containerized Mode C
+
+This is the recommended local OAuth path. It runs DevIssuer and the HTTP gateway as containers; the gateway launches the Kubernetes MCP server privately over stdio:
+
+```bash
+./scripts/create-demo-kubeconfig.sh --compose
+docker compose -f deploy/mode-c/compose.yaml up --build
+```
+
+Codex CLI HTTP MCP config:
+
+```toml
+[mcp_servers.infra-gate]
+url = "http://127.0.0.1:3001/mcp"
+oauth_resource = "http://127.0.0.1:3001/mcp"
+scopes = ["mcp:tools"]
+```
+
+Then run:
+
+```bash
+codex mcp login infra-gate
+```
+
+The gateway is exposed at `http://127.0.0.1:3001/mcp`, DevIssuer at `http://127.0.0.1:3011`, and the MCP server remains a private subprocess inside the gateway container.
+
 ### Run the HTTP MCP gateway
 
-The gateway is the recommended client-facing local MCP endpoint. It listens on `http://127.0.0.1:3001/mcp` by default, accepts either OAuth JWT access tokens or the local static bearer token, and starts the downstream stdio server itself.
+The source-run gateway listens on `http://127.0.0.1:3001/mcp` by default, accepts either OAuth JWT access tokens or the local static bearer token, and starts the downstream stdio server itself.
 
 For the local static bearer-token demo:
 
@@ -122,6 +148,7 @@ export INFRA_GATE_DEV_ISSUER_ISSUER="http://127.0.0.1:3011"
 export INFRA_GATE_DEV_ISSUER_RESOURCE="http://127.0.0.1:3001/mcp"
 export INFRA_GATE_DEV_ISSUER_SCOPE="mcp:tools"
 export INFRA_GATE_DEV_ISSUER_SUBJECT="infra-gate-dev-user"
+export INFRA_GATE_DEV_ISSUER_INTERNAL_ENDPOINT_BASE="http://devissuer:3011"
 ```
 
 Use `ASPNETCORE_URLS` to bind the dev issuer to a different URL, and keep `INFRA_GATE_DEV_ISSUER_ISSUER` aligned with the URL clients use for discovery.

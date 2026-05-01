@@ -52,6 +52,36 @@ public sealed class DevIssuerTests
     }
 
     [Fact]
+    public async Task Discovery_UsesInternalEndpointBase_WhenRequestedThroughInternalHost()
+    {
+        const string internalEndpointBase = "http://devissuer:3011";
+        using var server = CreateIssuerServer(internalEndpointBase);
+        using var client = server.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            DevIssuerConventions.Endpoints.AuthorizationServerMetadata);
+        request.Headers.Host = "devissuer:3011";
+
+        var response = await client.SendAsync(request);
+
+        response.EnsureSuccessStatusCode();
+        var metadata = await ReadJsonAsync(response);
+        Assert.Equal(Issuer, metadata.GetProperty(DevIssuerConventions.Json.Issuer).GetString());
+        Assert.Equal(
+            internalEndpointBase + DevIssuerConventions.Endpoints.Authorize,
+            metadata.GetProperty(DevIssuerConventions.Json.AuthorizationEndpoint).GetString());
+        Assert.Equal(
+            internalEndpointBase + DevIssuerConventions.Endpoints.Token,
+            metadata.GetProperty(DevIssuerConventions.Json.TokenEndpoint).GetString());
+        Assert.Equal(
+            internalEndpointBase + DevIssuerConventions.Endpoints.Jwks,
+            metadata.GetProperty(DevIssuerConventions.Json.JwksUri).GetString());
+        Assert.Equal(
+            internalEndpointBase + DevIssuerConventions.Endpoints.Register,
+            metadata.GetProperty(DevIssuerConventions.Json.RegistrationEndpoint).GetString());
+    }
+
+    [Fact]
     public async Task AuthorizationCodeFlow_ReturnsGatewayAcceptedJwt()
     {
         using var issuerServer = CreateIssuerServer();
@@ -160,9 +190,9 @@ public sealed class DevIssuerTests
         await AssertOAuthErrorAsync(response, DevIssuerConventions.Errors.InvalidRequest);
     }
 
-    private static TestServer CreateIssuerServer()
+    private static TestServer CreateIssuerServer(string? internalEndpointBase = null)
     {
-        var options = new DevIssuerOptions(Issuer, Resource, Scope, Subject);
+        var options = new DevIssuerOptions(Issuer, Resource, Scope, Subject, internalEndpointBase);
 
         return new TestServer(new WebHostBuilder()
             .ConfigureServices(services =>

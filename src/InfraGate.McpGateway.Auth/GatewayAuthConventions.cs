@@ -10,6 +10,7 @@ public static class GatewayAuthConventions
     {
         public const string BearerToken = "INFRA_GATE_GATEWAY_BEARER_TOKEN";
         public const string OAuthAuthority = "INFRA_GATE_OAUTH_AUTHORITY";
+        public const string OAuthMetadataAddress = "INFRA_GATE_OAUTH_METADATA_ADDRESS";
         public const string OAuthResource = "INFRA_GATE_OAUTH_RESOURCE";
         public const string OAuthScope = "INFRA_GATE_OAUTH_SCOPE";
         public const string OAuthRequireHttpsMetadata = "INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA";

@@ -6,7 +6,8 @@ public sealed record McpGatewayOptions(
     GatewayAuthOptions Auth,
     string DownstreamProject,
     string GuardAuditRoot,
-    string WorkingDirectory)
+    string WorkingDirectory,
+    string? DownstreamAssembly = null)
 {
     public const string DefaultUrl = McpGatewayConventions.DefaultUrl;
 
@@ -21,6 +22,8 @@ public sealed record McpGatewayOptions(
                 McpGatewayConventions.Paths.SourceDirectory,
                 McpGatewayConventions.Paths.DefaultDownstreamProjectDirectory,
                 McpGatewayConventions.Paths.DefaultDownstreamProjectFileName);
+        var downstreamAssembly =
+            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.DownstreamAssembly);
         var auditRoot =
             Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.GuardAuditRoot) ??
             Path.Combine(workingDirectory, McpGatewayConventions.Paths.DefaultGuardAuditRootDirectory);
@@ -29,6 +32,7 @@ public sealed record McpGatewayOptions(
             auth,
             downstreamProject,
             auditRoot,
-            workingDirectory);
+            workingDirectory,
+            downstreamAssembly);
     }
 }

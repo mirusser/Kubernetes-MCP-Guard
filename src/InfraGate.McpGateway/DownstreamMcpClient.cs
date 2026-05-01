@@ -61,19 +61,7 @@ public sealed class DownstreamMcpClient(McpGatewayOptions options) : IDownstream
                 return client;
             }
 
-            var transport = new StdioClientTransport(new StdioClientTransportOptions
-            {
-                Name = McpGatewayConventions.DownstreamProcess.Name,
-                Command = McpGatewayConventions.DownstreamProcess.Command,
-                Arguments =
-                [
-                    McpGatewayConventions.DownstreamProcess.RunArgument,
-                    McpGatewayConventions.DownstreamProcess.ProjectArgument,
-                    options.DownstreamProject
-                ],
-                WorkingDirectory = options.WorkingDirectory,
-                ShutdownTimeout = TimeSpan.FromSeconds(10)
-            });
+            var transport = new StdioClientTransport(CreateTransportOptions());
 
             client = await McpClient.CreateAsync(
                 transport,
@@ -99,6 +87,26 @@ public sealed class DownstreamMcpClient(McpGatewayOptions options) : IDownstream
         {
             clientLock.Release();
         }
+    }
+
+    internal StdioClientTransportOptions CreateTransportOptions()
+    {
+        string[] arguments = string.IsNullOrWhiteSpace(options.DownstreamAssembly)
+            ? [
+                McpGatewayConventions.DownstreamProcess.RunArgument,
+                McpGatewayConventions.DownstreamProcess.ProjectArgument,
+                options.DownstreamProject
+            ]
+            : [options.DownstreamAssembly];
+
+        return new StdioClientTransportOptions
+        {
+            Name = McpGatewayConventions.DownstreamProcess.Name,
+            Command = McpGatewayConventions.DownstreamProcess.Command,
+            Arguments = arguments,
+            WorkingDirectory = options.WorkingDirectory,
+            ShutdownTimeout = TimeSpan.FromSeconds(10)
+        };
     }
 
     private async ValueTask<ElicitResult> HandleElicitationAsync(

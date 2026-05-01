@@ -1,7 +1,9 @@
-bin/
-obj/
+.git/
+.agents/
 .kube/
 .mcp-approvals/
 .mcp-guardrails/
 TestResults/
 coverage-report/
+**/bin/
+**/obj/

@@ -48,6 +48,11 @@ public static class GatewayAuthentication
                 .AddJwtBearer(jwtOptions =>
                 {
                     jwtOptions.Authority = oauthAuthority;
+                    if (!string.IsNullOrWhiteSpace(options.OAuthMetadataAddress))
+                    {
+                        jwtOptions.MetadataAddress = options.OAuthMetadataAddress;
+                    }
+
                     jwtOptions.Audience = options.OAuthResource;
                     jwtOptions.MapInboundClaims = false;
                     jwtOptions.RequireHttpsMetadata = options.OAuthRequireHttpsMetadata;

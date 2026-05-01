@@ -25,6 +25,7 @@
 ## Configuration
 
 - `INFRA_GATE_DOWNSTREAM_PROJECT`: optional path to the downstream `InfraGate.McpServer.csproj`.
+- `INFRA_GATE_DOWNSTREAM_ASSEMBLY`: optional path to a published downstream `InfraGate.McpServer.dll`; used by the containerized gateway image.
 - `INFRA_GATE_GUARD_AUDIT_ROOT`: optional audit output root. Defaults to `.mcp-guardrails`.
 - `ASPNETCORE_URLS`: optional HTTP binding. Defaults to `http://127.0.0.1:3001` when unset.
 - Auth settings come from `InfraGate.McpGateway.Auth`.

@@ -5,6 +5,7 @@
 ## What It Covers
 
 - Discovery and JWKS metadata shape.
+- Internal endpoint metadata for container bridge-network discovery.
 - Dynamic client registration with loopback redirect URI validation.
 - Authorization-code flow with PKCE `S256`.
 - JWT access tokens accepted by gateway auth validation.

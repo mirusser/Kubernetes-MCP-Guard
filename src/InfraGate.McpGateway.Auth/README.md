@@ -24,6 +24,7 @@
 
 - `INFRA_GATE_GATEWAY_BEARER_TOKEN`: enables static bearer auth.
 - `INFRA_GATE_OAUTH_AUTHORITY`: enables OAuth JWT validation and discovery challenge metadata.
+- `INFRA_GATE_OAUTH_METADATA_ADDRESS`: optional internal OIDC discovery URL; useful when the public issuer URL differs from the gateway's network path to the issuer.
 - `INFRA_GATE_OAUTH_RESOURCE`: expected JWT audience/resource. Defaults to `http://127.0.0.1:3001/mcp`.
 - `INFRA_GATE_OAUTH_SCOPE`: required scope. Defaults to `mcp:tools`.
 - `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA`: controls JWT metadata HTTPS requirement.

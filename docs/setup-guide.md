@@ -7,13 +7,13 @@ graph LR
     Client["MCP Client<br/>(Codex CLI / Open WebUI)"]
     Gateway["InfraGate.McpGateway<br/>HTTP :3001/mcp"]
     Auth["McpGateway.Auth<br/>bearer / OAuth JWT"]
-    Server["InfraGate.McpServer<br/>stdio process"]
+    Server["InfraGate.McpServer<br/>private stdio subprocess"]
     DevIssuer["InfraGate.DevIssuer<br/>localhost OAuth :3011"]
     K8s["Kubernetes API<br/>(minikube)"]
 
     Client -- "HTTP MCP + token" --> Gateway
     Gateway --> Auth
-    Gateway -- "stdio" --> Server
+    Gateway -- "stdio subprocess" --> Server
     Server -- ".NET KubernetesClient" --> K8s
     Client -. "OAuth discovery/login" .-> DevIssuer
     DevIssuer -. "JWT validation" .-> Gateway
@@ -23,7 +23,7 @@ graph LR
 
 | Project | Role | Runs as |
 |---|---|---|
-| `InfraGate.McpServer` | Kubernetes MCP server (tools, plans, approvals) | stdio child process (spawned by gateway) |
+| `InfraGate.McpServer` | Kubernetes MCP server (tools, plans, approvals) | stdio child process |
 | `InfraGate.McpGateway` | HTTP MCP endpoint + guardrails + audit | HTTP server `:3001` |
 | `InfraGate.McpGateway.Auth` | Auth library (static bearer + OAuth JWT) | Linked into Gateway |
 | `InfraGate.DevIssuer` | Dev-only OAuth/OIDC issuer | HTTP server `:3011` (optional) |
@@ -61,12 +61,21 @@ minikube start
 kubectl cluster-info
 ```
 
-### 3. Verify tools
+### 3. Docker Compose
+
+The containerized Mode C path uses Docker Compose:
+
+```bash
+docker compose version
+```
+
+### 4. Verify tools
 
 ```bash
 dotnet --version          # → 10.x.x
 minikube status           # → Running
 kubectl version --client  # → any recent version
+docker compose version    # → Docker Compose v2
 ```
 
 ---
@@ -79,10 +88,12 @@ This creates the `mcp-nginx-demo` namespace, a scoped ServiceAccount + Role + Ro
 
 ```bash
 cd /workspace
-./scripts/create-demo-kubeconfig.sh
+./scripts/create-demo-kubeconfig.sh --compose
 ```
 
-**Output:** `.kube/mcp-nginx-demo.config`
+**Output:** `.kube/mcp-nginx-demo.config` and `.kube/mcp-nginx-demo.compose.config`
+
+Use `./scripts/create-demo-kubeconfig.sh` without `--compose` when you only need the source-based stdio or gateway flows.
 
 **Verify RBAC:**
 
@@ -96,7 +107,7 @@ kubectl --kubeconfig $KC auth can-i create deployments -n default         # → 
 ```
 
 > [!NOTE]
-> The token expires after 24 hours. Re-run `./scripts/create-demo-kubeconfig.sh` to refresh.
+> The token expires after 24 hours. Re-run `./scripts/create-demo-kubeconfig.sh --compose` to refresh the containerized setup.
 
 ### Step 2 — Build the Solution
 
@@ -196,7 +207,41 @@ dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
 
 ### Mode C — HTTP Gateway + OAuth (DevIssuer)
 
-Use this for the full OAuth/OIDC flow (e.g., testing Codex CLI `mcp login`).
+Use this for the full OAuth/OIDC flow (e.g., testing Codex CLI `mcp login`). The recommended local path is Docker Compose: the gateway and dev issuer run on a Docker bridge network, and the gateway launches the Kubernetes MCP server as a private stdio subprocess.
+
+```bash
+./scripts/create-demo-kubeconfig.sh --compose
+docker compose -f deploy/mode-c/compose.yaml up --build
+```
+
+**Endpoints:**
+
+- Gateway: `http://127.0.0.1:3001/mcp`
+- Dev issuer: `http://127.0.0.1:3011`
+
+**Codex CLI config** (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.infra-gate]
+url = "http://127.0.0.1:3001/mcp"
+oauth_resource = "http://127.0.0.1:3001/mcp"
+scopes = ["mcp:tools"]
+```
+
+```bash
+codex mcp login infra-gate
+```
+
+The Compose path is OAuth-only. It uses `INFRA_GATE_OAUTH_METADATA_ADDRESS` internally so the gateway container can discover DevIssuer through `http://devissuer:3011` while clients still use the public issuer `http://127.0.0.1:3011`.
+
+Tradeoff: keeping `InfraGate.McpServer` as a private stdio subprocess makes setup simpler and keeps the HTTP attack surface small. The downside is that the gateway image bundles the server binary, the gateway and server share a container boundary, and the server cannot be scaled or restarted independently.
+
+> [!IMPORTANT]
+> Set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` only for localhost dev with DevIssuer. Never in production.
+
+#### Source Mode C
+
+Use this alternate flow when you want to run the same OAuth path from source instead of containers.
 
 **Terminal 1 — Dev Issuer:**
 
@@ -221,22 +266,6 @@ export K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo
 
 dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
 ```
-
-**Codex CLI config** (`~/.codex/config.toml`):
-
-```toml
-[mcp_servers.infra-gate]
-url = "http://127.0.0.1:3001/mcp"
-oauth_resource = "http://127.0.0.1:3001/mcp"
-scopes = ["mcp:tools"]
-```
-
-```bash
-codex mcp login infra-gate
-```
-
-> [!IMPORTANT]
-> Set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` **only** for localhost dev with DevIssuer. Never in production.
 
 > [!TIP]
 > You can set `INFRA_GATE_GATEWAY_BEARER_TOKEN` alongside OAuth to accept both static tokens *and* OAuth JWTs simultaneously.
@@ -286,6 +315,9 @@ INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build
 # HTTP gateway integration tests (requires minikube + RBAC from Step 1)
 INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build
 
+# Compose config validation
+docker compose -f deploy/mode-c/compose.yaml config
+
 # Check cluster state after integration tests
 kubectl --kubeconfig .kube/mcp-nginx-demo.config \
   -n mcp-nginx-demo get deployment,service,configmap,pods,replicasets -o wide
@@ -310,6 +342,7 @@ The stdio integration flag verifies the direct MCP server path. The gateway inte
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `INFRA_GATE_DOWNSTREAM_PROJECT` | No | — | Path to McpServer `.csproj` |
+| `INFRA_GATE_DOWNSTREAM_ASSEMBLY` | No | — | Published McpServer assembly path for container subprocess mode |
 | `INFRA_GATE_GUARD_AUDIT_ROOT` | No | `.mcp-guardrails` | Guardrail audit JSONL output |
 | `ASPNETCORE_URLS` | No | `http://127.0.0.1:3001` | HTTP bind address |
 
@@ -319,6 +352,7 @@ The stdio integration flag verifies the direct MCP server path. The gateway inte
 |---|---|---|---|
 | `INFRA_GATE_GATEWAY_BEARER_TOKEN` | One of bearer/OAuth | — | Static bearer token |
 | `INFRA_GATE_OAUTH_AUTHORITY` | One of bearer/OAuth | — | OAuth issuer URL |
+| `INFRA_GATE_OAUTH_METADATA_ADDRESS` | No | — | Optional internal OIDC discovery URL |
 | `INFRA_GATE_OAUTH_RESOURCE` | No | `http://127.0.0.1:3001/mcp` | JWT audience |
 | `INFRA_GATE_OAUTH_SCOPE` | No | `mcp:tools` | Required JWT scope |
 | `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA` | No | `true` | HTTPS metadata check |
@@ -331,6 +365,7 @@ The stdio integration flag verifies the direct MCP server path. The gateway inte
 | `INFRA_GATE_DEV_ISSUER_RESOURCE` | No | `http://127.0.0.1:3001/mcp` | Token audience |
 | `INFRA_GATE_DEV_ISSUER_SCOPE` | No | `mcp:tools` | Token scope |
 | `INFRA_GATE_DEV_ISSUER_SUBJECT` | No | `infra-gate-dev-user` | Token subject claim |
+| `INFRA_GATE_DEV_ISSUER_INTERNAL_ENDPOINT_BASE` | No | — | Internal endpoint base for bridge-network discovery metadata |
 | `ASPNETCORE_URLS` | No | (framework default) | HTTP bind; keep aligned with issuer URL |
 
 ---
@@ -349,12 +384,16 @@ The stdio integration flag verifies the direct MCP server path. The gateway inte
 │   ├── InfraGate.McpServer.Tests/
 │   ├── InfraGate.McpGateway.Tests/
 │   └── InfraGate.DevIssuer.Tests/
-├── deploy/minikube/rbac.yaml             # Namespace + ServiceAccount + Role + RoleBinding
+├── deploy/
+│   ├── docker/                           # Runtime Dockerfiles
+│   ├── minikube/rbac.yaml                # Namespace + ServiceAccount + Role + RoleBinding
+│   └── mode-c/compose.yaml               # Containerized OAuth setup
 ├── scripts/
 │   ├── create-demo-kubeconfig.sh         # Bootstrap RBAC & generate kubeconfig
 │   └── approve-plan.sh                   # Manual plan approval (for non-elicitation clients)
-├── .kube/                                # Generated kubeconfig (gitignored)
-└── .mcp-approvals/                       # Plan files: pending/, approved/, applied/ (gitignored)
+├── .kube/                                # Generated kubeconfigs (gitignored)
+├── .mcp-approvals/                       # Plan files: pending/, approved/, applied/ (gitignored)
+└── .mcp-guardrails/                      # Gateway audit log output (gitignored)
 ```
 
 ---
@@ -365,7 +404,7 @@ The stdio integration flag verifies the direct MCP server path. The gateway inte
 |---|---|---|
 | `dotnet: command not found` | .NET 10 SDK not installed | Install SDK, ensure `~/.dotnet` is on `$PATH` |
 | `error NETSDK1045: target framework 'net10.0' not installed` | Wrong SDK version | Install .NET 10 preview/RC SDK |
-| RBAC `can-i` returns `no` for allowed operations | Token expired or RBAC not applied | Re-run `./scripts/create-demo-kubeconfig.sh` |
+| RBAC `can-i` returns `no` for allowed operations | Token expired or RBAC not applied | Re-run `./scripts/create-demo-kubeconfig.sh --compose` |
 | Gateway returns `401 Unauthorized` | No `Authorization` header, wrong token, or no auth env vars set | Set `INFRA_GATE_GATEWAY_BEARER_TOKEN` or OAuth vars |
 | `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA` error | Trying to reach HTTP issuer with HTTPS check | Set to `false` for localhost DevIssuer only |
 | `apply_approved_plan` refuses with hash mismatch | Plan changed after approval | Re-request the plan and re-approve |

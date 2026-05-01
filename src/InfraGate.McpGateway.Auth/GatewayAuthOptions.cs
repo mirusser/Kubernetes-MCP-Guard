@@ -5,7 +5,8 @@ public sealed record GatewayAuthOptions(
     string? OAuthAuthority = null,
     string OAuthResource = GatewayAuthConventions.DefaultOAuthResource,
     string OAuthScope = GatewayAuthConventions.DefaultOAuthScope,
-    bool OAuthRequireHttpsMetadata = true)
+    bool OAuthRequireHttpsMetadata = true,
+    string? OAuthMetadataAddress = null)
 {
     public bool OAuthEnabled => !string.IsNullOrWhiteSpace(OAuthAuthority);
 
@@ -15,6 +16,7 @@ public sealed record GatewayAuthOptions(
     {
         var token = Environment.GetEnvironmentVariable(GatewayAuthConventions.EnvironmentVariables.BearerToken);
         var oauthAuthority = Environment.GetEnvironmentVariable(GatewayAuthConventions.EnvironmentVariables.OAuthAuthority);
+        var oauthMetadataAddress = Environment.GetEnvironmentVariable(GatewayAuthConventions.EnvironmentVariables.OAuthMetadataAddress);
         var oauthResource =
             Environment.GetEnvironmentVariable(GatewayAuthConventions.EnvironmentVariables.OAuthResource) ??
             GatewayAuthConventions.DefaultOAuthResource;
@@ -36,7 +38,8 @@ public sealed record GatewayAuthOptions(
             oauthAuthority,
             oauthResource,
             oauthScope,
-            requireHttpsMetadata);
+            requireHttpsMetadata,
+            oauthMetadataAddress);
     }
 
     private static bool ParseBooleanEnvironmentVariable(string? value, bool defaultValue)

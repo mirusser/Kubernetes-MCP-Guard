@@ -14,6 +14,7 @@ internal static class DevIssuerConventions
         public const string Resource = "INFRA_GATE_DEV_ISSUER_RESOURCE";
         public const string Scope = "INFRA_GATE_DEV_ISSUER_SCOPE";
         public const string Subject = "INFRA_GATE_DEV_ISSUER_SUBJECT";
+        public const string InternalEndpointBase = "INFRA_GATE_DEV_ISSUER_INTERNAL_ENDPOINT_BASE";
     }
 
     public static class ConfigurationKeys

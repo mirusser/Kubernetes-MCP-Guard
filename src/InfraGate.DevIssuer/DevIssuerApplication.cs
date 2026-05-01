@@ -18,10 +18,10 @@ internal static partial class DevIssuerApplication
     {
         endpoints.MapGet(
             DevIssuerConventions.Endpoints.AuthorizationServerMetadata,
-            (DevIssuerOptions options) => Results.Json(CreateMetadata(options)));
+            (HttpRequest request, DevIssuerOptions options) => Results.Json(CreateMetadata(request, options)));
         endpoints.MapGet(
             DevIssuerConventions.Endpoints.OpenIdConfiguration,
-            (DevIssuerOptions options) => Results.Json(CreateMetadata(options)));
+            (HttpRequest request, DevIssuerOptions options) => Results.Json(CreateMetadata(request, options)));
         endpoints.MapGet(
             DevIssuerConventions.Endpoints.Jwks,
             (DevIssuerSigningKey signingKey) => Results.Json(signingKey.CreateJwks()));

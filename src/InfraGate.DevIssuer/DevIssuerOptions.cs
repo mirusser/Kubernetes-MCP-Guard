@@ -4,7 +4,8 @@ internal sealed record DevIssuerOptions(
     string Issuer,
     string Resource,
     string Scope,
-    string Subject)
+    string Subject,
+    string? InternalEndpointBase = null)
 {
     public const string DefaultUrl = DevIssuerConventions.DefaultUrl;
 
@@ -18,6 +19,7 @@ internal sealed record DevIssuerOptions(
             Environment.GetEnvironmentVariable(DevIssuerConventions.EnvironmentVariables.Scope) ??
             DevIssuerConventions.DefaultScope,
             Environment.GetEnvironmentVariable(DevIssuerConventions.EnvironmentVariables.Subject) ??
-            DevIssuerConventions.DefaultSubject);
+            DevIssuerConventions.DefaultSubject,
+            Environment.GetEnvironmentVariable(DevIssuerConventions.EnvironmentVariables.InternalEndpointBase));
     }
 }

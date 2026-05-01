@@ -15,6 +15,7 @@ internal static class McpGatewayConventions
     public static class EnvironmentVariables
     {
         public const string AspNetCoreUrls = "ASPNETCORE_URLS";
+        public const string DownstreamAssembly = "INFRA_GATE_DOWNSTREAM_ASSEMBLY";
         public const string DownstreamProject = "INFRA_GATE_DOWNSTREAM_PROJECT";
         public const string GuardAuditRoot = "INFRA_GATE_GUARD_AUDIT_ROOT";
     }

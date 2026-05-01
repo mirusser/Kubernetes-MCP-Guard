@@ -1,12 +1,10 @@
 # Kubernetes MCP Guard: AI-safe Kubernetes operations through MCP
 
-Kubernetes MCP Guard is a .NET 10 gateway/server for AI-assisted Kubernetes operations through the Model Context Protocol. 
-
-It lets MCP clients such as Codex, Open WebUI, and LibreChat inspect clusters, propose changes, and apply only approved mutations through OAuth-aware authentication, prompt-injection guardrails, audit logging, namespace-scoped RBAC, bounded observability, and exact-plan approval checks.
+Kubernetes MCP Guard is a .NET 10 gateway/server for AI-assisted Kubernetes operations through the Model Context Protocol. It lets MCP clients such as Codex, Open WebUI, and LibreChat inspect clusters, propose changes, and apply only approved mutations through OAuth-aware authentication, prompt-injection guardrails, audit logging, namespace-scoped RBAC, bounded observability, and exact-plan approval checks.
 
 ## What It Does ⚙️
 
-- Exposes Kubernetes operations through the Model Context Protocol (MCP), with both a stdio server and a local HTTP gateway.
+- Exposes Kubernetes operations through the Model Context Protocol (MCP), with a stdio Kubernetes server behind a local HTTP gateway.
 - Uses the Kubernetes API via `KubernetesClient`; it does not shell out to `kubectl` for runtime operations.
 - Adds OAuth/static bearer authentication at the gateway, including MCP protected-resource metadata and insufficient-scope challenges.
 - Applies prompt-injection guardrails around model-visible tool input/output, with warn, redact, and audit behavior.
@@ -25,7 +23,7 @@ flowchart TB
         Guardrails --> Audit
     end
 
-    subgraph Server["stdio Kubernetes MCP Server"]
+    subgraph Server["Kubernetes MCP Server"]
         Tools["Typed Kubernetes tools"]
         ReadOnly["Bounded read-only observability"]
         Plans["Approval-gated mutation plans"]
@@ -47,7 +45,7 @@ flowchart TB
 
 ## Why It Matters 🔐
 
-AI infrastructure tools are powerful, but power is not the same thing as safety. InfraGate treats AI-assisted ops as a systems design problem: capability needs identity, boundaries, auditability, and human approval at the point where state changes.
+AI infrastructure tools are powerful, but power is not the same thing as safety. Kubernetes MCP Guard treats AI-assisted ops as a systems design problem: capability needs identity, boundaries, auditability, and human approval at the point where state changes.
 
 That makes the project a practical slice of a bigger direction: MCP-native infrastructure operations where agents can inspect, explain, and propose, while production-grade controls decide what actually changes.
 
@@ -79,35 +77,34 @@ That makes the project a practical slice of a bigger direction: MCP-native infra
 
 ## What It Looks Like In Practice
 
-A local MCP client can connect to the stdio server with explicit Kubernetes boundaries:
+The recommended local OAuth setup runs the gateway and dev issuer with Docker Compose; the gateway launches the Kubernetes MCP server privately over stdio:
 
-```json
-{
-  "mcpServers": {
-    "infra-gate": {
-      "command": "dotnet",
-      "args": [
-        "run", "--project",
-        "/workspace/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
-      ],
-      "env": {
-        "KUBECONFIG": "/workspace/.kube/mcp-nginx-demo.config",
-        "K8S_MCP_APPROVAL_ROOT": "/workspace/.mcp-approvals",
-        "K8S_MCP_ALLOWED_NAMESPACES": "mcp-nginx-demo"
-      }
-    }
-  }
-}
+```bash
+./scripts/create-demo-kubeconfig.sh --compose
+docker compose -f deploy/mode-c/compose.yaml up --build
 ```
 
-*For the recommended HTTP gateway path with OAuth, prompt guardrails, and audit behavior, see the [Setup Guide](docs/setup-guide.md).*
+Codex can then connect to `http://127.0.0.1:3001/mcp` with OAuth:
+
+```toml
+[mcp_servers.infra-gate]
+url = "http://127.0.0.1:3001/mcp"
+oauth_resource = "http://127.0.0.1:3001/mcp"
+scopes = ["mcp:tools"]
+```
+
+```bash
+codex mcp login infra-gate
+```
+
+*For source-based run modes and verification details, see the [Setup Guide](docs/setup-guide.md).*
 
 ## Explore The Project
 
 - Developer runbook: [docs/devs-readme.md](docs/devs-readme.md)
 - Setup guide: [docs/setup-guide.md](docs/setup-guide.md)
 - MCP compliance notes: [docs/MCP-COMPLIANCE.md](docs/MCP-COMPLIANCE.md)
-- Kubernetes stdio server: [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md)
+- Kubernetes MCP server: [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md)
 - HTTP MCP gateway: [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md)
 - Gateway auth: [src/InfraGate.McpGateway.Auth/README.md](src/InfraGate.McpGateway.Auth/README.md)
 - Local dev OAuth issuer: [src/InfraGate.DevIssuer/README.md](src/InfraGate.DevIssuer/README.md)

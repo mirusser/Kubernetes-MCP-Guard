@@ -188,6 +188,31 @@ public sealed class GatewayAuthenticationTests
             challenge.Parameter);
     }
 
+    [Fact]
+    public void AddGatewayAuthentication_UsesMetadataAddressOverride_WithPublicIssuerValidation()
+    {
+        const string metadataAddress = "http://devissuer:3011/.well-known/openid-configuration";
+        var options = new GatewayAuthOptions(
+            BearerToken: null,
+            OAuthAuthority: Issuer,
+            OAuthResource: Resource,
+            OAuthScope: Scope,
+            OAuthRequireHttpsMetadata: false,
+            OAuthMetadataAddress: metadataAddress);
+        var services = new ServiceCollection();
+
+        services.AddGatewayAuthentication(options);
+        using var provider = services.BuildServiceProvider();
+        var jwtOptions = provider
+            .GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
+            .Get(JwtBearerDefaults.AuthenticationScheme);
+
+        Assert.Equal(Issuer, jwtOptions.Authority);
+        Assert.Equal(metadataAddress, jwtOptions.MetadataAddress);
+        Assert.Contains(Issuer, jwtOptions.TokenValidationParameters.ValidIssuers);
+        Assert.Contains(Issuer.TrimEnd('/'), jwtOptions.TokenValidationParameters.ValidIssuers);
+    }
+
     private static TestServer CreateOAuthServer() =>
         CreateOAuthServer(out _);
 
