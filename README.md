@@ -1,10 +1,8 @@
-# InfraGate: AI-safe Kubernetes operations through MCP 🧠
+# Kubernetes MCP Guard: AI-safe Kubernetes operations through MCP
 
-A safety-first Kubernetes MCP gateway/server that combines OAuth, prompt-injection guardrails, audit logging, strict Kubernetes RBAC, bounded observability, and approval-gated mutations.
+Kubernetes MCP Guard is a .NET 10 gateway/server for AI-assisted Kubernetes operations through the Model Context Protocol. 
 
-InfraGate is a .NET 10 project exploring how AI assistants can operate against Kubernetes without turning "agentic" into "unbounded." It connects MCP clients such as Codex, Open WebUI, or LibreChat to Kubernetes through a guarded gateway, strict RBAC, OAuth-aware authentication, audit trails, and explicit approval gates.
-
-The core idea: let AI help with real infrastructure work while keeping the dangerous parts narrow, reviewable, and accountable.
+It lets MCP clients such as Codex, Open WebUI, and LibreChat inspect clusters, propose changes, and apply only approved mutations through OAuth-aware authentication, prompt-injection guardrails, audit logging, namespace-scoped RBAC, bounded observability, and exact-plan approval checks.
 
 ## What It Does ⚙️
 
