@@ -172,7 +172,8 @@ public sealed partial class McpServerIntegrationTests
                     ["limit"] = 5
                 },
                 cancellationToken: CancellationToken.None);
-            AssertJsonKindName(podDiagnosticsText, "Pod", podName);
+            AssertJsonProperty(podDiagnosticsText, "kind", "Pod");
+            AssertJsonProperty(podDiagnosticsText, "podName", podName);
 
             var podLogsText = await CallTextAsync(
                 client,
