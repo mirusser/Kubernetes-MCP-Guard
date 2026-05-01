@@ -93,7 +93,7 @@ server_host() {
   printf '%s' "${host_port%%:*}"
 }
 
-kubectl apply -f "${ROOT}/deploy/minikube/rbac.yaml"
+kubectl apply --validate=false -f "${ROOT}/deploy/minikube/rbac.yaml"
 
 SERVER="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
 CA_DATA="$(kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')"

@@ -18,8 +18,6 @@ jobs:
     runs-on:
       - self-hosted
       - linux
-    env:
-      KUBECONFIG: ${{ github.workspace }}/.kube/mcp-nginx-demo.config
 
     steps:
       - name: Checkout
@@ -40,7 +38,11 @@ jobs:
         run: ./scripts/create-demo-kubeconfig.sh
 
       - name: Run MCP server integration tests
+        env:
+          KUBECONFIG: ${{ github.workspace }}/.kube/mcp-nginx-demo.config
         run: INFRA_GATE_RUN_INTEGRATION=1 dotnet test tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj --configuration Release --no-build
 
       - name: Run gateway integration tests
+        env:
+          KUBECONFIG: ${{ github.workspace }}/.kube/mcp-nginx-demo.config
         run: INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --configuration Release --no-build
