@@ -74,6 +74,29 @@ public sealed class McpGatewayOptionsTests
         Assert.Equal(WorkingDirectory, transportOptions.WorkingDirectory);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void CreateTransportOptions_FallsBackToProject_WhenAssemblyIsEmptyOrWhitespace(string assembly)
+    {
+        var client = new DownstreamMcpClient(new McpGatewayOptions(
+            new GatewayAuthOptions(BearerToken),
+            DownstreamProject,
+            GuardAuditRoot,
+            WorkingDirectory,
+            assembly));
+
+        var transportOptions = client.CreateTransportOptions();
+
+        Assert.Equal(
+            [
+                McpGatewayConventions.DownstreamProcess.RunArgument,
+                McpGatewayConventions.DownstreamProcess.ProjectArgument,
+                DownstreamProject
+            ],
+            transportOptions.Arguments);
+    }
+
     private sealed class EnvironmentVariableScope : IDisposable
     {
         private readonly Dictionary<string, string?> previousValues;

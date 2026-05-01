@@ -1,4 +1,4 @@
-## Infra Gate: .NET 10 Kubernetes MCP server
+## .NET 10 Kubernetes MCP server
 
 This is the developer/runbook guide. Unless noted otherwise, run commands from the repository root.
 
@@ -72,29 +72,12 @@ Expected: `yes`, `yes`, `yes`, `yes`, `no`, then `no`.
 
 ### Run containerized Mode C
 
-This is the recommended local OAuth path. It runs DevIssuer and the HTTP gateway as containers; the gateway launches the Kubernetes MCP server privately over stdio:
+This is the recommended local OAuth path. See [Mode C in the setup guide](setup-guide.md#mode-c--http-gateway--oauth-devissuer) for full details, Codex CLI config, and tradeoff notes.
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
 docker compose -f deploy/mode-c/compose.yaml up --build
 ```
-
-Codex CLI HTTP MCP config:
-
-```toml
-[mcp_servers.infra-gate]
-url = "http://127.0.0.1:3001/mcp"
-oauth_resource = "http://127.0.0.1:3001/mcp"
-scopes = ["mcp:tools"]
-```
-
-Then run:
-
-```bash
-codex mcp login infra-gate
-```
-
-The gateway is exposed at `http://127.0.0.1:3001/mcp`, DevIssuer at `http://127.0.0.1:3011`, and the MCP server remains a private subprocess inside the gateway container.
 
 ### Run the HTTP MCP gateway
 

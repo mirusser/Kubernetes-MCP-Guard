@@ -28,6 +28,8 @@ graph LR
 | `InfraGate.McpGateway.Auth` | Auth library (static bearer + OAuth JWT) | Linked into Gateway |
 | `InfraGate.DevIssuer` | Dev-only OAuth/OIDC issuer | HTTP server `:3011` (optional) |
 
+In source mode all three processes run separately. In containerized Mode C, the gateway and server share a single container (the gateway launches the server as a stdio subprocess), so only two containers run: `mcp-gateway` and `devissuer`.
+
 ---
 
 ## Prerequisites
