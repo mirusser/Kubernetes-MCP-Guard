@@ -115,26 +115,43 @@ public sealed partial class K8sManager
         try
         {
             var normalizedKind = kind.Trim();
-
-            return normalizedKind switch
-            {
-                var value when IsKind(value, K8sConventions.K8sResources.Deployment) =>
-                    await ReadDeploymentSummaryAsync(namespaceName, name, cancellationToken),
-                var value when IsKind(value, K8sConventions.K8sResources.ReplicaSet) =>
-                    await ReadReplicaSetSummaryAsync(namespaceName, name, cancellationToken),
-                var value when IsKind(value, K8sConventions.K8sResources.Pod) =>
-                    await ReadPodSummaryAsync(namespaceName, name, cancellationToken),
-                var value when IsKind(value, K8sConventions.K8sResources.Service) =>
-                    await ReadServiceSummaryAsync(namespaceName, name, cancellationToken),
-                var value when IsKind(value, K8sConventions.K8sResources.ConfigMap) =>
-                    await ReadConfigMapSummaryAsync(namespaceName, name, cancellationToken),
-                _ => UnsupportedResourceKindMessage(normalizedKind)
-            };
+            return await ReadResourceSummaryAsync(namespaceName, normalizedKind, name, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return FormatApiException("Resource read failed", ex);
         }
+    }
+
+    private Task<string> ReadResourceSummaryAsync(
+        string namespaceName,
+        string normalizedKind,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        if (IsKind(normalizedKind, K8sConventions.K8sResources.Deployment))
+        {
+            return ReadDeploymentSummaryAsync(namespaceName, name, cancellationToken);
+        }
+
+        if (IsKind(normalizedKind, K8sConventions.K8sResources.ReplicaSet))
+        {
+            return ReadReplicaSetSummaryAsync(namespaceName, name, cancellationToken);
+        }
+
+        if (IsKind(normalizedKind, K8sConventions.K8sResources.Pod))
+        {
+            return ReadPodSummaryAsync(namespaceName, name, cancellationToken);
+        }
+
+        if (IsKind(normalizedKind, K8sConventions.K8sResources.Service))
+        {
+            return ReadServiceSummaryAsync(namespaceName, name, cancellationToken);
+        }
+
+        return IsKind(normalizedKind, K8sConventions.K8sResources.ConfigMap)
+            ? ReadConfigMapSummaryAsync(namespaceName, name, cancellationToken)
+            : Task.FromResult(UnsupportedResourceKindMessage(normalizedKind));
     }
 
     private async Task<string> ReadDeploymentSummaryAsync(
@@ -147,22 +164,7 @@ public sealed partial class K8sManager
             namespaceName,
             cancellationToken: cancellationToken);
 
-        return JsonSerializer.Serialize(new
-        {
-            @namespace = namespaceName,
-            kind = K8sConventions.K8sResources.Deployment,
-            name = deployment.Metadata?.Name,
-            labels = deployment.Metadata?.Labels,
-            replicas = new
-            {
-                desired = deployment.Spec?.Replicas,
-                ready = deployment.Status?.ReadyReplicas,
-                available = deployment.Status?.AvailableReplicas,
-                updated = deployment.Status?.UpdatedReplicas
-            },
-            selector = deployment.Spec?.Selector?.MatchLabels,
-            conditions = deployment.Status?.Conditions?.Select(ConditionSummary)
-        }, JsonOptions);
+        return JsonSerializer.Serialize(DeploymentResourceSummary(namespaceName, deployment), JsonOptions);
     }
 
     private async Task<string> ReadReplicaSetSummaryAsync(
@@ -175,21 +177,7 @@ public sealed partial class K8sManager
             namespaceName,
             cancellationToken: cancellationToken);
 
-        return JsonSerializer.Serialize(new
-        {
-            @namespace = namespaceName,
-            kind = K8sConventions.K8sResources.ReplicaSet,
-            name = replicaSet.Metadata?.Name,
-            labels = replicaSet.Metadata?.Labels,
-            replicas = new
-            {
-                desired = replicaSet.Spec?.Replicas,
-                ready = replicaSet.Status?.ReadyReplicas,
-                available = replicaSet.Status?.AvailableReplicas
-            },
-            selector = replicaSet.Spec?.Selector?.MatchLabels,
-            conditions = replicaSet.Status?.Conditions?.Select(ConditionSummary)
-        }, JsonOptions);
+        return JsonSerializer.Serialize(ReplicaSetResourceSummary(namespaceName, replicaSet), JsonOptions);
     }
 
     private async Task<string> ReadPodSummaryAsync(
@@ -202,26 +190,7 @@ public sealed partial class K8sManager
             namespaceName,
             cancellationToken: cancellationToken);
 
-        return JsonSerializer.Serialize(new
-        {
-            @namespace = namespaceName,
-            kind = K8sConventions.K8sResources.Pod,
-            name = pod.Metadata?.Name,
-            labels = pod.Metadata?.Labels,
-            phase = pod.Status?.Phase,
-            reason = pod.Status?.Reason,
-            message = pod.Status?.Message,
-            podIp = pod.Status?.PodIP,
-            hostIp = pod.Status?.HostIP,
-            conditions = pod.Status?.Conditions?.Select(ConditionSummary),
-            containers = pod.Status?.ContainerStatuses?.Select(status => new
-            {
-                name = status.Name,
-                ready = status.Ready,
-                restartCount = status.RestartCount,
-                state = ContainerStateSummary(status.State)
-            })
-        }, JsonOptions);
+        return JsonSerializer.Serialize(PodResourceSummary(namespaceName, pod), JsonOptions);
     }
 
     private async Task<string> ReadServiceSummaryAsync(
@@ -243,14 +212,7 @@ public sealed partial class K8sManager
             type = service.Spec?.Type,
             clusterIp = service.Spec?.ClusterIP,
             selector = service.Spec?.Selector,
-            ports = service.Spec?.Ports?.Select(port => new
-            {
-                name = port.Name,
-                port = port.Port,
-                targetPort = port.TargetPort?.ToString(),
-                nodePort = port.NodePort,
-                protocol = port.Protocol
-            })
+            ports = ServicePortSummaries(service.Spec)
         }, JsonOptions);
     }
 
@@ -275,6 +237,121 @@ public sealed partial class K8sManager
             binaryDataKeys = configMap.BinaryData?.Keys.Order(StringComparer.Ordinal).ToArray() ?? Array.Empty<string>()
         }, JsonOptions);
     }
+
+    private static object DeploymentResourceSummary(string namespaceName, V1Deployment deployment) => new
+    {
+        @namespace = namespaceName,
+        kind = K8sConventions.K8sResources.Deployment,
+        name = deployment.Metadata?.Name,
+        labels = deployment.Metadata?.Labels,
+        replicas = DeploymentReplicaSummary(deployment.Spec, deployment.Status),
+        selector = DeploymentSelector(deployment.Spec),
+        conditions = DeploymentConditionSummaries(deployment.Status)
+    };
+
+    private static object DeploymentReplicaSummary(V1DeploymentSpec? spec, V1DeploymentStatus? status) => new
+    {
+        desired = spec?.Replicas,
+        ready = status?.ReadyReplicas,
+        available = status?.AvailableReplicas,
+        updated = status?.UpdatedReplicas
+    };
+
+    private static IDictionary<string, string>? DeploymentSelector(V1DeploymentSpec? spec) =>
+        spec?.Selector?.MatchLabels;
+
+    private static IEnumerable<object>? DeploymentConditionSummaries(V1DeploymentStatus? status) =>
+        status?.Conditions?.Select(ConditionSummary);
+
+    private static IEnumerable<object>? DeploymentContainerSummaries(V1DeploymentSpec? spec) =>
+        spec?.Template?.Spec?.Containers?.Select(DeploymentContainerSummary);
+
+    private static object DeploymentContainerSummary(V1Container container) => new
+    {
+        name = container.Name,
+        image = container.Image
+    };
+
+    private static object ReplicaSetResourceSummary(string namespaceName, V1ReplicaSet replicaSet) => new
+    {
+        @namespace = namespaceName,
+        kind = K8sConventions.K8sResources.ReplicaSet,
+        name = replicaSet.Metadata?.Name,
+        labels = replicaSet.Metadata?.Labels,
+        replicas = ReplicaSetReplicaSummary(replicaSet.Spec, replicaSet.Status),
+        selector = ReplicaSetSelector(replicaSet.Spec),
+        conditions = ReplicaSetConditionSummaries(replicaSet.Status)
+    };
+
+    private static object ReplicaSetReplicaSummary(V1ReplicaSetSpec? spec, V1ReplicaSetStatus? status) => new
+    {
+        desired = spec?.Replicas,
+        ready = status?.ReadyReplicas,
+        available = status?.AvailableReplicas
+    };
+
+    private static IDictionary<string, string>? ReplicaSetSelector(V1ReplicaSetSpec? spec) =>
+        spec?.Selector?.MatchLabels;
+
+    private static IEnumerable<object>? ReplicaSetConditionSummaries(V1ReplicaSetStatus? status) =>
+        status?.Conditions?.Select(ConditionSummary);
+
+    private static object PodResourceSummary(string namespaceName, V1Pod pod)
+    {
+        var status = PodStatusFields.From(pod.Status);
+        return new
+        {
+            @namespace = namespaceName,
+            kind = K8sConventions.K8sResources.Pod,
+            name = pod.Metadata?.Name,
+            labels = pod.Metadata?.Labels,
+            phase = status.Phase,
+            reason = status.Reason,
+            message = status.Message,
+            podIp = status.PodIp,
+            hostIp = status.HostIp,
+            conditions = PodConditionSummaries(pod.Status),
+            containers = PodContainerStatusSummaries(pod.Status)
+        };
+    }
+
+    private static IEnumerable<object>? PodConditionSummaries(V1PodStatus? status) =>
+        status?.Conditions?.Select(ConditionSummary);
+
+    private static IEnumerable<object>? PodContainerStatusSummaries(V1PodStatus? status) =>
+        status?.ContainerStatuses?.Select(PodResourceContainerStatusSummary);
+
+    private static object PodResourceContainerStatusSummary(V1ContainerStatus status) => new
+    {
+        name = status.Name,
+        ready = status.Ready,
+        restartCount = status.RestartCount,
+        state = ContainerStateSummary(status.State)
+    };
+
+    private static IEnumerable<object>? PodDiagnosticContainerStatusSummaries(V1PodStatus? status) =>
+        status?.ContainerStatuses?.Select(PodDiagnosticContainerStatusSummary);
+
+    private static object PodDiagnosticContainerStatusSummary(V1ContainerStatus status) => new
+    {
+        name = status.Name,
+        ready = status.Ready,
+        restartCount = status.RestartCount,
+        image = status.Image,
+        state = ContainerStateSummary(status.State)
+    };
+
+    private static IEnumerable<object>? ServicePortSummaries(V1ServiceSpec? spec) =>
+        spec?.Ports?.Select(ServicePortSummary);
+
+    private static object ServicePortSummary(V1ServicePort port) => new
+    {
+        name = port.Name,
+        port = port.Port,
+        targetPort = port.TargetPort?.ToString(),
+        nodePort = port.NodePort,
+        protocol = port.Protocol
+    };
 
     private static string? ValidateBoundedCount(int value, int maxValue, string name)
     {
@@ -390,5 +467,18 @@ public sealed partial class K8sManager
             DateTimeOffset dateTimeOffset => dateTimeOffset.ToString("O", CultureInfo.InvariantCulture),
             _ => Convert.ToString(value, CultureInfo.InvariantCulture)
         };
+    }
+
+    private sealed record PodStatusFields(
+        string? Phase,
+        string? Reason,
+        string? Message,
+        string? PodIp,
+        string? HostIp)
+    {
+        public static PodStatusFields From(V1PodStatus? status) =>
+            status is null
+                ? new PodStatusFields(null, null, null, null, null)
+                : new PodStatusFields(status.Phase, status.Reason, status.Message, status.PodIP, status.HostIP);
     }
 }

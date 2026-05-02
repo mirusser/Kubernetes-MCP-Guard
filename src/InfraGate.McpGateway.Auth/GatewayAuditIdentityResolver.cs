@@ -8,16 +8,28 @@ public static class GatewayAuditIdentityResolver
     {
         if (user?.Identity?.IsAuthenticated is not true)
         {
-            return new GatewayAuditIdentity(null, null);
+            return Unauthenticated();
         }
 
-        if (string.Equals(user.Identity.AuthenticationType, GatewayAuthConventions.Schemes.StaticBearer, StringComparison.Ordinal))
+        if (IsStaticBearerIdentity(user))
         {
-            return new GatewayAuditIdentity(
-                GatewayAuthConventions.Audit.LocalBearerSubject,
-                GatewayAuthConventions.Audit.StaticBearerAuthenticationType);
+            return StaticBearerIdentity();
         }
 
+        return OAuthIdentity(user);
+    }
+
+    private static GatewayAuditIdentity Unauthenticated() => new(null, null);
+
+    private static bool IsStaticBearerIdentity(ClaimsPrincipal user) =>
+        string.Equals(user.Identity?.AuthenticationType, GatewayAuthConventions.Schemes.StaticBearer, StringComparison.Ordinal);
+
+    private static GatewayAuditIdentity StaticBearerIdentity() => new(
+        GatewayAuthConventions.Audit.LocalBearerSubject,
+        GatewayAuthConventions.Audit.StaticBearerAuthenticationType);
+
+    private static GatewayAuditIdentity OAuthIdentity(ClaimsPrincipal user)
+    {
         var subject = ClaimValue(GatewayAuthConventions.Claims.PreferredUsername) ??
                       ClaimValue(GatewayAuthConventions.Claims.Email) ??
                       ClaimValue(GatewayAuthConventions.Claims.Subject) ??

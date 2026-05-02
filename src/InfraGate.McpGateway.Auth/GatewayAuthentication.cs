@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.AspNetCore.Authentication;
@@ -15,13 +16,22 @@ public static class GatewayAuthentication
     {
         services.AddSingleton(options);
 
-        var authBuilder = services
+        var authBuilder = AddGatewayAuthenticationSchemes(services, options);
+        AddOAuthAuthentication(authBuilder, options);
+        AddGatewayAuthorization(services, options);
+
+        return services;
+    }
+
+    private static AuthenticationBuilder AddGatewayAuthenticationSchemes(
+        IServiceCollection services,
+        GatewayAuthOptions options)
+    {
+        return services
             .AddAuthentication(authenticationOptions =>
             {
                 authenticationOptions.DefaultAuthenticateScheme = GatewayAuthConventions.Schemes.PolicyScheme;
-                authenticationOptions.DefaultChallengeScheme = options.OAuthEnabled
-                    ? McpAuthenticationDefaults.AuthenticationScheme
-                    : GatewayAuthConventions.Schemes.StaticBearer;
+                authenticationOptions.DefaultChallengeScheme = DefaultChallengeScheme(options);
                 authenticationOptions.DefaultForbidScheme = GatewayAuthConventions.Schemes.PolicyScheme;
             })
             .AddPolicyScheme(
@@ -29,71 +39,29 @@ public static class GatewayAuthentication
                 displayName: null,
                 policyOptions =>
                 {
-                    policyOptions.ForwardDefaultSelector = context =>
-                        GatewayAuthToken.IsStaticBearerToken(context.Request.Headers.Authorization.ToString(), options)
-                            ? GatewayAuthConventions.Schemes.StaticBearer
-                            : options.OAuthEnabled
-                                ? JwtBearerDefaults.AuthenticationScheme
-                                : GatewayAuthConventions.Schemes.StaticBearer;
+                    policyOptions.ForwardDefaultSelector = context => ForwardedAuthenticationScheme(context, options);
                 })
             .AddScheme<AuthenticationSchemeOptions, StaticBearerAuthenticationHandler>(
                 GatewayAuthConventions.Schemes.StaticBearer,
                 displayName: null,
                 configureOptions: null);
+    }
 
-        if (!string.IsNullOrWhiteSpace(options.OAuthAuthority))
+    private static void AddOAuthAuthentication(AuthenticationBuilder authBuilder, GatewayAuthOptions options)
+    {
+        if (string.IsNullOrWhiteSpace(options.OAuthAuthority))
         {
-            var oauthAuthority = options.OAuthAuthority;
-            authBuilder
-                .AddJwtBearer(jwtOptions =>
-                {
-                    jwtOptions.Authority = oauthAuthority;
-                    if (!string.IsNullOrWhiteSpace(options.OAuthMetadataAddress))
-                    {
-                        jwtOptions.MetadataAddress = options.OAuthMetadataAddress;
-                    }
-
-                    jwtOptions.Audience = options.OAuthResource;
-                    jwtOptions.MapInboundClaims = false;
-                    jwtOptions.RequireHttpsMetadata = options.OAuthRequireHttpsMetadata;
-                    jwtOptions.TokenValidationParameters = new TokenValidationParameters
-                    {
-                        ValidateIssuer = true,
-                        ValidateAudience = true,
-                        ValidateLifetime = true,
-                        ValidateIssuerSigningKey = true,
-                        ValidIssuers = DistinctValues(oauthAuthority, TrimTrailingSlash(oauthAuthority)),
-                        AudienceValidator = (audiences, _, _) => HasAudience(audiences, options.OAuthResource)
-                    };
-                    jwtOptions.Events = new JwtBearerEvents
-                    {
-                        OnForbidden = context =>
-                        {
-                            var request = context.Request;
-                            var resourceMetadata = $"{request.Scheme}://{request.Host}{request.PathBase}{GatewayAuthConventions.Metadata.ProtectedResourcePath}";
-
-                            context.Response.Headers.WWWAuthenticate =
-                                BuildInsufficientScopeChallenge(options.OAuthScope, resourceMetadata);
-
-                            return Task.CompletedTask;
-                        }
-                    };
-                })
-                .AddMcp(mcpOptions =>
-                {
-                    mcpOptions.ResourceMetadataUri = new Uri(
-                        GatewayAuthConventions.Metadata.ProtectedResourcePath,
-                        UriKind.Relative);
-                    mcpOptions.ResourceMetadata = new ProtectedResourceMetadata
-                    {
-                        Resource = options.OAuthResource,
-                        ResourceName = GatewayAuthConventions.Metadata.ResourceName,
-                        AuthorizationServers = { oauthAuthority },
-                        ScopesSupported = { options.OAuthScope }
-                    };
-                });
+            return;
         }
 
+        var oauthAuthority = options.OAuthAuthority;
+        authBuilder
+            .AddJwtBearer(jwtOptions => ConfigureJwtBearerOptions(jwtOptions, options, oauthAuthority))
+            .AddMcp(mcpOptions => ConfigureMcpOptions(mcpOptions, options, oauthAuthority));
+    }
+
+    private static void AddGatewayAuthorization(IServiceCollection services, GatewayAuthOptions options)
+    {
         services
             .AddAuthorizationBuilder()
             .AddPolicy(GatewayAuthConventions.Schemes.PolicyName, policy =>
@@ -101,9 +69,82 @@ public static class GatewayAuthentication
                 policy.RequireAuthenticatedUser();
                 policy.RequireAssertion(context => HasRequiredScope(context.User, options.OAuthScope));
             });
-
-        return services;
     }
+
+    private static string DefaultChallengeScheme(GatewayAuthOptions options) =>
+        options.OAuthEnabled
+            ? McpAuthenticationDefaults.AuthenticationScheme
+            : GatewayAuthConventions.Schemes.StaticBearer;
+
+    private static string ForwardedAuthenticationScheme(HttpContext context, GatewayAuthOptions options)
+    {
+        if (GatewayAuthToken.IsStaticBearerToken(context.Request.Headers.Authorization.ToString(), options))
+        {
+            return GatewayAuthConventions.Schemes.StaticBearer;
+        }
+
+        return options.OAuthEnabled
+            ? JwtBearerDefaults.AuthenticationScheme
+            : GatewayAuthConventions.Schemes.StaticBearer;
+    }
+
+    private static void ConfigureJwtBearerOptions(
+        JwtBearerOptions jwtOptions,
+        GatewayAuthOptions options,
+        string oauthAuthority)
+    {
+        jwtOptions.Authority = oauthAuthority;
+        if (!string.IsNullOrWhiteSpace(options.OAuthMetadataAddress))
+        {
+            jwtOptions.MetadataAddress = options.OAuthMetadataAddress;
+        }
+
+        jwtOptions.Audience = options.OAuthResource;
+        jwtOptions.MapInboundClaims = false;
+        jwtOptions.RequireHttpsMetadata = options.OAuthRequireHttpsMetadata;
+        jwtOptions.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuers = DistinctValues(oauthAuthority, TrimTrailingSlash(oauthAuthority)),
+            AudienceValidator = (audiences, _, _) => HasAudience(audiences, options.OAuthResource)
+        };
+        jwtOptions.Events = CreateJwtBearerEvents(options);
+    }
+
+    private static JwtBearerEvents CreateJwtBearerEvents(GatewayAuthOptions options) => new()
+    {
+        OnForbidden = context =>
+        {
+            var resourceMetadata = ResourceMetadataUrl(context.Request);
+            context.Response.Headers.WWWAuthenticate =
+                BuildInsufficientScopeChallenge(options.OAuthScope, resourceMetadata);
+
+            return Task.CompletedTask;
+        }
+    };
+
+    private static void ConfigureMcpOptions(
+        McpAuthenticationOptions mcpOptions,
+        GatewayAuthOptions options,
+        string oauthAuthority)
+    {
+        mcpOptions.ResourceMetadataUri = new Uri(
+            GatewayAuthConventions.Metadata.ProtectedResourcePath,
+            UriKind.Relative);
+        mcpOptions.ResourceMetadata = new ProtectedResourceMetadata
+        {
+            Resource = options.OAuthResource,
+            ResourceName = GatewayAuthConventions.Metadata.ResourceName,
+            AuthorizationServers = { oauthAuthority },
+            ScopesSupported = { options.OAuthScope }
+        };
+    }
+
+    private static string ResourceMetadataUrl(HttpRequest request) =>
+        $"{request.Scheme}://{request.Host}{request.PathBase}{GatewayAuthConventions.Metadata.ProtectedResourcePath}";
 
     private static bool HasRequiredScope(ClaimsPrincipal user, string requiredScope)
     {

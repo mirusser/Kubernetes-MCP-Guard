@@ -188,20 +188,10 @@ public sealed partial class K8sManager
         name = deployment.Metadata?.Name,
         labels = deployment.Metadata?.Labels,
         generation = deployment.Metadata?.Generation,
-        replicas = new
-        {
-            desired = deployment.Spec?.Replicas,
-            ready = deployment.Status?.ReadyReplicas,
-            available = deployment.Status?.AvailableReplicas,
-            updated = deployment.Status?.UpdatedReplicas
-        },
-        selector = deployment.Spec?.Selector?.MatchLabels,
-        containers = deployment.Spec?.Template?.Spec?.Containers?.Select(container => new
-        {
-            name = container.Name,
-            image = container.Image
-        }),
-        conditions = deployment.Status?.Conditions?.Select(ConditionSummary)
+        replicas = DeploymentReplicaSummary(deployment.Spec, deployment.Status),
+        selector = DeploymentSelector(deployment.Spec),
+        containers = DeploymentContainerSummaries(deployment.Spec),
+        conditions = DeploymentConditionSummaries(deployment.Status)
     };
 
     private static object ReplicaSetDiagnosticSummary(V1ReplicaSet replicaSet) => new
@@ -209,35 +199,27 @@ public sealed partial class K8sManager
         name = replicaSet.Metadata?.Name,
         labels = replicaSet.Metadata?.Labels,
         generation = replicaSet.Metadata?.Generation,
-        replicas = new
-        {
-            desired = replicaSet.Spec?.Replicas,
-            ready = replicaSet.Status?.ReadyReplicas,
-            available = replicaSet.Status?.AvailableReplicas
-        },
-        conditions = replicaSet.Status?.Conditions?.Select(ConditionSummary)
+        replicas = ReplicaSetReplicaSummary(replicaSet.Spec, replicaSet.Status),
+        conditions = ReplicaSetConditionSummaries(replicaSet.Status)
     };
 
-    private static object PodDiagnosticSummary(V1Pod pod) => new
+    private static object PodDiagnosticSummary(V1Pod pod)
     {
-        name = pod.Metadata?.Name,
-        labels = pod.Metadata?.Labels,
-        phase = pod.Status?.Phase,
-        reason = pod.Status?.Reason,
-        message = pod.Status?.Message,
-        podIp = pod.Status?.PodIP,
-        hostIp = pod.Status?.HostIP,
-        nodeName = pod.Spec?.NodeName,
-        conditions = pod.Status?.Conditions?.Select(ConditionSummary),
-        containers = pod.Status?.ContainerStatuses?.Select(status => new
+        var status = PodStatusFields.From(pod.Status);
+        return new
         {
-            name = status.Name,
-            ready = status.Ready,
-            restartCount = status.RestartCount,
-            image = status.Image,
-            state = ContainerStateSummary(status.State)
-        })
-    };
+            name = pod.Metadata?.Name,
+            labels = pod.Metadata?.Labels,
+            phase = status.Phase,
+            reason = status.Reason,
+            message = status.Message,
+            podIp = status.PodIp,
+            hostIp = status.HostIp,
+            nodeName = pod.Spec?.NodeName,
+            conditions = PodConditionSummaries(pod.Status),
+            containers = PodDiagnosticContainerStatusSummaries(pod.Status)
+        };
+    }
 
     private static object ServiceDiagnosticSummary(V1Service service) => new
     {
@@ -246,14 +228,7 @@ public sealed partial class K8sManager
         type = service.Spec?.Type,
         clusterIp = service.Spec?.ClusterIP,
         selector = service.Spec?.Selector,
-        ports = service.Spec?.Ports?.Select(port => new
-        {
-            name = port.Name,
-            port = port.Port,
-            targetPort = port.TargetPort?.ToString(),
-            nodePort = port.NodePort,
-            protocol = port.Protocol
-        })
+        ports = ServicePortSummaries(service.Spec)
     };
 
     private static IReadOnlySet<RelatedObjectRef> RelatedRefs(
@@ -336,14 +311,21 @@ public sealed partial class K8sManager
 
         return expression.OperatorProperty switch
         {
-            K8sConventions.LabelSelectorOperators.In when values.Length > 0 =>
-                $"{expression.Key} in ({string.Join(",", values)})",
-            K8sConventions.LabelSelectorOperators.NotIn when values.Length > 0 =>
-                $"{expression.Key} notin ({string.Join(",", values)})",
+            K8sConventions.LabelSelectorOperators.In =>
+                FormatSetBasedLabelSelectorExpression(expression.Key, "in", values),
+            K8sConventions.LabelSelectorOperators.NotIn =>
+                FormatSetBasedLabelSelectorExpression(expression.Key, "notin", values),
             K8sConventions.LabelSelectorOperators.Exists => expression.Key,
             K8sConventions.LabelSelectorOperators.DoesNotExist => $"!{expression.Key}",
             _ => null
         };
+    }
+
+    private static string? FormatSetBasedLabelSelectorExpression(string key, string operatorText, string[] values)
+    {
+        return values.Length == 0
+            ? null
+            : $"{key} {operatorText} ({string.Join(",", values)})";
     }
 
     private sealed record RelatedObjectRef(string Kind, string Name);

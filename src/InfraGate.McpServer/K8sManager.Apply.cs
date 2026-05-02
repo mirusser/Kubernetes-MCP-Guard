@@ -74,36 +74,100 @@ public sealed partial class K8sManager
         CancellationToken cancellationToken)
     {
         var pending = await approvalStore.GetPendingPlanAsync(planId, cancellationToken);
-        if (!pending.IsPending || pending.Plan is null || pending.Hash is null)
+        if (TryDenyInvalidPendingPlan(pending, out var denied))
         {
-            return ApprovedPlanResult.Denied(pending.Message);
+            return denied;
         }
 
-        var message = FormatApprovalRequest(pending.Plan, pending.Hash);
-        PlanApprovalInput approval;
-        try
+        var plan = pending.Plan!;
+        var hash = pending.Hash!;
+        var message = FormatApprovalRequest(plan, hash);
+        var approvalResult = await ElicitPlanApprovalAsync(planId, message, server, cancellationToken);
+        if (approvalResult.DenialMessage is not null)
         {
-            var result = await server.ElicitAsync<PlanApprovalInput>(message, cancellationToken: cancellationToken);
-            if (!result.IsAccepted || result.Content is not { Approve: true })
-            {
-                return ApprovedPlanResult.Denied($"Plan '{planId}' was not approved through MCP elicitation.");
-            }
-
-            approval = result.Content;
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or McpException)
-        {
-            return ApprovedPlanResult.Denied(
-                $"Plan '{planId}' requires MCP server approval, but the client could not complete elicitation: {ex.Message}");
+            return ApprovedPlanResult.Denied(approvalResult.DenialMessage);
         }
 
+        return await ApproveMatchingPlanAsync(planId, hash, approvalResult.Approval!, cancellationToken);
+    }
+
+    private static bool TryDenyInvalidPendingPlan(PendingPlanResult pending, out ApprovedPlanResult denied)
+    {
+        if (IsValidPendingPlan(pending))
+        {
+            denied = ApprovedPlanResult.Denied(string.Empty);
+            return false;
+        }
+
+        denied = ApprovedPlanResult.Denied(pending.Message);
+        return true;
+    }
+
+    private static bool IsValidPendingPlan(PendingPlanResult pending) =>
+        pending.IsPending &&
+        pending.Plan is not null &&
+        pending.Hash is not null;
+
+    private async Task<ApprovedPlanResult> ApproveMatchingPlanAsync(
+        string planId,
+        string hash,
+        PlanApprovalInput approval,
+        CancellationToken cancellationToken)
+    {
         if (!string.Equals(approval.PlanId, planId, StringComparison.Ordinal))
         {
             return ApprovedPlanResult.Denied($"Plan '{planId}' approval did not echo the matching plan id.");
         }
 
-        return await approvalStore.ApprovePendingPlanAsync(planId, pending.Hash, cancellationToken);
+        return await approvalStore.ApprovePendingPlanAsync(planId, hash, cancellationToken);
     }
+
+    private static async Task<(PlanApprovalInput? Approval, string? DenialMessage)> ElicitPlanApprovalAsync(
+        string planId,
+        string message,
+        ModelContextProtocol.Server.McpServer server,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await ReadPlanApprovalAsync(planId, message, server, cancellationToken);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or McpException)
+        {
+            return (null,
+                $"Plan '{planId}' requires MCP server approval, but the client could not complete elicitation: {ex.Message}");
+        }
+    }
+
+    private static async Task<(PlanApprovalInput? Approval, string? DenialMessage)> ReadPlanApprovalAsync(
+        string planId,
+        string message,
+        ModelContextProtocol.Server.McpServer server,
+        CancellationToken cancellationToken)
+    {
+        var result = await server.ElicitAsync<PlanApprovalInput>(message, cancellationToken: cancellationToken);
+        if (!result.IsAccepted)
+        {
+            return DeniedPlanApproval(planId);
+        }
+
+        return AcceptedPlanApproval(planId, result.Content);
+    }
+
+    private static (PlanApprovalInput? Approval, string? DenialMessage) AcceptedPlanApproval(
+        string planId,
+        PlanApprovalInput? approval)
+    {
+        if (approval is { Approve: true })
+        {
+            return (approval, null);
+        }
+
+        return DeniedPlanApproval(planId);
+    }
+
+    private static (PlanApprovalInput? Approval, string? DenialMessage) DeniedPlanApproval(string planId) =>
+        (null, $"Plan '{planId}' was not approved through MCP elicitation.");
 
     private static string FormatApprovalRequest(K8sPlan plan, string hash)
     {
@@ -243,19 +307,16 @@ public sealed partial class K8sManager
             name,
             plan.Namespace,
             cancellationToken: cancellationToken);
-        var deploymentContainer = deployment.Spec?.Template?.Spec?.Containers?
-            .FirstOrDefault(item => string.Equals(item.Name, container, StringComparison.Ordinal));
-        if (deploymentContainer is null)
+        var deploymentContainer = FindDeploymentContainer(deployment, container);
+        var imageValidation = ValidatePlannedContainerImage(
+            plan.Namespace,
+            name,
+            container,
+            currentImage,
+            deploymentContainer);
+        if (imageValidation is not null)
         {
-            return ApplyResult.Failed(
-                $"Deployment '{plan.Namespace}/{name}' does not contain container '{container}'. Re-request the plan.");
-        }
-
-        var actualImage = deploymentContainer.Image ?? string.Empty;
-        if (!string.Equals(actualImage, currentImage, StringComparison.Ordinal))
-        {
-            return ApplyResult.Failed(
-                $"Deployment '{plan.Namespace}/{name}' container '{container}' image changed from planned '{currentImage}' to '{actualImage}'. Re-request the plan.");
+            return ApplyResult.Failed(imageValidation);
         }
 
         var patch = new
@@ -292,37 +353,84 @@ public sealed partial class K8sManager
 
     private async Task ApplyObjectAsync(IKubernetesObject<V1ObjectMeta> obj, CancellationToken cancellationToken)
     {
-        switch (obj)
+        if (await TryApplyDeploymentAsync(obj, cancellationToken))
         {
-            case V1Deployment deployment:
-                await client.AppsV1.PatchNamespacedDeploymentAsync(
-                    new V1Patch(deployment, V1Patch.PatchType.ApplyPatch),
-                    deployment.Metadata.Name,
-                    deployment.Metadata.NamespaceProperty,
-                    fieldManager: FieldManager,
-                    force: true,
-                    cancellationToken: cancellationToken);
-                break;
-            case V1Service service:
-                await client.CoreV1.PatchNamespacedServiceAsync(
-                    new V1Patch(service, V1Patch.PatchType.ApplyPatch),
-                    service.Metadata.Name,
-                    service.Metadata.NamespaceProperty,
-                    fieldManager: FieldManager,
-                    force: true,
-                    cancellationToken: cancellationToken);
-                break;
-            case V1ConfigMap configMap:
-                await client.CoreV1.PatchNamespacedConfigMapAsync(
-                    new V1Patch(configMap, V1Patch.PatchType.ApplyPatch),
-                    configMap.Metadata.Name,
-                    configMap.Metadata.NamespaceProperty,
-                    fieldManager: FieldManager,
-                    force: true,
-                    cancellationToken: cancellationToken);
-                break;
+            return;
         }
+
+        if (await TryApplyServiceAsync(obj, cancellationToken))
+        {
+            return;
+        }
+
+        await TryApplyConfigMapAsync(obj, cancellationToken);
     }
+
+    private async Task<bool> TryApplyDeploymentAsync(
+        IKubernetesObject<V1ObjectMeta> obj,
+        CancellationToken cancellationToken)
+    {
+        if (obj is not V1Deployment deployment)
+        {
+            return false;
+        }
+
+        await ApplyDeploymentAsync(deployment, cancellationToken);
+        return true;
+    }
+
+    private async Task<bool> TryApplyServiceAsync(
+        IKubernetesObject<V1ObjectMeta> obj,
+        CancellationToken cancellationToken)
+    {
+        if (obj is not V1Service service)
+        {
+            return false;
+        }
+
+        await ApplyServiceAsync(service, cancellationToken);
+        return true;
+    }
+
+    private async Task<bool> TryApplyConfigMapAsync(
+        IKubernetesObject<V1ObjectMeta> obj,
+        CancellationToken cancellationToken)
+    {
+        if (obj is not V1ConfigMap configMap)
+        {
+            return false;
+        }
+
+        await ApplyConfigMapAsync(configMap, cancellationToken);
+        return true;
+    }
+
+    private Task ApplyDeploymentAsync(V1Deployment deployment, CancellationToken cancellationToken) =>
+        client.AppsV1.PatchNamespacedDeploymentAsync(
+            new V1Patch(deployment, V1Patch.PatchType.ApplyPatch),
+            deployment.Metadata.Name,
+            deployment.Metadata.NamespaceProperty,
+            fieldManager: FieldManager,
+            force: true,
+            cancellationToken: cancellationToken);
+
+    private Task ApplyServiceAsync(V1Service service, CancellationToken cancellationToken) =>
+        client.CoreV1.PatchNamespacedServiceAsync(
+            new V1Patch(service, V1Patch.PatchType.ApplyPatch),
+            service.Metadata.Name,
+            service.Metadata.NamespaceProperty,
+            fieldManager: FieldManager,
+            force: true,
+            cancellationToken: cancellationToken);
+
+    private Task ApplyConfigMapAsync(V1ConfigMap configMap, CancellationToken cancellationToken) =>
+        client.CoreV1.PatchNamespacedConfigMapAsync(
+            new V1Patch(configMap, V1Patch.PatchType.ApplyPatch),
+            configMap.Metadata.Name,
+            configMap.Metadata.NamespaceProperty,
+            fieldManager: FieldManager,
+            force: true,
+            cancellationToken: cancellationToken);
 
     private async Task<string> DeleteObjectAsync(K8sObjectRef obj, CancellationToken cancellationToken)
     {
@@ -369,28 +477,18 @@ public sealed partial class K8sManager
         }
 
         var deadline = DateTimeOffset.UtcNow.AddSeconds(60);
+        return await WaitForDeploymentRolloutsAsync(namespaceName, names, deadline, cancellationToken);
+    }
+
+    private async Task<string> WaitForDeploymentRolloutsAsync(
+        string namespaceName,
+        string[] names,
+        DateTimeOffset deadline,
+        CancellationToken cancellationToken)
+    {
         while (DateTimeOffset.UtcNow < deadline)
         {
-            var pending = new List<string>();
-            foreach (var name in names)
-            {
-                var deployment = await client.AppsV1.ReadNamespacedDeploymentAsync(
-                    name,
-                    namespaceName,
-                    cancellationToken: cancellationToken);
-                var desired = deployment.Spec?.Replicas ?? 0;
-                var updated = deployment.Status?.UpdatedReplicas ?? 0;
-                var ready = deployment.Status?.ReadyReplicas ?? 0;
-                var available = deployment.Status?.AvailableReplicas ?? 0;
-                var observedGeneration = deployment.Status?.ObservedGeneration ?? 0;
-                var generation = deployment.Metadata?.Generation ?? 0;
-                var observed = observedGeneration >= generation;
-
-                if (!observed || updated != desired || ready != desired || available != desired)
-                {
-                    pending.Add($"{name}: desired={desired}, updated={updated}, ready={ready}, available={available}");
-                }
-            }
+            var pending = await ReadPendingDeploymentRolloutsAsync(namespaceName, names, cancellationToken);
 
             if (pending.Count == 0)
             {
@@ -401,6 +499,101 @@ public sealed partial class K8sManager
         }
 
         return $"Timed out waiting for Deployment rollout: {string.Join(", ", names)}.";
+    }
+
+    private async Task<List<string>> ReadPendingDeploymentRolloutsAsync(
+        string namespaceName,
+        IEnumerable<string> names,
+        CancellationToken cancellationToken)
+    {
+        var pending = new List<string>();
+        foreach (var name in names)
+        {
+            var deployment = await client.AppsV1.ReadNamespacedDeploymentAsync(
+                name,
+                namespaceName,
+                cancellationToken: cancellationToken);
+            var rollout = DeploymentRolloutStatus.From(deployment);
+            if (!rollout.IsComplete)
+            {
+                pending.Add(rollout.PendingMessage(name));
+            }
+        }
+
+        return pending;
+    }
+
+    private static V1Container? FindDeploymentContainer(V1Deployment deployment, string container) =>
+        deployment.Spec?.Template?.Spec?.Containers?
+            .FirstOrDefault(item => string.Equals(item.Name, container, StringComparison.Ordinal));
+
+    private static string? ValidatePlannedContainerImage(
+        string namespaceName,
+        string deploymentName,
+        string container,
+        string currentImage,
+        V1Container? deploymentContainer)
+    {
+        if (deploymentContainer is null)
+        {
+            return $"Deployment '{namespaceName}/{deploymentName}' does not contain container '{container}'. Re-request the plan.";
+        }
+
+        var actualImage = deploymentContainer.Image ?? string.Empty;
+        return string.Equals(actualImage, currentImage, StringComparison.Ordinal)
+            ? null
+            : $"Deployment '{namespaceName}/{deploymentName}' container '{container}' image changed from planned '{currentImage}' to '{actualImage}'. Re-request the plan.";
+    }
+
+    private sealed record DeploymentRolloutStatus(
+        bool IsComplete,
+        int Desired,
+        int Updated,
+        int Ready,
+        int Available)
+    {
+        public static DeploymentRolloutStatus From(V1Deployment deployment)
+        {
+            var desired = DesiredReplicas(deployment);
+            var updated = UpdatedReplicas(deployment);
+            var ready = ReadyReplicas(deployment);
+            var available = AvailableReplicas(deployment);
+            var isComplete = IsRolloutComplete(deployment, desired, updated, ready, available);
+
+            return new DeploymentRolloutStatus(isComplete, desired, updated, ready, available);
+        }
+
+        private static int DesiredReplicas(V1Deployment deployment) =>
+            deployment.Spec?.Replicas ?? 0;
+
+        private static int UpdatedReplicas(V1Deployment deployment) =>
+            deployment.Status?.UpdatedReplicas ?? 0;
+
+        private static int ReadyReplicas(V1Deployment deployment) =>
+            deployment.Status?.ReadyReplicas ?? 0;
+
+        private static int AvailableReplicas(V1Deployment deployment) =>
+            deployment.Status?.AvailableReplicas ?? 0;
+
+        private static bool IsRolloutComplete(
+            V1Deployment deployment,
+            int desired,
+            int updated,
+            int ready,
+            int available) =>
+            HasObservedGeneration(deployment) &&
+            HasExpectedReplicaCounts(desired, updated, ready, available);
+
+        private static bool HasObservedGeneration(V1Deployment deployment) =>
+            (deployment.Status?.ObservedGeneration ?? 0) >= (deployment.Metadata?.Generation ?? 0);
+
+        private static bool HasExpectedReplicaCounts(int desired, int updated, int ready, int available) =>
+            updated == desired &&
+            ready == desired &&
+            available == desired;
+
+        public string PendingMessage(string name) =>
+            $"{name}: desired={Desired}, updated={Updated}, ready={Ready}, available={Available}";
     }
 
     private sealed class PlanApprovalInput

@@ -33,28 +33,43 @@ public sealed partial class PromptInjectionGuard
                 ScanJsonElement(element, location, findings);
                 return;
             case IReadOnlyDictionary<string, object?> dictionary:
-                foreach (var (name, child) in dictionary)
-                {
-                    ScanValue(child, $"{location}.{name}", findings);
-                }
-
+                ScanReadOnlyDictionary(dictionary, location, findings);
                 return;
             case IDictionary dictionary:
-                foreach (DictionaryEntry entry in dictionary)
-                {
-                    ScanValue(entry.Value, $"{location}.{entry.Key}", findings);
-                }
-
+                ScanDictionary(dictionary, location, findings);
                 return;
             case IEnumerable enumerable:
-                var index = 0;
-                foreach (var item in enumerable)
-                {
-                    ScanValue(item, $"{location}[{index}]", findings);
-                    index++;
-                }
-
+                ScanEnumerable(enumerable, location, findings);
                 return;
+        }
+    }
+
+    private static void ScanReadOnlyDictionary(
+        IReadOnlyDictionary<string, object?> dictionary,
+        string location,
+        List<GuardrailFinding> findings)
+    {
+        foreach (var (name, child) in dictionary)
+        {
+            ScanValue(child, $"{location}.{name}", findings);
+        }
+    }
+
+    private static void ScanDictionary(IDictionary dictionary, string location, List<GuardrailFinding> findings)
+    {
+        foreach (DictionaryEntry entry in dictionary)
+        {
+            ScanValue(entry.Value, $"{location}.{entry.Key}", findings);
+        }
+    }
+
+    private static void ScanEnumerable(IEnumerable enumerable, string location, List<GuardrailFinding> findings)
+    {
+        var index = 0;
+        foreach (var item in enumerable)
+        {
+            ScanValue(item, $"{location}[{index}]", findings);
+            index++;
         }
     }
 
@@ -92,26 +107,34 @@ public sealed partial class PromptInjectionGuard
                 AddTextFindings(text, location, findings);
                 break;
             case JsonObject jsonObject:
-                foreach (var (name, child) in jsonObject)
-                {
-                    if (child is not null)
-                    {
-                        ScanJsonNode(child, $"{location}.{name}", findings);
-                    }
-                }
-
+                ScanJsonObject(jsonObject, location, findings);
                 break;
             case JsonArray jsonArray:
-                for (var i = 0; i < jsonArray.Count; i++)
-                {
-                    var child = jsonArray[i];
-                    if (child is not null)
-                    {
-                        ScanJsonNode(child, $"{location}[{i}]", findings);
-                    }
-                }
-
+                ScanJsonArray(jsonArray, location, findings);
                 break;
+        }
+    }
+
+    private static void ScanJsonObject(JsonObject jsonObject, string location, List<GuardrailFinding> findings)
+    {
+        foreach (var (name, child) in jsonObject)
+        {
+            if (child is not null)
+            {
+                ScanJsonNode(child, $"{location}.{name}", findings);
+            }
+        }
+    }
+
+    private static void ScanJsonArray(JsonArray jsonArray, string location, List<GuardrailFinding> findings)
+    {
+        for (var i = 0; i < jsonArray.Count; i++)
+        {
+            var child = jsonArray[i];
+            if (child is not null)
+            {
+                ScanJsonNode(child, $"{location}[{i}]", findings);
+            }
         }
     }
 }
