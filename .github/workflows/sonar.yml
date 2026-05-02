@@ -1,0 +1,56 @@
+name: SonarCloud Analysis
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sonar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore local tools
+        run: dotnet tool restore
+
+      - name: Begin Sonar scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet tool run dotnet-sonarscanner begin \
+            /k:"${{ vars.SONAR_PROJECT_KEY }}" \
+            /o:"${{ vars.SONAR_ORGANIZATION }}" \
+            /d:sonar.token="$SONAR_TOKEN" \
+            /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.cs.vscoveragexml.reportsPaths="TestResults/coverage.xml"
+
+      - name: Restore NuGet packages
+        run: dotnet restore InfraGate.slnx
+
+      - name: Build
+        run: dotnet build InfraGate.slnx --configuration Release --no-restore
+
+      - name: Test with coverage
+        run: dotnet tool run dotnet-coverage collect "dotnet test InfraGate.slnx --configuration Release --no-build" -f xml -o TestResults/coverage.xml
+
+      - name: End Sonar scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: dotnet tool run dotnet-sonarscanner end /d:sonar.token="$SONAR_TOKEN"
