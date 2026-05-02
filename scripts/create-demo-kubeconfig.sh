@@ -93,6 +93,26 @@ server_host() {
   printf '%s' "${host_port%%:*}"
 }
 
+ensure_cluster_ready() {
+  local context
+  local server
+
+  context="$(kubectl config current-context 2>/dev/null || true)"
+  server="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
+
+  if [[ -z "${context}" || -z "${server}" ]]; then
+    echo "No current Kubernetes context is configured. Start minikube first: minikube start" >&2
+    exit 1
+  fi
+
+  if ! kubectl --request-timeout=10s get --raw=/readyz >/dev/null 2>&1; then
+    echo "Current Kubernetes context '${context}' is not reachable at ${server}." >&2
+    echo "Start or repair minikube first: minikube start" >&2
+    exit 1
+  fi
+}
+
+ensure_cluster_ready
 kubectl apply --validate=false -f "${ROOT}/deploy/minikube/rbac.yaml"
 
 SERVER="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
