@@ -122,7 +122,7 @@ codex mcp login infra-gate
 
 - Developer runbook: [docs/devs-readme.md](docs/devs-readme.md)
 - Setup guide: [docs/setup-guide.md](docs/setup-guide.md)
-- MCP compliance notes: [docs/MCP-COMPLIANCE.md](docs/MCP-COMPLIANCE.md)
+- MCP compliance notes: [docs/MCP-compliance.md](docs/MCP-compliance.md)
 - Kubernetes MCP server: [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md)
 - HTTP MCP gateway: [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md)
 - Gateway auth: [src/InfraGate.McpGateway.Auth/README.md](src/InfraGate.McpGateway.Auth/README.md)

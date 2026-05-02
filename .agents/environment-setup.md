@@ -10,7 +10,7 @@ The key tools required are:
 |---|---|---|
 | **git** | Version control | ✅ Installed (2.39.5) |
 | **.NET 10 SDK** | Build/run all 7 projects (all target `net10.0`) | ✅ Installed (10.0.203) via `dotnet-install.sh` to `~/.dotnet` |
-| **.NET Local Tools (ReportGenerator)** | Generate code coverage HTML reports | ✅ Installed locally via `.config/dotnet-tools.json` |
+| **.NET Local Tools (ReportGenerator, SonarScanner, dotnet-coverage)** | Generate code coverage HTML reports (ReportGenerator), SonarCloud CI analysis (SonarScanner), code coverage collection (dotnet-coverage) | ✅ Installed locally via `.config/dotnet-tools.json` |
 | **Docker + Docker Compose** | Run minikube / Kubernetes locally for testing | ✅ Available via Docker Outside Docker (29.4.1 + Compose v5.1.3) |
 | **kubectl** | Interact with the local cluster and setup RBAC | ✅ Available via Docker |
 | **minikube** | Local Kubernetes cluster for testing the MCP server | ✅ Available via Docker |
@@ -80,7 +80,7 @@ For `minikube`, a similar approach can be taken using a containerized version, o
 
 ### 6. Code Coverage Tools
 
-We use `dotnet-reportgenerator-globaltool` as a local tool to generate HTML coverage reports. It is tracked via `.config/dotnet-tools.json`.
+We use `dotnet-reportgenerator-globaltool` as a local tool to generate HTML coverage reports. Additionally, `dotnet-sonarscanner` and `dotnet-coverage` are installed for SonarCloud CI analysis. All are tracked via `.config/dotnet-tools.json`.
 
 To ensure the local tool is ready, run:
 ```bash
