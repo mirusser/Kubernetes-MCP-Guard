@@ -375,7 +375,11 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                     [McpGatewayConventions.ToolArguments.PodName] = podName,
                     [McpGatewayConventions.ToolArguments.Limit] = 5
                 });
-            AssertJsonKindName(podDiagnosticsText, "Pod", podName);
+            AssertJsonKindName(
+                podDiagnosticsText,
+                "Pod",
+                podName,
+                McpGatewayConventions.ToolArguments.PodName);
 
             var podLogsText = await CallTextAsync(
                 client,
@@ -712,13 +716,17 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         return null;
     }
 
-    private static void AssertJsonKindName(string json, string kind, string name)
+    private static void AssertJsonKindName(
+        string json,
+        string kind,
+        string name,
+        string nameProperty = McpGatewayConventions.ToolArguments.Name)
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
 
         Assert.Equal(kind, root.GetProperty("kind").GetString());
-        Assert.Equal(name, root.GetProperty("name").GetString());
+        Assert.Equal(name, root.GetProperty(nameProperty).GetString());
     }
 
     private static void AssertJsonArrayProperty(string json, string propertyName)
