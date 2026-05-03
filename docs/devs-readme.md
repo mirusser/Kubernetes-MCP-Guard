@@ -79,6 +79,27 @@ This is the recommended local OAuth path. See [Mode C in the setup guide](setup-
 docker compose -f deploy/mode-c/compose.yaml up --build
 ```
 
+### Docker image publishing
+
+Images are pushed to Docker Hub only on version tags or manual dispatch.
+PRs and pushes to `main` build without pushing.
+
+Trigger a push:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+Or trigger manually from Actions → Docker workflow → Run workflow → check `push_images`.
+
+Required repository configuration:
+
+- `vars.DOCKERHUB_USERNAME`
+- `vars.DOCKERHUB_NAMESPACE`
+- `secrets.DOCKERHUB_TOKEN`
+
+Images built: `kubernetes-mcp-guard-devissuer`, `kubernetes-mcp-guard-gateway`.
+
 ### Run the HTTP MCP gateway
 
 The source-run gateway listens on `http://127.0.0.1:3001/mcp` by default, accepts either OAuth JWT access tokens or the local static bearer token, and starts the downstream stdio server itself.
