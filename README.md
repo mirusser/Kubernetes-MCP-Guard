@@ -2,7 +2,10 @@
 
 Kubernetes MCP Guard is a .NET 10 gateway/server for AI-assisted Kubernetes operations through the Model Context Protocol.
 
-It lets MCP clients such as Codex, Open WebUI, and LibreChat inspect clusters, propose changes, and apply only approved mutations through OAuth-aware authentication, prompt-injection guardrails, audit logging, namespace-scoped RBAC, bounded observability, and exact-plan approval checks.
+It lets MCP clients such as Codex, Open WebUI, LibreChat etc. inspect clusters, propose changes, and apply only approved mutations through OAuth-aware authentication, prompt-injection guardrails, audit logging, namespace-scoped RBAC, bounded observability, and exact-plan approval checks. 
+
+<sub><em>This project is experimental, it's APIs, image tags, configuration, and runtime behavior may change.</em></sub>
+
 
 ![Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml/badge.svg?branch=main)
 ![Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml/badge.svg?branch=main)
@@ -65,6 +68,22 @@ That makes the project a practical slice of a bigger direction: MCP-native infra
 - Product engineering taste: small operational surface, clear user flows, safety defaults, and readable documentation for humans and agents.
 - Modern .NET implementation: .NET 10, dependency injection, async APIs, focused tests, and project-level separation of auth, gateway, server, issuer, and test concerns.
 
+## Published Images
+
+Released image tags follow the GitHub release tag (`vX.Y.Z`).
+
+### GitHub Container Registry (recommended)
+
+- `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>`
+- `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:<tag>`
+
+### Docker Hub
+
+- `mirusser/kubernetes-mcp-guard-gateway:<tag>`
+- `mirusser/kubernetes-mcp-guard-devissuer:<tag>`
+
+An end-to-end published-image quickstart will land with [Epic 2](.agents/Plans/roadmap-final.md).
+
 ## How To Run ▶️
 
 The recommended local OAuth setup runs the gateway and dev issuer with Docker Compose; the gateway launches the Kubernetes MCP server privately over stdio:
@@ -123,6 +142,17 @@ codex mcp login infra-gate
 | `request_set_deployment_image` | Plan a container image update |
 | `apply_approved_plan` | Apply an exact-hash-verified, user-approved plan |
 
+## Compatibility
+
+| Area | Supported / tested |
+| --- | --- |
+| .NET | .NET 10 |
+| Kubernetes | minikube / local cluster initially |
+| MCP transport | HTTP MCP endpoint at `/mcp` |
+| OIDC | DevIssuer (dev), Keycloak planned, Entra ID later |
+| Container registries | GHCR, Docker Hub |
+| Platforms | linux/amd64 initially |
+
 ## Explore The Project 🧭
 
 - Developer runbook: [docs/devs-readme.md](docs/devs-readme.md)
@@ -132,3 +162,11 @@ codex mcp login infra-gate
 - HTTP MCP gateway: [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md)
 - Gateway auth: [src/InfraGate.McpGateway.Auth/README.md](src/InfraGate.McpGateway.Auth/README.md)
 - Local dev OAuth issuer: [src/InfraGate.DevIssuer/README.md](src/InfraGate.DevIssuer/README.md)
+
+**Naming note:** The public name is **Kubernetes MCP Guard**. The internal codename **InfraGate** appears in `.slnx`, project folders, env-var prefixes (`INFRA_GATE_*`), and Docker labels. They refer to the same project; the rename is gradual and does not change runtime behavior.
+
+## Project Policies
+
+- License: [Apache-2.0](LICENSE)
+- Security policy: [SECURITY.md](SECURITY.md)
+- Release process: [docs/releasing.md](docs/releasing.md)
