@@ -1,11 +1,6 @@
 # Kubernetes MCP Guard 🛡️: AI-safe Kubernetes operations through MCP
 
-Kubernetes MCP Guard is a .NET 10 gateway/server for AI-assisted Kubernetes operations through the Model Context Protocol.
-
-It lets MCP clients such as Codex, Open WebUI, LibreChat etc. inspect clusters, propose changes, and apply only approved mutations through OAuth-aware authentication, prompt-injection guardrails, audit logging, namespace-scoped RBAC, bounded observability, and exact-plan approval checks. 
-
-<sub><em>This project is experimental, it's APIs, image tags, configuration, and runtime behavior may change.</em></sub>
-
+**Bridging the gap between AI Agents and Production Infrastructure with a Security-First Gateway.**
 
 [![Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml)
 [![Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml)
@@ -13,14 +8,22 @@ It lets MCP clients such as Codex, Open WebUI, LibreChat etc. inspect clusters, 
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=mirusser_Kubernetes-MCP-Guard&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=mirusser_Kubernetes-MCP-Guard)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=mirusser_Kubernetes-MCP-Guard&metric=coverage)](https://sonarcloud.io/summary/new_code?id=mirusser_Kubernetes-MCP-Guard)
 
-## What It Does ⚙️
+<sub>![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?style=flat-square&logo=dotnet) ![Kubernetes](https://img.shields.io/badge/Kubernetes-Cloud--Native-326ce5?style=flat-square&logo=kubernetes) ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ed?style=flat-square&logo=docker) ![AI/LLM](https://img.shields.io/badge/AI/LLM-MCP%20Ready-black?style=flat-square&logo=openai)</sub>
 
-- Exposes Kubernetes operations through the Model Context Protocol (MCP), with a stdio Kubernetes server behind a local HTTP gateway.
-- Uses the Kubernetes API via `KubernetesClient`; it does not shell out to `kubectl` for runtime operations.
-- Adds OAuth/static bearer authentication at the gateway, including MCP protected-resource metadata and insufficient-scope challenges.
-- Applies prompt-injection guardrails around model-visible tool input/output, with warn, redact, and audit behavior.
-- Keeps mutation paths approval-gated: create a plan first, then apply the exact approved plan.
-- Limits Kubernetes blast radius with namespace-scoped RBAC and typed, bounded tool surfaces.
+## 🎯 The Problem
+Giving AI agents direct access to Kubernetes is risky. Without a safety layer, an LLM "hallucination" or a prompt injection could accidentally delete a production namespace or leak sensitive secrets.
+
+## 🚀 The Solution
+Kubernetes-MCP-Guard is a high-performance gateway built on .NET 10 and the Model Context Protocol (MCP). It provides a secure, audited, and human-gated interface that allows AI agents (like Claude Code or Open WebUI) to interact with your clusters without compromising safety.
+
+## 💎 Key Business Value
+
+- **Human-in-the-Loop Governance:** AI can propose changes, but only a human can approve the final execution plan.
+- **Enterprise-Grade Security:** Integrated with OAuth-aware authentication and Namespace-scoped RBAC to ensure the AI only sees what it is allowed to see.
+- **AI Safety & Auditing:** Built-in prompt-injection guardrails and full audit logging for compliance and troubleshooting
+- **Cutting-Edge Stack:** Architected using the latest .NET 10 features and the industry-standard MCP protocol.
+
+---
 
 ```mermaid
 flowchart TB
@@ -55,30 +58,43 @@ flowchart TB
 ```
 <sub><em>Simplified architectural graph. Full version [here](docs/MCP-compliance.md)</em></sub>
 
-## Why It Matters 🔐
+## 🛠️ Technical & Architectural Highlights
 
-AI infrastructure tools are powerful, but power is not the same thing as safety. Kubernetes MCP Guard treats AI-assisted ops as a systems design problem: capability needs identity, boundaries, auditability, and human approval at the point where state changes.
+- **AI Integration & Safety:** Deep implementation of Model Context Protocol (MCP), handling tool contracts, elicitation-style approval workflows, and mitigating prompt-injection risks within model-visible data.
 
-That makes the project a practical slice of a bigger direction: MCP-native infrastructure operations where agents can inspect, explain, and propose, while production-grade controls decide what actually changes.
+- **Security & Identity:** Implemented OAuth 2.0 resource-server patterns, including scope enforcement, identity-based audit logging, and strict Least-Privilege RBAC for Kubernetes interactions.
 
-## What This Demonstrates 🚀
+- **Cloud-Native Engineering:** Advanced usage of the Official Kubernetes .NET Client, utilizing Server-Side Apply (SSA) for dry-run planning, real-time Pod log streaming, and namespace isolation.
 
-- AI systems knowledge: MCP transports, tool contracts, elicitation-style approval, and prompt-injection risk around model-visible data.
-- Security judgment: OAuth resource-server behavior, scope enforcement, protected-resource metadata, audit identity, and least-privilege RBAC.
-- Kubernetes fluency: typed API usage, server-side apply planning, rollout checks, Events, Pod logs, resource summaries, and namespace isolation.
-- Product engineering taste: small operational surface, clear user flows, safety defaults, and readable documentation for humans and agents.
-- Modern .NET implementation: .NET 10, dependency injection, async APIs, focused tests, and project-level separation of auth, gateway, server, issuer, and test concerns.
+- **Modern .NET 10 Stack:** Built with a focus on Clean Architecture, leveraging Dependency Injection, high-performance Async/Await patterns, and a modular project structure that separates Auth, Gateway, and Core logic.
 
-## Published Images
+- **Product Mindset:** Prioritized a "small operational surface" and human-readable audit logs, ensuring the tool is as safe for a human SRE as it is powerful for an AI agent.
 
-Released image tags follow the GitHub release tag (`vX.Y.Z`); the floating `latest` tag is also published.
+#### 🏗️ Implementation Details:
+- Exposes Kubernetes operations through the Model Context Protocol (MCP), with a stdio Kubernetes server behind a local HTTP gateway.
+- Uses the Kubernetes API via `KubernetesClient`; it does not shell out to `kubectl` for runtime operations.
+- Adds OAuth/static bearer authentication at the gateway, including MCP protected-resource metadata and insufficient-scope challenges.
+- Applies prompt-injection guardrails around model-visible tool input/output, with warn, redact, and audit behavior.
+- Keeps mutation paths approval-gated: create a plan first, then apply the exact approved plan.
+- Limits Kubernetes blast radius with namespace-scoped RBAC and typed, bounded tool surfaces.
 
-| Registry | Gateway | Dev Issuer |
+## 📦 Container Images
+
+Images are automatically built, scanned, and published to multiple registries for every release.
+
+| Registry | Gateway (Core) | Dev Issuer (Auth) |
 | --- | --- | --- |
-| GHCR (recommended) | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>` | `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
+| GitHub (GHCR) | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>` | `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
 | Docker Hub | `mirusser/kubernetes-mcp-guard-gateway:<tag>` | `mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
 
-## How To Run ▶️
+**Versioning:** Use specific tags (e.g., `:v0.1.0`) for production stability. The `:latest` tag tracks the most recent stable release.
+
+Example pull:
+``` bash
+docker pull ghcr.io/mirusser/kubernetes-mcp-guard-gateway:latest
+```
+
+## ⚡ Quick Start
 
 ### Option 1 — Run from published images (no build required)
 
@@ -145,9 +161,9 @@ Connect Codex the same way as Option 1.
 
 *Other run modes (stdio-only, static bearer token) and full setup details are in the [Setup Guide](docs/setup-guide.md).*
 
-## Current Capabilities 🧰
+## 🧰 Current Capabilities 
 
-### Gateway Protections 🛡️
+### 🛡️ Gateway Protections 
 
 | Layer | Behavior |
 |---|---|
@@ -156,7 +172,7 @@ Connect Codex the same way as Option 1.
 | Audit logging | JSONL guardrail audit with identity resolution |
 | MCP compliance | Streamable HTTP transport, protected-resource metadata, step-up authorization |
 
-### Read-Only Observability 🔎
+### 🔎 Read-Only Observability 
 
 | Tool | Purpose |
 |---|---|
@@ -168,7 +184,7 @@ Connect Codex the same way as Option 1.
 | `get_pod_diagnostics` | Pod status, conditions, container state, and Events |
 | `get_service_diagnostics` | Service endpoints, backing Pods, and Events |
 
-### Approval-Gated Mutations ✅
+### ✅ Approval-Gated Mutations 
 
 | Tool | Purpose |
 |---|---|
@@ -190,7 +206,7 @@ Connect Codex the same way as Option 1.
 | Container registries | GHCR, Docker Hub |
 | Platforms | linux/amd64 initially |
 
-## Explore The Project 🧭
+## 🧭 Explore The Project 
 
 - Developer runbook: [docs/devs-readme.md](docs/devs-readme.md)
 - Setup guide: [docs/setup-guide.md](docs/setup-guide.md)
@@ -199,8 +215,6 @@ Connect Codex the same way as Option 1.
 - HTTP MCP gateway: [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md)
 - Gateway auth: [src/InfraGate.McpGateway.Auth/README.md](src/InfraGate.McpGateway.Auth/README.md)
 - Local dev OAuth issuer: [src/InfraGate.DevIssuer/README.md](src/InfraGate.DevIssuer/README.md)
-
-
 
 <sub><em>**Naming note:** The public name is **Kubernetes MCP Guard**. The internal codename **InfraGate** appears in `.slnx`, project folders, env-var prefixes (`INFRA_GATE_*`), and Docker labels. They refer to the same project; the rename is gradual and does not change runtime behavior.</em></sub>
 
