@@ -28,14 +28,17 @@ public sealed partial class PromptInjectionGuard
 
     [GeneratedRegex(
         @"(?ims)(?<prefix>^[ \t]*Manifest:\s*\r?\n)```(?:ya?ml)?\s*\r?\n(?<manifest>.*?)```+",
-        RegexOptions.CultureInvariant)]
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: McpGatewayConventions.RegexTimeoutMilliseconds)]
     private static partial Regex ManifestBlockRegex();
 
-    [GeneratedRegex(@"(\r\n|\r|\n)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(\r\n|\r|\n)", RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: McpGatewayConventions.RegexTimeoutMilliseconds)]
     private static partial Regex LineSplitRegex();
 
     [GeneratedRegex(
         OperationalLinePattern,
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: McpGatewayConventions.RegexTimeoutMilliseconds)]
     private static partial Regex OperationalLineRegex();
 }

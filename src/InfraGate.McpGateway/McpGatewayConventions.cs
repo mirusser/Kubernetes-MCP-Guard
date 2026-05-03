@@ -6,6 +6,7 @@ internal static class McpGatewayConventions
     public const string McpPath = "/mcp";
     public const int DefaultEventLimit = 50;
     public const int DefaultLogTailLines = 200;
+    internal const int RegexTimeoutMilliseconds = 1000;
 
     public static class ConfigurationKeys
     {

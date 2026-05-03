@@ -136,6 +136,11 @@ if [[ "${COMPOSE_MODE}" == "true" ]]; then
 
   write_kubeconfig "${COMPOSE_OUT}" "${COMPOSE_SERVER}" "${TLS_SERVER_NAME}"
   mkdir -p "${ROOT}/.mcp-approvals" "${ROOT}/.mcp-guardrails"
+  # Demo-only bind mounts: the container's non-root .NET app user (UID 1654)
+  # needs to write approval/guardrail files even when the host user owns
+  # these directories. Use world-writable + sticky bit, like /tmp, so unrelated
+  # local users cannot delete/rename files they do not own.
+  chmod 1777 "${ROOT}/.mcp-approvals" "${ROOT}/.mcp-guardrails"
 fi
 
 echo "${OUT}"

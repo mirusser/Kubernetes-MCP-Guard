@@ -118,7 +118,8 @@ public sealed partial class GuardedToolRunner
         return match.Success ? match.Groups[McpGatewayConventions.RegexGroups.Id].Value : null;
     }
 
-    [GeneratedRegex(@"(?:PlanId|Applied plan):\s+(?<id>[0-9a-z-]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?:PlanId|Applied plan):\s+(?<id>[0-9a-z-]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: McpGatewayConventions.RegexTimeoutMilliseconds)]
     private static partial Regex PlanIdRegex();
 
     private sealed record AuditIdentity(string? Subject, string? AuthenticationType);

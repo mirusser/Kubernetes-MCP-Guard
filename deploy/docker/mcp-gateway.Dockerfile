@@ -23,4 +23,6 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app/gateway
 COPY --from=build /app/gateway .
 COPY --from=build /app/server /app/server
+RUN install -d -o $APP_UID -g $APP_UID /data/approvals /data/guardrails
+USER $APP_UID
 ENTRYPOINT ["dotnet", "InfraGate.McpGateway.dll"]

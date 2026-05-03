@@ -360,7 +360,7 @@ public sealed partial class McpServerIntegrationTests
         throw new InvalidOperationException("Could not locate repository root.");
     }
 
-    [GeneratedRegex(@"PlanId:\s+(?<id>[0-9a-z-]+)")]
+    [GeneratedRegex(@"PlanId:\s+(?<id>[0-9a-z-]+)", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
     private static partial Regex PlanIdPattern();
 
     private const string DemoManifest = """
