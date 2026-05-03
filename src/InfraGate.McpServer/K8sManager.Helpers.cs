@@ -65,14 +65,41 @@ public sealed partial class K8sManager
 
     private static string FormatApiException(string prefix, Exception ex)
     {
-        return ex switch
+        if (TryFormatKubernetesException(prefix, ex, out var message))
         {
-            KubernetesException kube when kube.Status is not null =>
-                $"{prefix}: Kubernetes API returned {kube.Status.Code} {kube.Status.Reason}: {kube.Status.Message}",
-            HttpOperationException http when http.Response is not null =>
-                $"{prefix}: Kubernetes API returned {(int)http.Response.StatusCode} {http.Response.ReasonPhrase}: {http.Message}",
-            _ => $"{prefix}: {ex.Message}"
-        };
+            return message;
+        }
+
+        if (TryFormatHttpOperationException(prefix, ex, out message))
+        {
+            return message;
+        }
+
+        return $"{prefix}: {ex.Message}";
+    }
+
+    private static bool TryFormatKubernetesException(string prefix, Exception ex, out string message)
+    {
+        if (ex is KubernetesException { Status: not null } kube)
+        {
+            message = $"{prefix}: Kubernetes API returned {kube.Status.Code} {kube.Status.Reason}: {kube.Status.Message}";
+            return true;
+        }
+
+        message = string.Empty;
+        return false;
+    }
+
+    private static bool TryFormatHttpOperationException(string prefix, Exception ex, out string message)
+    {
+        if (ex is HttpOperationException { Response: not null } http)
+        {
+            message = $"{prefix}: Kubernetes API returned {(int)http.Response.StatusCode} {http.Response.ReasonPhrase}: {http.Message}";
+            return true;
+        }
+
+        message = string.Empty;
+        return false;
     }
 
     private sealed record ApplyResult(bool Succeeded, string Message)

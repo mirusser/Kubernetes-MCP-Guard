@@ -78,35 +78,52 @@ public sealed partial class PromptInjectionGuard
             case null:
                 return null;
             case JsonValue value when value.TryGetValue<string>(out var text):
-                var before = findings.Count;
-                AddTextFindings(text, location, findings);
-
-                return findings.Count == before ? node : JsonValue.Create(RedactedValue);
+                return RedactJsonValue(node, text, location, findings);
             case JsonObject jsonObject:
-                foreach (var (name, child) in jsonObject.ToArray())
-                {
-                    var redacted = RedactJsonNode(child, $"{location}.{name}", findings);
-                    if (!ReferenceEquals(redacted, child))
-                    {
-                        jsonObject[name] = redacted;
-                    }
-                }
-
+                RedactJsonObject(jsonObject, location, findings);
                 return jsonObject;
             case JsonArray jsonArray:
-                for (var i = 0; i < jsonArray.Count; i++)
-                {
-                    var child = jsonArray[i];
-                    var redacted = RedactJsonNode(child, $"{location}[{i}]", findings);
-                    if (!ReferenceEquals(redacted, child))
-                    {
-                        jsonArray[i] = redacted;
-                    }
-                }
-
+                RedactJsonArray(jsonArray, location, findings);
                 return jsonArray;
             default:
                 return node;
+        }
+    }
+
+    private static JsonNode? RedactJsonValue(
+        JsonNode node,
+        string text,
+        string location,
+        List<GuardrailFinding> findings)
+    {
+        var before = findings.Count;
+        AddTextFindings(text, location, findings);
+
+        return findings.Count == before ? node : JsonValue.Create(RedactedValue);
+    }
+
+    private static void RedactJsonObject(JsonObject jsonObject, string location, List<GuardrailFinding> findings)
+    {
+        foreach (var (name, child) in jsonObject.ToArray())
+        {
+            var redacted = RedactJsonNode(child, $"{location}.{name}", findings);
+            if (!ReferenceEquals(redacted, child))
+            {
+                jsonObject[name] = redacted;
+            }
+        }
+    }
+
+    private static void RedactJsonArray(JsonArray jsonArray, string location, List<GuardrailFinding> findings)
+    {
+        for (var i = 0; i < jsonArray.Count; i++)
+        {
+            var child = jsonArray[i];
+            var redacted = RedactJsonNode(child, $"{location}[{i}]", findings);
+            if (!ReferenceEquals(redacted, child))
+            {
+                jsonArray[i] = redacted;
+            }
         }
     }
 

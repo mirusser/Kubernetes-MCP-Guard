@@ -1,0 +1,56 @@
+name: Integration Tests
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-tests
+  cancel-in-progress: false
+
+jobs:
+  integration-tests:
+    runs-on:
+      - self-hosted
+      - linux
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore InfraGate.slnx
+
+      - name: Build
+        run: dotnet build InfraGate.slnx --configuration Release --no-restore
+
+      - name: Ensure Minikube is running
+        run: |
+          minikube start --wait=apiserver,system_pods --wait-timeout=5m
+          minikube update-context
+          kubectl config use-context minikube
+          kubectl --request-timeout=10s get --raw=/readyz
+          kubectl wait --for=condition=Ready node --all --timeout=120s
+
+      - name: Create demo kubeconfig
+        run: ./scripts/create-demo-kubeconfig.sh
+
+      - name: Run MCP server integration tests
+        env:
+          KUBECONFIG: ${{ github.workspace }}/.kube/mcp-nginx-demo.config
+        run: INFRA_GATE_RUN_INTEGRATION=1 dotnet test tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj --configuration Release --no-build
+
+      - name: Run gateway integration tests
+        env:
+          KUBECONFIG: ${{ github.workspace }}/.kube/mcp-nginx-demo.config
+        run: INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --configuration Release --no-build

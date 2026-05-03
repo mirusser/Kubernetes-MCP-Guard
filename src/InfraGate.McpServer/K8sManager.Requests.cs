@@ -1,4 +1,5 @@
 using k8s;
+using k8s.Models;
 
 namespace InfraGate.McpServer;
 
@@ -137,27 +138,13 @@ public sealed partial class K8sManager
                 name,
                 namespaceName,
                 cancellationToken: cancellationToken);
-            var deploymentContainer = deployment.Spec?.Template?.Spec?.Containers?
-                .FirstOrDefault(item => string.Equals(item.Name, container, StringComparison.Ordinal));
+            var deploymentContainer = FindDeploymentContainer(deployment, container);
             if (deploymentContainer is null)
             {
                 return $"Deployment '{namespaceName}/{name}' does not contain container '{container}'.";
             }
 
-            var currentImage = deploymentContainer.Image ?? string.Empty;
-            var plan = CreatePlan(
-                operation: K8sConventions.PlanOperations.SetImage,
-                namespaceName,
-                description: $"Update Deployment '{name}' container '{container}' image from '{currentImage}' to '{image}'.",
-                parameters: new Dictionary<string, string>
-                {
-                    [K8sConventions.PlanParameters.Name] = name,
-                    [K8sConventions.PlanParameters.Container] = container,
-                    [K8sConventions.PlanParameters.CurrentImage] = currentImage,
-                    [K8sConventions.PlanParameters.Image] = image
-                },
-                objects: [K8sConventions.K8sResources.DeploymentRef(namespaceName, name)],
-                manifest: null);
+            var plan = CreateSetDeploymentImagePlan(namespaceName, name, container, image, deploymentContainer);
 
             return await CreateAndFormatPlanAsync(plan, cancellationToken);
         }
@@ -210,5 +197,28 @@ public sealed partial class K8sManager
             parameters,
             objects,
             manifest);
+    }
+
+    private K8sPlan CreateSetDeploymentImagePlan(
+        string namespaceName,
+        string name,
+        string container,
+        string image,
+        V1Container deploymentContainer)
+    {
+        var currentImage = deploymentContainer.Image ?? string.Empty;
+        return CreatePlan(
+            operation: K8sConventions.PlanOperations.SetImage,
+            namespaceName,
+            description: $"Update Deployment '{name}' container '{container}' image from '{currentImage}' to '{image}'.",
+            parameters: new Dictionary<string, string>
+            {
+                [K8sConventions.PlanParameters.Name] = name,
+                [K8sConventions.PlanParameters.Container] = container,
+                [K8sConventions.PlanParameters.CurrentImage] = currentImage,
+                [K8sConventions.PlanParameters.Image] = image
+            },
+            objects: [K8sConventions.K8sResources.DeploymentRef(namespaceName, name)],
+            manifest: null);
     }
 }

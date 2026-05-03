@@ -2,7 +2,16 @@
 
 Kubernetes MCP Guard is a .NET 10 gateway/server for AI-assisted Kubernetes operations through the Model Context Protocol.
 
-It lets MCP clients such as Codex, Open WebUI, and LibreChat inspect clusters, propose changes, and apply only approved mutations through OAuth-aware authentication, prompt-injection guardrails, audit logging, namespace-scoped RBAC, bounded observability, and exact-plan approval checks.
+It lets MCP clients such as Codex, Open WebUI, LibreChat etc. inspect clusters, propose changes, and apply only approved mutations through OAuth-aware authentication, prompt-injection guardrails, audit logging, namespace-scoped RBAC, bounded observability, and exact-plan approval checks. 
+
+<sub><em>This project is experimental, it's APIs, image tags, configuration, and runtime behavior may change.</em></sub>
+
+
+[![Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml)
+[![Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml)
+[![Docker](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/package-docker.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/package-docker.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=mirusser_Kubernetes-MCP-Guard&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=mirusser_Kubernetes-MCP-Guard)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=mirusser_Kubernetes-MCP-Guard&metric=coverage)](https://sonarcloud.io/summary/new_code?id=mirusser_Kubernetes-MCP-Guard)
 
 ## What It Does ⚙️
 
@@ -60,16 +69,35 @@ That makes the project a practical slice of a bigger direction: MCP-native infra
 - Product engineering taste: small operational surface, clear user flows, safety defaults, and readable documentation for humans and agents.
 - Modern .NET implementation: .NET 10, dependency injection, async APIs, focused tests, and project-level separation of auth, gateway, server, issuer, and test concerns.
 
+## Published Images
+
+Released image tags follow the GitHub release tag (`vX.Y.Z`); the floating `latest` tag is also published.
+
+| Registry | Gateway | Dev Issuer |
+| --- | --- | --- |
+| GHCR (recommended) | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>` | `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
+| Docker Hub | `mirusser/kubernetes-mcp-guard-gateway:<tag>` | `mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
+
 ## How To Run ▶️
 
-The recommended local OAuth setup runs the gateway and dev issuer with Docker Compose; the gateway launches the Kubernetes MCP server privately over stdio:
+### Option 1 — Run from published images (no build required)
+
+**Prerequisites:** [Docker Compose v2](https://docs.docker.com/compose/install/), [minikube](https://minikube.sigs.k8s.io/docs/start/), `git`.
 
 ```bash
+git clone https://github.com/mirusser/Kubernetes-MCP-Guard.git
+
+cd Kubernetes-MCP-Guard
+
 ./scripts/create-demo-kubeconfig.sh --compose
-docker compose -f deploy/mode-c/compose.yaml up --build
+TAG=latest docker compose -f deploy/mode-c/compose.release.yaml up
 ```
 
-Codex can then connect to `http://127.0.0.1:3001/mcp` with OAuth:
+Replace `latest` with a specific release tag (e.g. `v0.1.0`) for a stable run. Available tags are listed on the [Releases page](https://github.com/mirusser/Kubernetes-MCP-Guard/releases).
+
+**Connect Codex CLI:**
+
+1. Add this block to `~/.codex/config.toml` (create the file if it does not exist):
 
 ```toml
 [mcp_servers.infra-gate]
@@ -78,11 +106,24 @@ oauth_resource = "http://127.0.0.1:3001/mcp"
 scopes = ["mcp:tools"]
 ```
 
+2. Then log in:
+
 ```bash
 codex mcp login infra-gate
 ```
 
-*For source-based run modes and verification details, see the [Setup Guide](docs/setup-guide.md).*
+### Option 2 — Build and run from source
+
+**Prerequisites:** [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), Docker Compose v2, minikube, `git`.
+
+```bash
+./scripts/create-demo-kubeconfig.sh --compose
+docker compose -f deploy/mode-c/compose.yaml up --build
+```
+
+Connect Codex the same way as Option 1.
+
+*Other run modes (stdio-only, static bearer token) and full setup details are in the [Setup Guide](docs/setup-guide.md).*
 
 ## Current Capabilities 🧰
 
@@ -118,12 +159,31 @@ codex mcp login infra-gate
 | `request_set_deployment_image` | Plan a container image update |
 | `apply_approved_plan` | Apply an exact-hash-verified, user-approved plan |
 
+## Compatibility
+
+| Area | Supported / tested |
+| --- | --- |
+| .NET | .NET 10 |
+| Kubernetes | minikube / local cluster initially |
+| MCP transport | HTTP MCP endpoint at `/mcp` |
+| OIDC | DevIssuer (dev), Keycloak planned, Entra ID later |
+| Container registries | GHCR, Docker Hub |
+| Platforms | linux/amd64 initially |
+
 ## Explore The Project 🧭
 
 - Developer runbook: [docs/devs-readme.md](docs/devs-readme.md)
 - Setup guide: [docs/setup-guide.md](docs/setup-guide.md)
-- MCP compliance notes: [docs/MCP-COMPLIANCE.md](docs/MCP-COMPLIANCE.md)
+- MCP compliance notes: [docs/MCP-compliance.md](docs/MCP-compliance.md)
 - Kubernetes MCP server: [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md)
 - HTTP MCP gateway: [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md)
 - Gateway auth: [src/InfraGate.McpGateway.Auth/README.md](src/InfraGate.McpGateway.Auth/README.md)
 - Local dev OAuth issuer: [src/InfraGate.DevIssuer/README.md](src/InfraGate.DevIssuer/README.md)
+
+**Naming note:** The public name is **Kubernetes MCP Guard**. The internal codename **InfraGate** appears in `.slnx`, project folders, env-var prefixes (`INFRA_GATE_*`), and Docker labels. They refer to the same project; the rename is gradual and does not change runtime behavior.
+
+## Project Policies
+
+- License: [Apache-2.0](LICENSE)
+- Security policy: [SECURITY.md](SECURITY.md)
+- Release process: [docs/releasing.md](docs/releasing.md)

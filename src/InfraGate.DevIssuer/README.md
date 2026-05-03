@@ -18,7 +18,7 @@
 - Tokens are JWT access tokens signed with the current ephemeral RSA key.
 - The token audience/resource and scope should match gateway OAuth configuration.
 - The authorization request must include the resource; the token request may omit it because the authorization code is already resource-bound. If a token request includes an explicitly wrong resource, it is rejected.
-- This behavior is intentionally scoped to local OAuth compatibility testing for the gateway path described in [MCP-COMPLIANCE.md](../../docs/MCP-COMPLIANCE.md).
+- This behavior is intentionally scoped to local OAuth compatibility testing for the gateway path described in [MCP-compliance.md](../../docs/MCP-compliance.md).
 
 ## Configuration
 

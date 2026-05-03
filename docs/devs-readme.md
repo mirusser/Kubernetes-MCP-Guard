@@ -13,7 +13,7 @@ This repo contains a narrow Kubernetes governance slice for the larger Open WebU
 - Read-only observability tools expose bounded Events, Pod logs, focused resource summaries, and diagnostics without exposing Secret values, ConfigMap values, raw manifests, exec, attach, or port-forward.
 - `deploy/minikube/rbac.yaml` creates a namespace-scoped ServiceAccount, Role, and RoleBinding.
 - `scripts/create-demo-kubeconfig.sh` creates a short-lived service-account kubeconfig at `.kube/mcp-nginx-demo.config`; `--compose` also writes `.kube/mcp-nginx-demo.compose.config`.
-- MCP transport and OAuth compliance notes for the HTTP gateway path are tracked in [MCP-COMPLIANCE.md](MCP-COMPLIANCE.md).
+- MCP transport and OAuth compliance notes for the HTTP gateway path are tracked in [MCP-compliance.md](MCP-compliance.md).
 
 General idea:
 
@@ -78,6 +78,27 @@ This is the recommended local OAuth path. See [Mode C in the setup guide](setup-
 ./scripts/create-demo-kubeconfig.sh --compose
 docker compose -f deploy/mode-c/compose.yaml up --build
 ```
+
+### Docker image publishing
+
+Images are pushed to Docker Hub only on version tags or manual dispatch.
+PRs and pushes to `main` build without pushing.
+
+Trigger a push:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+Or trigger manually from Actions → Docker workflow → Run workflow → check `push_images`.
+
+Required repository configuration:
+
+- `vars.DOCKERHUB_USERNAME`
+- `vars.DOCKERHUB_NAMESPACE`
+- `secrets.DOCKERHUB_TOKEN`
+
+Images built: `kubernetes-mcp-guard-devissuer`, `kubernetes-mcp-guard-gateway`.
 
 ### Run the HTTP MCP gateway
 

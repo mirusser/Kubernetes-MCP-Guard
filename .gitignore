@@ -5,4 +5,5 @@ obj/
 .mcp-guardrails/
 TestResults/
 coverage-report/
+.sonarqube/
 actions-runner/
