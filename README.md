@@ -1,4 +1,4 @@
-# Kubernetes MCP Guard 🛡️: AI-safe Kubernetes operations through MCP
+# 🛡️ Kubernetes MCP Guard 
 
 **Bridging the gap between AI Agents and Production Infrastructure with a Security-First Gateway.**
 
