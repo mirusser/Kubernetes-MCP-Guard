@@ -25,7 +25,14 @@ Kubernetes-MCP-Guard is a high-performance gateway built on .NET 10 and the Mode
 
 ---
 
+## 🗺️ System Architecture
+
+The following diagram illustrates the secure request flow from the AI client through the Guardrails and into the Kubernetes cluster.
+
 ```mermaid
+---
+title: Kubernetes-MCP-Guard Flow
+---
 flowchart TB
     Client["MCP client<br/>Codex / Open WebUI / LibreChat"]
 
@@ -58,7 +65,7 @@ flowchart TB
 ```
 <sub><em>Simplified architectural graph. Full version [here](docs/MCP-compliance.md)</em></sub>
 
-## 🛠️ Technical & Architectural Highlights
+### 🛠️ Technical & Architectural Highlights
 
 - **AI Integration & Safety:** Deep implementation of Model Context Protocol (MCP), handling tool contracts, elicitation-style approval workflows, and mitigating prompt-injection risks within model-visible data.
 
@@ -70,7 +77,7 @@ flowchart TB
 
 - **Product Mindset:** Prioritized a "small operational surface" and human-readable audit logs, ensuring the tool is as safe for a human SRE as it is powerful for an AI agent.
 
-#### 🏗️ Implementation Details:
+##### 🏗️ Implementation Details:
 - Exposes Kubernetes operations through the Model Context Protocol (MCP), with a stdio Kubernetes server behind a local HTTP gateway.
 - Uses the Kubernetes API via `KubernetesClient`; it does not shell out to `kubectl` for runtime operations.
 - Adds OAuth/static bearer authentication at the gateway, including MCP protected-resource metadata and insufficient-scope challenges.
@@ -219,7 +226,7 @@ Connect Codex the same way as Option 1.
 <sub><em>**Naming note:** The public name is **Kubernetes MCP Guard**. The internal codename **InfraGate** appears in `.slnx`, project folders, env-var prefixes (`INFRA_GATE_*`), and Docker labels. They refer to the same project; the rename is gradual and does not change runtime behavior.</em></sub>
 
 
-## Project Policies
+## ⚖️ Governance & Policies
 
 - License: [Apache-2.0](LICENSE)
 - Security policy: [SECURITY.md](SECURITY.md)
