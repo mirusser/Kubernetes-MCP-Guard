@@ -109,8 +109,11 @@ scopes = ["mcp:tools"]
 2. Then log in:
 
 ```bash
-codex mcp login infra-gate
+codex mcp login infra-gate # authorize 
+codex # run codex
 ```
+
+3. After successful log in, you may ask codex: *Explain what are the capabilities of MCP server infra-gate*
 
 ### Option 2 — Build and run from source
 
