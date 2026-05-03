@@ -71,30 +71,33 @@ That makes the project a practical slice of a bigger direction: MCP-native infra
 
 ## Published Images
 
-Released image tags follow the GitHub release tag (`vX.Y.Z`).
+Released image tags follow the GitHub release tag (`vX.Y.Z`); the floating `latest` tag is also published.
 
-### GitHub Container Registry (recommended)
-
-- `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>`
-- `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:<tag>`
-
-### Docker Hub
-
-- `mirusser/kubernetes-mcp-guard-gateway:<tag>`
-- `mirusser/kubernetes-mcp-guard-devissuer:<tag>`
-
-An end-to-end published-image quickstart will land with [Epic 2](.agents/Plans/roadmap-final.md).
+| Registry | Gateway | Dev Issuer |
+| --- | --- | --- |
+| GHCR (recommended) | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>` | `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
+| Docker Hub | `mirusser/kubernetes-mcp-guard-gateway:<tag>` | `mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
 
 ## How To Run ▶️
 
-The recommended local OAuth setup runs the gateway and dev issuer with Docker Compose; the gateway launches the Kubernetes MCP server privately over stdio:
+### Option 1 — Run from published images (no build required)
+
+**Prerequisites:** [Docker Compose v2](https://docs.docker.com/compose/install/), [minikube](https://minikube.sigs.k8s.io/docs/start/), `git`.
 
 ```bash
+git clone https://github.com/mirusser/Kubernetes-MCP-Guard.git
+
+cd Kubernetes-MCP-Guard
+
 ./scripts/create-demo-kubeconfig.sh --compose
-docker compose -f deploy/mode-c/compose.yaml up --build
+TAG=latest docker compose -f deploy/mode-c/compose.release.yaml up
 ```
 
-Codex can then connect to `http://127.0.0.1:3001/mcp` with OAuth:
+Replace `latest` with a specific release tag (e.g. `v0.1.0`) for a stable run. Available tags are listed on the [Releases page](https://github.com/mirusser/Kubernetes-MCP-Guard/releases).
+
+**Connect Codex CLI:**
+
+1. Add this block to `~/.codex/config.toml` (create the file if it does not exist):
 
 ```toml
 [mcp_servers.infra-gate]
@@ -103,11 +106,24 @@ oauth_resource = "http://127.0.0.1:3001/mcp"
 scopes = ["mcp:tools"]
 ```
 
+2. Then log in:
+
 ```bash
 codex mcp login infra-gate
 ```
 
-*For source-based run modes and verification details, see the [Setup Guide](docs/setup-guide.md).*
+### Option 2 — Build and run from source
+
+**Prerequisites:** [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), Docker Compose v2, minikube, `git`.
+
+```bash
+./scripts/create-demo-kubeconfig.sh --compose
+docker compose -f deploy/mode-c/compose.yaml up --build
+```
+
+Connect Codex the same way as Option 1.
+
+*Other run modes (stdio-only, static bearer token) and full setup details are in the [Setup Guide](docs/setup-guide.md).*
 
 ## Current Capabilities 🧰
 

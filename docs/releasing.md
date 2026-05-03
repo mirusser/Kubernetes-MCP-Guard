@@ -57,4 +57,13 @@ Experimental. Not recommended for production workloads.
 
 ## Smoke Test
 
-An end-to-end published-image smoke test (booting `compose.release.yaml`, verifying the gateway and DevIssuer endpoints, and running one read-only tool call) is owned by Epic 2 / `compose.release.yaml`. See that file once it lands.
+Run the published-image smoke test manually against the release tag before announcing:
+
+```bash
+./scripts/create-demo-kubeconfig.sh --compose
+TAG=vX.Y.Z ./scripts/smoke-test-release.sh
+```
+
+The script boots `deploy/mode-c/compose.release.yaml` from GHCR, waits for both the DevIssuer OIDC discovery endpoint and the gateway HTTP server, asserts the gateway returns a well-formed 401 auth challenge, then tears everything down. It exits non-zero and dumps logs on failure.
+
+A CI workflow (`release-smoke-test.yml`) is planned once a Kubernetes-in-CI path (kind) is in place; until then this step is manual.

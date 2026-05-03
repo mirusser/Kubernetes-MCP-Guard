@@ -241,6 +241,40 @@ Tradeoff: keeping `InfraGate.McpServer` as a private stdio subprocess makes setu
 > [!IMPORTANT]
 > Set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` only for localhost dev with DevIssuer. Never in production.
 
+#### Mode C — Run from published images
+
+This is the fastest path to evaluate the gateway. It pulls released images from GHCR (Docker Hub equivalents are listed below). Use this when you do not need to modify source.
+
+**Prerequisites:**
+
+- Minikube running (see [Prerequisites](#prerequisites) above).
+- Docker Compose v2 (`docker compose version`).
+- A checkout of the repository (for the kubeconfig helper and volume mounts).
+
+**Run:**
+
+```bash
+./scripts/create-demo-kubeconfig.sh --compose
+TAG=vX.Y.Z docker compose -f deploy/mode-c/compose.release.yaml up
+```
+
+Replace `vX.Y.Z` with the release tag from <https://github.com/mirusser/Kubernetes-MCP-Guard/releases>. Omitting `TAG=` falls back to `latest`, which moves over time and is fine for a quick try but is not stable for repeatable runs.
+
+**Endpoints:** same as the build-from-source path above — gateway at `http://127.0.0.1:3001/mcp`, dev issuer at `http://127.0.0.1:3011`.
+
+**Codex CLI config:** same as the Mode C from-source config above.
+
+**Docker Hub alternates** (substitute into `compose.release.yaml` if preferred):
+
+```text
+ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:${TAG} → mirusser/kubernetes-mcp-guard-devissuer:${TAG}
+ghcr.io/mirusser/kubernetes-mcp-guard-gateway:${TAG}   → mirusser/kubernetes-mcp-guard-gateway:${TAG}
+```
+
+After release, the published-image path is verified by `scripts/smoke-test-release.sh` (see [Verification](#verification)).
+
+The same tradeoffs as the build-from-source Compose path apply: the gateway image bundles the server binary, and the server cannot be scaled or restarted independently.
+
 #### Source Mode C
 
 Use this alternate flow when you want to run the same OAuth path from source instead of containers.
