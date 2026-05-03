@@ -62,7 +62,8 @@ Every new doc must have a single, named purpose. This is the contract that preve
 | [docs/setup-guide.md](../../docs/setup-guide.md) | Local development and demo setup | Local build, Docker Compose dev mode, kubeconfig setup, DevIssuer usage, verification commands | Production OIDC details (link to `production-oidc.md`), full security model, full architecture |
 | [docs/devs-readme.md](../../docs/devs-readme.md) | Developer runbook | Mode A/B/C runbooks, env vars per project, verification commands, file layout, troubleshooting | Long marketing copy, OIDC provider walkthroughs |
 | [docs/MCP-compliance.md](../../docs/MCP-compliance.md) | MCP spec alignment | Transport, OAuth 2.1, PKCE, RFC 8707, token-passthrough notes | Setup steps, environment variables |
-| `docs/security-model.md` (new) | What is actually safe and what is not | RBAC as hard boundary, JWT validation, scopes, namespace enforcement, approval flow, audit, guardrails as defense-in-depth, non-goals, production warnings | Setup commands, env-var tables, provider-specific OIDC |
+| `docs/security-model.md` (new) | What is actually safe and what is not | RBAC as hard boundary, JWT validation, scopes, namespace enforcement, approval flow, audit, guardrails as defense-in-depth, threat model (assumptions, what is reduced, what is out of scope), non-goals, production warnings | Setup commands, env-var tables, provider-specific OIDC |
+| `docs/tool-permissions.md` (new) | Per-tool RBAC and scope matrix | Each MCP tool's type (read/plan/mutation), Kubernetes verbs and resources, OAuth scope, approval requirement, namespace boundary | Implementation details, OIDC setup, env-var tables |
 | `docs/production-oidc.md` (new) | Replace DevIssuer with a real IdP | OIDC assumptions, required claims, issuer/audience, scopes, JWKS, HTTPS, example provider config (Keycloak first, Entra ID later) | DevIssuer development notes |
 | `docs/configuration.md` (new) | Single source of truth for env vars | Variable, component, required, default, example, description, production guidance | Long flow explanations |
 | `docs/architecture.md` (new) | System map and request flows | Component diagram, read-only flow, mutation flow, approval flow, auth flow, audit flow, image layout | Setup commands, full security model, env-var tables |
@@ -113,8 +114,28 @@ The README is already strong but the repo lacks an OSS license, a vulnerability 
 - Add `LICENSE` (Apache-2.0 recommended for an infra/security-adjacent project; MIT acceptable).
 - Add `SECURITY.md` with supported versions, private reporting channel (GitHub Security Advisories), required information, and disclosure policy.
 - Add a release-notes template at `.github/release.yml` or `docs/releasing.md`.
+- Add a release checklist at `docs/releasing.md` (see template below) covering test signal, image publishing, package visibility, secrets hygiene, pre-release flagging, and quickstart tag verification.
 - Add explicit Docker Hub and GHCR image references in the README quickstart section.
 - Add a short note in the README explaining the public name "Kubernetes MCP Guard" vs. the internal "InfraGate" naming visible in `.slnx`, project folders, and env-var prefixes.
+
+#### Release checklist (template)
+
+Bake this into `docs/releasing.md` so every release follows the same path:
+
+```markdown
+1. Confirm unit tests pass on `main`.
+2. Confirm integration tests pass (self-hosted runner, both `INFRA_GATE_RUN_INTEGRATION` and `INFRA_GATE_RUN_GATEWAY_INTEGRATION`).
+3. Confirm `package-docker.yml` succeeds for the release tag.
+4. Confirm Docker Hub images are pushed (`mirusser/kubernetes-mcp-guard-gateway`, `mirusser/kubernetes-mcp-guard-devissuer`).
+5. Confirm GHCR images are pushed (`ghcr.io/mirusser/kubernetes-mcp-guard-gateway`, `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer`).
+6. Confirm GHCR packages are set to **public** if public pulls are intended; confirm Docker Hub repositories are public if intended.
+7. Confirm the GitHub Packages page links back to the GitHub repository and has a description.
+8. Confirm release notes include exact image names and tags.
+9. Mark the GitHub release as **pre-release** while the project is experimental.
+10. Verify quickstart commands (compose, README) reference the released tag.
+11. Verify no secrets, tokens, or live credentials are present in docs, logs, sample manifests, or example env files.
+12. Run the published-image smoke test from Epic 2 against the release tag before announcing.
+```
 
 #### Files to add or modify
 
@@ -144,6 +165,22 @@ Remaining:
 - `LICENSE`, `SECURITY.md`, release-notes template do not exist.
 - README does not yet surface the published image references in a quickstart-grade way.
 - README does not yet explain the InfraGate vs. Kubernetes MCP Guard naming.
+- README does not yet include a compatibility/support matrix.
+
+#### Compatibility / support matrix
+
+Add a small section to the README (or to `docs/configuration.md` if it grows) so users do not assume production-grade compatibility across every Kubernetes distribution.
+
+```markdown
+| Area | Supported / tested |
+| --- | --- |
+| .NET | .NET 10 |
+| Kubernetes | minikube / local cluster initially |
+| MCP transport | HTTP MCP endpoint at `/mcp` |
+| OIDC | DevIssuer (dev), Keycloak planned, Entra ID later |
+| Container registries | GHCR, Docker Hub |
+| Platforms | linux/amd64 initially |
+```
 
 ---
 
@@ -178,11 +215,22 @@ Document the Docker Hub equivalents (`mirusser/kubernetes-mcp-guard-*:VERSION`) 
 - [docs/setup-guide.md](../../docs/setup-guide.md) (add a "Run from published images" section)
 - [README.md](../../README.md) (link to the published-image quickstart)
 
+#### Release smoke test
+
+CI builds and pushes images today, but nothing exercises the documented release path end to end. Add a small smoke test (workflow or scripted check) that runs after a release and validates:
+
+- `compose.release.yaml` boots cleanly from a clean checkout using the latest release tag.
+- The gateway responds on `http://127.0.0.1:3001/mcp` (initialize handshake returns 200 + `Mcp-Session-Id`).
+- DevIssuer responds on `http://127.0.0.1:3011/.well-known/openid-configuration`.
+- One read-only Kubernetes tool call (e.g. `get_k8s_status` against `mcp-nginx-demo`) succeeds.
+
 #### Acceptance criteria
 
-- A user can run the project with one `docker compose -f deploy/mode-c/compose.release.yaml up` command after providing a kubeconfig.
+- A user can run the project from published images with documented prerequisites and a single Docker Compose command.
 - Local-build mode and released-image mode are both documented and clearly distinguished.
 - Tag references in docs and compose files match the latest GitHub release tag.
+- Published images are smoke-tested after release, not merely built and pushed.
+- GHCR packages and Docker Hub repositories are confirmed public if public pulls are intended, and their descriptions link back to the GitHub repo.
 
 #### Status
 
@@ -254,28 +302,85 @@ Remaining:
 
 #### Problem
 
-Users need a single doc that names hard boundaries, defense-in-depth layers, and explicit non-goals. Today this content is spread across the README, `MCP-compliance.md`, and per-project READMEs.
+Users need a single doc that names hard boundaries, defense-in-depth layers, and explicit non-goals. Today this content is spread across the README, `MCP-compliance.md`, and per-project READMEs. There is also no per-tool RBAC/scope matrix, which security reviewers and Kubernetes operators always ask for.
 
 #### Recommended changes
 
-Add `docs/security-model.md` with four sections:
+Add `docs/security-model.md` with five sections:
 
 1. Hard boundaries: Kubernetes RBAC, JWT validation, required scopes, namespace enforcement, approval-gated mutation flow.
 2. Defense-in-depth: prompt/input guardrails, output redaction, audit logging, MCP tool annotations, hash-bound approvals.
-3. Non-goals: not a replacement for Kubernetes RBAC, not a production IdP, not a full policy engine, no guarantee that AI-generated actions are correct, not production-certified.
-4. Development-only components: DevIssuer, `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false`, local kubeconfig scripts.
+3. Threat model: assumptions, what risk is reduced, and what is explicitly out of scope.
+4. Non-goals: not a replacement for Kubernetes RBAC, not a production IdP, not a full policy engine, no guarantee that AI-generated actions are correct, not production-certified.
+5. Development-only components: DevIssuer, `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false`, local kubeconfig scripts.
+
+Add `docs/tool-permissions.md` (or a section inside `security-model.md`) with a per-tool matrix.
 
 Link to `docs/MCP-compliance.md` for OAuth detail rather than duplicating it.
+
+#### Threat model section (template)
+
+```markdown
+## Threat model
+
+This project assumes:
+
+- The Kubernetes API server enforces RBAC correctly.
+- The configured identity provider issues valid tokens.
+- The gateway is deployed behind TLS in production.
+- MCP clients may be untrusted or partially trusted.
+- AI-generated suggestions may be incorrect or unsafe.
+
+This project aims to reduce risk from:
+
+- Overbroad AI access to Kubernetes.
+- Unauthorized mutation attempts.
+- Plan tampering after approval.
+- Prompt injection influencing responses.
+- Accidental unsafe changes.
+
+This project does not defend against:
+
+- A compromised Kubernetes cluster.
+- A compromised identity provider.
+- A malicious administrator with cluster-admin.
+- A compromised host running the gateway.
+```
+
+#### Tool permissions matrix (template)
+
+Populate one row per shipped MCP tool. Keep this aligned with the actual `K8sTools.cs` surface and the `K8sManifestParser.cs` allow-list.
+
+```markdown
+| MCP tool | Type | Requires approval | Kubernetes verbs | Kubernetes resources | Scope required | Notes |
+| --- | --- | :---: | --- | --- | --- | --- |
+| `get_k8s_status` | Read | No | `get`, `list` | Deployments, Services, ConfigMaps, Pods, ReplicaSets | `mcp:tools` | Namespace-scoped |
+| `get_k8s_events` | Read | No | `list` | Events | `mcp:tools` | Bounded; default 50, max 100 |
+| `get_pod_logs` | Read | No | `get` (logs subresource) | Pods | `mcp:tools` | Bounded; tail + byte cap |
+| `get_k8s_resource` | Read | No | `get` | Deployment, Service, ConfigMap | `mcp:tools` | No Secret values, no raw manifests |
+| `get_*_diagnostics` | Read | No | `get`, `list` | Deployment / Pod / Service | `mcp:tools` | Aggregated, bounded |
+| `request_apply_manifest` | Plan mutation | No apply yet | none/apply preview | Deployment, Service, ConfigMap | `mcp:tools` | Produces hash-bound plan |
+| `request_delete_manifest` | Plan mutation | No apply yet | none/delete preview | Deployment, Service, ConfigMap | `mcp:tools` | Produces hash-bound plan |
+| `request_scale_deployment` | Plan mutation | No apply yet | none/scale preview | Deployment | `mcp:tools` | Replicas bounded `0..5` |
+| `request_restart_deployment` | Plan mutation | No apply yet | none/patch preview | Deployment | `mcp:tools` | |
+| `request_set_deployment_image` | Plan mutation | No apply yet | none/patch preview | Deployment | `mcp:tools` | |
+| `apply_approved_plan` | Mutation | Yes | depends on plan | depends on plan | `mcp:tools` | Applies only the exact approved plan |
+```
+
+The actual scope value reflects the gateway default `INFRA_GATE_OAUTH_SCOPE=mcp:tools`. If finer-grained scopes (`mcp:read` / `mcp:write`) are introduced later, update the matrix and the gateway auth options together.
 
 #### Files to add or modify
 
 - `docs/security-model.md` (new)
-- [README.md](../../README.md) (link to the security model)
+- `docs/tool-permissions.md` (new, or a section inside `security-model.md`)
+- [README.md](../../README.md) (link to both)
 
 #### Acceptance criteria
 
 - Security model has its own document.
-- README links to it.
+- Threat model section names assumptions, risks reduced, and out-of-scope risks.
+- A per-tool RBAC/scope matrix exists and matches the shipped tool surface.
+- README links to the security model and the tool permissions matrix.
 - Dev-only components are clearly flagged.
 - Guardrails are described as defense-in-depth, not as a hard boundary.
 - The doc links to `MCP-compliance.md` rather than restating OAuth content.
@@ -291,6 +396,8 @@ Already in place:
 Remaining:
 
 - No standalone `docs/security-model.md`.
+- No threat model section anywhere in the repo.
+- No per-tool RBAC/scope matrix.
 - Non-goals and production warnings are not consolidated anywhere a reader can find them quickly.
 
 ---
@@ -341,18 +448,22 @@ Remaining:
 
 ---
 
-### Epic 6 — Image scanning and supply-chain checks
+### Epic 6 — Image and dependency scanning, supply-chain checks
 
 #### Problem
 
-A safety-focused project that publishes container images should scan them. There is no scanning step in any workflow today.
+A safety-focused project that publishes container images should scan them and should also catch vulnerable .NET / NuGet dependencies before they ship. There is no scanning step of either kind in any workflow today.
 
 #### Recommended changes
 
-- Add a Trivy (preferred) or Grype scan step after image build in `package-docker.yml` (or in a dedicated `image-scan.yml`).
+- Add a Trivy (preferred) or Grype container scan step after image build in `package-docker.yml` (or in a dedicated `image-scan.yml`).
 - Upload SARIF results to the GitHub Security tab.
-- Define an explicit ignore policy: any ignored CVE must include a documented reason and an expiry.
-- Update the workflow `description:` field — it currently says only "Push images to Docker Hub" but the workflow already publishes to both Docker Hub and GHCR. Reword to reflect both registries (and image scanning, once added).
+- Add **dependency scanning** for .NET / NuGet packages — at minimum:
+  - Enable GitHub Dependabot for NuGet (and GitHub Actions) via `.github/dependabot.yml`.
+  - Run `dotnet list package --vulnerable --include-transitive` (or equivalent) in CI on the solution and fail on known vulnerable packages above the agreed severity.
+  - Optionally add `dotnet list package --deprecated` and `--outdated` as advisory signal.
+- Define an explicit ignore policy that applies to **both** image and dependency findings: any ignored CVE must include a documented reason and an expiry.
+- Update the workflow `description:` field — it currently says only "Push images to Docker Hub" but the workflow already publishes to both Docker Hub and GHCR. Reword to reflect both registries (and scanning, once added).
 - Consider pinning third-party Actions by commit SHA for the security-sensitive workflow once scanning is in place.
 
 #### Severity policy (initial)
@@ -364,17 +475,31 @@ A safety-focused project that publishes container images should scan them. There
 
 #### Files to add or modify
 
-- [.github/workflows/package-docker.yml](../../.github/workflows/package-docker.yml) (description text + scan step + SARIF upload)
-- `.trivyignore` or a documented allowlist file (new, only if needed)
-- [README.md](../../README.md) (badge for image scan once stable)
+- [.github/workflows/package-docker.yml](../../.github/workflows/package-docker.yml) (description text + image scan step + SARIF upload)
+- `.github/workflows/dependency-scan.yml` (new — `dotnet list package --vulnerable --include-transitive` on the solution; SARIF upload optional)
+- `.github/dependabot.yml` (new — NuGet + GitHub Actions ecosystems)
+- `.trivyignore` and/or a documented dependency-ignore allowlist (new, only if needed; ignored entries must include reason and expiry)
+- [README.md](../../README.md) (badges for image scan and dependency scan once stable)
+
+#### Future supply-chain hardening
+
+Beyond image scanning, plan a follow-up wave that fits the project's safety identity. None of these are required for v0.0.x but should be tracked here so they are not forgotten:
+
+- Generate SBOMs for published images (e.g. Syft / `docker buildx` SBOM attestations) and attach them to GitHub Releases.
+- Publish build provenance / SLSA attestations.
+- Sign images with cosign (keyless via GitHub OIDC is acceptable).
+- Document how users can verify image signatures, SBOMs, and provenance from the published images.
 
 #### Acceptance criteria
 
 - CI scans both `kubernetes-mcp-guard-gateway` and `kubernetes-mcp-guard-devissuer` images.
-- Scan failures are understandable and actionable.
+- CI runs .NET dependency vulnerability scanning on the solution and fails on agreed severity thresholds.
+- Dependabot is enabled for NuGet and GitHub Actions ecosystems.
+- Scan failures (image and dependency) are understandable and actionable.
 - Workflow description names both Docker Hub and GHCR.
-- README displays a scan badge once scanning is stable.
-- Any ignored CVE has a documented reason and an owner.
+- README displays scan badges once scanning is stable.
+- Any ignored CVE (image or dependency) has a documented reason, owner, and expiry.
+- A follow-up issue or roadmap entry tracks SBOM, provenance, and signing as future hardening.
 
 #### Status
 
@@ -386,6 +511,8 @@ Already in place:
 Remaining:
 
 - No image scan in any workflow; no SARIF upload.
+- No .NET dependency vulnerability scan in any workflow.
+- No `.github/dependabot.yml` configured for NuGet or GitHub Actions ecosystems.
 - Workflow `description:` text still reads "Push images to Docker Hub" — wording-only drift now that GHCR is wired.
 - Actions are pinned by major version, not by SHA.
 
@@ -581,15 +708,23 @@ For each epic:
 This roadmap is considered implemented when:
 
 - README clearly explains the project, status, images, quickstart, and safety model summary, and links to deeper docs.
+- README includes a compatibility/support matrix.
 - `LICENSE` and `SECURITY.md` exist at the repo root.
 - Users can run the project from published Docker Hub and GHCR images via a documented compose file.
+- Published images are smoke-tested after release (compose boots, gateway initializes, DevIssuer reachable, one read-only tool call succeeds).
+- GHCR and Docker Hub package visibility is verified to match intent and links back to the GitHub repo.
 - Experimental and pre-production limitations are visible.
 - A standalone security model doc exists and is linked from the README.
+- The security model doc includes a threat model section.
+- A per-tool RBAC/scope matrix exists (in `docs/tool-permissions.md` or inside `security-model.md`) and matches the shipped tool surface.
 - A production OIDC guide exists with at least one real provider walkthrough.
 - A configuration reference exists and other docs link to it instead of duplicating env-var detail.
 - A consolidated architecture doc exists.
 - An end-to-end demo (manifests + walkthrough) exercises read-only and approval-gated flows.
 - CI runs container image scanning with a documented severity and ignore policy.
+- CI runs .NET / NuGet dependency vulnerability scanning, and Dependabot is configured for NuGet and GitHub Actions.
+- A documented release checklist covers tests, image publishing, GHCR/Docker Hub package visibility, secrets hygiene, pre-release flagging, and quickstart tag verification.
+- A follow-up issue or roadmap entry tracks SBOM, provenance, and image signing as future supply-chain hardening.
 - The `package-docker.yml` workflow description names both Docker Hub and GHCR.
 - `CONTRIBUTING.md`, PR template, issue templates, and `CHANGELOG.md` exist.
 - The repository is ready for external experimental users to evaluate safely.
