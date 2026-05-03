@@ -179,6 +179,10 @@ Connect Codex the same way as Option 1.
 | `request_set_deployment_image` | Plan a container image update |
 | `apply_approved_plan` | Apply an exact-hash-verified, user-approved plan |
 
+## See It In Action 🎬
+
+End-to-end walkthrough of the approval-gated workflow against a deliberately broken Deployment: [docs/demo-failing-deployment.md](docs/demo-failing-deployment.md). Uses the demo manifests under [examples/failing-deployment/](examples/failing-deployment/).
+
 ## Compatibility
 
 | Area | Supported / tested |
