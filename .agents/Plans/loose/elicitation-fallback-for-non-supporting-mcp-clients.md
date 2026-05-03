@@ -1,0 +1,1 @@
+MCP server should probably avoid elicitation/create when the client doesn't support MCP elicitation flow such as OpenCode, or provide a fallback such as returning a normal tool result/message that the client lacks capabilites - something like that..

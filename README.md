@@ -95,7 +95,7 @@ TAG=latest docker compose -f deploy/mode-c/compose.release.yaml up
 
 Replace `latest` with a specific release tag (e.g. `v0.1.0`) for a stable run. Available tags are listed on the [Releases page](https://github.com/mirusser/Kubernetes-MCP-Guard/releases).
 
-**Connect Codex CLI:**
+#### **Connect Codex CLI:**
 
 1. Add this block to `~/.codex/config.toml` (create the file if it does not exist):
 
@@ -109,11 +109,28 @@ scopes = ["mcp:tools"]
 2. Then log in:
 
 ```bash
-codex mcp login infra-gate # authorize 
+codex mcp login infra-gate # authenticate 
 codex # run codex
 ```
 
-3. After successful log in, you may ask codex: *Explain what are the capabilities of MCP server infra-gate*
+#### **Connect Claude Code:**
+
+```bash
+# 1. Add/register the MCP server
+claude mcp add-json --scope user infra-gate \
+  '{"type":"http","url":"http://127.0.0.1:3001/mcp","oauth":{"scopes":"mcp:tools"}}'
+
+# 2. Start Claude Code
+claude
+
+# 3. Inside Claude Code, open MCP manager/auth flow
+/mcp
+```
+
+ After successful log in you may start with: 
+ ```text
+ Explain briefly what are the capabilities of MCP server: infra-gate
+ ```
 
 ### Option 2 — Build and run from source
 
@@ -183,7 +200,10 @@ Connect Codex the same way as Option 1.
 - Gateway auth: [src/InfraGate.McpGateway.Auth/README.md](src/InfraGate.McpGateway.Auth/README.md)
 - Local dev OAuth issuer: [src/InfraGate.DevIssuer/README.md](src/InfraGate.DevIssuer/README.md)
 
-**Naming note:** The public name is **Kubernetes MCP Guard**. The internal codename **InfraGate** appears in `.slnx`, project folders, env-var prefixes (`INFRA_GATE_*`), and Docker labels. They refer to the same project; the rename is gradual and does not change runtime behavior.
+
+
+<sub><em>**Naming note:** The public name is **Kubernetes MCP Guard**. The internal codename **InfraGate** appears in `.slnx`, project folders, env-var prefixes (`INFRA_GATE_*`), and Docker labels. They refer to the same project; the rename is gradual and does not change runtime behavior.</em></sub>
+
 
 ## Project Policies
 
