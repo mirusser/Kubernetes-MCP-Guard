@@ -16,6 +16,7 @@ spec:
       labels:
         app.kubernetes.io/name: nginx-demo
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: nginx
           image: nginx:1.27-doesnotexist

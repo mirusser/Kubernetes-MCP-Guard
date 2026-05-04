@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Always use the admin kubeconfig for cluster setup, not any service-account
+# kubeconfig that may be set in the caller's environment.
+unset KUBECONFIG
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NAMESPACE="mcp-nginx-demo"
 SERVICE_ACCOUNT="infra-gate-mcp"
