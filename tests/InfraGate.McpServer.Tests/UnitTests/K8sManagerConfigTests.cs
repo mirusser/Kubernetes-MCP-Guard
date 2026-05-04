@@ -58,6 +58,22 @@ public sealed class K8sManagerConfigTests
         Assert.Null(ex);
     }
 
+    [Fact]
+    public async Task GetAllowedNamespacesAsync_ReturnsEmptyArrayWithZeroCount_WhenNoNamespacesConfigured()
+    {
+        var manager = CreateManager();
+
+        var result = await manager.GetAllowedNamespacesAsync();
+
+        var doc = JsonDocument.Parse(result);
+        var namespaces = doc.RootElement.GetProperty("allowedNamespaces").EnumerateArray()
+            .Select(e => e.GetString()!)
+            .ToArray();
+
+        Assert.Empty(namespaces);
+        Assert.Equal(0, doc.RootElement.GetProperty("count").GetInt32());
+    }
+
     private static K8sManager CreateManager(params string[] namespaces)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));

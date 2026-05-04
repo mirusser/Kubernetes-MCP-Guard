@@ -49,6 +49,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
         var tools = await client.ListToolsAsync(cancellationToken: CancellationToken.None);
 
+        Assert.Contains(tools, tool => tool.Name == McpGatewayConventions.ToolNames.GetAllowedNamespaces);
         Assert.Contains(tools, tool => tool.Name == McpGatewayConventions.ToolNames.GetK8sStatus);
         Assert.Contains(tools, tool => tool.Name == McpGatewayConventions.ToolNames.RequestApplyManifest);
         Assert.Contains(tools, tool => tool.Name == McpGatewayConventions.ToolNames.ApplyApprovedPlan);

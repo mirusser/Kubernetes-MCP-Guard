@@ -48,6 +48,16 @@ public sealed partial class McpServerIntegrationTests
 
         var tools = await client.ListToolsAsync(cancellationToken: CancellationToken.None);
         Assert.Contains(tools, tool => tool.Name == "request_apply_manifest");
+        Assert.Contains(tools, tool => tool.Name == "get_allowed_namespaces");
+
+        var allowedNsText = await CallTextAsync(
+            client,
+            "get_allowed_namespaces",
+            new Dictionary<string, object?>(),
+            cancellationToken: CancellationToken.None);
+
+        Assert.Contains(namespaceName, allowedNsText);
+        Assert.Contains("allowedNamespaces", allowedNsText);
 
         var applyRequestText = await CallTextAsync(
             client,
