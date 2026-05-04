@@ -54,6 +54,7 @@ internal static class McpGatewayConventions
         public const string RequestRestartDeployment = "request_restart_deployment";
         public const string RequestSetDeploymentImage = "request_set_deployment_image";
         public const string ApplyApprovedPlan = "apply_approved_plan";
+        public const string GetAllowedNamespaces = "get_allowed_namespaces";
     }
 
     public static class ToolArguments

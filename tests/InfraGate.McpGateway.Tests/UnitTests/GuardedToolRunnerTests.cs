@@ -153,6 +153,19 @@ public sealed class GuardedToolRunnerTests
     }
 
     [Fact]
+    public async Task GetAllowedNamespaces_ForwardsExpectedToolNameWithNoArguments()
+    {
+        var downstream = new FakeDownstream("""{"allowedNamespaces":["demo"],"count":1}""");
+        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), new InMemoryAuditStore());
+
+        var result = await K8sGatewayTools.GetAllowedNamespaces(runner, CancellationToken.None);
+
+        Assert.Equal("get_allowed_namespaces", downstream.ToolName);
+        Assert.Empty(downstream.Arguments);
+        Assert.Contains("allowedNamespaces", result);
+    }
+
+    [Fact]
     public async Task GetK8sEvents_ForwardsExpectedToolNameAndArguments()
     {
         var downstream = new FakeDownstream("events");

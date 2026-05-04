@@ -6,6 +6,16 @@ namespace InfraGate.McpGateway;
 [McpServerToolType]
 public static class K8sGatewayTools
 {
+    [McpServerTool(Name = McpGatewayConventions.ToolNames.GetAllowedNamespaces, ReadOnly = true, OpenWorld = false)]
+    [Description("Returns the list of Kubernetes namespaces this server is allowed to access.")]
+    public static Task<string> GetAllowedNamespaces(
+        GuardedToolRunner runner,
+        CancellationToken cancellationToken = default) =>
+        runner.CallAsync(
+            McpGatewayConventions.ToolNames.GetAllowedNamespaces,
+            new Dictionary<string, object?>(),
+            cancellationToken);
+
     [McpServerTool(Name = McpGatewayConventions.ToolNames.GetK8sStatus, ReadOnly = true, OpenWorld = false)]
     [Description("Shows a JSON summary of supported Kubernetes resources in an allowed namespace.")]
     public static Task<string> GetK8sStatus(
