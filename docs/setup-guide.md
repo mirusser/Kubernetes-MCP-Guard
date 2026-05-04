@@ -202,6 +202,22 @@ dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
 **Endpoint:** `http://127.0.0.1:3001/mcp`
 **Auth:** `Authorization: Bearer change-me`
 
+**Claude Code config** (`.mcp.json` in repo root, or add via `claude mcp add`):
+
+```json
+{
+  "mcpServers": {
+    "infra-gate": {
+      "type": "http",
+      "url": "http://127.0.0.1:3001/mcp",
+      "headers": {
+        "Authorization": "Bearer change-me"
+      }
+    }
+  }
+}
+```
+
 > [!TIP]
 > The gateway starts the stdio server as a child process via `INFRA_GATE_DOWNSTREAM_PROJECT` — you don't need to run the server separately.
 
@@ -233,6 +249,24 @@ scopes = ["mcp:tools"]
 ```bash
 codex mcp login infra-gate
 ```
+
+**Claude Code config** (`.mcp.json` in repo root):
+
+```json
+{
+  "mcpServers": {
+    "infra-gate": {
+      "type": "http",
+      "url": "http://127.0.0.1:3001/mcp",
+      "oauth": {
+        "scopes": ["mcp:tools"]
+      }
+    }
+  }
+}
+```
+
+Then run `/mcp` inside Claude Code to trigger the OAuth login flow.
 
 The Compose path is OAuth-only. It uses `INFRA_GATE_OAUTH_METADATA_ADDRESS` internally so the gateway container can discover DevIssuer through `http://devissuer:3011` while clients still use the public issuer `http://127.0.0.1:3011`.
 
@@ -279,15 +313,10 @@ The same tradeoffs as the build-from-source Compose path apply: the gateway imag
 
 Use this alternate flow when you want to run the same OAuth path from source instead of containers.
 
-**Terminal 1 — Dev Issuer:**
+> [!IMPORTANT]
+> Start the **Gateway first**, then the DevIssuer. The MCP client discovers the DevIssuer URL by querying the gateway's `/.well-known/oauth-protected-resource` endpoint, so the gateway must be answering before you trigger authentication in the client.
 
-```bash
-dotnet run --project src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj
-```
-
-Listens on `http://127.0.0.1:3011`. Provides OAuth discovery, PKCE authorization-code flow, JWKS, and dynamic client registration — all in-memory, ephemeral.
-
-**Terminal 2 — Gateway with OAuth:**
+**Terminal 1 — Gateway with OAuth:**
 
 ```bash
 export REPO_ROOT="$(pwd)"
@@ -302,6 +331,14 @@ export K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo
 
 dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
 ```
+
+**Terminal 2 — Dev Issuer:**
+
+```bash
+dotnet run --project src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj
+```
+
+Listens on `http://127.0.0.1:3011`. Provides OAuth discovery, PKCE authorization-code flow, JWKS, and dynamic client registration — all in-memory, ephemeral.
 
 > [!TIP]
 > You can set `INFRA_GATE_GATEWAY_BEARER_TOKEN` alongside OAuth to accept both static tokens *and* OAuth JWTs simultaneously.

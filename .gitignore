@@ -7,3 +7,4 @@ TestResults/
 coverage-report/
 .sonarqube/
 actions-runner/
+.mcp.json
