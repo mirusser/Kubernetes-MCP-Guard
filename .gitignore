@@ -8,3 +8,5 @@ coverage-report/
 .sonarqube/
 actions-runner/
 .mcp.json
+.idea/
+src/InfraGate.McpGateway/.mcp-guardrails/audit.jsonl
