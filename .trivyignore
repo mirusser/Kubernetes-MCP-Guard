@@ -8,3 +8,5 @@
 #
 # Example:
 # CVE-XXXX-XXXXX # reason: not exploitable in this context | owner: @mirusser | expires: 2026-12-01
+
+# CVE-2026-4878 # reason: libcap2 TOCTOU in cap_set_file() requires local write access to a parent directory — not reachable in a containerized non-root workload (APP_UID 1654, no cap_set_file usage in application code); suppress until aspnet:10.0 base image includes libcap2 1:2.66-5ubuntu2.4 | owner: @mirusser | expires: 2026-12-01

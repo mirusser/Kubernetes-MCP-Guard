@@ -4,16 +4,10 @@ namespace InfraGate.McpServer;
 
 public sealed partial class K8sManager
 {
-    public Task<string> GetAllowedNamespacesAsync()
-    {
-        var namespaces = options.AllowedNamespaces
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-
-        return Task.FromResult(JsonSerializer.Serialize(new
+    public Task<string> GetAllowedNamespacesAsync() =>
+        Task.FromResult(JsonSerializer.Serialize(new
         {
-            allowedNamespaces = namespaces,
-            count = namespaces.Length
+            allowedNamespaces = options.AllowedNamespaces.Order(StringComparer.Ordinal).ToArray(),
+            count = options.AllowedNamespaces.Count
         }, JsonOptions));
-    }
 }
