@@ -2,12 +2,15 @@
 
 **Bridging the gap between AI Agents and Production Infrastructure with a Security-First Gateway.**
 
-[![Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml)
-[![Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml)
+
+[![Unit Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml)
+[![Integration Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml)
 [![Docker](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/package-docker.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/package-docker.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=mirusser_Kubernetes-MCP-Guard&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=mirusser_Kubernetes-MCP-Guard)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=mirusser_Kubernetes-MCP-Guard&metric=coverage)](https://sonarcloud.io/summary/new_code?id=mirusser_Kubernetes-MCP-Guard)
 
 <sub>![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?style=flat-square&logo=dotnet) ![Kubernetes](https://img.shields.io/badge/Kubernetes-Cloud--Native-326ce5?style=flat-square&logo=kubernetes) ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ed?style=flat-square&logo=docker) ![AI/LLM](https://img.shields.io/badge/AI/LLM-MCP%20Ready-black?style=flat-square&logo=openai)</sub>
+
 
 ## 🎯 The Problem
 Giving AI agents direct access to Kubernetes is risky. Without a safety layer, an LLM "hallucination" or a prompt injection could accidentally delete a production namespace or leak sensitive secrets.
@@ -182,6 +185,7 @@ Connect Codex the same way as Option 1.
 
 | Tool | Purpose |
 |---|---|
+| `get_allowed_namespaces` | Namespace allow-list the server is configured to access |
 | `get_k8s_status` | Deployments, Services, ConfigMaps, Pods, and ReplicaSets in a namespace |
 | `get_k8s_events` | Bounded `events.k8s.io/v1` cluster diagnostics |
 | `get_pod_logs` | Bounded Pod log reads (tail lines + byte cap) |

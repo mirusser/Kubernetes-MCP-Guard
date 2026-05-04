@@ -221,6 +221,7 @@ Use this shape for a local stdio MCP client:
 
 The HTTP gateway exposes the same tool names and arguments as the stdio server:
 
+- `get_allowed_namespaces()`
 - `get_k8s_status(namespace, labelSelector = null)`
 - `get_k8s_events(namespace, labelSelector = null, fieldSelector = null, limit = 50)`
 - `get_pod_logs(namespace, podName, container = null, tailLines = 200, previous = false)`
