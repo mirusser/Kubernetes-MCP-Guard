@@ -1,0 +1,10 @@
+# .trivyignore — Trivy CVE ignore list
+#
+# Every entry MUST include:
+#   - CVE identifier
+#   - Reason for ignoring (e.g. "not exploitable in this context because...")
+#   - Owner (GitHub username)
+#   - Expiry date (YYYY-MM-DD) — re-evaluate when this date passes
+#
+# Example:
+# CVE-XXXX-XXXXX # reason: not exploitable in this context | owner: @mirusser | expires: 2026-12-01

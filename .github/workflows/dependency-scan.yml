@@ -1,0 +1,49 @@
+name: Dependency Scan
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nuget-vulnerability-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7  # v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore InfraGate.slnx
+
+      - name: Check NuGet package vulnerabilities
+        run: |
+          dotnet list InfraGate.slnx package --vulnerable --include-transitive 2>&1 | tee vuln-report.txt
+          if grep -q 'Critical\|High' vuln-report.txt; then
+            echo "FAIL: Critical or High severity NuGet vulnerabilities found."
+            cat vuln-report.txt
+            exit 1
+          fi
+
+      - name: Check deprecated NuGet packages (advisory)
+        continue-on-error: true
+        run: dotnet list InfraGate.slnx package --deprecated --include-transitive
+
+      - name: Upload vulnerability report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v4
+        with:
+          name: nuget-vuln-report
+          path: vuln-report.txt

@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       push_images:
-        description: Push images to Docker Hub
+        description: Push images to Docker Hub and GitHub Container Registry
         required: false
         type: boolean
         default: false
@@ -20,6 +20,7 @@ on:
 permissions:
   contents: read
   packages: write
+  security-events: write
 
 jobs:
   docker:
@@ -90,5 +91,23 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           push: ${{ env.PUSH_IMAGES == 'true' }}
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8  # v0.36.0
+        with:
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          format: sarif
+          output: trivy-${{ matrix.image }}.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Upload Trivy SARIF results
+        if: always()
+        uses: github/codeql-action/upload-sarif@53e96ec3b35fce51c141c0d6f0e31028a448722d  # v3
+        with:
+          sarif_file: trivy-${{ matrix.image }}.sarif
+          category: trivy-${{ matrix.image }}
