@@ -10,7 +10,7 @@ RUN dotnet publish src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj \
     --output /app/publish \
     --no-restore
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled AS runtime
 WORKDIR /app
 COPY --from=build /app/publish .
 USER $APP_UID

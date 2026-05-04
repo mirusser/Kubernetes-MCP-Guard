@@ -18,11 +18,12 @@ RUN dotnet publish src/InfraGate.McpGateway/InfraGate.McpGateway.csproj \
     --configuration Release \
     --output /app/gateway \
     --no-restore
+RUN install -d -o $APP_UID -g $APP_UID /data/approvals /data/guardrails
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled AS runtime
 WORKDIR /app/gateway
 COPY --from=build /app/gateway .
 COPY --from=build /app/server /app/server
-RUN install -d -o $APP_UID -g $APP_UID /data/approvals /data/guardrails
+COPY --from=build /data /data
 USER $APP_UID
 ENTRYPOINT ["dotnet", "InfraGate.McpGateway.dll"]
