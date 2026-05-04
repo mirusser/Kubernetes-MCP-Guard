@@ -52,6 +52,14 @@ For multi-step tasks, state a brief plan:
 3. [Step] → verify: [check]
 ```
 
+## Skills
+
+Reusable skill definitions live in [.agents/skills/](.agents/skills/). Load the relevant `SKILL.md` before starting work that matches its scope:
+
+- [code-standards](.agents/skills/code-standards/SKILL.md): coding conventions for this repo — apply when making, reviewing, or refactoring code.
+- [infragate-mcp-gateway](.agents/skills/infragate-mcp-gateway/SKILL.md): use the local InfraGate MCP gateway for Kubernetes inspection and guarded changes.
+- [verify-readme-docs](.agents/skills/verify-readme-docs/SKILL.md): audit and minimally fix README files against actual code and tests.
+
 ## Solution Map
 
 Start with the root [README.md](README.md) for project intent and high-level architecture. Use [devs-readme.md](docs/devs-readme.md) for setup, local runs, tool contracts, and verification. For project-level context, use these guides:

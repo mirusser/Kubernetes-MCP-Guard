@@ -62,7 +62,7 @@ flowchart TB
     ReadOnly --> RBAC
     Plans --> RBAC
 ```
-<sub><em>Simplified architectural graph. Full version [here](docs/MCP-compliance.md)</em></sub>
+<sub><em>Simplified architectural graph. Full version [here](docs/full-architecture-diagram)</em></sub>
 
 ### 🛠️ Technical & Architectural Highlights
 
@@ -201,7 +201,7 @@ Connect Codex the same way as Option 1.
 | `request_set_deployment_image` | Plan a container image update |
 | `apply_approved_plan` | Apply an exact-hash-verified, user-approved plan |
 
-## See It In Action 🎬
+## 🎬 See It In Action 
 
 End-to-end walkthrough of the approval-gated workflow against a deliberately broken Deployment: [docs/demo-failing-deployment.md](docs/demo-failing-deployment.md). Uses the demo manifests under [examples/failing-deployment/](examples/failing-deployment/).
 
@@ -234,3 +234,5 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 - License: [Apache-2.0](LICENSE)
 - Security policy: [SECURITY.md](SECURITY.md)
 - Release process: [docs/releasing.md](docs/releasing.md)
+
+---
