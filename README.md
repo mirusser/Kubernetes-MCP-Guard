@@ -2,12 +2,15 @@
 
 **Bridging the gap between AI Agents and Production Infrastructure with a Security-First Gateway.**
 
-[![Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml)
-[![Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml)
+
+[![Unit Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml)
+[![Integration Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml)
 [![Docker](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/package-docker.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/package-docker.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=mirusser_Kubernetes-MCP-Guard&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=mirusser_Kubernetes-MCP-Guard)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=mirusser_Kubernetes-MCP-Guard&metric=coverage)](https://sonarcloud.io/summary/new_code?id=mirusser_Kubernetes-MCP-Guard)
 
 <sub>![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?style=flat-square&logo=dotnet) ![Kubernetes](https://img.shields.io/badge/Kubernetes-Cloud--Native-326ce5?style=flat-square&logo=kubernetes) ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ed?style=flat-square&logo=docker) ![AI/LLM](https://img.shields.io/badge/AI/LLM-MCP%20Ready-black?style=flat-square&logo=openai)</sub>
+
 
 ## 🎯 The Problem
 Giving AI agents direct access to Kubernetes is risky. Without a safety layer, an LLM "hallucination" or a prompt injection could accidentally delete a production namespace or leak sensitive secrets.
@@ -17,7 +20,7 @@ Kubernetes-MCP-Guard is a high-performance gateway built on .NET 10 and the Mode
 
 ## 💎 Key Business Value
 
-- **Human-in-the-Loop Governance:** AI can propose changes, but only a human can approve the final execution plan.
+- **Human-in-the-Loop Governance:** AI can propose changes, but only a human can approve the final execution plan — via a separate browser-based approval flow that the MCP client cannot intercept or answer on the human's behalf.
 - **Enterprise-Grade Security:** Integrated with OAuth-aware authentication and Namespace-scoped RBAC to ensure the AI only sees what it is allowed to see.
 - **AI Safety & Auditing:** Built-in prompt-injection guardrails and full audit logging for compliance and troubleshooting
 - **Cutting-Edge Stack:** Architected using the latest .NET 10 features and the industry-standard MCP protocol.
@@ -36,7 +39,7 @@ flowchart TB
     Client["MCP client<br/>Codex / Open WebUI / LibreChat"]
 
     subgraph Gateway["HTTP MCP Gateway"]
-        Auth["OAuth or bearer auth"]
+        Auth["OAuth JWT auth"]
         Guardrails["Prompt-injection guardrails"]
         Audit["Guardrail audit log"]
         Auth --> Guardrails
@@ -62,11 +65,59 @@ flowchart TB
     ReadOnly --> RBAC
     Plans --> RBAC
 ```
-<sub><em>Simplified architectural graph. Full version [here](docs/MCP-compliance.md)</em></sub>
+
+
+### 🔐 How Approval-Gated Mutations Work
+
+The diagram below shows what happens when an AI agent tries to make a change to your cluster. The key point: **the AI cannot approve its own requests**. Approval happens in your browser, on a completely separate channel with its own login.
+
+```mermaid
+---
+title: Out-of-Band Approval Flow
+---
+flowchart TB
+    classDef ai      fill:#e8f0fe,stroke:#4285f4,color:#1a1a2e,font-size:13px
+    classDef browser fill:#e6f4ea,stroke:#34a853,color:#1a1a2e,font-size:13px
+    classDef gate    fill:#fff3e0,stroke:#fb8c00,color:#1a1a2e,font-size:13px
+    classDef k8s     fill:#fce4ec,stroke:#e53935,color:#1a1a2e,font-size:13px
+
+    subgraph AI["① AI / MCP Channel"]
+        direction TB
+        A1["🤖 AI agent requests a change e.g. scale deployment to 3 replicas"]
+        A2["Gateway validates identity and creates a pending plan locked with a SHA-256 hash"]
+        A3["⛔ AI receives an approval URL only.
+         It cannot approve on your behalf"]
+        A4["AI calls apply again once human has approved"]
+    end
+
+    subgraph OOB["② Your Browser  —  separate login, separate session"]
+        direction TB
+        B1["🔗 You open the approval URL in your browser"]
+        B2["You log in with OAuth independent of the AI session"]
+        B3["Browser shows the real plan rendered by the Gateway from disk not by the AI"]
+        B4["You review: operation, namespace, affected objects, expiry time"]
+        B5["✅ You click Approve  or  ❌ Deny"]
+    end
+
+    K8s["☸️ Kubernetes Change is applied only after both channels agree"]
+
+    A1 --> A2 --> A3
+    A3 -.->|"URL shown to AI, opened by you"| B1
+    B1 --> B2 --> B3 --> B4 --> B5
+    B5 -->|"Approval recorded with identity binding"| A4
+    A4 --> K8s
+
+    class A1,A2,A3,A4 ai
+    class B1,B2,B3,B4,B5 browser
+    class K8s k8s
+```
+
+<sub><em>Even if the AI agent is compromised, it cannot self-approve. The approval must come from your browser session a channel the AI has no control over.</em></sub>
+<sub><em>Simplified architectural graph. Full version [here](docs/full-architecture-diagram.md)</em></sub>
 
 ### 🛠️ Technical & Architectural Highlights
 
-- **AI Integration & Safety:** Deep implementation of Model Context Protocol (MCP), handling tool contracts, elicitation-style approval workflows, and mitigating prompt-injection risks within model-visible data.
+- **AI Integration & Safety:** Deep implementation of Model Context Protocol (MCP), handling tool contracts, out-of-band approval workflows, and mitigating prompt-injection risks within model-visible data.
 
 - **Security & Identity:** Implemented OAuth 2.0 resource-server patterns, including scope enforcement, identity-based audit logging, and strict Least-Privilege RBAC for Kubernetes interactions.
 
@@ -79,9 +130,9 @@ flowchart TB
 ##### 🏗️ Implementation Details:
 - Exposes Kubernetes operations through the Model Context Protocol (MCP), with a stdio Kubernetes server behind a local HTTP gateway.
 - Uses the Kubernetes API via `KubernetesClient`; it does not shell out to `kubectl` for runtime operations.
-- Adds OAuth/static bearer authentication at the gateway, including MCP protected-resource metadata and insufficient-scope challenges.
+- Adds OAuth authentication at the gateway, including MCP protected-resource metadata, insufficient-scope challenges, and browser approval sessions.
 - Applies prompt-injection guardrails around model-visible tool input/output, with warn, redact, and audit behavior.
-- Keeps mutation paths approval-gated: create a plan first, then apply the exact approved plan.
+- Keeps mutation paths approval-gated: create a plan first, approve it in the Gateway browser UI, then apply the exact approved plan.
 - Limits Kubernetes blast radius with namespace-scoped RBAC and typed, bounded tool surfaces.
 
 ## 📦 Container Images
@@ -165,7 +216,7 @@ docker compose -f deploy/mode-c/compose.yaml up --build
 
 Connect Codex the same way as Option 1.
 
-*Other run modes (stdio-only, static bearer token) and full setup details are in the [Setup Guide](docs/setup-guide.md).*
+*Other run modes and full setup details are in the [Setup Guide](docs/setup-guide.md).*
 
 ## 🧰 Current Capabilities 
 
@@ -173,7 +224,7 @@ Connect Codex the same way as Option 1.
 
 | Layer | Behavior |
 |---|---|
-| Authentication | OAuth 2.1 JWT or local static bearer token |
+| Authentication | OAuth 2.1 JWT for MCP plus browser OAuth cookie for approvals |
 | Prompt-injection guardrails | Warn and redact suspicious model-visible input/output |
 | Audit logging | JSONL guardrail audit with identity resolution |
 | MCP compliance | Streamable HTTP transport, protected-resource metadata, step-up authorization |
@@ -182,6 +233,7 @@ Connect Codex the same way as Option 1.
 
 | Tool | Purpose |
 |---|---|
+| `get_allowed_namespaces` | Namespace allow-list the server is configured to access |
 | `get_k8s_status` | Deployments, Services, ConfigMaps, Pods, and ReplicaSets in a namespace |
 | `get_k8s_events` | Bounded `events.k8s.io/v1` cluster diagnostics |
 | `get_pod_logs` | Bounded Pod log reads (tail lines + byte cap) |
@@ -201,7 +253,7 @@ Connect Codex the same way as Option 1.
 | `request_set_deployment_image` | Plan a container image update |
 | `apply_approved_plan` | Apply an exact-hash-verified, user-approved plan |
 
-## See It In Action 🎬
+## 🎬 See It In Action 
 
 End-to-end walkthrough of the approval-gated workflow against a deliberately broken Deployment: [docs/demo-failing-deployment.md](docs/demo-failing-deployment.md). Uses the demo manifests under [examples/failing-deployment/](examples/failing-deployment/).
 
@@ -234,3 +286,5 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 - License: [Apache-2.0](LICENSE)
 - Security policy: [SECURITY.md](SECURITY.md)
 - Release process: [docs/releasing.md](docs/releasing.md)
+
+---

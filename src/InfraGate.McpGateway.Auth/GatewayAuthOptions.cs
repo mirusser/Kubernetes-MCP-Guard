@@ -1,20 +1,28 @@
 namespace InfraGate.McpGateway.Auth;
 
 public sealed record GatewayAuthOptions(
-    string? BearerToken,
-    string? OAuthAuthority = null,
+    string OAuthAuthority,
     string OAuthResource = GatewayAuthConventions.DefaultOAuthResource,
     string OAuthScope = GatewayAuthConventions.DefaultOAuthScope,
     bool OAuthRequireHttpsMetadata = true,
-    string? OAuthMetadataAddress = null)
+    string? OAuthMetadataAddress = null,
+    string ApprovalOAuthClientId = GatewayAuthConventions.DefaultApprovalOAuthClientId,
+    string? ApprovalOAuthAuthorizationEndpoint = null,
+    string? ApprovalOAuthTokenEndpoint = null,
+    string ApprovalOAuthCallbackPath = GatewayAuthConventions.Approvals.DefaultCallbackPath)
 {
-    public bool OAuthEnabled => !string.IsNullOrWhiteSpace(OAuthAuthority);
+    public string ApprovalAuthorizationEndpoint =>
+        string.IsNullOrWhiteSpace(ApprovalOAuthAuthorizationEndpoint)
+            ? TrimTrailingSlash(OAuthAuthority) + GatewayAuthConventions.Approvals.AuthorizePath
+            : ApprovalOAuthAuthorizationEndpoint;
 
-    public bool StaticBearerEnabled => !string.IsNullOrWhiteSpace(BearerToken);
+    public string ApprovalTokenEndpoint =>
+        string.IsNullOrWhiteSpace(ApprovalOAuthTokenEndpoint)
+            ? TrimTrailingSlash(OAuthAuthority) + GatewayAuthConventions.Approvals.TokenPath
+            : ApprovalOAuthTokenEndpoint;
 
     public static GatewayAuthOptions FromEnvironment()
     {
-        var token = Environment.GetEnvironmentVariable(GatewayAuthConventions.EnvironmentVariables.BearerToken);
         var oauthAuthority = Environment.GetEnvironmentVariable(GatewayAuthConventions.EnvironmentVariables.OAuthAuthority);
         var oauthMetadataAddress = Environment.GetEnvironmentVariable(GatewayAuthConventions.EnvironmentVariables.OAuthMetadataAddress);
         var oauthResource =
@@ -26,20 +34,33 @@ public sealed record GatewayAuthOptions(
         var requireHttpsMetadata = ParseBooleanEnvironmentVariable(
             Environment.GetEnvironmentVariable(GatewayAuthConventions.EnvironmentVariables.OAuthRequireHttpsMetadata),
             defaultValue: true);
+        var approvalClientId =
+            Environment.GetEnvironmentVariable(GatewayAuthConventions.EnvironmentVariables.ApprovalOAuthClientId) ??
+            GatewayAuthConventions.DefaultApprovalOAuthClientId;
+        var approvalAuthorizationEndpoint =
+            Environment.GetEnvironmentVariable(GatewayAuthConventions.EnvironmentVariables.ApprovalOAuthAuthorizationEndpoint);
+        var approvalTokenEndpoint =
+            Environment.GetEnvironmentVariable(GatewayAuthConventions.EnvironmentVariables.ApprovalOAuthTokenEndpoint);
+        var approvalCallbackPath =
+            Environment.GetEnvironmentVariable(GatewayAuthConventions.EnvironmentVariables.ApprovalOAuthCallbackPath) ??
+            GatewayAuthConventions.Approvals.DefaultCallbackPath;
 
-        if (string.IsNullOrWhiteSpace(token) && string.IsNullOrWhiteSpace(oauthAuthority))
+        if (string.IsNullOrWhiteSpace(oauthAuthority))
         {
             throw new InvalidOperationException(
-                $"{GatewayAuthConventions.EnvironmentVariables.BearerToken} or {GatewayAuthConventions.EnvironmentVariables.OAuthAuthority} is required.");
+                $"{GatewayAuthConventions.EnvironmentVariables.OAuthAuthority} is required.");
         }
 
         return new GatewayAuthOptions(
-            token,
             oauthAuthority,
             oauthResource,
             oauthScope,
             requireHttpsMetadata,
-            oauthMetadataAddress);
+            oauthMetadataAddress,
+            approvalClientId,
+            approvalAuthorizationEndpoint,
+            approvalTokenEndpoint,
+            approvalCallbackPath);
     }
 
     private static bool ParseBooleanEnvironmentVariable(string? value, bool defaultValue)
@@ -48,4 +69,6 @@ public sealed record GatewayAuthOptions(
             ? defaultValue
             : bool.Parse(value);
     }
+
+    private static string TrimTrailingSlash(string value) => value.TrimEnd('/');
 }

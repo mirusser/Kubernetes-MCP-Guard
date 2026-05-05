@@ -5,13 +5,20 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using InfraGate.Approvals;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 
@@ -22,11 +29,14 @@ namespace InfraGate.McpGateway.Tests.IntegrationTests;
 
 public sealed partial class GatewayHttpMcpIntegrationTests
 {
-    private const string BearerToken = "secret";
+    private const string Issuer = "https://issuer.example.com";
+    private const string Resource = "http://127.0.0.1:3001/mcp";
+    private const string Scope = "mcp:tools";
+    private const string Subject = "test-user";
     private const string NamespaceName = "mcp-nginx-demo";
 
     [Fact]
-    public async Task McpEndpoint_RejectsMissingAndWrongStaticBearerToken()
+    public async Task McpEndpoint_RejectsMissingAndInvalidJwt()
     {
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(new FakeDownstream("unused"), audit);
@@ -38,6 +48,36 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
         Assert.Equal(HttpStatusCode.Unauthorized, missingResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, wrongResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task McpEndpoint_RejectsStaticBearerToken()
+    {
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(new FakeDownstream("unused"), audit);
+        using var client = server.CreateClient();
+
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", "change-me");
+        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ApplyApprovedPlan_ToolSchema_AcceptsOnlyPlanId()
+    {
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(new FakeDownstream("unused"), audit);
+        await using var client = await CreateHttpMcpClientAsync(server);
+
+        var tools = await client.ListToolsAsync(cancellationToken: CancellationToken.None);
+        var applyTool = Assert.Single(tools, t => t.Name == McpGatewayConventions.ToolNames.ApplyApprovedPlan);
+
+        var schemaJson = JsonSerializer.Serialize(applyTool.JsonSchema);
+        Assert.DoesNotContain("hash", schemaJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("decision", schemaJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"approve\"", schemaJson, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -173,7 +213,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
     }
 
     [Fact]
-    public async Task ApplyApprovedPlan_ForwardsAcceptedAndDeclinedElicitationThroughGateway()
+    public async Task ApplyApprovedPlan_RequiresOutOfBandApprovalBeforeForwarding()
     {
         var repoRoot = FindRepoRoot();
         var serverProject = Path.Combine(repoRoot, "src", "InfraGate.McpServer", "InfraGate.McpServer.csproj");
@@ -188,56 +228,70 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot));
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(downstream, audit, CreateGatewayOptions(serverProject, testRoot, repoRoot));
-        var approvals = new Queue<bool>([false, true]);
-        await using var client = await CreateHttpMcpClientAsync(server, requestParams =>
-        {
-            var approve = approvals.Dequeue();
-            if (!approve)
-            {
-                return new ElicitResult { Action = "decline" };
-            }
+        await using var client = await CreateHttpMcpClientAsync(server);
 
-            var planId = PlanIdPattern().Match(requestParams?.Message ?? string.Empty).Groups["id"].Value;
-            return new ElicitResult
-            {
-                Action = "accept",
-                Content = new Dictionary<string, JsonElement>
-                {
-                    ["approve"] = JsonSerializer.SerializeToElement(true),
-                    ["planId"] = JsonSerializer.SerializeToElement(planId)
-                }
-            };
-        });
-
-        var declinedRequest = await RequestScalePlanAsync(client, replicas: 1);
-        var declinedPlanId = ParsePlanId(declinedRequest);
-        var declinedResult = await CallTextAsync(
+        var request = await RequestScalePlanAsync(client, replicas: 2);
+        var planId = ParsePlanId(request);
+        var approvalRequired = await CallTextAsync(
             client,
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.PlanId] = declinedPlanId
+                [McpGatewayConventions.ToolArguments.PlanId] = planId
             });
 
-        Assert.Contains("Refused:", declinedResult);
-        Assert.Contains("not approved through MCP elicitation", declinedResult);
+        Assert.Contains("Approval required.", approvalRequired);
+        Assert.Contains("Approval URL:", approvalRequired);
+        Assert.DoesNotContain("Scaled apps/v1 Deployment", approvalRequired);
+        Assert.DoesNotContain(k8sApi.Requests, apiRequest =>
+            apiRequest.Method == "PATCH" &&
+            apiRequest.Path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo/scale");
 
-        var acceptedRequest = await RequestScalePlanAsync(client, replicas: 2);
-        var acceptedPlanId = ParsePlanId(acceptedRequest);
+        var challengeId = ParseChallengeId(approvalRequired);
+        using var unauthenticatedBrowser = new HttpClient(server.CreateHandler())
+        {
+            BaseAddress = server.BaseAddress
+        };
+        var unauthenticatedPage = await unauthenticatedBrowser.GetAsync($"/approvals/{challengeId}");
+        Assert.Equal(HttpStatusCode.Redirect, unauthenticatedPage.StatusCode);
+        Assert.EndsWith(
+            "/approvals/login?ReturnUrl=%2Fapprovals%2F" + challengeId,
+            unauthenticatedPage.Headers.Location?.ToString(),
+            StringComparison.Ordinal);
+
+        using var browser = await CreateAuthenticatedApprovalBrowserAsync(server, challengeId);
+        var page = await browser.GetAsync($"/approvals/{challengeId}");
+        page.EnsureSuccessStatusCode();
+        var pageText = await page.Content.ReadAsStringAsync();
+        Assert.Contains($"PlanId</dt><dd>{planId}</dd>", pageText);
+        Assert.Contains("Plan hash", pageText);
+        Assert.Contains($"{NamespaceName}/demo", pageText);
+
+        var token = ParseAntiforgeryToken(pageText);
+        AddResponseCookies(browser, page);
+        var approvalResponse = await browser.PostAsync(
+            $"/approvals/{challengeId}/approve",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                [McpGatewayConventions.Approvals.RequestVerificationToken] = token
+            }));
+        approvalResponse.EnsureSuccessStatusCode();
+        Assert.Contains("was approved", await approvalResponse.Content.ReadAsStringAsync());
+
         var acceptedResult = await CallTextAsync(
             client,
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.PlanId] = acceptedPlanId
+                [McpGatewayConventions.ToolArguments.PlanId] = planId
             });
 
         Assert.Contains("Scaled apps/v1 Deployment", acceptedResult);
         Assert.Contains("Deployment rollout completed", acceptedResult);
-        Assert.True(File.Exists(Path.Combine(approvalRoot, "approved", $"{acceptedPlanId}.sha256")));
-        Assert.Contains(k8sApi.Requests, request =>
-            request.Method == "PATCH" &&
-            request.Path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo/scale");
+        Assert.True(File.Exists(Path.Combine(approvalRoot, "approved", $"{planId}.sha256")));
+        Assert.Contains(k8sApi.Requests, apiRequest =>
+            apiRequest.Method == "PATCH" &&
+            apiRequest.Path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo/scale");
     }
 
     [Fact]
@@ -490,8 +544,28 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<IGuardrailAuditStore>(audit);
                 services.AddSingleton(downstream);
                 services.AddSingleton<GuardedToolRunner>();
+                services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
+                services.AddSingleton<ApprovalStore>();
+                services.AddSingleton<ApprovalChallengeStore>();
+                services.AddSingleton<GatewayApprovalService>();
                 services.AddHttpContextAccessor();
+                services.AddAntiforgery();
                 services.AddGatewayAuthentication(options.Auth);
+                services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, jwtOptions =>
+                {
+                    jwtOptions.Configuration = new OpenIdConnectConfiguration
+                    {
+                        Issuer = Issuer
+                    };
+                    jwtOptions.Configuration.SigningKeys.Add(SigningKey());
+                    jwtOptions.TokenValidationParameters.IssuerSigningKey = SigningKey();
+                    jwtOptions.TokenValidationParameters.ValidIssuer = Issuer;
+                    jwtOptions.TokenValidationParameters.ValidAudience = Resource;
+                });
+                services.PostConfigure<OAuthOptions>(GatewayAuthConventions.Schemes.ApprovalOAuth, oauthOptions =>
+                {
+                    oauthOptions.Backchannel = new HttpClient(new FakeOAuthBackchannel(Subject));
+                });
                 services
                     .AddMcpServer()
                     .WithHttpTransport()
@@ -504,6 +578,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 app.UseAuthorization();
                 app.UseEndpoints(endpoints =>
                 {
+                    endpoints.MapGatewayApprovalEndpoints();
                     endpoints.MapMcp(McpGatewayConventions.McpPath)
                         .RequireAuthorization(GatewayAuthConventions.Schemes.PolicyName);
                 });
@@ -512,14 +587,23 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
     private static McpGatewayOptions CreateGatewayOptions(string downstreamProject, string testRoot, string workingDirectory) =>
         new(
-            new GatewayAuthOptions(BearerToken),
+            new GatewayAuthOptions(
+                Issuer,
+                Resource,
+                Scope,
+                OAuthRequireHttpsMetadata: false,
+                OAuthMetadataAddress: null,
+                ApprovalOAuthClientId: GatewayAuthConventions.DefaultApprovalOAuthClientId,
+                ApprovalOAuthAuthorizationEndpoint: Issuer + "/authorize",
+                ApprovalOAuthTokenEndpoint: Issuer + "/token"),
             downstreamProject,
             Path.Combine(testRoot, "guardrails"),
-            workingDirectory);
+            workingDirectory,
+            Path.Combine(testRoot, "approvals"),
+            ApprovalBaseUrl: null,
+            McpGatewayOptions.DefaultApprovalChallengeTtl);
 
-    private static async Task<McpClient> CreateHttpMcpClientAsync(
-        TestServer server,
-        Func<ElicitRequestParams?, ElicitResult>? elicitationHandler = null)
+    private static async Task<McpClient> CreateHttpMcpClientAsync(TestServer server)
     {
         var httpClient = server.CreateClient();
         var transport = new HttpClientTransport(
@@ -530,34 +614,97 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 TransportMode = HttpTransportMode.StreamableHttp,
                 AdditionalHeaders = new Dictionary<string, string>
                 {
-                    ["Authorization"] = $"Bearer {BearerToken}"
+                    ["Authorization"] = $"Bearer {CreateJwt(Subject)}"
                 }
             },
             httpClient,
             NullLoggerFactory.Instance,
             ownsHttpClient: true);
-        var options = elicitationHandler is null
-            ? null
-            : new McpClientOptions
-            {
-                Capabilities = new ClientCapabilities
-                {
-                    Elicitation = new ElicitationCapability
-                    {
-                        Form = new FormElicitationCapability()
-                    }
-                },
-                Handlers = new McpClientHandlers
-                {
-                    ElicitationHandler = (requestParams, _) =>
-                        ValueTask.FromResult(elicitationHandler(requestParams))
-                }
-            };
 
         return await McpClient.CreateAsync(
             transport,
-            options,
             cancellationToken: CancellationToken.None);
+    }
+
+    private static async Task<HttpClient> CreateAuthenticatedApprovalBrowserAsync(
+        TestServer server,
+        string challengeId)
+    {
+        var browser = new HttpClient(server.CreateHandler())
+        {
+            BaseAddress = server.BaseAddress
+        };
+
+        var pageRedirect = await browser.GetAsync($"/approvals/{challengeId}");
+        var loginPath = pageRedirect.Headers.Location?.ToString() ??
+                        throw new InvalidOperationException("Approval page did not redirect to login.");
+        var loginRedirect = await browser.GetAsync(loginPath);
+        var correlationCookie = CookieHeader(loginRedirect);
+        var authorizationUri = loginRedirect.Headers.Location ??
+                               throw new InvalidOperationException("Login did not redirect to OAuth authorization.");
+        var state = QueryHelpers.ParseQuery(authorizationUri.Query)["state"].ToString();
+        if (string.IsNullOrWhiteSpace(state))
+        {
+            throw new InvalidOperationException("OAuth authorization redirect did not contain state.");
+        }
+        using var callbackRequest = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"{GatewayAuthConventions.Approvals.DefaultCallbackPath}?code=test-code&state={Uri.EscapeDataString(state)}");
+        callbackRequest.Headers.Add("Cookie", correlationCookie);
+
+        var callback = await browser.SendAsync(callbackRequest);
+        AddResponseCookies(browser, callback);
+
+        return browser;
+    }
+
+    private static void AddResponseCookies(HttpClient client, HttpResponseMessage response)
+    {
+        var cookies = CookieHeader(response);
+        if (!string.IsNullOrWhiteSpace(cookies))
+        {
+            var existingCookies = client.DefaultRequestHeaders.TryGetValues("Cookie", out var values)
+                ? string.Join("; ", values)
+                : string.Empty;
+            var combinedCookies = string.Join(
+                "; ",
+                new[] { existingCookies, cookies }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+            client.DefaultRequestHeaders.Remove("Cookie");
+            client.DefaultRequestHeaders.Add("Cookie", combinedCookies);
+        }
+    }
+
+    private static string CookieHeader(HttpResponseMessage response)
+    {
+        return response.Headers.TryGetValues("Set-Cookie", out var values)
+            ? string.Join("; ", values.Select(value => value.Split(';', 2)[0]))
+            : string.Empty;
+    }
+
+    private static SecurityKey SigningKey() =>
+        new SymmetricSecurityKey("0123456789abcdef0123456789abcdef"u8.ToArray())
+        {
+            KeyId = "test-key"
+        };
+
+    private static string CreateJwt(string subject)
+    {
+        var descriptor = new SecurityTokenDescriptor
+        {
+            Issuer = Issuer,
+            Audience = Resource,
+            Expires = DateTime.UtcNow.AddMinutes(30),
+            Claims = new Dictionary<string, object>
+            {
+                [GatewayAuthConventions.Claims.Subject] = subject,
+                [GatewayAuthConventions.Claims.PreferredUsername] = subject,
+                [GatewayAuthConventions.Claims.Scope] = Scope
+            },
+            SigningCredentials = new SigningCredentials(SigningKey(), SecurityAlgorithms.HmacSha256)
+        };
+
+        return new JsonWebTokenHandler().CreateToken(descriptor);
     }
 
     private static async Task<string> CallTextAsync(
@@ -702,6 +849,22 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         return planId;
     }
 
+    private static string ParseChallengeId(string text)
+    {
+        var challengeId = ChallengeIdPattern().Match(text).Groups["id"].Value;
+        Assert.False(string.IsNullOrWhiteSpace(challengeId));
+
+        return challengeId;
+    }
+
+    private static string ParseAntiforgeryToken(string html)
+    {
+        var token = AntiforgeryTokenPattern().Match(html).Groups["token"].Value;
+        Assert.False(string.IsNullOrWhiteSpace(token));
+
+        return WebUtility.HtmlDecode(token);
+    }
+
     private static string? TryGetFirstPodName(string statusText)
     {
         using var document = JsonDocument.Parse(statusText);
@@ -762,6 +925,12 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
     [GeneratedRegex(@"PlanId:\s+(?<id>[0-9a-z-]+)", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
     private static partial Regex PlanIdPattern();
+
+    [GeneratedRegex(@"Approval URL:\s+https?://[^/]+/approvals/(?<id>[0-9a-f]+)", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
+    private static partial Regex ChallengeIdPattern();
+
+    [GeneratedRegex(@"name=""__RequestVerificationToken"" value=""(?<token>[^""]+)""", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
+    private static partial Regex AntiforgeryTokenPattern();
 
     private const string CleanConfigMapManifest = """
                                                   apiVersion: v1
@@ -827,12 +996,30 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         public Task<string> CallToolAsync(
             string toolName,
             IReadOnlyDictionary<string, object?> arguments,
-            CancellationToken cancellationToken,
-            ModelContextProtocol.Server.McpServer? upstreamServer = null)
+            CancellationToken cancellationToken)
         {
             Calls.Add(new DownstreamCall(toolName, arguments));
 
             return Task.FromResult(response);
+        }
+    }
+
+    private sealed class FakeOAuthBackchannel(string subject) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var json = JsonSerializer.Serialize(new
+            {
+                access_token = CreateJwt(subject),
+                token_type = "Bearer"
+            });
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            });
         }
     }
 

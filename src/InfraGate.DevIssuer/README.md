@@ -7,6 +7,7 @@
 - `Program.cs` configures the web app and maps issuer endpoints.
 - `DevIssuerApplication*.cs` maps discovery, JWKS, dynamic client registration, authorization, and token endpoints.
 - `DevIssuerStore.cs` keeps registered clients and authorization codes in memory.
+- `DevIssuerStore.cs` pre-registers the local InfraGate approval UI client and keeps dynamic clients and authorization codes in memory.
 - `DevIssuerSigningKey.cs` creates an ephemeral RSA signing key and JWKS response.
 - `DevIssuerConventions.cs` holds endpoint paths, OAuth constants, JSON keys, claims, errors, and env var names.
 
@@ -16,6 +17,7 @@
 - Redirect URIs must be loopback `http` URIs.
 - Authorization code flow requires PKCE `S256`.
 - Tokens are JWT access tokens signed with the current ephemeral RSA key.
+- The local approval UI client id and redirect URI are pre-registered so browser approvals work without dynamic registration.
 - The token audience/resource and scope should match gateway OAuth configuration.
 - The authorization request must include the resource; the token request may omit it because the authorization code is already resource-bound. If a token request includes an explicitly wrong resource, it is rejected.
 - This behavior is intentionally scoped to local OAuth compatibility testing for the gateway path described in [MCP-compliance.md](../../docs/MCP-compliance.md).
@@ -27,6 +29,8 @@
 - `INFRA_GATE_DEV_ISSUER_SCOPE`: issued scope. Defaults to `mcp:tools`.
 - `INFRA_GATE_DEV_ISSUER_SUBJECT`: subject claim. Defaults to `infra-gate-dev-user`.
 - `INFRA_GATE_DEV_ISSUER_INTERNAL_ENDPOINT_BASE`: optional endpoint base for metadata requested through an internal network host, while preserving the public issuer value in tokens.
+- `INFRA_GATE_DEV_ISSUER_APPROVAL_CLIENT_ID`: pre-registered approval UI client id. Defaults to `infra-gate-approval-ui`.
+- `INFRA_GATE_DEV_ISSUER_APPROVAL_REDIRECT_URI`: pre-registered approval UI redirect URI. Defaults to `http://127.0.0.1:3001/approvals/oauth/callback`.
 - `ASPNETCORE_URLS`: optional HTTP binding. Keep it aligned with the issuer URL clients use.
 
 ## Verification

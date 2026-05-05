@@ -1,9 +1,13 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.AspNetCore.Authentication;
 using ModelContextProtocol.Authentication;
@@ -17,7 +21,8 @@ public static class GatewayAuthentication
         services.AddSingleton(options);
 
         var authBuilder = AddGatewayAuthenticationSchemes(services, options);
-        AddOAuthAuthentication(authBuilder, options);
+        AddJwtBearerAuthentication(authBuilder, options);
+        AddApprovalBrowserAuthentication(authBuilder, options);
         AddGatewayAuthorization(services, options);
 
         return services;
@@ -40,24 +45,32 @@ public static class GatewayAuthentication
                 policyOptions =>
                 {
                     policyOptions.ForwardDefaultSelector = context => ForwardedAuthenticationScheme(context, options);
-                })
-            .AddScheme<AuthenticationSchemeOptions, StaticBearerAuthenticationHandler>(
-                GatewayAuthConventions.Schemes.StaticBearer,
-                displayName: null,
-                configureOptions: null);
+                });
     }
 
-    private static void AddOAuthAuthentication(AuthenticationBuilder authBuilder, GatewayAuthOptions options)
+    private static void AddJwtBearerAuthentication(AuthenticationBuilder authBuilder, GatewayAuthOptions options)
     {
-        if (string.IsNullOrWhiteSpace(options.OAuthAuthority))
-        {
-            return;
-        }
-
         var oauthAuthority = options.OAuthAuthority;
         authBuilder
             .AddJwtBearer(jwtOptions => ConfigureJwtBearerOptions(jwtOptions, options, oauthAuthority))
             .AddMcp(mcpOptions => ConfigureMcpOptions(mcpOptions, options, oauthAuthority));
+    }
+
+    private static void AddApprovalBrowserAuthentication(AuthenticationBuilder authBuilder, GatewayAuthOptions options)
+    {
+        authBuilder
+            .AddCookie(
+                GatewayAuthConventions.Schemes.ApprovalCookie,
+                cookieOptions =>
+                {
+                    cookieOptions.LoginPath = GatewayAuthConventions.Approvals.LoginPath;
+                    cookieOptions.Cookie.Name = GatewayAuthConventions.Approvals.CookieName;
+                    cookieOptions.Cookie.HttpOnly = true;
+                    cookieOptions.Cookie.SameSite = SameSiteMode.Lax;
+                })
+            .AddOAuth(
+                GatewayAuthConventions.Schemes.ApprovalOAuth,
+                oauthOptions => ConfigureApprovalOAuthOptions(oauthOptions, options));
     }
 
     private static void AddGatewayAuthorization(IServiceCollection services, GatewayAuthOptions options)
@@ -68,25 +81,19 @@ public static class GatewayAuthentication
             {
                 policy.RequireAuthenticatedUser();
                 policy.RequireAssertion(context => HasRequiredScope(context.User, options.OAuthScope));
+            })
+            .AddPolicy(GatewayAuthConventions.Schemes.ApprovalPolicyName, policy =>
+            {
+                policy.AuthenticationSchemes.Add(GatewayAuthConventions.Schemes.ApprovalCookie);
+                policy.RequireAuthenticatedUser();
             });
     }
 
     private static string DefaultChallengeScheme(GatewayAuthOptions options) =>
-        options.OAuthEnabled
-            ? McpAuthenticationDefaults.AuthenticationScheme
-            : GatewayAuthConventions.Schemes.StaticBearer;
+        McpAuthenticationDefaults.AuthenticationScheme;
 
     private static string ForwardedAuthenticationScheme(HttpContext context, GatewayAuthOptions options)
-    {
-        if (GatewayAuthToken.IsStaticBearerToken(context.Request.Headers.Authorization.ToString(), options))
-        {
-            return GatewayAuthConventions.Schemes.StaticBearer;
-        }
-
-        return options.OAuthEnabled
-            ? JwtBearerDefaults.AuthenticationScheme
-            : GatewayAuthConventions.Schemes.StaticBearer;
-    }
+        => JwtBearerDefaults.AuthenticationScheme;
 
     private static void ConfigureJwtBearerOptions(
         JwtBearerOptions jwtOptions,
@@ -142,6 +149,51 @@ public static class GatewayAuthentication
             ScopesSupported = { options.OAuthScope }
         };
     }
+
+    private static void ConfigureApprovalOAuthOptions(OAuthOptions oauthOptions, GatewayAuthOptions options)
+    {
+        oauthOptions.SignInScheme = GatewayAuthConventions.Schemes.ApprovalCookie;
+        oauthOptions.ClientId = options.ApprovalOAuthClientId;
+        oauthOptions.ClientSecret = GatewayAuthConventions.Approvals.PublicClientSecretPlaceholder;
+        oauthOptions.CallbackPath = options.ApprovalOAuthCallbackPath;
+        oauthOptions.AuthorizationEndpoint = options.ApprovalAuthorizationEndpoint;
+        oauthOptions.TokenEndpoint = options.ApprovalTokenEndpoint;
+        oauthOptions.UsePkce = true;
+        oauthOptions.SaveTokens = true;
+        oauthOptions.Scope.Clear();
+        oauthOptions.Scope.Add(options.OAuthScope);
+        oauthOptions.Events = CreateApprovalOAuthEvents(options);
+    }
+
+    private static OAuthEvents CreateApprovalOAuthEvents(GatewayAuthOptions options) => new()
+    {
+        OnRedirectToAuthorizationEndpoint = context =>
+        {
+            var redirectUri = QueryHelpers.AddQueryString(
+                context.RedirectUri,
+                GatewayAuthConventions.Parameters.Resource,
+                options.OAuthResource);
+            context.Response.Redirect(redirectUri);
+
+            return Task.CompletedTask;
+        },
+        OnCreatingTicket = context =>
+        {
+            if (string.IsNullOrWhiteSpace(context.AccessToken))
+            {
+                context.Fail("OAuth token response did not contain an access token.");
+                return Task.CompletedTask;
+            }
+
+            var token = new JsonWebTokenHandler().ReadJsonWebToken(context.AccessToken);
+            foreach (var claim in token.Claims)
+            {
+                context.Identity?.AddClaim(claim);
+            }
+
+            return Task.CompletedTask;
+        }
+    };
 
     private static string ResourceMetadataUrl(HttpRequest request) =>
         $"{request.Scheme}://{request.Host}{request.PathBase}{GatewayAuthConventions.Metadata.ProtectedResourcePath}";

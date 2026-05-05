@@ -12,6 +12,8 @@ services:
       INFRA_GATE_DEV_ISSUER_INTERNAL_ENDPOINT_BASE: http://devissuer:3011
       INFRA_GATE_DEV_ISSUER_RESOURCE: http://127.0.0.1:3001/mcp
       INFRA_GATE_DEV_ISSUER_SCOPE: mcp:tools
+      INFRA_GATE_DEV_ISSUER_APPROVAL_CLIENT_ID: infra-gate-approval-ui
+      INFRA_GATE_DEV_ISSUER_APPROVAL_REDIRECT_URI: http://127.0.0.1:3001/approvals/oauth/callback
     ports:
       - "127.0.0.1:3011:3011"
 
@@ -26,6 +28,10 @@ services:
       INFRA_GATE_OAUTH_RESOURCE: http://127.0.0.1:3001/mcp
       INFRA_GATE_OAUTH_SCOPE: mcp:tools
       INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA: "false"
+      INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID: infra-gate-approval-ui
+      INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT: http://127.0.0.1:3011/authorize
+      INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT: http://devissuer:3011/token
+      INFRA_GATE_APPROVAL_BASE_URL: http://127.0.0.1:3001
       INFRA_GATE_DOWNSTREAM_ASSEMBLY: /app/server/InfraGate.McpServer.dll
       INFRA_GATE_GUARD_AUDIT_ROOT: /data/guardrails
       KUBECONFIG: /run/kube/mcp-nginx-demo.compose.config

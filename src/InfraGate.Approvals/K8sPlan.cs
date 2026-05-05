@@ -1,4 +1,4 @@
-namespace InfraGate.McpServer;
+namespace InfraGate.Approvals;
 
 public sealed record K8sPlan(
     string Id,

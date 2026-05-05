@@ -132,11 +132,10 @@ public static class K8sTools
         manager.RequestSetDeploymentImageAsync(@namespace, name, container, image, cancellationToken);
 
     [McpServerTool(Name = K8sConventions.ToolNames.ApplyApprovedPlan, Destructive = true, OpenWorld = false)]
-    [Description("Requests MCP user approval for a pending Kubernetes plan, then applies the exact approved plan.")]
+    [Description("Applies a pending Kubernetes plan that was already approved out-of-band.")]
     public static Task<string> ApplyApprovedPlan(
         K8sManager manager,
-        ModelContextProtocol.Server.McpServer server,
         [Description("PlanId returned by one of the request_* tools.")] string planId,
         CancellationToken cancellationToken = default) =>
-        manager.ApplyApprovedPlanAsync(planId, server, cancellationToken);
+        manager.ApplyApprovedPlanAsync(planId, cancellationToken);
 }

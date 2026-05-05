@@ -1,11 +1,12 @@
 # InfraGate.McpGateway
 
-`InfraGate.McpGateway` is the local HTTP MCP endpoint that fronts the stdio Kubernetes MCP server. It adds authentication, prompt-injection guardrails, response sanitization, and guardrail audit logging while preserving the same Kubernetes tool names and arguments exposed by `InfraGate.McpServer`.
+`InfraGate.McpGateway` is the local HTTP MCP endpoint that fronts the stdio Kubernetes MCP server. It adds authentication, prompt-injection guardrails, response sanitization, out-of-band plan approval, and guardrail audit logging while preserving the same Kubernetes tool names and arguments exposed by `InfraGate.McpServer`.
 
 ## Runtime Flow
 
-- `Program.cs` configures the HTTP MCP server at `/mcp`, registers auth, guardrails, the downstream client, and the gateway tool facade.
+- `Program.cs` configures the HTTP MCP server at `/mcp`, registers auth, approval endpoints, guardrails, the downstream client, and the gateway tool facade.
 - `K8sGatewayTools.cs` exposes the same MCP tools as the stdio server and delegates to `GuardedToolRunner`.
+- `GatewayApprovalService.cs` and `GatewayApprovalEndpoints.cs` create short-lived approval URLs and render pending plans from the shared approval store.
 - `GuardedToolRunner.cs` scans inbound arguments, calls the downstream stdio server, sanitizes risky model-visible output, and writes audit events.
 - `DownstreamMcpClient.cs` starts and reuses the downstream `InfraGate.McpServer` process via the Model Context Protocol client.
 - `PromptInjectionGuard*.cs` contains argument scanning, response redaction, operational-line allow-listing, and regex patterns.
@@ -20,6 +21,8 @@
 - Suspicious response text and echoed manifest blocks are redacted before returning to the MCP client.
 - Authentication behavior is provided by `InfraGate.McpGateway.Auth`; this project should not duplicate auth rules.
 - OAuth access tokens are terminated at the gateway. The downstream stdio server receives tool calls, not bearer tokens.
+- Approval is browser-based and out-of-band: MCP clients receive an approval URL but cannot submit approval content through MCP.
+- Approval challenges are bound to plan id, plan hash, requester subject, expiry, and single-use status.
 - Guardrail audit entries must not include bearer tokens or raw credentials.
 
 ## Configuration
@@ -27,6 +30,9 @@
 - `INFRA_GATE_DOWNSTREAM_PROJECT`: optional path to the downstream `InfraGate.McpServer.csproj`.
 - `INFRA_GATE_DOWNSTREAM_ASSEMBLY`: optional path to a published downstream `InfraGate.McpServer.dll`; used by the containerized gateway image.
 - `INFRA_GATE_GUARD_AUDIT_ROOT`: optional audit output root. Defaults to `.mcp-guardrails`.
+- `K8S_MCP_APPROVAL_ROOT`: approval file storage root shared with the downstream server. Defaults to `.mcp-approvals`.
+- `INFRA_GATE_APPROVAL_BASE_URL`: optional public base URL used when returning approval links.
+- `INFRA_GATE_APPROVAL_CHALLENGE_TTL_SECONDS`: optional approval challenge TTL. Defaults to 900 seconds.
 - `ASPNETCORE_URLS`: optional HTTP binding. Defaults to `http://127.0.0.1:3001` when unset.
 - Auth settings come from `InfraGate.McpGateway.Auth`.
 

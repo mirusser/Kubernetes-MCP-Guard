@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using InfraGate.Approvals;
 using InfraGate.McpServer;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;

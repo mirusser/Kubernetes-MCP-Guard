@@ -1,37 +1,39 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 
-namespace InfraGate.McpServer;
+namespace InfraGate.Approvals;
 
 public sealed class ApprovalStore
 {
     private const int PlanIdRandomByteCount = 4;
 
-    private readonly K8sMcpOptions options;
+    private readonly ApprovalStoreOptions options;
     private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true
     };
 
-    public ApprovalStore(K8sMcpOptions options)
+    public ApprovalStore(ApprovalStoreOptions options)
     {
         this.options = options;
     }
 
-    public string PendingDirectory => Path.Combine(options.ApprovalRoot, K8sConventions.ApprovalStorage.PendingDirectory);
+    public string PendingDirectory => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.PendingDirectory);
 
-    public string ApprovedDirectory => Path.Combine(options.ApprovalRoot, K8sConventions.ApprovalStorage.ApprovedDirectory);
+    public string ApprovedDirectory => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.ApprovedDirectory);
 
-    public string AppliedDirectory => Path.Combine(options.ApprovalRoot, K8sConventions.ApprovalStorage.AppliedDirectory);
+    public string AppliedDirectory => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.AppliedDirectory);
 
-    public string AuditPath => Path.Combine(options.ApprovalRoot, K8sConventions.ApprovalStorage.AuditFileName);
+    public string ChallengesDirectory => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.ChallengesDirectory);
+
+    public string AuditPath => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.AuditFileName);
 
     public static string NewPlanId()
     {
         Span<byte> bytes = stackalloc byte[PlanIdRandomByteCount];
         RandomNumberGenerator.Fill(bytes);
 
-        return $"{DateTimeOffset.UtcNow.ToString(K8sConventions.DateTimeFormats.PlanIdTimestamp)}-{Convert.ToHexString(bytes).ToLowerInvariant()}";
+        return $"{DateTimeOffset.UtcNow.ToString(ApprovalConventions.DateTimeFormats.PlanIdTimestamp)}-{Convert.ToHexString(bytes).ToLowerInvariant()}";
     }
 
     public async Task<ApprovalPlanResult> CreatePlanAsync(K8sPlan plan, CancellationToken cancellationToken)
@@ -43,7 +45,7 @@ public sealed class ApprovalStore
         await File.WriteAllTextAsync(pendingPath, json, cancellationToken);
 
         var hash = await ComputeSha256Async(pendingPath, cancellationToken);
-        await WriteAuditAsync(K8sConventions.AuditEvents.PlanRequested, new
+        await WriteAuditAsync(ApprovalConventions.AuditEvents.PlanRequested, new
         {
             plan.Id,
             plan.Operation,
@@ -82,9 +84,9 @@ public sealed class ApprovalStore
         var actualHash = await ComputeSha256Async(pendingPath, cancellationToken);
         var approvedHash = (await File.ReadAllTextAsync(approvedPath, cancellationToken)).Trim();
 
-        if (!StringComparer.OrdinalIgnoreCase.Equals(actualHash, approvedHash))
+        if (!FixedTimeStringComparer.Equals(actualHash, approvedHash))
         {
-            await WriteAuditAsync(K8sConventions.AuditEvents.ApprovalHashMismatch, new
+            await WriteAuditAsync(ApprovalConventions.AuditEvents.ApprovalHashMismatch, new
             {
                 planId,
                 approvedHash,
@@ -130,9 +132,24 @@ public sealed class ApprovalStore
             : PendingPlanResult.Found(plan, pendingPath, GetApprovedPath(planId), actualHash);
     }
 
+    public Task<ApprovedPlanResult> ApprovePendingPlanAsync(
+        string planId,
+        string expectedHash,
+        CancellationToken cancellationToken) =>
+        ApprovePendingPlanAsync(
+            planId,
+            expectedHash,
+            ApprovalConventions.ApprovalSources.DirectStore,
+            approverSubject: null,
+            challengeId: null,
+            cancellationToken);
+
     public async Task<ApprovedPlanResult> ApprovePendingPlanAsync(
         string planId,
         string expectedHash,
+        string source,
+        string? approverSubject,
+        string? challengeId,
         CancellationToken cancellationToken)
     {
         var pending = await GetPendingPlanAsync(planId, cancellationToken);
@@ -141,9 +158,9 @@ public sealed class ApprovalStore
             return ApprovedPlanResult.Denied(pending.Message);
         }
 
-        if (!StringComparer.OrdinalIgnoreCase.Equals(expectedHash, pending.Hash))
+        if (!FixedTimeStringComparer.Equals(expectedHash, pending.Hash))
         {
-            await WriteAuditAsync(K8sConventions.AuditEvents.ApprovalHashMismatch, new
+            await WriteAuditAsync(ApprovalConventions.AuditEvents.ApprovalHashMismatch, new
             {
                 planId,
                 approvedHash = expectedHash,
@@ -153,12 +170,15 @@ public sealed class ApprovalStore
             return ApprovedPlanResult.Denied($"Plan '{planId}' changed during approval; refusing to apply it.");
         }
 
+        EnsureDirectories();
         await File.WriteAllTextAsync(pending.ApprovedPath, pending.Hash, cancellationToken);
-        await WriteAuditAsync(K8sConventions.AuditEvents.PlanApproved, new
+        await WriteAuditAsync(ApprovalConventions.AuditEvents.PlanApproved, new
         {
             planId,
             hash = pending.Hash,
-            source = K8sConventions.ApprovalSources.McpElicitation
+            source,
+            approverSubject,
+            challengeId
         }, cancellationToken);
 
         return ApprovedPlanResult.Approved(pending.Plan, pending.Hash);
@@ -179,7 +199,7 @@ public sealed class ApprovalStore
         }, jsonOptions);
 
         await File.WriteAllTextAsync(appliedPath, json, cancellationToken);
-        await WriteAuditAsync(K8sConventions.AuditEvents.PlanApplied, new
+        await WriteAuditAsync(ApprovalConventions.AuditEvents.PlanApplied, new
         {
             plan.Id,
             plan.Operation,
@@ -202,11 +222,11 @@ public sealed class ApprovalStore
         return File.AppendAllTextAsync(AuditPath, line + Environment.NewLine, cancellationToken);
     }
 
-    public string GetPendingPath(string planId) => Path.Combine(PendingDirectory, planId + K8sConventions.ApprovalStorage.JsonExtension);
+    public string GetPendingPath(string planId) => Path.Combine(PendingDirectory, planId + ApprovalConventions.Storage.JsonExtension);
 
-    public string GetApprovedPath(string planId) => Path.Combine(ApprovedDirectory, planId + K8sConventions.ApprovalStorage.Sha256Extension);
+    public string GetApprovedPath(string planId) => Path.Combine(ApprovedDirectory, planId + ApprovalConventions.Storage.Sha256Extension);
 
-    public string GetAppliedPath(string planId) => Path.Combine(AppliedDirectory, planId + K8sConventions.ApprovalStorage.JsonExtension);
+    public string GetAppliedPath(string planId) => Path.Combine(AppliedDirectory, planId + ApprovalConventions.Storage.JsonExtension);
 
     public static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
     {
@@ -222,6 +242,7 @@ public sealed class ApprovalStore
         Directory.CreateDirectory(PendingDirectory);
         Directory.CreateDirectory(ApprovedDirectory);
         Directory.CreateDirectory(AppliedDirectory);
+        Directory.CreateDirectory(ChallengesDirectory);
     }
 
     private static bool IsSafePlanId(string planId)

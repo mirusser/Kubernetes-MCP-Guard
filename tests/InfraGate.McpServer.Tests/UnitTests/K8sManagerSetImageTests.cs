@@ -1,4 +1,5 @@
 using System.Text.Json;
+using InfraGate.Approvals;
 using InfraGate.McpServer;
 using k8s;
 
@@ -215,7 +216,7 @@ public sealed class K8sManagerSetImageTests
                 SkipTlsVerify = true
             });
 
-        return new ManagerContext(new K8sManager(options, new ApprovalStore(options), client!), root);
+        return new ManagerContext(new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client!), root);
     }
 
     private static async Task<string> ApprovePlanAsync(string approvalRoot, string requestText)

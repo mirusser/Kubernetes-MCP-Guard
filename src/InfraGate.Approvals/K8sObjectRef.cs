@@ -1,4 +1,4 @@
-namespace InfraGate.McpServer;
+namespace InfraGate.Approvals;
 
 public sealed record K8sObjectRef(
     string ApiVersion,

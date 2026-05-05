@@ -1,0 +1,209 @@
+using System.Security.Claims;
+using InfraGate.Approvals;
+using InfraGate.McpGateway;
+using InfraGate.McpGateway.Auth;
+using Microsoft.AspNetCore.Http;
+
+namespace InfraGate.McpGateway.Tests.UnitTests;
+
+public sealed class GatewayApprovalServiceTests
+{
+    private const string Subject = "requester";
+    private const string NamespaceName = "mcp-nginx-demo";
+
+    [Fact]
+    public async Task EnsureApprovedOrCreateChallengeAsync_UnapprovedPlan_ReturnsApprovalUrl()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+
+        var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+
+        Assert.False(result.IsApproved);
+        Assert.Contains("Approval required.", result.Message);
+        Assert.Contains("Approval URL: http://gateway.test/approvals/", result.Message);
+        Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
+    }
+
+    [Fact]
+    public async Task ApproveChallengeAsync_SameSubject_WritesApprovalAndRejectsReuse()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+
+        var approved = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
+        var reused = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
+        var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
+
+        Assert.True(approved.Succeeded);
+        Assert.True(File.Exists(context.Store.GetApprovedPath(plan.Id)));
+        Assert.False(reused.Succeeded);
+        Assert.Contains("already approved", reused.Message);
+        Assert.Equal(McpGatewayConventions.ApprovalChallengeStatuses.Approved, challenge?.Status);
+    }
+
+    [Fact]
+    public async Task EnsureApprovedOrCreateChallengeAsync_ApprovedHashWithoutChallenge_ReturnsApprovalUrl()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var hash = await ApprovalStore.ComputeSha256Async(context.Store.GetPendingPath(plan.Id), CancellationToken.None);
+        Directory.CreateDirectory(Path.GetDirectoryName(context.Store.GetApprovedPath(plan.Id))!);
+        await File.WriteAllTextAsync(context.Store.GetApprovedPath(plan.Id), hash, CancellationToken.None);
+
+        var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+
+        Assert.False(result.IsApproved);
+        Assert.Contains("Approval URL:", result.Message);
+    }
+
+    [Fact]
+    public async Task ApproveChallengeAsync_DifferentSubject_Rejects()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+        SetUser(context.HttpContextAccessor, "other-user");
+
+        var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("same authenticated subject", result.Message);
+        Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
+    }
+
+    [Fact]
+    public async Task ApproveChallengeAsync_PlanHashDrift_Rejects()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+        await File.AppendAllTextAsync(context.Store.GetPendingPath(plan.Id), Environment.NewLine, CancellationToken.None);
+
+        var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("pending plan changed", result.Message);
+        Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
+    }
+
+    [Fact]
+    public async Task ApproveChallengeAsync_ExpiredChallenge_RejectsAndSetsExpiredStatus()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+
+        var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
+        var expired = challenge! with { ExpiresAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1) };
+        await context.Challenges.SaveAsync(expired, CancellationToken.None);
+
+        var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
+        var updated = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("expired", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(McpGatewayConventions.ApprovalChallengeStatuses.Expired, updated?.Status);
+    }
+
+    [Fact]
+    public async Task EnsureApprovedOrCreateChallengeAsync_NonExistentPlanId_ReturnsRefusal()
+    {
+        var context = CreateContext();
+
+        var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(
+            "00000000-0000-0000-0000-000000000000", CancellationToken.None);
+
+        Assert.False(result.IsApproved);
+        Assert.StartsWith("Refused:", result.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DenyChallengeAsync_MarksDeniedWithoutApproving()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+
+        var result = await context.Service.DenyChallengeAsync(challengeId, CancellationToken.None);
+        var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(McpGatewayConventions.ApprovalChallengeStatuses.Denied, challenge?.Status);
+        Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
+    }
+
+    private static async Task<K8sPlan> CreatePendingPlanAsync(ApprovalStore store)
+    {
+        var plan = new K8sPlan(
+            ApprovalStore.NewPlanId(),
+            "scale",
+            NamespaceName,
+            DateTimeOffset.UtcNow,
+            "Scale deployment.",
+            new Dictionary<string, string>
+            {
+                ["name"] = "demo",
+                ["replicas"] = "2"
+            },
+            [new K8sObjectRef("apps/v1", "Deployment", NamespaceName, "demo")],
+            Manifest: null);
+        await store.CreatePlanAsync(plan, CancellationToken.None);
+
+        return plan;
+    }
+
+    private static async Task<string> CreateChallengeAsync(TestContext context, string planId)
+    {
+        var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(planId, CancellationToken.None);
+
+        return result.Message
+            .Split(Environment.NewLine)
+            .Single(line => line.StartsWith("Approval URL:", StringComparison.Ordinal))
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Last();
+    }
+
+    private static TestContext CreateContext()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "infra-gate-approval-tests", Guid.NewGuid().ToString("N"));
+        var storeOptions = new ApprovalStoreOptions(root);
+        var store = new ApprovalStore(storeOptions);
+        var challenges = new ApprovalChallengeStore(storeOptions);
+        var gatewayOptions = new McpGatewayOptions(
+            new GatewayAuthOptions("https://issuer.example.com"),
+            "downstream.csproj",
+            Path.Combine(root, "guardrails"),
+            Directory.GetCurrentDirectory(),
+            root,
+            "http://gateway.test",
+            McpGatewayOptions.DefaultApprovalChallengeTtl);
+        var httpContextAccessor = new HttpContextAccessor();
+        SetUser(httpContextAccessor, Subject);
+
+        return new TestContext(
+            new GatewayApprovalService(store, challenges, gatewayOptions, httpContextAccessor),
+            store,
+            challenges,
+            httpContextAccessor);
+    }
+
+    private static void SetUser(HttpContextAccessor accessor, string subject)
+    {
+        accessor.HttpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(
+            [
+                new Claim(GatewayAuthConventions.Claims.Subject, subject),
+                new Claim(GatewayAuthConventions.Claims.Scope, "mcp:tools")
+            ], "test"))
+        };
+    }
+
+    private sealed record TestContext(
+        GatewayApprovalService Service,
+        ApprovalStore Store,
+        ApprovalChallengeStore Challenges,
+        HttpContextAccessor HttpContextAccessor);
+}

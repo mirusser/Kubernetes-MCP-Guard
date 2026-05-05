@@ -1,30 +1,17 @@
-using System.ComponentModel;
+using InfraGate.Approvals;
 using k8s;
 using k8s.Models;
-using ModelContextProtocol;
-using ModelContextProtocol.Server;
 
 namespace InfraGate.McpServer;
 
 public sealed partial class K8sManager
 {
-    public Task<string> ApplyApprovedPlanAsync(string planId, CancellationToken cancellationToken) =>
-        ApplyApprovedPlanAsync(planId, server: null, cancellationToken);
-
-    public async Task<string> ApplyApprovedPlanAsync(
-        string planId,
-        ModelContextProtocol.Server.McpServer? server,
-        CancellationToken cancellationToken)
+    public async Task<string> ApplyApprovedPlanAsync(string planId, CancellationToken cancellationToken)
     {
         var approved = await approvalStore.GetApprovedPlanAsync(planId, cancellationToken);
-        if (!approved.IsApproved && server is not null)
-        {
-            approved = await RequestServerApprovalAsync(planId, server, cancellationToken);
-        }
-
         if (!approved.IsApproved || approved.Plan is null || approved.Hash is null)
         {
-            await approvalStore.WriteAuditAsync(K8sConventions.AuditEvents.ApplyDenied, new
+            await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApplyDenied, new
             {
                 planId,
                 approved.Message
@@ -36,7 +23,7 @@ public sealed partial class K8sManager
         var applyResult = await ApplyPlanAsync(approved.Plan, cancellationToken);
         if (!applyResult.Succeeded)
         {
-            await approvalStore.WriteAuditAsync(K8sConventions.AuditEvents.ApplyFailed, new
+            await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApplyFailed, new
             {
                 approved.Plan.Id,
                 approved.Plan.Operation,
@@ -65,126 +52,6 @@ public sealed partial class K8sManager
 
                Current status:
                {status}
-               """;
-    }
-
-    private async Task<ApprovedPlanResult> RequestServerApprovalAsync(
-        string planId,
-        ModelContextProtocol.Server.McpServer server,
-        CancellationToken cancellationToken)
-    {
-        var pending = await approvalStore.GetPendingPlanAsync(planId, cancellationToken);
-        if (TryDenyInvalidPendingPlan(pending, out var denied))
-        {
-            return denied;
-        }
-
-        var plan = pending.Plan!;
-        var hash = pending.Hash!;
-        var message = FormatApprovalRequest(plan, hash);
-        var approvalResult = await ElicitPlanApprovalAsync(planId, message, server, cancellationToken);
-        if (approvalResult.DenialMessage is not null)
-        {
-            return ApprovedPlanResult.Denied(approvalResult.DenialMessage);
-        }
-
-        return await ApproveMatchingPlanAsync(planId, hash, approvalResult.Approval!, cancellationToken);
-    }
-
-    private static bool TryDenyInvalidPendingPlan(PendingPlanResult pending, out ApprovedPlanResult denied)
-    {
-        if (IsValidPendingPlan(pending))
-        {
-            denied = ApprovedPlanResult.Denied(string.Empty);
-            return false;
-        }
-
-        denied = ApprovedPlanResult.Denied(pending.Message);
-        return true;
-    }
-
-    private static bool IsValidPendingPlan(PendingPlanResult pending) =>
-        pending.IsPending &&
-        pending.Plan is not null &&
-        pending.Hash is not null;
-
-    private async Task<ApprovedPlanResult> ApproveMatchingPlanAsync(
-        string planId,
-        string hash,
-        PlanApprovalInput approval,
-        CancellationToken cancellationToken)
-    {
-        if (!string.Equals(approval.PlanId, planId, StringComparison.Ordinal))
-        {
-            return ApprovedPlanResult.Denied($"Plan '{planId}' approval did not echo the matching plan id.");
-        }
-
-        return await approvalStore.ApprovePendingPlanAsync(planId, hash, cancellationToken);
-    }
-
-    private static async Task<(PlanApprovalInput? Approval, string? DenialMessage)> ElicitPlanApprovalAsync(
-        string planId,
-        string message,
-        ModelContextProtocol.Server.McpServer server,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await ReadPlanApprovalAsync(planId, message, server, cancellationToken);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or McpException)
-        {
-            return (null,
-                $"Plan '{planId}' requires MCP server approval, but the client could not complete elicitation: {ex.Message}");
-        }
-    }
-
-    private static async Task<(PlanApprovalInput? Approval, string? DenialMessage)> ReadPlanApprovalAsync(
-        string planId,
-        string message,
-        ModelContextProtocol.Server.McpServer server,
-        CancellationToken cancellationToken)
-    {
-        var result = await server.ElicitAsync<PlanApprovalInput>(message, cancellationToken: cancellationToken);
-        if (!result.IsAccepted)
-        {
-            return DeniedPlanApproval(planId);
-        }
-
-        return AcceptedPlanApproval(planId, result.Content);
-    }
-
-    private static (PlanApprovalInput? Approval, string? DenialMessage) AcceptedPlanApproval(
-        string planId,
-        PlanApprovalInput? approval)
-    {
-        if (approval is { Approve: true })
-        {
-            return (approval, null);
-        }
-
-        return DeniedPlanApproval(planId);
-    }
-
-    private static (PlanApprovalInput? Approval, string? DenialMessage) DeniedPlanApproval(string planId) =>
-        (null, $"Plan '{planId}' was not approved through MCP elicitation.");
-
-    private static string FormatApprovalRequest(K8sPlan plan, string hash)
-    {
-        var objects = string.Join(
-            Environment.NewLine,
-            plan.Objects.Select(obj => $"- {obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}"));
-
-        return $"""
-               Approve this Kubernetes plan before applying it.
-
-               PlanId: {plan.Id}
-               Operation: {plan.Operation}
-               Namespace: {plan.Namespace}
-               Description: {plan.Description}
-               Objects:
-               {objects}
-               Plan hash: {hash}
                """;
     }
 
@@ -596,12 +463,4 @@ public sealed partial class K8sManager
             $"{name}: desired={Desired}, updated={Updated}, ready={Ready}, available={Available}";
     }
 
-    private sealed class PlanApprovalInput
-    {
-        [Description("Set to true to approve applying this Kubernetes plan.")]
-        public bool Approve { get; set; }
-
-        [Description("Echo the PlanId from the approval prompt.")]
-        public string PlanId { get; set; } = string.Empty;
-    }
 }

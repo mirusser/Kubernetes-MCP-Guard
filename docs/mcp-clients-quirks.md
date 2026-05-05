@@ -10,7 +10,7 @@ Known behavioural oddities in MCP clients when connecting to InfraGate.
 
 Claude Code CLI stores MCP server configs in `~/.claude.json` scoped by the directory you were in when you ran `claude mcp add`. When you later open a project that lives *inside* that directory, Claude Code inherits the parent-scoped config and uses it instead of the repo's `.mcp.json`.
 
-If you previously added `infra-gate` with a static bearer token (Mode B) from your home directory, that config shadows the OAuth setup you configure in the repo later.
+If you previously added `infra-gate` with a manual `Authorization` header from your home directory, that config shadows the OAuth setup you configure in the repo later.
 
 **Symptom — gateway log:**
 
@@ -18,7 +18,7 @@ If you previously added `infra-gate` with a static bearer token (Mode B) from yo
 Microsoft.IdentityModel.Tokens.SecurityTokenMalformedException: IDX14100: JWT is not well formed, there are no dots (.).
 ```
 
-The gateway is receiving the old opaque static bearer token (e.g. `change-me`) instead of the OAuth JWT. Opaque tokens have no `.` characters, so the JWT parser rejects them immediately before any signature check.
+The gateway is receiving an old opaque bearer value (e.g. `change-me`) instead of the OAuth JWT. Opaque values have no `.` characters, so the JWT parser rejects them immediately before any signature check.
 
 **Symptom — Claude Code:**
 
@@ -31,12 +31,12 @@ Re-authenticating does not help because the stale config is read before the OAut
 
 ### Reproduction steps
 
-1. While in `$HOME` (or any parent of your repo), add the MCP server with a static bearer token:
+1. While in `$HOME` (or any parent of your repo), add the MCP server with a manual Authorization header:
    ```bash
    claude mcp add infra-gate --transport http http://127.0.0.1:3001/mcp \
      --header "Authorization: Bearer change-me"
    ```
-2. Switch to Mode C (OAuth) and put the OAuth config in the repo's `.mcp.json`.
+2. Switch to OAuth and put the OAuth config in the repo's `.mcp.json`.
 3. Run `docker compose -f deploy/mode-c/compose.yaml up --build`.
 4. Open Claude Code inside the repo directory and use `/mcp`.
 5. The gateway receives `Bearer change-me` and rejects it with the "no dots" error.

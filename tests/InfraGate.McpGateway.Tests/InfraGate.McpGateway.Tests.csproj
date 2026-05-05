@@ -22,6 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\InfraGate.Approvals\InfraGate.Approvals.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.McpGateway.Auth\InfraGate.McpGateway.Auth.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.McpGateway\InfraGate.McpGateway.csproj" />
   </ItemGroup>

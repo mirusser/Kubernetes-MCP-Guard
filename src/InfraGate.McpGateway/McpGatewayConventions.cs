@@ -19,6 +19,8 @@ internal static class McpGatewayConventions
         public const string DownstreamAssembly = "INFRA_GATE_DOWNSTREAM_ASSEMBLY";
         public const string DownstreamProject = "INFRA_GATE_DOWNSTREAM_PROJECT";
         public const string GuardAuditRoot = "INFRA_GATE_GUARD_AUDIT_ROOT";
+        public const string ApprovalBaseUrl = "INFRA_GATE_APPROVAL_BASE_URL";
+        public const string ApprovalChallengeTtlSeconds = "INFRA_GATE_APPROVAL_CHALLENGE_TTL_SECONDS";
     }
 
     public static class Paths
@@ -36,7 +38,24 @@ internal static class McpGatewayConventions
         public const string Command = "dotnet";
         public const string RunArgument = "run";
         public const string ProjectArgument = "--project";
-        public const string DeclineAction = "decline";
+    }
+
+    public static class Approvals
+    {
+        public const string PathPrefix = "/approvals";
+        public const string ChallengeRoute = "/approvals/{challengeId}";
+        public const string ApproveRoute = "/approvals/{challengeId}/approve";
+        public const string DenyRoute = "/approvals/{challengeId}/deny";
+        public const string LoginPath = "/approvals/login";
+        public const string RequestVerificationToken = "__RequestVerificationToken";
+    }
+
+    public static class ApprovalChallengeStatuses
+    {
+        public const string Pending = "pending";
+        public const string Approved = "approved";
+        public const string Denied = "denied";
+        public const string Expired = "expired";
     }
 
     public static class ToolNames
@@ -77,8 +96,6 @@ internal static class McpGatewayConventions
 
     public static class GuardrailAudit
     {
-        public const string LocalBearerSubject = "local-bearer-demo";
-        public const string StaticBearerAuthenticationType = "static-bearer";
         public const string OAuthAuthenticationType = "oauth-jwt";
         public const string RequestDirection = "request";
         public const string ResponseDirection = "response";

@@ -52,6 +52,14 @@ For multi-step tasks, state a brief plan:
 3. [Step] → verify: [check]
 ```
 
+## Skills
+
+Reusable skill definitions live in [.agents/skills/](.agents/skills/). Load the relevant `SKILL.md` before starting work that matches its scope:
+
+- [code-standards](.agents/skills/code-standards/SKILL.md): coding conventions for this repo — apply when making, reviewing, or refactoring code.
+- [infragate-mcp-gateway](.agents/skills/infragate-mcp-gateway/SKILL.md): use the local InfraGate MCP gateway for Kubernetes inspection and guarded changes.
+- [verify-readme-docs](.agents/skills/verify-readme-docs/SKILL.md): audit and minimally fix README files against actual code and tests.
+
 ## Solution Map
 
 Start with the root [README.md](README.md) for project intent and high-level architecture. Use [devs-readme.md](docs/devs-readme.md) for setup, local runs, tool contracts, and verification. For project-level context, use these guides:
@@ -59,7 +67,7 @@ Start with the root [README.md](README.md) for project intent and high-level arc
 - Runtime projects:
   - [InfraGate.McpServer](src/InfraGate.McpServer/README.md): stdio MCP server, Kubernetes validation, approval plans, and plan application.
   - [InfraGate.McpGateway](src/InfraGate.McpGateway/README.md): HTTP MCP gateway, downstream stdio client, guardrails, sanitization, and audit logging.
-  - [InfraGate.McpGateway.Auth](src/InfraGate.McpGateway.Auth/README.md): static bearer auth, OAuth JWT auth, MCP protected-resource metadata, and audit identity resolution.
+  - [InfraGate.McpGateway.Auth](src/InfraGate.McpGateway.Auth/README.md): OAuth JWT auth, MCP protected-resource metadata, and audit identity resolution.
   - [InfraGate.DevIssuer](src/InfraGate.DevIssuer/README.md): localhost-only OAuth/OIDC-style issuer for development and Codex login testing.
 - Test projects:
   - [InfraGate.McpServer.Tests](tests/InfraGate.McpServer.Tests/README.md): server unit tests and opt-in Kubernetes integration coverage.

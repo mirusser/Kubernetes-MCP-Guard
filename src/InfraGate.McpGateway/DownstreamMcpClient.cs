@@ -1,6 +1,5 @@
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
-using ModelContextProtocol.Server;
 
 namespace InfraGate.McpGateway;
 
@@ -9,19 +8,16 @@ public sealed class DownstreamMcpClient(McpGatewayOptions options) : IDownstream
     private readonly SemaphoreSlim clientLock = new(1, 1);
     private readonly SemaphoreSlim callLock = new(1, 1);
     private McpClient? client;
-    private McpServer? activeUpstreamServer;
 
     public async Task<string> CallToolAsync(
         string toolName,
         IReadOnlyDictionary<string, object?> arguments,
-        CancellationToken cancellationToken,
-        McpServer? upstreamServer = null)
+        CancellationToken cancellationToken)
     {
         var mcpClient = await GetClientAsync(cancellationToken);
         await callLock.WaitAsync(cancellationToken);
         try
         {
-            activeUpstreamServer = upstreamServer;
             var result = await mcpClient.CallToolAsync(toolName, arguments, cancellationToken: cancellationToken);
 
             return string.Join(
@@ -30,7 +26,6 @@ public sealed class DownstreamMcpClient(McpGatewayOptions options) : IDownstream
         }
         finally
         {
-            activeUpstreamServer = null;
             callLock.Release();
         }
     }
@@ -63,23 +58,7 @@ public sealed class DownstreamMcpClient(McpGatewayOptions options) : IDownstream
 
             var transport = new StdioClientTransport(CreateTransportOptions());
 
-            client = await McpClient.CreateAsync(
-                transport,
-                new McpClientOptions
-                {
-                    Capabilities = new ClientCapabilities
-                    {
-                        Elicitation = new ElicitationCapability
-                        {
-                            Form = new FormElicitationCapability()
-                        }
-                    },
-                    Handlers = new McpClientHandlers
-                    {
-                        ElicitationHandler = HandleElicitationAsync
-                    }
-                },
-                cancellationToken: cancellationToken);
+            client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken);
 
             return client;
         }
@@ -109,22 +88,4 @@ public sealed class DownstreamMcpClient(McpGatewayOptions options) : IDownstream
         };
     }
 
-    private async ValueTask<ElicitResult> HandleElicitationAsync(
-        ElicitRequestParams? requestParams,
-        CancellationToken cancellationToken)
-    {
-        if (activeUpstreamServer is null || requestParams is null)
-        {
-            return new ElicitResult { Action = McpGatewayConventions.DownstreamProcess.DeclineAction };
-        }
-
-        try
-        {
-            return await activeUpstreamServer.ElicitAsync(requestParams, cancellationToken);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or ModelContextProtocol.McpException)
-        {
-            return new ElicitResult { Action = McpGatewayConventions.DownstreamProcess.DeclineAction };
-        }
-    }
 }

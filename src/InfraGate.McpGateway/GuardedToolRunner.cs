@@ -1,6 +1,5 @@
 using System.Text.RegularExpressions;
 using InfraGate.McpGateway.Auth;
-using ModelContextProtocol.Server;
 
 namespace InfraGate.McpGateway;
 
@@ -39,15 +38,6 @@ public sealed partial class GuardedToolRunner
         IReadOnlyDictionary<string, object?> arguments,
         CancellationToken cancellationToken)
     {
-        return await CallAsync(toolName, arguments, upstreamServer: null, cancellationToken);
-    }
-
-    public async Task<string> CallAsync(
-        string toolName,
-        IReadOnlyDictionary<string, object?> arguments,
-        McpServer? upstreamServer,
-        CancellationToken cancellationToken)
-    {
         var auditIdentity = GetAuditIdentity();
         var requestScan = guard.ScanArguments(arguments);
         if (requestScan.HasFindings)
@@ -64,7 +54,7 @@ public sealed partial class GuardedToolRunner
                 cancellationToken);
         }
 
-        var downstreamText = await downstream.CallToolAsync(toolName, arguments, cancellationToken, upstreamServer);
+        var downstreamText = await downstream.CallToolAsync(toolName, arguments, cancellationToken);
         var response = guard.SanitizeResponse(downstreamText);
         if (response.HasFindings || response.ManifestRedacted)
         {

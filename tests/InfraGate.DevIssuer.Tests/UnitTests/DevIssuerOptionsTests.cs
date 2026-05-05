@@ -12,7 +12,9 @@ public sealed class DevIssuerOptionsTests
             (DevIssuerConventions.EnvironmentVariables.Resource, null),
             (DevIssuerConventions.EnvironmentVariables.Scope, null),
             (DevIssuerConventions.EnvironmentVariables.Subject, null),
-            (DevIssuerConventions.EnvironmentVariables.InternalEndpointBase, null));
+            (DevIssuerConventions.EnvironmentVariables.InternalEndpointBase, null),
+            (DevIssuerConventions.EnvironmentVariables.ApprovalClientId, null),
+            (DevIssuerConventions.EnvironmentVariables.ApprovalRedirectUri, null));
 
         var options = DevIssuerOptions.FromEnvironment();
 
@@ -21,6 +23,8 @@ public sealed class DevIssuerOptionsTests
         Assert.Equal(DevIssuerConventions.DefaultScope, options.Scope);
         Assert.Equal(DevIssuerConventions.DefaultSubject, options.Subject);
         Assert.Null(options.InternalEndpointBase);
+        Assert.Equal(DevIssuerConventions.DefaultApprovalClientId, options.ApprovalClientId);
+        Assert.Equal(DevIssuerConventions.DefaultApprovalRedirectUri, options.ApprovalRedirectUri);
     }
 
     [Fact]
@@ -31,7 +35,9 @@ public sealed class DevIssuerOptionsTests
             (DevIssuerConventions.EnvironmentVariables.Resource, "http://127.0.0.1:4001/mcp"),
             (DevIssuerConventions.EnvironmentVariables.Scope, "mcp:tools mcp:admin"),
             (DevIssuerConventions.EnvironmentVariables.Subject, "dev-user"),
-            (DevIssuerConventions.EnvironmentVariables.InternalEndpointBase, "http://devissuer:3011"));
+            (DevIssuerConventions.EnvironmentVariables.InternalEndpointBase, "http://devissuer:3011"),
+            (DevIssuerConventions.EnvironmentVariables.ApprovalClientId, "approval-client"),
+            (DevIssuerConventions.EnvironmentVariables.ApprovalRedirectUri, "http://127.0.0.1:4001/approvals/oauth/callback"));
 
         var options = DevIssuerOptions.FromEnvironment();
 
@@ -40,6 +46,8 @@ public sealed class DevIssuerOptionsTests
         Assert.Equal("mcp:tools mcp:admin", options.Scope);
         Assert.Equal("dev-user", options.Subject);
         Assert.Equal("http://devissuer:3011", options.InternalEndpointBase);
+        Assert.Equal("approval-client", options.ApprovalClientId);
+        Assert.Equal("http://127.0.0.1:4001/approvals/oauth/callback", options.ApprovalRedirectUri);
     }
 
     private sealed class EnvironmentVariableScope : IDisposable

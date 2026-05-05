@@ -1,4 +1,5 @@
 using System.Text.Json;
+using InfraGate.Approvals;
 using InfraGate.McpServer;
 using k8s;
 
@@ -299,7 +300,7 @@ public sealed class K8sManagerObservabilityTests
                 SkipTlsVerify = true
             });
 
-        return new K8sManager(options, new ApprovalStore(options), client!);
+        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client!);
     }
 
 }

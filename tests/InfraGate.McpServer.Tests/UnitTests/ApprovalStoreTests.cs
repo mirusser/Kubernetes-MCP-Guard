@@ -1,3 +1,4 @@
+using InfraGate.Approvals;
 using InfraGate.McpServer;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
@@ -78,12 +79,24 @@ public sealed class ApprovalStoreTests
         Assert.False(File.Exists(created.ApprovedPath));
     }
 
+    [Fact]
+    public async Task ApprovePendingPlanAsync_DeniesWrongHash()
+    {
+        var store = CreateStore();
+        var plan = CreatePlan();
+        var created = await store.CreatePlanAsync(plan, CancellationToken.None);
+
+        var approved = await store.ApprovePendingPlanAsync(created.Plan.Id, "0000000000000000", CancellationToken.None);
+
+        Assert.False(approved.IsApproved);
+        Assert.Contains("changed during approval", approved.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(created.ApprovedPath));
+    }
+
     private static ApprovalStore CreateStore()
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
-        return new ApprovalStore(new K8sMcpOptions(
-            new HashSet<string>(StringComparer.Ordinal) { K8sMcpOptions.DefaultNamespace },
-            root));
+        return new ApprovalStore(new ApprovalStoreOptions(root));
     }
 
     private static K8sPlan CreatePlan() =>

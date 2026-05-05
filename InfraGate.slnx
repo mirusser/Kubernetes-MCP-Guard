@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj" />
+    <Project Path="src/InfraGate.Approvals/InfraGate.Approvals.csproj" />
     <Project Path="src/InfraGate.McpGateway.Auth/InfraGate.McpGateway.Auth.csproj" />
     <Project Path="src/InfraGate.McpGateway/InfraGate.McpGateway.csproj" />
     <Project Path="src/InfraGate.McpServer/InfraGate.McpServer.csproj" />

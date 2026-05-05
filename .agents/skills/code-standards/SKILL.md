@@ -68,3 +68,4 @@ Keeping multiple types in one file is acceptable when the extra types are tiny i
 - Prefer constructor injection for dependencies and options records for configuration.
 - Keep DTOs/contracts separate from behavior-heavy services when they grow.
 - Name tests by behavior using `Method_State_ExpectedResult`.
+- Use primary constructors where applicable

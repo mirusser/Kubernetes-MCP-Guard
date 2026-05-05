@@ -1,4 +1,5 @@
 using System.Text.Json;
+using InfraGate.Approvals;
 using InfraGate.McpServer;
 using k8s;
 
@@ -133,7 +134,7 @@ public sealed class K8sManagerApplyTests
         var options = new K8sMcpOptions(
             new HashSet<string>(StringComparer.Ordinal) { DemoNamespace },
             root);
-        var approvalStore = new ApprovalStore(options);
+        var approvalStore = new ApprovalStore(new ApprovalStoreOptions(root));
         var client = api is null
             ? null
             : new Kubernetes(new KubernetesClientConfiguration

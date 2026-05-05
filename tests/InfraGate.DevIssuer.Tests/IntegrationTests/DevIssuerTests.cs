@@ -103,6 +103,25 @@ public sealed class DevIssuerTests
     }
 
     [Fact]
+    public async Task AuthorizationCodeFlow_AcceptsPreconfiguredApprovalUiClient()
+    {
+        using var server = CreateIssuerServer();
+        using var client = server.CreateClient();
+        var code = await AuthorizeAsync(
+            client,
+            DevIssuerConventions.DefaultApprovalClientId,
+            DevIssuerConventions.DefaultApprovalRedirectUri);
+
+        var accessToken = await RequestTokenAsync(
+            client,
+            DevIssuerConventions.DefaultApprovalClientId,
+            code,
+            DevIssuerConventions.DefaultApprovalRedirectUri);
+
+        Assert.False(string.IsNullOrWhiteSpace(accessToken));
+    }
+
+    [Fact]
     public async Task Token_RejectsReusedAuthorizationCode()
     {
         using var server = CreateIssuerServer();
@@ -210,10 +229,9 @@ public sealed class DevIssuerTests
     private static TestServer CreateGatewayServer(TestServer issuerServer)
     {
         var options = new GatewayAuthOptions(
-            BearerToken: null,
-            OAuthAuthority: Issuer,
-            OAuthResource: Resource,
-            OAuthScope: Scope,
+            Issuer,
+            Resource,
+            Scope,
             OAuthRequireHttpsMetadata: false);
 
         return new TestServer(new WebHostBuilder()
@@ -254,13 +272,16 @@ public sealed class DevIssuerTests
         return json.GetProperty(DevIssuerConventions.Json.ClientId).GetString()!;
     }
 
-    private static async Task<string> AuthorizeAsync(HttpClient client, string clientId)
+    private static Task<string> AuthorizeAsync(HttpClient client, string clientId) =>
+        AuthorizeAsync(client, clientId, RedirectUri);
+
+    private static async Task<string> AuthorizeAsync(HttpClient client, string clientId, string redirectUri)
     {
-        var response = await client.GetAsync(AuthorizeUrl(clientId, Scope));
+        var response = await client.GetAsync(AuthorizeUrl(clientId, Scope, redirectUri));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.NotNull(response.Headers.Location);
-        Assert.Equal(RedirectUri, response.Headers.Location!.GetLeftPart(UriPartial.Path));
+        Assert.Equal(redirectUri, response.Headers.Location!.GetLeftPart(UriPartial.Path));
 
         var query = QueryHelpers.ParseQuery(response.Headers.Location.Query);
         Assert.Equal("state-1", query[DevIssuerConventions.Parameters.State].ToString());
@@ -268,13 +289,16 @@ public sealed class DevIssuerTests
         return query[DevIssuerConventions.Parameters.Code].ToString();
     }
 
-    private static string AuthorizeUrl(string clientId, string scope)
+    private static string AuthorizeUrl(string clientId, string scope) =>
+        AuthorizeUrl(clientId, scope, RedirectUri);
+
+    private static string AuthorizeUrl(string clientId, string scope, string redirectUri)
     {
         var query = new Dictionary<string, string?>
         {
             [DevIssuerConventions.Parameters.ResponseType] = DevIssuerConventions.OAuth.CodeResponseType,
             [DevIssuerConventions.Parameters.ClientId] = clientId,
-            [DevIssuerConventions.Parameters.RedirectUri] = RedirectUri,
+            [DevIssuerConventions.Parameters.RedirectUri] = redirectUri,
             [DevIssuerConventions.Parameters.CodeChallenge] = CodeChallenge(CodeVerifier),
             [DevIssuerConventions.Parameters.CodeChallengeMethod] = DevIssuerConventions.OAuth.S256CodeChallengeMethod,
             [DevIssuerConventions.Parameters.Resource] = Resource,
@@ -285,9 +309,12 @@ public sealed class DevIssuerTests
         return QueryHelpers.AddQueryString(DevIssuerConventions.Endpoints.Authorize, query);
     }
 
-    private static async Task<string> RequestTokenAsync(HttpClient client, string clientId, string code)
+    private static Task<string> RequestTokenAsync(HttpClient client, string clientId, string code) =>
+        RequestTokenAsync(client, clientId, code, RedirectUri);
+
+    private static async Task<string> RequestTokenAsync(HttpClient client, string clientId, string code, string redirectUri)
     {
-        var response = await PostTokenAsync(client, clientId, code, CodeVerifier, Resource);
+        var response = await PostTokenAsync(client, clientId, code, CodeVerifier, Resource, redirectUri);
 
         response.EnsureSuccessStatusCode();
         var json = await ReadJsonAsync(response);
@@ -303,13 +330,14 @@ public sealed class DevIssuerTests
         string clientId,
         string code,
         string codeVerifier,
-        string? resource)
+        string? resource,
+        string redirectUri = RedirectUri)
     {
         var form = new Dictionary<string, string>
         {
             [DevIssuerConventions.Parameters.GrantType] = DevIssuerConventions.OAuth.AuthorizationCodeGrantType,
             [DevIssuerConventions.Parameters.Code] = code,
-            [DevIssuerConventions.Parameters.RedirectUri] = RedirectUri,
+            [DevIssuerConventions.Parameters.RedirectUri] = redirectUri,
             [DevIssuerConventions.Parameters.ClientId] = clientId,
             [DevIssuerConventions.Parameters.CodeVerifier] = codeVerifier
         };

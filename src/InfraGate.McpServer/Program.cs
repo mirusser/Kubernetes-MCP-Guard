@@ -1,3 +1,4 @@
+using InfraGate.Approvals;
 using InfraGate.McpServer;
 using k8s;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,7 +13,9 @@ builder.Logging.AddConsole(options =>
     options.LogToStandardErrorThreshold = LogLevel.Trace;
 });
 
-builder.Services.AddSingleton(K8sMcpOptions.FromEnvironment());
+var options = K8sMcpOptions.FromEnvironment();
+builder.Services.AddSingleton(options);
+builder.Services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
 builder.Services.AddSingleton<ApprovalStore>();
 builder.Services.AddSingleton<IKubernetes>(_ =>
 {
