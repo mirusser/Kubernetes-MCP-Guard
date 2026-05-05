@@ -5,17 +5,18 @@ namespace InfraGate.McpGateway.Tests.UnitTests;
 
 public sealed class McpGatewayOptionsTests
 {
-    private const string BearerToken = "secret";
+    private const string OAuthAuthority = "https://issuer.example.com";
     private const string DownstreamAssembly = "/app/server/InfraGate.McpServer.dll";
     private const string DownstreamProject = "server.csproj";
     private const string GuardAuditRoot = "guardrails";
     private const string WorkingDirectory = "/repo";
+    private const string ApprovalRoot = "approvals";
 
     [Fact]
     public void FromEnvironment_UsesDownstreamAssembly_WhenSet()
     {
         using var environment = EnvironmentVariableScope.Set(
-            (GatewayAuthConventions.EnvironmentVariables.BearerToken, BearerToken),
+            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
             (McpGatewayConventions.EnvironmentVariables.DownstreamAssembly, DownstreamAssembly));
 
         var options = McpGatewayOptions.FromEnvironment();
@@ -27,7 +28,7 @@ public sealed class McpGatewayOptionsTests
     public void FromEnvironment_LeavesDownstreamAssemblyNull_WhenUnset()
     {
         using var environment = EnvironmentVariableScope.Set(
-            (GatewayAuthConventions.EnvironmentVariables.BearerToken, BearerToken),
+            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
             (McpGatewayConventions.EnvironmentVariables.DownstreamAssembly, null));
 
         var options = McpGatewayOptions.FromEnvironment();
@@ -38,11 +39,7 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void CreateTransportOptions_UsesProjectRunArguments_WhenAssemblyUnset()
     {
-        var client = new DownstreamMcpClient(new McpGatewayOptions(
-            new GatewayAuthOptions(BearerToken),
-            DownstreamProject,
-            GuardAuditRoot,
-            WorkingDirectory));
+        var client = new DownstreamMcpClient(CreateOptions());
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -60,12 +57,7 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void CreateTransportOptions_UsesAssemblyArgument_WhenAssemblySet()
     {
-        var client = new DownstreamMcpClient(new McpGatewayOptions(
-            new GatewayAuthOptions(BearerToken),
-            DownstreamProject,
-            GuardAuditRoot,
-            WorkingDirectory,
-            DownstreamAssembly));
+        var client = new DownstreamMcpClient(CreateOptions(DownstreamAssembly));
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -79,12 +71,7 @@ public sealed class McpGatewayOptionsTests
     [InlineData("  ")]
     public void CreateTransportOptions_FallsBackToProject_WhenAssemblyIsEmptyOrWhitespace(string assembly)
     {
-        var client = new DownstreamMcpClient(new McpGatewayOptions(
-            new GatewayAuthOptions(BearerToken),
-            DownstreamProject,
-            GuardAuditRoot,
-            WorkingDirectory,
-            assembly));
+        var client = new DownstreamMcpClient(CreateOptions(assembly));
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -96,6 +83,17 @@ public sealed class McpGatewayOptionsTests
             ],
             transportOptions.Arguments);
     }
+
+    private static McpGatewayOptions CreateOptions(string? downstreamAssembly = null) =>
+        new(
+            new GatewayAuthOptions(OAuthAuthority),
+            DownstreamProject,
+            GuardAuditRoot,
+            WorkingDirectory,
+            ApprovalRoot,
+            ApprovalBaseUrl: null,
+            McpGatewayOptions.DefaultApprovalChallengeTtl,
+            downstreamAssembly);
 
     private sealed class EnvironmentVariableScope : IDisposable
     {

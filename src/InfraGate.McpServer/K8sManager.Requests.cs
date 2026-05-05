@@ -1,3 +1,4 @@
+using InfraGate.Approvals;
 using k8s;
 using k8s.Models;
 
@@ -100,7 +101,7 @@ public sealed partial class K8sManager
             return Task.FromResult(validation);
         }
 
-        var restartedAtUtc = DateTimeOffset.UtcNow.ToString(K8sConventions.DateTimeFormats.RoundTrip);
+        var restartedAtUtc = DateTimeOffset.UtcNow.ToString(ApprovalConventions.DateTimeFormats.RoundTrip);
         var plan = CreatePlan(
             operation: K8sConventions.PlanOperations.Restart,
             namespaceName,
@@ -166,7 +167,7 @@ public sealed partial class K8sManager
 
         return $"""
                PlanId: {result.Plan.Id}
-               Status: pending MCP server approval
+               Status: pending Gateway approval
                Operation: {result.Plan.Operation}
                Namespace: {result.Plan.Namespace}
                Objects:
@@ -175,7 +176,7 @@ public sealed partial class K8sManager
                Plan hash: {result.Hash}
 
                Next step:
-                 Call {K8sConventions.ToolNames.ApplyApprovedPlan} with {K8sConventions.ToolArguments.PlanId} '{result.Plan.Id}'. The MCP server will request user approval before applying it.
+                 Call {K8sConventions.ToolNames.ApplyApprovedPlan} with {K8sConventions.ToolArguments.PlanId} '{result.Plan.Id}'. The Gateway will return a browser approval URL before applying it.
                {manifestBlock}
                """;
     }

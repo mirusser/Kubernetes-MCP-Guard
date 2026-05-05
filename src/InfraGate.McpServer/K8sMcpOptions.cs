@@ -1,3 +1,5 @@
+using InfraGate.Approvals;
+
 namespace InfraGate.McpServer;
 
 public sealed record K8sMcpOptions(IReadOnlySet<string> AllowedNamespaces, string ApprovalRoot)
@@ -12,7 +14,7 @@ public sealed record K8sMcpOptions(IReadOnlySet<string> AllowedNamespaces, strin
         var approvalRoot = Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.ApprovalRoot);
         if (string.IsNullOrWhiteSpace(approvalRoot))
         {
-            approvalRoot = Path.Combine(Directory.GetCurrentDirectory(), K8sConventions.ApprovalStorage.DefaultRootDirectory);
+            approvalRoot = Path.Combine(Directory.GetCurrentDirectory(), ApprovalConventions.Storage.DefaultRootDirectory);
         }
 
         var allowedNamespaces = ParseAllowedNamespaces(

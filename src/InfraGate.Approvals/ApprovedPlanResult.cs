@@ -1,4 +1,4 @@
-namespace InfraGate.McpServer;
+namespace InfraGate.Approvals;
 
 public sealed record ApprovedPlanResult(bool IsApproved, K8sPlan? Plan, string? Hash, string Message)
 {

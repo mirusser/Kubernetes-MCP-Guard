@@ -12,15 +12,12 @@ Use the InfraGate MCP gateway as the preferred interface to the demo Kubernetes 
 ## Defaults
 
 - HTTP MCP endpoint: `http://127.0.0.1:3001/mcp`
-- Bearer auth: `Authorization: Bearer <token>`
-- Demo token from `README.md`: `change-me`, via `INFRA_GATE_GATEWAY_BEARER_TOKEN`
+- Auth: OAuth JWT Bearer (obtain a token from the dev issuer; see Starting The Gateway below)
 - Dev OAuth issuer: `http://127.0.0.1:3011`
 - OAuth resource/scope: `http://127.0.0.1:3001/mcp`, `mcp:tools`
 - Default allowed namespace: `mcp-nginx-demo`
 - Approval root: `.mcp-approvals`
 - Guardrail audit root: `.mcp-guardrails`
-
-Prefer the token supplied by the user or environment. Treat `change-me` as the local demo default, not a production secret.
 
 ## Connection
 
@@ -37,7 +34,7 @@ If checking the raw HTTP endpoint, remember it is session-based MCP:
 
 ```bash
 curl -i --max-time 5 \
-  -H "Authorization: Bearer ${INFRA_GATE_GATEWAY_BEARER_TOKEN:-change-me}" \
+  -H "Authorization: Bearer ${INFRA_GATE_JWT_TOKEN}" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"codex-curl","version":"1.0"}}}' \
@@ -64,10 +61,11 @@ Use the gateway's plan-first flow for every Kubernetes mutation:
 1. Call a `request_*` tool to create a pending plan.
 2. Tell the user the `PlanId` and affected objects when returned.
 3. Call `apply_approved_plan` with the exact `PlanId`.
-4. Let the MCP server request user approval through MCP elicitation before applying.
-5. Verify with `get_k8s_status`.
+4. The gateway returns an approval URL. Open it in a browser, authenticate with OAuth, and approve the plan there.
+5. Call `apply_approved_plan` again with the same `PlanId` — the gateway forwards to the server and applies.
+6. Verify with `get_k8s_status`.
 
-Do not try to bypass the approval step. OAuth login authenticates access to the gateway, but Kubernetes mutation still requires MCP elicitation approval in `apply_approved_plan`.
+Do not try to bypass the approval step. OAuth login authenticates access to the gateway, but Kubernetes mutation also requires browser-based out-of-band approval via the approval URL returned by `apply_approved_plan`.
 
 Supported mutation operations:
 
@@ -83,7 +81,6 @@ If the user asks to run the gateway locally, use the repo README workflow:
 
 ```bash
 export REPO_ROOT="$(pwd)"
-export INFRA_GATE_GATEWAY_BEARER_TOKEN="change-me"
 export INFRA_GATE_DOWNSTREAM_PROJECT="${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
 export KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config"
 export K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals"

@@ -1,3 +1,5 @@
+using InfraGate.Approvals;
+
 namespace InfraGate.McpServer;
 
 internal static class K8sConventions
@@ -15,40 +17,8 @@ internal static class K8sConventions
     public static class EnvironmentVariables
     {
         public const string KubeConfig = "KUBECONFIG";
-        public const string ApprovalRoot = "K8S_MCP_APPROVAL_ROOT";
+        public const string ApprovalRoot = ApprovalConventions.EnvironmentVariables.ApprovalRoot;
         public const string AllowedNamespaces = "K8S_MCP_ALLOWED_NAMESPACES";
-    }
-
-    public static class ApprovalStorage
-    {
-        public const string PendingDirectory = "pending";
-        public const string ApprovedDirectory = "approved";
-        public const string AppliedDirectory = "applied";
-        public const string AuditFileName = "audit.jsonl";
-        public const string DefaultRootDirectory = ".mcp-approvals";
-        public const string JsonExtension = ".json";
-        public const string Sha256Extension = ".sha256";
-    }
-
-    public static class AuditEvents
-    {
-        public const string PlanRequested = "plan_requested";
-        public const string ApprovalHashMismatch = "approval_hash_mismatch";
-        public const string PlanApproved = "plan_approved";
-        public const string PlanApplied = "plan_applied";
-        public const string ApplyDenied = "apply_denied";
-        public const string ApplyFailed = "apply_failed";
-    }
-
-    public static class ApprovalSources
-    {
-        public const string McpElicitation = "mcp_elicitation";
-    }
-
-    public static class DateTimeFormats
-    {
-        public const string PlanIdTimestamp = "yyyyMMddHHmmss";
-        public const string RoundTrip = "O";
     }
 
     public static class PlanOperations

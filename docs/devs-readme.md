@@ -5,10 +5,10 @@ This is the developer/runbook guide. Unless noted otherwise, run commands from t
 This repo contains a narrow Kubernetes governance slice for the larger Open WebUI/LibreChat + remote MCP idea:
 
 - `src/InfraGate.McpServer` is a .NET 10 stdio Kubernetes MCP server using the official C# MCP SDK.
-- `src/InfraGate.McpGateway` is a local HTTP MCP gateway that fronts the MCP server with OAuth/static bearer auth and warn+redact prompt-injection guardrails.
+- `src/InfraGate.McpGateway` is a local HTTP MCP gateway that fronts the MCP server with OAuth auth, browser approval pages, and warn+redact prompt-injection guardrails.
 - `src/InfraGate.DevIssuer` is a dev-only localhost OAuth issuer with OIDC-style discovery metadata for testing Codex MCP OAuth login without an external provider.
 - The MCP server uses the Kubernetes API through `KubernetesClient`, not runtime `kubectl` process execution.
-- Mutating actions are two-step: request a plan through MCP, then call apply so the MCP server can request user approval before changing Kubernetes.
+- Mutating actions are two-step: request a plan through MCP, then approve it in the Gateway browser UI before changing Kubernetes.
 - The server allows only configured namespaces. Manifest apply/delete is limited to `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap`; other mutating tools are narrow Deployment operations.
 - Read-only observability tools expose bounded Events, Pod logs, focused resource summaries, and diagnostics without exposing Secret values, ConfigMap values, raw manifests, exec, attach, or port-forward.
 - `deploy/minikube/rbac.yaml` creates a namespace-scoped ServiceAccount, Role, and RoleBinding.
@@ -70,9 +70,9 @@ kubectl --kubeconfig .kube/mcp-nginx-demo.config auth can-i create deployments -
 
 Expected: `yes`, `yes`, `yes`, `yes`, `no`, then `no`.
 
-### Run containerized Mode C
+### Run Containerized OAuth
 
-This is the recommended local OAuth path. See [Mode C in the setup guide](setup-guide.md#mode-c--http-gateway--oauth-devissuer) for full details, Codex CLI config, and tradeoff notes.
+This is the recommended local OAuth path. See [Mode B in the setup guide](setup-guide.md#mode-b--http-gateway--oauth-devissuer) for full details, Codex CLI config, and tradeoff notes.
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
@@ -102,20 +102,7 @@ Images built: `kubernetes-mcp-guard-devissuer`, `kubernetes-mcp-guard-gateway`.
 
 ### Run the HTTP MCP gateway
 
-The source-run gateway listens on `http://127.0.0.1:3001/mcp` by default, accepts either OAuth JWT access tokens or the local static bearer token, and starts the downstream stdio server itself.
-
-For the local static bearer-token demo:
-
-```bash
-export REPO_ROOT="$(pwd)"
-export INFRA_GATE_GATEWAY_BEARER_TOKEN="change-me"
-export INFRA_GATE_DOWNSTREAM_PROJECT="${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
-export KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config"
-export K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals"
-export K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo
-
-dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
-```
+The source-run gateway listens on `http://127.0.0.1:3001/mcp` by default, accepts OAuth JWT access tokens, serves browser approval pages under `/approvals`, and starts the downstream stdio server itself.
 
 For local OAuth/Codex login without an external issuer, run the repo-local dev issuer in a separate terminal:
 
@@ -133,6 +120,10 @@ export INFRA_GATE_OAUTH_AUTHORITY="http://127.0.0.1:3011"
 export INFRA_GATE_OAUTH_RESOURCE="http://127.0.0.1:3001/mcp"
 export INFRA_GATE_OAUTH_SCOPE="mcp:tools"
 export INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false
+export INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID="infra-gate-approval-ui"
+export INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT="http://127.0.0.1:3011/authorize"
+export INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT="http://127.0.0.1:3011/token"
+export INFRA_GATE_APPROVAL_BASE_URL="http://127.0.0.1:3001"
 export INFRA_GATE_DOWNSTREAM_PROJECT="${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
 export KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config"
 export K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals"
@@ -141,7 +132,7 @@ export K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo
 dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
 ```
 
-Set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` only for a localhost-only issuer during development. If `INFRA_GATE_GATEWAY_BEARER_TOKEN` is also set, the static token remains accepted for local demos while OAuth discovery is advertised to clients.
+Set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` only for a localhost-only issuer during development.
 
 For an external OAuth/OIDC issuer, use its issuer URL for `INFRA_GATE_OAUTH_AUTHORITY`. The gateway remains a resource server only; external issuer setup, users, clients, login, consent, PKCE policy, and token issuance stay outside the gateway.
 
@@ -153,6 +144,8 @@ export INFRA_GATE_DEV_ISSUER_RESOURCE="http://127.0.0.1:3001/mcp"
 export INFRA_GATE_DEV_ISSUER_SCOPE="mcp:tools"
 export INFRA_GATE_DEV_ISSUER_SUBJECT="infra-gate-dev-user"
 export INFRA_GATE_DEV_ISSUER_INTERNAL_ENDPOINT_BASE="http://devissuer:3011"
+export INFRA_GATE_DEV_ISSUER_APPROVAL_CLIENT_ID="infra-gate-approval-ui"
+export INFRA_GATE_DEV_ISSUER_APPROVAL_REDIRECT_URI="http://127.0.0.1:3001/approvals/oauth/callback"
 ```
 
 Use `ASPNETCORE_URLS` to bind the dev issuer to a different URL, and keep `INFRA_GATE_DEV_ISSUER_ISSUER` aligned with the URL clients use for discovery.
@@ -244,9 +237,11 @@ Approval flow:
 
 1. Ask the MCP server for a plan with `request_apply_manifest`, `request_scale_deployment`, etc.
 2. Call `apply_approved_plan` with the returned `PlanId`.
-3. The MCP server requests user approval through MCP elicitation before it writes the approval hash and applies anything.
+3. The Gateway returns an approval URL instead of applying.
+4. Open the URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan, and approve or deny it.
+5. Call `apply_approved_plan` again. The Gateway forwards only after the approved hash exists and still matches.
 
-The approval prompt requires an MCP client that supports elicitation. OAuth login authenticates the client to the gateway, but it does not replace `apply_approved_plan` approval. Codex CLI has been verified with this repo and routes elicitation prompts to its TUI for user input. Other clients vary; the community-maintained MCP client list can be filtered by `Elicitation`: <https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/docs/clients.mdx>.
+The MCP client never submits approval content. Approval challenges are bound to the plan id, current plan hash, requester subject, expiry, and single-use status.
 
 The approval file stores the SHA-256 hash of the pending plan. If the pending plan changes after approval, the MCP server refuses to apply it. Audit events are written under `.mcp-approvals/audit.jsonl`.
 

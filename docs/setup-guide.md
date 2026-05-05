@@ -25,10 +25,10 @@ graph LR
 |---|---|---|
 | `InfraGate.McpServer` | Kubernetes MCP server (tools, plans, approvals) | stdio child process |
 | `InfraGate.McpGateway` | HTTP MCP endpoint + guardrails + audit | HTTP server `:3001` |
-| `InfraGate.McpGateway.Auth` | Auth library (static bearer + OAuth JWT) | Linked into Gateway |
+| `InfraGate.McpGateway.Auth` | Auth library (OAuth JWT + browser approval cookie) | Linked into Gateway |
 | `InfraGate.DevIssuer` | Dev-only OAuth/OIDC issuer | HTTP server `:3011` (optional) |
 
-In source mode all three processes run separately. In containerized Mode C, the gateway and server share a single container (the gateway launches the server as a stdio subprocess), so only two containers run: `mcp-gateway` and `devissuer`.
+In source mode all three processes run separately. In the containerized OAuth mode, the gateway and server share a single container (the gateway launches the server as a stdio subprocess), so only two containers run: `mcp-gateway` and `devissuer`.
 
 ---
 
@@ -65,7 +65,7 @@ kubectl cluster-info
 
 ### 3. Docker Compose
 
-The containerized Mode C path uses Docker Compose:
+The containerized OAuth path uses Docker Compose:
 
 ```bash
 docker compose version
@@ -182,48 +182,7 @@ codex mcp add infra-gate \
 
 ---
 
-### Mode B — HTTP Gateway + Static Bearer Token
-
-Use this when you want the full HTTP MCP endpoint with guardrails but don't need OAuth.
-
-**Single terminal — Gateway spawns the Server process automatically:**
-
-```bash
-export REPO_ROOT="$(pwd)"
-export INFRA_GATE_GATEWAY_BEARER_TOKEN="change-me"
-export INFRA_GATE_DOWNSTREAM_PROJECT="${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
-export KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config"
-export K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals"
-export K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo
-
-dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
-```
-
-**Endpoint:** `http://127.0.0.1:3001/mcp`
-**Auth:** `Authorization: Bearer change-me`
-
-**Claude Code config** (`.mcp.json` in repo root, or add via `claude mcp add`):
-
-```json
-{
-  "mcpServers": {
-    "infra-gate": {
-      "type": "http",
-      "url": "http://127.0.0.1:3001/mcp",
-      "headers": {
-        "Authorization": "Bearer change-me"
-      }
-    }
-  }
-}
-```
-
-> [!TIP]
-> The gateway starts the stdio server as a child process via `INFRA_GATE_DOWNSTREAM_PROJECT` — you don't need to run the server separately.
-
----
-
-### Mode C — HTTP Gateway + OAuth (DevIssuer)
+### Mode B — HTTP Gateway + OAuth (DevIssuer)
 
 Use this for the full OAuth/OIDC flow (e.g., testing Codex CLI `mcp login`). The recommended local path is Docker Compose: the gateway and dev issuer run on a Docker bridge network, and the gateway launches the Kubernetes MCP server as a private stdio subprocess.
 
@@ -268,14 +227,14 @@ codex mcp login infra-gate
 
 Then run `/mcp` inside Claude Code to trigger the OAuth login flow.
 
-The Compose path is OAuth-only. It uses `INFRA_GATE_OAUTH_METADATA_ADDRESS` internally so the gateway container can discover DevIssuer through `http://devissuer:3011` while clients still use the public issuer `http://127.0.0.1:3011`.
+The Compose path is OAuth-only. It uses `INFRA_GATE_OAUTH_METADATA_ADDRESS` internally so the gateway container can discover DevIssuer through `http://devissuer:3011` while clients still use the public issuer `http://127.0.0.1:3011`. Browser approval links point at `http://127.0.0.1:3001/approvals/...` and use the pre-registered DevIssuer approval UI client.
 
 Tradeoff: keeping `InfraGate.McpServer` as a private stdio subprocess makes setup simpler and keeps the HTTP attack surface small. The downside is that the gateway image bundles the server binary, the gateway and server share a container boundary, and the server cannot be scaled or restarted independently.
 
 > [!IMPORTANT]
 > Set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` only for localhost dev with DevIssuer. Never in production.
 
-#### Mode C — Run from published images
+#### Mode B — Run from published images
 
 This is the fastest path to evaluate the gateway. It pulls released images from GHCR (Docker Hub equivalents are listed below). Use this when you do not need to modify source.
 
@@ -296,7 +255,7 @@ Replace `vX.Y.Z` with the release tag from <https://github.com/mirusser/Kubernet
 
 **Endpoints:** same as the build-from-source path above — gateway at `http://127.0.0.1:3001/mcp`, dev issuer at `http://127.0.0.1:3011`.
 
-**Codex CLI config:** same as the Mode C from-source config above.
+**Codex CLI config:** same as the Mode B from-source config above.
 
 **Docker Hub alternates** (substitute into `compose.release.yaml` if preferred):
 
@@ -309,7 +268,7 @@ After release, the published-image path is verified by `scripts/smoke-test-relea
 
 The same tradeoffs as the build-from-source Compose path apply: the gateway image bundles the server binary, and the server cannot be scaled or restarted independently.
 
-#### Source Mode C
+#### Source Mode B
 
 Use this alternate flow when you want to run the same OAuth path from source instead of containers.
 
@@ -324,6 +283,10 @@ export INFRA_GATE_OAUTH_AUTHORITY="http://127.0.0.1:3011"
 export INFRA_GATE_OAUTH_RESOURCE="http://127.0.0.1:3001/mcp"
 export INFRA_GATE_OAUTH_SCOPE="mcp:tools"
 export INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false
+export INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID="infra-gate-approval-ui"
+export INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT="http://127.0.0.1:3011/authorize"
+export INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT="http://127.0.0.1:3011/token"
+export INFRA_GATE_APPROVAL_BASE_URL="http://127.0.0.1:3001"
 export INFRA_GATE_DOWNSTREAM_PROJECT="${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
 export KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config"
 export K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals"
@@ -338,10 +301,7 @@ dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
 dotnet run --project src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj
 ```
 
-Listens on `http://127.0.0.1:3011`. Provides OAuth discovery, PKCE authorization-code flow, JWKS, and dynamic client registration — all in-memory, ephemeral.
-
-> [!TIP]
-> You can set `INFRA_GATE_GATEWAY_BEARER_TOKEN` alongside OAuth to accept both static tokens *and* OAuth JWTs simultaneously.
+Listens on `http://127.0.0.1:3011`. Provides OAuth discovery, PKCE authorization-code flow, JWKS, dynamic client registration, and a pre-registered approval UI client — all in-memory, ephemeral.
 
 ---
 
@@ -367,7 +327,7 @@ Once running, the server exposes these tools:
 
 Logs and Events are untrusted Kubernetes workload/cluster output. Prefer the HTTP gateway for model-visible diagnostics because it sanitizes suspicious output before returning it; direct stdio use bypasses that gateway guardrail layer.
 
-**Approval flow:** `request_*` → returns `planId` → `apply_approved_plan(planId)` → MCP elicitation prompt → user approves → applied.
+**Approval flow:** `request_*` → returns `planId` → `apply_approved_plan(planId)` → Gateway returns approval URL → browser OAuth approval → call `apply_approved_plan(planId)` again → applied.
 
 Allowed manifest kinds: `apps/v1 Deployment`, `v1 Service`, `v1 ConfigMap`.
 
@@ -423,12 +383,16 @@ The stdio integration flag verifies the direct MCP server path. The gateway inte
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `INFRA_GATE_GATEWAY_BEARER_TOKEN` | One of bearer/OAuth | — | Static bearer token |
-| `INFRA_GATE_OAUTH_AUTHORITY` | One of bearer/OAuth | — | OAuth issuer URL |
+| `INFRA_GATE_OAUTH_AUTHORITY` | Yes | — | OAuth issuer URL |
 | `INFRA_GATE_OAUTH_METADATA_ADDRESS` | No | — | Optional internal OIDC discovery URL |
 | `INFRA_GATE_OAUTH_RESOURCE` | No | `http://127.0.0.1:3001/mcp` | JWT audience |
 | `INFRA_GATE_OAUTH_SCOPE` | No | `mcp:tools` | Required JWT scope |
 | `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA` | No | `true` | HTTPS metadata check |
+| `INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID` | No | `infra-gate-approval-ui` | Browser approval OAuth client id |
+| `INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT` | No | `${INFRA_GATE_OAUTH_AUTHORITY}/authorize` | Browser-visible approval authorization endpoint |
+| `INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT` | No | `${INFRA_GATE_OAUTH_AUTHORITY}/token` | Gateway-visible approval token endpoint |
+| `INFRA_GATE_APPROVAL_BASE_URL` | No | request-derived | Public base URL for approval links |
+| `INFRA_GATE_APPROVAL_CHALLENGE_TTL_SECONDS` | No | `900` | Approval URL lifetime |
 
 ### DevIssuer
 
@@ -439,6 +403,8 @@ The stdio integration flag verifies the direct MCP server path. The gateway inte
 | `INFRA_GATE_DEV_ISSUER_SCOPE` | No | `mcp:tools` | Token scope |
 | `INFRA_GATE_DEV_ISSUER_SUBJECT` | No | `infra-gate-dev-user` | Token subject claim |
 | `INFRA_GATE_DEV_ISSUER_INTERNAL_ENDPOINT_BASE` | No | — | Internal endpoint base for bridge-network discovery metadata |
+| `INFRA_GATE_DEV_ISSUER_APPROVAL_CLIENT_ID` | No | `infra-gate-approval-ui` | Pre-registered approval UI client id |
+| `INFRA_GATE_DEV_ISSUER_APPROVAL_REDIRECT_URI` | No | `http://127.0.0.1:3001/approvals/oauth/callback` | Pre-registered approval UI redirect |
 | `ASPNETCORE_URLS` | No | (framework default) | HTTP bind; keep aligned with issuer URL |
 
 ---
@@ -463,7 +429,7 @@ The stdio integration flag verifies the direct MCP server path. The gateway inte
 │   └── mode-c/compose.yaml               # Containerized OAuth setup
 ├── scripts/
 │   ├── create-demo-kubeconfig.sh         # Bootstrap RBAC & generate kubeconfig
-│   └── approve-plan.sh                   # Manual plan approval (for non-elicitation clients)
+│   └── approve-plan.sh                   # Manual dev-only hash approval helper
 ├── .kube/                                # Generated kubeconfigs (gitignored)
 ├── .mcp-approvals/                       # Plan files: pending/, approved/, applied/ (gitignored)
 └── .mcp-guardrails/                      # Gateway audit log output (gitignored)
@@ -478,7 +444,7 @@ The stdio integration flag verifies the direct MCP server path. The gateway inte
 | `dotnet: command not found` | .NET 10 SDK not installed | Install SDK, ensure `~/.dotnet` is on `$PATH` |
 | `error NETSDK1045: target framework 'net10.0' not installed` | Wrong SDK version | Install .NET 10 preview/RC SDK |
 | RBAC `can-i` returns `no` for allowed operations | Token expired or RBAC not applied | Re-run `./scripts/create-demo-kubeconfig.sh --compose` |
-| Gateway returns `401 Unauthorized` | No `Authorization` header, wrong token, or no auth env vars set | Set `INFRA_GATE_GATEWAY_BEARER_TOKEN` or OAuth vars |
+| Gateway returns `401 Unauthorized` | No `Authorization` header, invalid JWT, or no auth env vars set | Set OAuth vars and re-run MCP login |
 | `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA` error | Trying to reach HTTP issuer with HTTPS check | Set to `false` for localhost DevIssuer only |
 | `apply_approved_plan` refuses with hash mismatch | Plan changed after approval | Re-request the plan and re-approve |
 | DevIssuer registrations lost on restart | By design — all state is in-memory | Re-register the client (Codex does this automatically) |

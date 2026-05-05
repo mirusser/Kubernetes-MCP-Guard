@@ -233,18 +233,25 @@ public static class K8sGatewayTools
             cancellationToken);
 
     [McpServerTool(Name = McpGatewayConventions.ToolNames.ApplyApprovedPlan, Destructive = true, OpenWorld = false)]
-    [Description("Requests MCP user approval for a pending Kubernetes plan, then applies the exact approved plan.")]
-    public static Task<string> ApplyApprovedPlan(
+    [Description("Returns a browser approval URL for a pending Kubernetes plan, or applies it after out-of-band approval.")]
+    public static async Task<string> ApplyApprovedPlan(
         GuardedToolRunner runner,
-        McpServer server,
+        GatewayApprovalService approvals,
         [Description("PlanId returned by one of the request_* tools.")] string planId,
-        CancellationToken cancellationToken = default) =>
-        runner.CallAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var gate = await approvals.EnsureApprovedOrCreateChallengeAsync(planId, cancellationToken);
+        if (!gate.IsApproved)
+        {
+            return gate.Message;
+        }
+
+        return await runner.CallAsync(
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
             new Dictionary<string, object?>
             {
                 [McpGatewayConventions.ToolArguments.PlanId] = planId
             },
-            server,
             cancellationToken);
+    }
 }

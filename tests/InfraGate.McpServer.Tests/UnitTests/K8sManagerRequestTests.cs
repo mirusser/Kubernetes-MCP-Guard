@@ -1,3 +1,4 @@
+using InfraGate.Approvals;
 using InfraGate.McpServer;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
@@ -44,8 +45,8 @@ public sealed class K8sManagerRequestTests
 
         var result = await manager.RequestScaleDeploymentAsync("demo", "demo", 4, CancellationToken.None);
 
-        Assert.Contains("Status: pending MCP server approval", result);
-        Assert.Contains("The MCP server will request user approval before applying it", result);
+        Assert.Contains("Status: pending Gateway approval", result);
+        Assert.Contains("The Gateway will return a browser approval URL before applying it", result);
         Assert.DoesNotContain("./scripts/approve-plan.sh", result);
     }
 
@@ -72,7 +73,7 @@ public sealed class K8sManagerRequestTests
             new HashSet<string>(StringComparer.Ordinal) { namespaceName },
             root);
 
-        return new K8sManager(options, new ApprovalStore(options), client: null!);
+        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client: null!);
     }
 
     private const string ValidManifest = """

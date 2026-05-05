@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\InfraGate.Approvals\InfraGate.Approvals.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.McpServer\InfraGate.McpServer.csproj" />
   </ItemGroup>
 

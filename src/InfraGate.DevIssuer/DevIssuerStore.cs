@@ -12,16 +12,17 @@ internal sealed class DevIssuerStore
     private readonly ConcurrentDictionary<string, DevClient> clients = [];
     private readonly ConcurrentDictionary<string, AuthorizationCode> authorizationCodes = [];
 
+    public DevIssuerStore(DevIssuerOptions options)
+    {
+        RegisterClient(
+            options.ApprovalClientId,
+            [options.ApprovalRedirectUri],
+            "InfraGate approval UI");
+    }
+
     public DevClient RegisterClient(IReadOnlyCollection<string> redirectUris, string? clientName)
     {
-        var client = new DevClient(
-            NewRandomValue(ClientIdByteLength),
-            clientName,
-            redirectUris.ToArray());
-
-        clients[client.ClientId] = client;
-
-        return client;
+        return RegisterClient(NewRandomValue(ClientIdByteLength), redirectUris, clientName);
     }
 
     public bool ClientAllowsRedirectUri(string clientId, string redirectUri)
@@ -80,5 +81,17 @@ internal sealed class DevIssuerStore
         System.Security.Cryptography.RandomNumberGenerator.Fill(bytes);
 
         return Base64UrlEncoder.Encode(bytes);
+    }
+
+    private DevClient RegisterClient(string clientId, IReadOnlyCollection<string> redirectUris, string? clientName)
+    {
+        var client = new DevClient(
+            clientId,
+            clientName,
+            redirectUris.ToArray());
+
+        clients[client.ClientId] = client;
+
+        return client;
     }
 }

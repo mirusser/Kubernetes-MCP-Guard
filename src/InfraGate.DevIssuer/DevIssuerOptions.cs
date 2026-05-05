@@ -5,7 +5,9 @@ internal sealed record DevIssuerOptions(
     string Resource,
     string Scope,
     string Subject,
-    string? InternalEndpointBase = null)
+    string? InternalEndpointBase = null,
+    string ApprovalClientId = DevIssuerConventions.DefaultApprovalClientId,
+    string ApprovalRedirectUri = DevIssuerConventions.DefaultApprovalRedirectUri)
 {
     public const string DefaultUrl = DevIssuerConventions.DefaultUrl;
 
@@ -20,6 +22,10 @@ internal sealed record DevIssuerOptions(
             DevIssuerConventions.DefaultScope,
             Environment.GetEnvironmentVariable(DevIssuerConventions.EnvironmentVariables.Subject) ??
             DevIssuerConventions.DefaultSubject,
-            Environment.GetEnvironmentVariable(DevIssuerConventions.EnvironmentVariables.InternalEndpointBase));
+            Environment.GetEnvironmentVariable(DevIssuerConventions.EnvironmentVariables.InternalEndpointBase),
+            Environment.GetEnvironmentVariable(DevIssuerConventions.EnvironmentVariables.ApprovalClientId) ??
+            DevIssuerConventions.DefaultApprovalClientId,
+            Environment.GetEnvironmentVariable(DevIssuerConventions.EnvironmentVariables.ApprovalRedirectUri) ??
+            DevIssuerConventions.DefaultApprovalRedirectUri);
     }
 }

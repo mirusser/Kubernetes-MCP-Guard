@@ -11,10 +11,13 @@ public sealed class GuardrailAuditStoreTests
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-guard-tests", Guid.NewGuid().ToString("N"));
         var store = new GuardrailAuditStore(new McpGatewayOptions(
-            new GatewayAuthOptions("secret"),
+            new GatewayAuthOptions("https://issuer.example.com"),
             "downstream.csproj",
             root,
-            Directory.GetCurrentDirectory()));
+            Directory.GetCurrentDirectory(),
+            Path.Combine(root, "approvals"),
+            ApprovalBaseUrl: null,
+            McpGatewayOptions.DefaultApprovalChallengeTtl));
 
         await store.WriteAsync(
             new GuardrailAuditEvent(

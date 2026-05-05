@@ -1,10 +1,10 @@
 # MCP Protocol Compliance & Architecture Flow
 
-This document details the compliance of the **InfraGate** project against the official Model Context Protocol (MCP) specifications (as of `2025-11-25`), specifically focusing on **Mode C** (HTTP Gateway + OAuth DevIssuer).
+This document details the compliance of the **InfraGate** project against the official Model Context Protocol (MCP) specifications (as of `2025-11-25`), specifically focusing on the HTTP Gateway + OAuth DevIssuer path.
 
 ## Architecture & Request Flow
 
-The following diagram illustrates the OAuth login path and a representative tool call in Mode C, emphasizing how authentication, guardrails, and transport layers interact.
+The following diagram illustrates the OAuth login path and representative tool calls, emphasizing how authentication, guardrails, approval, and transport layers interact.
 
 ```mermaid
 sequenceDiagram
@@ -51,11 +51,13 @@ sequenceDiagram
         Downstream->>Downstream: Write pending approval plan + audit entry
     end
 
-    opt apply_approved_plan requires MCP elicitation
-        Downstream->>Gateway: Elicitation request
-        Gateway->>Client: Approval prompt
-        Client-->>Gateway: Approval response
-        Gateway-->>Downstream: Elicitation result
+    opt apply_approved_plan requires approval
+        Gateway->>Gateway: Read pending plan + hash
+        Gateway-->>Client: Approval URL
+        Client-->>Gateway: Browser opens /approvals/{challengeId}
+        Gateway->>Gateway: OAuth cookie auth + same-subject check
+        Gateway->>Gateway: Recompute pending-plan hash
+        Gateway->>Gateway: Write approved hash if unchanged
     end
 
     Downstream-->>Gateway: Tool result text

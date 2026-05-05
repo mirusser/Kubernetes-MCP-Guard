@@ -1,0 +1,442 @@
+# Security Audit Report
+## MCP Kubernetes Gateway — OAuth / Gateway / Approval Architecture
+
+**Date:** 2026-05-05
+**Scope:** Architecture & request-flow diagrams covering OAuth Login & Authorization, Read-Only Tool Calls, and Approval-Gated Mutations.
+**Method:** Static architectural analysis of Mermaid sequence diagrams and system description.
+**Status:** 13 findings identified — 6 from initial audit (verified & extended), 7 new.
+
+---
+
+## Table of Contents
+
+1. [Executive Summary](#executive-summary)
+2. [Threat Model Assumptions](#threat-model-assumptions)
+3. [Findings](#findings)
+   - [F-01 · Auto-Approval Loophole — Human Presence Not Provable](#f-01)
+   - [F-02 · TOCTOU via Stale Dry-Run / force-conflicts](#f-02)
+   - [F-03 · Prompt Injection Sanitization Fallacy](#f-03)
+   - [F-04 · Disk Exhaustion & Path Traversal in ApprovalStore](#f-04)
+   - [F-05 · Loopback Port Hijacking in Dynamic Client Registration](#f-05)
+   - [F-06 · Subprocess Blast Radius Under Shared Service Account](#f-06)
+   - [F-07 · JWT Bearer Replay — No Proof-of-Possession](#f-07)
+   - [F-08 · No User-to-Plan Binding — Cross-User Plan Approval](#f-08)
+   - [F-09 · No JWT Revocation Mechanism](#f-09)
+   - [F-10 · Subprocess Binary Integrity Not Verified](#f-10)
+   - [F-11 · JWKS Cache Poisoning / Key Rollover Race](#f-11)
+   - [F-12 · Audit Log Tamper by Compromised Process](#f-12)
+   - [F-13 · Single Scope for Read and Write Operations](#f-13)
+4. [Summary Table](#summary-table)
+5. [Recommended Prioritization](#recommended-prioritization)
+
+---
+
+## Executive Summary
+
+The architecture demonstrates a strong security foundation: OAuth 2.0 with PKCE S256, structured JWT scope enforcement, prompt-injection guardrails, an approval-gated mutation path with SHA-256 hash binding, and a structural firewall that terminates OAuth tokens at the Gateway before passing calls to the stdio subprocess. These are not trivial controls and reflect genuine security engineering effort.
+
+However, the audit identified **13 findings** ranging from Medium to Critical severity. The most impactful are:
+
+- The approval flow proves **plan integrity** via hash binding, but cannot prove **human presence** — a compromised MCP client can auto-approve without rendering the prompt to the SRE.
+- A **single `mcp:tools` scope** gates both read-only and destructive mutation operations, meaning any legitimately issued token can invoke mutation paths.
+- **No user-to-plan binding** means any authenticated principal can approve and execute a plan they did not create.
+- **JWT Bearer tokens are replayable** with no proof-of-possession or revocation mechanism.
+
+---
+
+## Threat Model Assumptions
+
+The following attacker capabilities are assumed for this audit:
+
+| Assumption | Rationale |
+|---|---|
+| Attacker can compromise the MCP Client process | Prompt injection, malicious package, or supply-chain attack |
+| Attacker can read local disk and logs | Shared host or lateral movement from another process |
+| Attacker can bind to loopback network interfaces | Any local process can race for a port |
+| Kubernetes objects (ConfigMaps, Pod labels) are attacker-influenced | Attacker may have written or deployed a workload into the cluster |
+| The stdio subprocess binary could be replaced | Supply-chain or local privilege escalation |
+
+---
+
+## Findings
+
+---
+
+### F-01
+### Auto-Approval Loophole — Human Presence Not Provable
+**Severity:** Critical
+**Diagram:** Approval-Gated Mutation (Diagram 3)
+**Status:** Original finding — extended after clarification
+
+#### Description
+
+The approval flow uses MCP elicitation: the Gateway sends a plan summary and SHA-256 hash to the MCP Client, the Client prompts the user (`"Approve this plan?"`), the user answers `Yes`, and the Client forwards the approval response back to the Gateway, which then notifies the subprocess.
+
+After clarification, the implementation does bind the hash to the plan content — the server recomputes the SHA-256 of the pending plan at apply-time and rejects any mismatch. This correctly closes the **bait-and-switch** scenario where a compromised client shows Plan A to the user but forwards approval for Plan B.
+
+#### Residual Risk
+
+The hash proves **plan integrity**, not **human presence**. The entire approval signal — including the correct planId and the correct hash — originates from within the MCP Client, which is itself within the compromised trust boundary in relevant attack scenarios.
+
+A compromised MCP Client can:
+1. Receive the elicitation request (it is the transport layer — it sees everything).
+2. Never render the prompt to the human SRE.
+3. Automatically respond `Yes`, forwarding the correct planId. The hash is fetched by the server from the pending plan file, so the client does not even need to know or forward it independently.
+
+This is structurally equivalent to a malicious browser extension auto-clicking a payment confirmation dialog. The transaction hash on the payment doesn't help if the extension intercepts the click event before the human sees it.
+
+#### Revised Attack Scope
+
+| Scenario | Status |
+|---|---|
+| Compromised client swaps plan content after approval | ✅ Mitigated by SHA-256 hash recomputation |
+| Compromised client auto-approves without prompting human | ❌ Not mitigated |
+| Cross-user approval via stolen planId | ❌ Not mitigated (see F-08) |
+
+#### Recommended Fix
+
+Implement **out-of-band (OOB) authorization** for mutation approvals. The Gateway must issue the approval challenge through a channel the MCP Client cannot intercept or forge:
+
+- A separate web UI served by the Gateway itself, requiring re-authentication.
+- A push notification to a registered device (e.g., Slack, Teams, or a mobile push-to-approve token).
+- At minimum, a short-lived, single-use approval token sent via a second channel (e.g., email or SMS) that must be supplied in the `apply_approved_plan` call.
+
+The approval signal should be cryptographically bound to the approver's identity (see F-08) and originate from outside the client's control plane.
+
+---
+
+### F-02
+### TOCTOU via Stale Dry-Run / force-conflicts
+**Severity:** High
+**Diagram:** Approval-Gated Mutation (Diagram 3)
+**Status:** Original finding — confirmed
+
+#### Description
+
+Plan creation performs a Server-Side Apply (SSA) dry-run with `force-conflicts`. The resulting plan is stored in `.mcp-approvals/pending/` and may sit unexecuted for an arbitrary duration before the user calls `apply_approved_plan`.
+
+During that window, another SRE or automated process may legitimately modify the same Kubernetes resource (e.g., rolling a new image tag to patch a zero-day vulnerability). When the pending plan is applied, `force-conflicts` causes it to silently overwrite those intervening changes, reverting a human-made security fix without any warning.
+
+The SHA-256 hash mitigates the case where the *pending plan file itself* is tampered with, but it does not protect against the **Kubernetes resource state** drifting between dry-run and apply.
+
+#### Recommended Fix
+
+- Capture the `resourceVersion` of every affected Kubernetes resource at dry-run time and store it alongside the plan.
+- At apply time, assert the `resourceVersion` is unchanged before proceeding. If any resource has been updated, reject the plan with an explicit error requiring re-planning.
+- Remove `force-conflicts` from AI-agent-initiated applies, or restrict it to an explicit operator override flag.
+- Enforce a configurable TTL on pending plans (e.g., 15 minutes) after which they expire automatically.
+
+---
+
+### F-03
+### Prompt Injection Sanitization Fallacy
+**Severity:** High
+**Diagram:** Read-Only Tool Call (Diagram 2)
+**Status:** Original finding — confirmed
+
+#### Description
+
+The Gateway's `GuardedToolRunner` scans tool call arguments and responses against five named categories: `ignore-instructions`, `reveal-prompts`, `tool-use`, `secret-exfiltration`, and `authority-override`. The response sanitizer redacts matching lines before returning results to the LLM.
+
+Rule-based and regex-based scanning is a known-weak defense against modern LLM prompt injections. An attacker who controls any Kubernetes object readable by the `get_k8s_status` tool (e.g., a ConfigMap value, a Pod label, a Service annotation, or application log output) can embed injection payloads that:
+
+- Are base64-encoded or otherwise encoded and decoded by the LLM but not by the scanner.
+- Are split across multiple fields that individually pass the scanner but are semantically meaningful to the LLM in combination.
+- Use Unicode homoglyphs, zero-width characters, or non-Latin script that the regex does not match.
+- Use indirect injection patterns not yet in the five-category blocklist.
+
+If any such payload reaches the LLM, it can override the system prompt and hijack subsequent tool calls, including mutation operations.
+
+#### Recommended Fix
+
+- **Treat all data from Kubernetes as hostile by default.** Do not attempt to distinguish safe from unsafe K8s content at the text level.
+- Deliver tool results to the LLM within strict, schema-enforced JSON envelopes. Instruct the model that content within the `tool_result` schema boundary is opaque data, never instructions.
+- Consider a secondary LLM pass specifically tasked with classifying tool output as benign or suspicious before it reaches the primary model context.
+- Use the audit log (`GuardrailAuditStore`) as a detection signal, not a prevention mechanism — assume some injections will pass.
+
+---
+
+### F-04
+### Disk Exhaustion & Path Traversal in ApprovalStore
+**Severity:** High
+**Diagram:** Approval-Gated Mutation (Diagram 3)
+**Status:** Original finding — confirmed, scope extended
+
+#### Description
+
+**Disk exhaustion:** The `request_scale_deployment` tool creates a new pending plan file on every invocation. If the AI agent enters a loop — due to a reasoning error, a prompt injection hijack, or deliberate abuse — it can generate thousands of plan files without any visible rate limit or pending-plan TTL. This exhausts disk space or inodes, causing a Denial of Service on the subprocess and potentially on the host.
+
+**Path traversal:** The `apply_approved_plan` call accepts a `planId` and constructs a file path under `.mcp-approvals/pending/`. If `planId` is not strictly validated as a UUID (or equivalent opaque token), an attacker who can influence the planId value (e.g., via a prompt injection that causes the LLM to construct a crafted tool call) could supply a value such as `../../../etc/passwd`, causing the file read to escape the approvals directory. Given the subprocess co-locates the approvals directory with its binary, the blast radius of a successful traversal is elevated.
+
+#### Recommended Fix
+
+- Validate `planId` as a cryptographically generated UUID (v4) using an allowlist regex before any file system operation. Reject all other values with a logged error.
+- Enforce a rate limit on `request_scale_deployment` per authenticated principal (e.g., max 5 pending plans per user at any time).
+- Implement an automated TTL cleanup: pending plans older than a configurable threshold (e.g., 30 minutes) are moved to an `expired/` subdirectory or deleted.
+- Run the subprocess with an OS-level disk quota to bound worst-case exhaustion.
+
+---
+
+### F-05
+### Loopback Port Hijacking in Dynamic Client Registration
+**Severity:** Medium
+**Diagram:** OAuth Login & Authorization (Diagram 1)
+**Status:** Original finding — confirmed, partially mitigated
+
+#### Description
+
+Dynamic Client Registration (DCR) uses a loopback redirect URI. On the host machine, any local process can attempt to bind to an arbitrary port on the loopback interface. If a malicious process wins the port race and binds before the MCP Client does, it receives the Authorization Code redirect from the Auth Server.
+
+The mandatory PKCE S256 enforcement significantly reduces the exploitability of this: capturing the Authorization Code alone is not sufficient — the attacker also requires the `code_verifier`, which is generated and held only by the MCP Client. However, in a scenario where the malicious process acts as a transparent proxy (binding first, forwarding to the real client, then capturing the code for replay), the window of opportunity exists particularly on slower or loaded systems.
+
+#### Recommended Fix
+
+- PKCE S256 enforcement (already present) is the primary mitigation — maintain it strictly.
+- Where the deployment environment permits, run the MCP Client in an isolated container or sandbox so the loopback interface is not shared with untrusted processes.
+- Consider binding the redirect listener to an OS-assigned ephemeral port and registering it dynamically, reducing predictability.
+- On supported platforms, use OS-level process validation (e.g., verifying the process that bound the port matches the expected binary) as a defense-in-depth measure.
+
+---
+
+### F-06
+### Subprocess Blast Radius Under Shared Service Account
+**Severity:** High
+**Diagram:** Read-Only Tool Call (Diagram 2)
+**Status:** Original finding — confirmed
+
+#### Description
+
+The Gateway intentionally terminates the OAuth JWT and does not pass it to the stdio subprocess. This is a correct structural firewall design — the subprocess has no user identity context and operates entirely under its own Kubernetes Service Account.
+
+The consequence is that all tool handlers — read-only (`get_k8s_status`) and mutating (`request_scale_deployment`, `apply_approved_plan`) — share a single K8s identity. If the subprocess is compromised (e.g., via a zero-day in the .NET JSON parser, a dependency vulnerability, or a successful prompt injection that achieves code execution), the attacker inherits the full weight of that Service Account, including all mutation permissions.
+
+#### Recommended Fix
+
+- Define separate Kubernetes Service Accounts for read operations and mutation operations, each bound to the minimum necessary RBAC Role.
+- Ideally, instantiate separate subprocess instances for read and write paths, each running under its respective Service Account, selected by the Gateway based on the tool being called.
+- Periodically rotate Service Account tokens and audit RBAC bindings in CI to prevent permission creep.
+
+---
+
+### F-07
+### JWT Bearer Replay — No Proof-of-Possession
+**Severity:** High
+**Diagram:** OAuth Login & Authorization (Diagram 1) & Read-Only Tool Call (Diagram 2)
+**Status:** New finding
+
+#### Description
+
+The access token is a standard Bearer JWT with no proof-of-possession binding. Any party that obtains the token can replay it against the Gateway until it expires. There is no mention of DPoP (RFC 9449) or mutual-TLS client certificate binding.
+
+In a local development context — where the DevIssuer is running on the same host — log verbosity is typically high. JWT tokens can leak through:
+
+- Debug log lines in the Gateway or client (e.g., full `Authorization:` header logging).
+- Process environment variables or command-line arguments visible via `/proc`.
+- Network capture on the loopback interface (unencrypted local traffic).
+- Shell history if the token is ever used in a curl invocation during development.
+
+Once leaked, the token is valid for its full lifetime and grants access to all tools within the `mcp:tools` scope, including mutation paths.
+
+#### Recommended Fix
+
+- Implement **DPoP (RFC 9449)**: bind the JWT to the client's ephemeral key pair. The Gateway verifies the DPoP proof on each request, making a stolen token useless without the corresponding private key.
+- If DPoP is out of scope, enforce very short token lifetimes (2–5 minutes) with silent refresh via refresh token rotation.
+- Ensure all Gateway and client log configurations explicitly scrub `Authorization` headers and Bearer token values.
+
+---
+
+### F-08
+### No User-to-Plan Binding — Cross-User Plan Approval
+**Severity:** High
+**Diagram:** Approval-Gated Mutation (Diagram 3)
+**Status:** New finding
+
+#### Description
+
+When a plan is created via `request_scale_deployment`, there is no evidence that the plan file records the `sub` (subject) claim of the JWT that created it. When `apply_approved_plan(planId)` is called, the server verifies the plan hash but does not appear to check whether the caller is the same principal who created the plan.
+
+This opens two attack paths:
+
+1. **Cross-user execution:** User A creates a plan to scale a production deployment to zero replicas. User A abandons it. User B (who has `mcp:tools` scope) discovers or is social-engineered into calling `apply_approved_plan` with that planId, executing User A's plan under User B's session.
+2. **Agent-driven cross-approval:** A compromised AI agent that has obtained any valid `mcp:tools` JWT can enumerate pending planIds (if the IDs are guessable or leaked) and apply plans created by other users.
+
+The SHA-256 hash binding does not address this because it binds content, not caller identity.
+
+#### Recommended Fix
+
+- At plan creation, record the `sub` claim of the creating JWT in the plan file.
+- At `apply_approved_plan` time, compare the caller's `sub` claim against the stored creator `sub`. Reject mismatches with a logged audit entry.
+- Display the creator's identity in the elicitation approval prompt so the approving human sees who originated the plan.
+- Consider whether cross-user approval should ever be permitted, and if so, implement an explicit delegation mechanism rather than relying on ambient scope.
+
+---
+
+### F-09
+### No JWT Revocation Mechanism
+**Severity:** Medium
+**Diagram:** OAuth Login & Authorization (Diagram 1) & Read-Only Tool Call (Diagram 2)
+**Status:** New finding
+
+#### Description
+
+JWTs are stateless and validated solely by signature and claims (issuer, audience, lifetime, scope). There is no token introspection endpoint, no revocation list, and no mention of short token lifetimes. If a token is compromised — via any of the leak vectors described in F-07 — there is no mechanism to invalidate it before expiry.
+
+This means a compromised token remains fully operational for its entire lifetime. Every tool call, including mutations, will succeed for any bearer of the token regardless of whether the legitimate user has ended their session.
+
+#### Recommended Fix
+
+- Implement token introspection at the Gateway: on each inbound request, call `POST /introspect` on the DevIssuer to validate that the token is still active. Cache introspection results for a short window (e.g., 30 seconds) to avoid per-request latency.
+- Alternatively, enforce very short JWT lifetimes (2–5 minutes) combined with refresh token rotation and a refresh token revocation list. Revoking the refresh token effectively invalidates the session.
+- Expose a `POST /revoke` endpoint on the Gateway that an SRE can call to immediately blacklist a token by `jti` claim.
+
+---
+
+### F-10
+### Subprocess Binary Integrity Not Verified
+**Severity:** High
+**Diagram:** Read-Only Tool Call (Diagram 2) & Approval-Gated Mutation (Diagram 3)
+**Status:** New finding
+
+#### Description
+
+The Gateway spawns the MCP Server as a `stdio` subprocess via `StdioClientTransport`. There is no documented check that the subprocess binary has not been tampered with before spawning. The binary path is presumably configured at startup and then trusted implicitly on every invocation.
+
+A supply-chain attack targeting the MCP Server package, or a local privilege escalation that replaces the binary on disk, would be entirely transparent to the Gateway. The Gateway would continue forwarding authenticated tool calls to the malicious binary, which inherits the Kubernetes Service Account and can perform any K8s operation the RBAC permits.
+
+This is especially relevant because the subprocess binary is co-located with the `.mcp-approvals/` directory, which it also writes to — a compromised binary has write access to its own audit store.
+
+#### Recommended Fix
+
+- At application startup, compute the SHA-256 hash of the subprocess binary and compare it against a pinned expected value stored outside the subprocess's directory (e.g., in a Gateway configuration file or environment variable).
+- Refuse to start if the hash does not match.
+- Run the subprocess under a dedicated OS user that has no write permissions to its own binary path.
+- Where possible, sign the subprocess binary and verify the signature using a trusted key at spawn time.
+
+---
+
+### F-11
+### JWKS Cache Poisoning / Key Rollover Race
+**Severity:** Medium
+**Diagram:** OAuth Login & Authorization (Diagram 1)
+**Status:** New finding
+
+#### Description
+
+The Gateway validates inbound JWTs against the issuer's JWKS (JSON Web Key Set). Two failure modes exist:
+
+**Stale trust window:** During key rollover, the old key may remain in the Gateway's JWKS cache for the duration of the cache TTL. Tokens signed with a revoked key continue to be accepted during this window.
+
+**Key ID (kid) acceptance:** If the Gateway accepts any key present in the JWKS response without strictly matching the `kid` header claim in the JWT, a JWKS endpoint compromise (e.g., via DNS poisoning or a compromise of the DevIssuer host) allows an attacker to inject a new key that signs arbitrary tokens with full Gateway trust.
+
+**DoS via rapid rotation:** If the DevIssuer rotates keys more frequently than the cache TTL, or if cache invalidation triggers a synchronous JWKS fetch on every validation failure, the Gateway becomes vulnerable to a DoS via cache-busting.
+
+#### Recommended Fix
+
+- Enforce strict `kid` matching: the JWT's `kid` header claim must match a specific key in the JWKS response. Reject tokens with unknown or missing `kid`.
+- Set a bounded JWKS cache TTL (e.g., 5 minutes) with a background refresh job, not on-demand refresh per validation failure.
+- On JWKS fetch failure, use the last-known-good cached key set rather than failing open or fetching synchronously per request.
+- Pin the JWKS endpoint URI in configuration and validate the TLS certificate against a pinned CA, even in local/dev deployments.
+
+---
+
+### F-12
+### Audit Log Tamper by Compromised Process
+**Severity:** Medium
+**Diagram:** Read-Only Tool Call (Diagram 2) & Approval-Gated Mutation (Diagram 3)
+**Status:** New finding
+
+#### Description
+
+Both audit stores — `GuardrailAuditStore` (JSONL in the Gateway process) and `.mcp-approvals/audit.jsonl` (in the subprocess) — are written to disk by the same processes that handle requests. Each process has the filesystem permissions necessary to write to its own audit file, which implicitly includes the ability to truncate, delete, or overwrite it.
+
+A compromised Gateway or subprocess can modify or delete audit entries to conceal malicious activity. There is no mention of append-only file semantics, remote log shipping, cryptographic chaining of log entries, or out-of-process log validation.
+
+This means the audit trail, which is the primary forensic record for detecting prompt injection, unauthorized approvals, and hash mismatches, cannot be trusted if either process is compromised.
+
+#### Recommended Fix
+
+- Ship audit log entries to an **out-of-process sink immediately on write**: a remote syslog server, a SIEM, or an append-only object store (e.g., S3 with Object Lock).
+- The process handling requests should not have `unlink`, `truncate`, or overwrite permissions on its own audit files. Use a separate log-shipping agent with dedicated write credentials.
+- Consider cryptographically chaining log entries (each entry includes a hash of the previous entry) so tampering with any entry breaks the chain and is detectable.
+- Treat the local JSONL files as a write-ahead buffer only, not as the authoritative audit record.
+
+---
+
+### F-13
+### Single Scope for Read and Write Operations
+**Severity:** High
+**Diagram:** All three diagrams
+**Status:** New finding
+
+#### Description
+
+The only OAuth scope referenced throughout the architecture is `mcp:tools`. This single scope is used to gate both read-only operations (`get_k8s_status`, log streaming) and destructive mutation operations (`request_scale_deployment`, `apply_approved_plan`).
+
+A token legitimately issued for a read-only session carries the same scope as a token for a mutation session. Consequences include:
+
+- Any `mcp:tools` token can invoke mutation paths. There is no scope-level guardrail preventing this.
+- If a read-only token is stolen or replayed (see F-07), it can be used to initiate or apply destructive plans.
+- Least-privilege cannot be enforced at the OAuth layer — the token grants more permission than the operation requires.
+
+#### Recommended Fix
+
+- Define at minimum two scopes: `mcp:read` and `mcp:write`.
+- The DevIssuer should issue `mcp:read`-only tokens for sessions where mutation is not expected.
+- The Gateway must enforce scope per tool: read-only handlers accept `mcp:read` or `mcp:write`; mutation handlers require `mcp:write` exclusively.
+- The protected-resource metadata (`/.well-known/oauth-protected-resource`) should advertise both scopes so MCP clients can request the minimum necessary scope.
+
+---
+
+## Summary Table
+
+| ID | Finding | Severity | Source | Affected Diagram |
+|---|---|---|---|---|
+| F-01 | Auto-approval loophole — human presence not provable | **Critical** | Original (extended) | Diagram 3 |
+| F-02 | TOCTOU via stale dry-run / force-conflicts | **High** | Original | Diagram 3 |
+| F-03 | Prompt injection sanitization fallacy | **High** | Original | Diagram 2 |
+| F-04 | Disk exhaustion & path traversal in ApprovalStore | **High** | Original | Diagram 3 |
+| F-05 | Loopback port hijacking in DCR | **Medium** | Original | Diagram 1 |
+| F-06 | Subprocess blast radius under shared Service Account | **High** | Original | Diagram 2 |
+| F-07 | JWT Bearer replay — no proof-of-possession | **High** | New | Diagrams 1 & 2 |
+| F-08 | No user-to-plan binding — cross-user plan approval | **High** | New | Diagram 3 |
+| F-09 | No JWT revocation mechanism | **Medium** | New | Diagrams 1 & 2 |
+| F-10 | Subprocess binary integrity not verified | **High** | New | Diagrams 2 & 3 |
+| F-11 | JWKS cache poisoning / key rollover race | **Medium** | New | Diagram 1 |
+| F-12 | Audit log tamper by compromised process | **Medium** | New | Diagrams 2 & 3 |
+| F-13 | Single scope for read and write operations | **High** | New | All |
+
+---
+
+## Recommended Prioritization
+
+### Immediate (before any production use)
+
+| Priority | Finding | Reason |
+|---|---|---|
+| 1 | **F-13** — Split `mcp:read` / `mcp:write` scopes | Architectural change required; blocks all other scope-based controls |
+| 2 | **F-08** — Bind plans to creator `sub` claim | Prevents cross-user approval with minimal implementation effort |
+| 3 | **F-04** — UUID validation + rate limit on planId | Low-effort fix with high DoS / traversal impact |
+| 4 | **F-02** — Capture and assert `resourceVersion` | Prevents silent overwrite of human-made changes |
+
+### Short-term (within one sprint)
+
+| Priority | Finding | Reason |
+|---|---|---|
+| 5 | **F-07** — DPoP or short-lived tokens + log scrubbing | Significantly reduces replay window |
+| 6 | **F-09** — Token revocation / introspection | Enables incident response to stolen tokens |
+| 7 | **F-10** — Binary hash pinning at startup | Low-cost, high-value supply-chain control |
+| 8 | **F-06** — Split Service Accounts by read/write | Reduces blast radius of subprocess compromise |
+
+### Medium-term (hardening pass)
+
+| Priority | Finding | Reason |
+|---|---|---|
+| 9 | **F-01** — OOB approval channel | Full fix requires external infrastructure |
+| 10 | **F-12** — Remote audit log shipping | Requires out-of-process log sink |
+| 11 | **F-03** — Schema-enforced tool output isolation | Requires LLM prompt engineering + testing |
+| 12 | **F-11** — JWKS `kid` pinning + bounded cache TTL | Configuration-level fix once token plumbing is stable |
+| 13 | **F-05** — Subprocess / container isolation | Deployment environment dependent |
+
+---
+
+*This report is based solely on static analysis of the provided architecture diagrams and system description. A full dynamic security assessment, including code review, penetration testing, and runtime analysis, is recommended before production deployment.*

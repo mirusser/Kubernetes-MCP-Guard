@@ -1,4 +1,5 @@
 using System.Text.Json;
+using InfraGate.Approvals;
 using k8s;
 
 namespace InfraGate.McpServer;

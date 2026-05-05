@@ -69,7 +69,7 @@ flowchart TB
 
 ### 🛠️ Technical & Architectural Highlights
 
-- **AI Integration & Safety:** Deep implementation of Model Context Protocol (MCP), handling tool contracts, elicitation-style approval workflows, and mitigating prompt-injection risks within model-visible data.
+- **AI Integration & Safety:** Deep implementation of Model Context Protocol (MCP), handling tool contracts, out-of-band approval workflows, and mitigating prompt-injection risks within model-visible data.
 
 - **Security & Identity:** Implemented OAuth 2.0 resource-server patterns, including scope enforcement, identity-based audit logging, and strict Least-Privilege RBAC for Kubernetes interactions.
 
@@ -82,9 +82,9 @@ flowchart TB
 ##### 🏗️ Implementation Details:
 - Exposes Kubernetes operations through the Model Context Protocol (MCP), with a stdio Kubernetes server behind a local HTTP gateway.
 - Uses the Kubernetes API via `KubernetesClient`; it does not shell out to `kubectl` for runtime operations.
-- Adds OAuth/static bearer authentication at the gateway, including MCP protected-resource metadata and insufficient-scope challenges.
+- Adds OAuth authentication at the gateway, including MCP protected-resource metadata, insufficient-scope challenges, and browser approval sessions.
 - Applies prompt-injection guardrails around model-visible tool input/output, with warn, redact, and audit behavior.
-- Keeps mutation paths approval-gated: create a plan first, then apply the exact approved plan.
+- Keeps mutation paths approval-gated: create a plan first, approve it in the Gateway browser UI, then apply the exact approved plan.
 - Limits Kubernetes blast radius with namespace-scoped RBAC and typed, bounded tool surfaces.
 
 ## 📦 Container Images
@@ -168,7 +168,7 @@ docker compose -f deploy/mode-c/compose.yaml up --build
 
 Connect Codex the same way as Option 1.
 
-*Other run modes (stdio-only, static bearer token) and full setup details are in the [Setup Guide](docs/setup-guide.md).*
+*Other run modes and full setup details are in the [Setup Guide](docs/setup-guide.md).*
 
 ## 🧰 Current Capabilities 
 
@@ -176,7 +176,7 @@ Connect Codex the same way as Option 1.
 
 | Layer | Behavior |
 |---|---|
-| Authentication | OAuth 2.1 JWT or local static bearer token |
+| Authentication | OAuth 2.1 JWT for MCP plus browser OAuth cookie for approvals |
 | Prompt-injection guardrails | Warn and redact suspicious model-visible input/output |
 | Audit logging | JSONL guardrail audit with identity resolution |
 | MCP compliance | Streamable HTTP transport, protected-resource metadata, step-up authorization |

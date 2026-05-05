@@ -6,6 +6,8 @@ internal static class DevIssuerConventions
     public const string DefaultResource = "http://127.0.0.1:3001/mcp";
     public const string DefaultScope = "mcp:tools";
     public const string DefaultSubject = "infra-gate-dev-user";
+    public const string DefaultApprovalClientId = "infra-gate-approval-ui";
+    public const string DefaultApprovalRedirectUri = "http://127.0.0.1:3001/approvals/oauth/callback";
 
     public static class EnvironmentVariables
     {
@@ -15,6 +17,8 @@ internal static class DevIssuerConventions
         public const string Scope = "INFRA_GATE_DEV_ISSUER_SCOPE";
         public const string Subject = "INFRA_GATE_DEV_ISSUER_SUBJECT";
         public const string InternalEndpointBase = "INFRA_GATE_DEV_ISSUER_INTERNAL_ENDPOINT_BASE";
+        public const string ApprovalClientId = "INFRA_GATE_DEV_ISSUER_APPROVAL_CLIENT_ID";
+        public const string ApprovalRedirectUri = "INFRA_GATE_DEV_ISSUER_APPROVAL_REDIRECT_URI";
     }
 
     public static class ConfigurationKeys

@@ -136,22 +136,29 @@ sequenceDiagram
 
     User->>Client: apply approved plan
     Client->>GW: POST /mcp → apply_approved_plan(planId)<br/>JSON-RPC + JWT Bearer
-    GW->>GW: validate JWT + scope, GuardedToolRunner scans args
+    GW->>GW: validate JWT + scope
+    GW->>GW: read pending plan + current hash<br/>from shared ApprovalStore
+    GW->>GW: create single-use challenge<br/>bound to planId + hash + requester subject
+    GW-->>Client: approval required<br/>PlanId + Plan hash + Approval URL
+
+    User->>GW: GET /approvals/{challengeId}<br/>browser + OAuth cookie
+    GW->>GW: validate same authenticated subject<br/>+ challenge status + expiry
+    GW->>GW: render actual pending plan<br/>from ApprovalStore
+    GW-->>User: browser approval page<br/>PlanId + Plan hash + objects
+    User->>GW: POST /approvals/{challengeId}/approve
+
+    Note over GW: Hash-bound approval enforcement
+    GW->>GW: recompute SHA-256 of pending plan<br/>→ reject if hash mismatch
+    GW->>GW: write approved hash<br/>+ approval audit entry
+    Note over GW: approval_hash_mismatch audit entry<br/>if pending plan changed after URL creation
+
+    User->>Client: retry apply approved plan
+    Client->>GW: POST /mcp → apply_approved_plan(planId)<br/>JSON-RPC + JWT Bearer
+    GW->>GW: validate approved hash exists and matches
     GW->>Svr: forward tool call (no token)
 
-    Note over Svr: MCP elicitation approval
-    Svr->>GW: elicitation request (plan details + hash)
-    GW-->>Client: approval prompt<br/>"Approve this plan?"
-    User-->>Client: Yes
-    Client->>GW: approval response
-    GW-->>Svr: elicitation result: approved
-    Note over Svr: K8sManager.ApplyApprovedPlan<br/>MCP elicitation via tools framework
-
-    Note over Svr: Hash-bound approval enforcement
-    Svr->>Svr: recompute SHA-256 of pending plan<br/>→ reject if hash mismatch
-    Note over Svr: approval_hash_mismatch audit entry<br/>if pending plan changed after approval
-
     Note over Svr,K8s: Apply mutation
+    Svr->>Svr: verify approved hash still matches<br/>pending plan before applying
     Svr->>K8s: apply mutation<br/>(server-side apply / patch)
     K8s-->>Svr: Kubernetes API response
     Svr->>Svr: ApprovalStore — write applied plan<br/>+ approval audit entry

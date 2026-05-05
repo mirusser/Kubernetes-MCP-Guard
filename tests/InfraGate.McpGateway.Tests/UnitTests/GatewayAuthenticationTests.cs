@@ -55,57 +55,6 @@ public sealed class GatewayAuthenticationTests
     }
 
     [Fact]
-    public async Task McpEndpoint_AllowsStaticBearerToken_WhenOAuthIsEnabled()
-    {
-        using var server = CreateOAuthServer(staticBearerToken: "secret");
-        using var client = server.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "secret");
-
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
-
-        response.EnsureSuccessStatusCode();
-        Assert.Equal("ok", await response.Content.ReadAsStringAsync());
-    }
-
-    [Fact]
-    public async Task McpEndpoint_RejectsWrongStaticBearerToken_WhenOAuthIsEnabled()
-    {
-        using var server = CreateOAuthServer(staticBearerToken: "secret");
-        using var client = server.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "wrong");
-
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
-
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task McpEndpoint_AllowsStaticBearerToken_WhenOAuthIsDisabled()
-    {
-        using var server = CreateStaticBearerServer("secret");
-        using var client = server.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "secret");
-
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
-
-        response.EnsureSuccessStatusCode();
-        Assert.Equal("ok", await response.Content.ReadAsStringAsync());
-    }
-
-    [Fact]
-    public async Task McpEndpoint_RejectsWrongStaticBearerToken_WhenOAuthIsDisabled()
-    {
-        using var server = CreateStaticBearerServer("secret");
-        using var client = server.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "wrong");
-
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
-
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Equal("Bearer", response.Headers.WwwAuthenticate.ToString());
-    }
-
-    [Fact]
     public async Task McpEndpoint_AllowsValidJwt()
     {
         using var server = CreateOAuthServer(out var signingKey);
@@ -193,10 +142,9 @@ public sealed class GatewayAuthenticationTests
     {
         const string metadataAddress = "http://devissuer:3011/.well-known/openid-configuration";
         var options = new GatewayAuthOptions(
-            BearerToken: null,
-            OAuthAuthority: Issuer,
-            OAuthResource: Resource,
-            OAuthScope: Scope,
+            Issuer,
+            Resource,
+            Scope,
             OAuthRequireHttpsMetadata: false,
             OAuthMetadataAddress: metadataAddress);
         var services = new ServiceCollection();
@@ -216,10 +164,7 @@ public sealed class GatewayAuthenticationTests
     private static TestServer CreateOAuthServer() =>
         CreateOAuthServer(out _);
 
-    private static TestServer CreateOAuthServer(string? staticBearerToken) =>
-        CreateOAuthServer(out _, staticBearerToken);
-
-    private static TestServer CreateOAuthServer(out SecurityKey signingKey, string? staticBearerToken = null)
+    private static TestServer CreateOAuthServer(out SecurityKey signingKey)
     {
         var key = new SymmetricSecurityKey("0123456789abcdef0123456789abcdef"u8.ToArray())
         {
@@ -227,7 +172,6 @@ public sealed class GatewayAuthenticationTests
         };
         signingKey = key;
         var options = new GatewayAuthOptions(
-            staticBearerToken,
             Issuer,
             Resource,
             Scope,
@@ -250,38 +194,6 @@ public sealed class GatewayAuthenticationTests
                     jwtOptions.TokenValidationParameters.ValidIssuer = Issuer;
                     jwtOptions.TokenValidationParameters.ValidAudience = Resource;
                 });
-            })
-            .Configure(app =>
-            {
-                app.UseRouting();
-                app.UseAuthentication();
-                app.UseAuthorization();
-                app.UseEndpoints(endpoints =>
-                {
-                    endpoints.MapGet(McpGatewayConventions.McpPath, () => "ok")
-                        .RequireAuthorization(GatewayAuthConventions.Schemes.PolicyName);
-                });
-            }));
-    }
-
-    private static TestServer CreateStaticBearerServer(string staticBearerToken)
-    {
-        var options = new GatewayAuthOptions(staticBearerToken);
-
-        return CreateServer(options, configureJwt: null);
-    }
-
-    private static TestServer CreateServer(
-        GatewayAuthOptions options,
-        Action<IServiceCollection>? configureJwt)
-    {
-        return new TestServer(new WebHostBuilder()
-            .ConfigureServices(services =>
-            {
-                services.AddRouting();
-                services.AddSingleton(options);
-                services.AddGatewayAuthentication(options);
-                configureJwt?.Invoke(services);
             })
             .Configure(app =>
             {
