@@ -20,7 +20,7 @@ Kubernetes-MCP-Guard is a high-performance gateway built on .NET 10 and the Mode
 
 ## 💎 Key Business Value
 
-- **Human-in-the-Loop Governance:** AI can propose changes, but only a human can approve the final execution plan.
+- **Human-in-the-Loop Governance:** AI can propose changes, but only a human can approve the final execution plan — via a separate browser-based approval flow that the MCP client cannot intercept or answer on the human's behalf.
 - **Enterprise-Grade Security:** Integrated with OAuth-aware authentication and Namespace-scoped RBAC to ensure the AI only sees what it is allowed to see.
 - **AI Safety & Auditing:** Built-in prompt-injection guardrails and full audit logging for compliance and troubleshooting
 - **Cutting-Edge Stack:** Architected using the latest .NET 10 features and the industry-standard MCP protocol.
@@ -39,7 +39,7 @@ flowchart TB
     Client["MCP client<br/>Codex / Open WebUI / LibreChat"]
 
     subgraph Gateway["HTTP MCP Gateway"]
-        Auth["OAuth or bearer auth"]
+        Auth["OAuth JWT auth"]
         Guardrails["Prompt-injection guardrails"]
         Audit["Guardrail audit log"]
         Auth --> Guardrails
@@ -65,6 +65,54 @@ flowchart TB
     ReadOnly --> RBAC
     Plans --> RBAC
 ```
+
+
+### 🔐 How Approval-Gated Mutations Work
+
+The diagram below shows what happens when an AI agent tries to make a change to your cluster. The key point: **the AI cannot approve its own requests**. Approval happens in your browser, on a completely separate channel with its own login.
+
+```mermaid
+---
+title: Out-of-Band Approval Flow
+---
+flowchart TB
+    classDef ai      fill:#e8f0fe,stroke:#4285f4,color:#1a1a2e,font-size:13px
+    classDef browser fill:#e6f4ea,stroke:#34a853,color:#1a1a2e,font-size:13px
+    classDef gate    fill:#fff3e0,stroke:#fb8c00,color:#1a1a2e,font-size:13px
+    classDef k8s     fill:#fce4ec,stroke:#e53935,color:#1a1a2e,font-size:13px
+
+    subgraph AI["① AI / MCP Channel"]
+        direction TB
+        A1["🤖 AI agent requests a change e.g. scale deployment to 3 replicas"]
+        A2["Gateway validates identity and creates a pending plan locked with a SHA-256 hash"]
+        A3["⛔ AI receives an approval URL only.
+         It cannot approve on your behalf"]
+        A4["AI calls apply again once human has approved"]
+    end
+
+    subgraph OOB["② Your Browser  —  separate login, separate session"]
+        direction TB
+        B1["🔗 You open the approval URL in your browser"]
+        B2["You log in with OAuth independent of the AI session"]
+        B3["Browser shows the real plan rendered by the Gateway from disk not by the AI"]
+        B4["You review: operation, namespace, affected objects, expiry time"]
+        B5["✅ You click Approve  or  ❌ Deny"]
+    end
+
+    K8s["☸️ Kubernetes Change is applied only after both channels agree"]
+
+    A1 --> A2 --> A3
+    A3 -.->|"URL shown to AI, opened by you"| B1
+    B1 --> B2 --> B3 --> B4 --> B5
+    B5 -->|"Approval recorded with identity binding"| A4
+    A4 --> K8s
+
+    class A1,A2,A3,A4 ai
+    class B1,B2,B3,B4,B5 browser
+    class K8s k8s
+```
+
+<sub><em>Even if the AI agent is compromised, it cannot self-approve. The approval must come from your browser session a channel the AI has no control over.</em></sub>
 <sub><em>Simplified architectural graph. Full version [here](docs/full-architecture-diagram)</em></sub>
 
 ### 🛠️ Technical & Architectural Highlights
