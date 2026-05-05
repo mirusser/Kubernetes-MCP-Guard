@@ -329,7 +329,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [McpGatewayConventions.ToolArguments.Namespace] = NamespaceName,
                 [McpGatewayConventions.ToolArguments.Manifest] = DemoManifest
             });
-        var applyPlanId = await ApprovePlanAsync(approvalRoot, applyRequestText);
+        var applyPlanId = await ApprovePlanAsync(approvalRoot, applyRequestText, Subject);
         var applyText = await CallTextAsync(
             client,
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
@@ -459,7 +459,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [McpGatewayConventions.ToolArguments.Container] = "nginx",
                 [McpGatewayConventions.ToolArguments.Image] = "nginx:1.27-alpine"
             });
-        var setImagePlanId = await ApprovePlanAsync(approvalRoot, setImageRequestText);
+        var setImagePlanId = await ApprovePlanAsync(approvalRoot, setImageRequestText, Subject);
         var setImageText = await CallTextAsync(
             client,
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
@@ -478,7 +478,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [McpGatewayConventions.ToolArguments.Name] = "mcp-api-demo",
                 [McpGatewayConventions.ToolArguments.Replicas] = 2
             });
-        var scalePlanId = await ApprovePlanAsync(approvalRoot, scaleRequestText);
+        var scalePlanId = await ApprovePlanAsync(approvalRoot, scaleRequestText, Subject);
         var scaleText = await CallTextAsync(
             client,
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
@@ -496,7 +496,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [McpGatewayConventions.ToolArguments.Namespace] = NamespaceName,
                 [McpGatewayConventions.ToolArguments.Name] = "mcp-api-demo"
             });
-        var restartPlanId = await ApprovePlanAsync(approvalRoot, restartRequestText);
+        var restartPlanId = await ApprovePlanAsync(approvalRoot, restartRequestText, Subject);
         var restartText = await CallTextAsync(
             client,
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
@@ -514,7 +514,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [McpGatewayConventions.ToolArguments.Namespace] = NamespaceName,
                 [McpGatewayConventions.ToolArguments.Manifest] = DemoManifest
             });
-        var deletePlanId = await ApprovePlanAsync(approvalRoot, deleteRequestText);
+        var deletePlanId = await ApprovePlanAsync(approvalRoot, deleteRequestText, Subject);
         var deleteText = await CallTextAsync(
             client,
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
@@ -828,15 +828,32 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         return kubeconfigPath;
     }
 
-    private static async Task<string> ApprovePlanAsync(string approvalRoot, string requestText)
+    private static async Task<string> ApprovePlanAsync(string approvalRoot, string requestText, string subject)
     {
         var planId = ParsePlanId(requestText);
-        var pendingPath = Path.Combine(approvalRoot, "pending", $"{planId}.json");
-        var approvedPath = Path.Combine(approvalRoot, "approved", $"{planId}.sha256");
+        var pendingPath = Path.Combine(approvalRoot, ApprovalConventions.Storage.PendingDirectory, $"{planId}{ApprovalConventions.Storage.JsonExtension}");
+        var approvedPath = Path.Combine(approvalRoot, ApprovalConventions.Storage.ApprovedDirectory, $"{planId}{ApprovalConventions.Storage.Sha256Extension}");
         await using var stream = File.OpenRead(pendingPath);
         var hash = Convert.ToHexString(await SHA256.HashDataAsync(stream)).ToLowerInvariant();
         Directory.CreateDirectory(Path.GetDirectoryName(approvedPath)!);
         await File.WriteAllTextAsync(approvedPath, hash);
+
+        var challengeId = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+        var challenge = new ApprovalChallenge(
+            challengeId,
+            planId,
+            hash,
+            subject,
+            RequesterAuthenticationType: null,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow.AddHours(1),
+            McpGatewayConventions.ApprovalChallengeStatuses.Approved,
+            ApproverSubject: subject,
+            DecidedAtUtc: DateTimeOffset.UtcNow);
+        var challengesDir = Path.Combine(approvalRoot, ApprovalConventions.Storage.ChallengesDirectory);
+        Directory.CreateDirectory(challengesDir);
+        var challengeJson = JsonSerializer.Serialize(challenge, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
+        await File.WriteAllTextAsync(Path.Combine(challengesDir, $"{challengeId}{ApprovalConventions.Storage.JsonExtension}"), challengeJson);
 
         return planId;
     }
