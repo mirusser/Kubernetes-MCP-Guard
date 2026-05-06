@@ -25,16 +25,9 @@
 - Approval challenges are bound to plan id, plan hash, requester subject, expiry, and single-use status.
 - Guardrail audit entries must not include bearer tokens or raw credentials.
 
-## Configuration
+## Settings
 
-- `INFRA_GATE_DOWNSTREAM_PROJECT`: optional path to the downstream `InfraGate.McpServer.csproj`.
-- `INFRA_GATE_DOWNSTREAM_ASSEMBLY`: optional path to a published downstream `InfraGate.McpServer.dll`; used by the containerized gateway image.
-- `INFRA_GATE_GUARD_AUDIT_ROOT`: optional audit output root. Defaults to `.mcp-guardrails`.
-- `K8S_MCP_APPROVAL_ROOT`: approval file storage root shared with the downstream server. Defaults to `.mcp-approvals`.
-- `INFRA_GATE_APPROVAL_BASE_URL`: optional public base URL used when returning approval links.
-- `INFRA_GATE_APPROVAL_CHALLENGE_TTL_SECONDS`: optional approval challenge TTL. Defaults to 900 seconds.
-- `ASPNETCORE_URLS`: optional HTTP binding. Defaults to `http://127.0.0.1:3001` when unset.
-- Auth settings come from `InfraGate.McpGateway.Auth`.
+Runtime environment variables, defaults, examples, and production guidance are documented in [docs/configuration.md](../../docs/configuration.md). Auth settings are owned by `InfraGate.McpGateway.Auth` and are listed there too.
 
 ## Verification
 

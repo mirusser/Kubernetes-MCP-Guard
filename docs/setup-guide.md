@@ -360,52 +360,9 @@ The stdio integration flag verifies the direct MCP server path. The gateway inte
 
 ---
 
-## Environment Variable Reference
+## Settings Reference
 
-### McpServer
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `KUBECONFIG` | No | SDK default discovery | Path to kubeconfig |
-| `K8S_MCP_APPROVAL_ROOT` | No | `.mcp-approvals` | Approval file storage root |
-| `K8S_MCP_ALLOWED_NAMESPACES` | No | `mcp-nginx-demo` | Comma-separated allowed namespaces |
-
-### McpGateway
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `INFRA_GATE_DOWNSTREAM_PROJECT` | No | — | Path to McpServer `.csproj` |
-| `INFRA_GATE_DOWNSTREAM_ASSEMBLY` | No | — | Published McpServer assembly path for container subprocess mode |
-| `INFRA_GATE_GUARD_AUDIT_ROOT` | No | `.mcp-guardrails` | Guardrail audit JSONL output |
-| `ASPNETCORE_URLS` | No | `http://127.0.0.1:3001` | HTTP bind address |
-
-### McpGateway.Auth
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `INFRA_GATE_OAUTH_AUTHORITY` | Yes | — | OAuth issuer URL |
-| `INFRA_GATE_OAUTH_METADATA_ADDRESS` | No | — | Optional internal OIDC discovery URL |
-| `INFRA_GATE_OAUTH_RESOURCE` | No | `http://127.0.0.1:3001/mcp` | JWT audience |
-| `INFRA_GATE_OAUTH_SCOPE` | No | `mcp:tools` | Required JWT scope |
-| `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA` | No | `true` | HTTPS metadata check |
-| `INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID` | No | `infra-gate-approval-ui` | Browser approval OAuth client id |
-| `INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT` | No | `${INFRA_GATE_OAUTH_AUTHORITY}/authorize` | Browser-visible approval authorization endpoint |
-| `INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT` | No | `${INFRA_GATE_OAUTH_AUTHORITY}/token` | Gateway-visible approval token endpoint |
-| `INFRA_GATE_APPROVAL_BASE_URL` | No | request-derived | Public base URL for approval links |
-| `INFRA_GATE_APPROVAL_CHALLENGE_TTL_SECONDS` | No | `900` | Approval URL lifetime |
-
-### DevIssuer
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `INFRA_GATE_DEV_ISSUER_ISSUER` | No | `http://127.0.0.1:3011` | Issuer URL |
-| `INFRA_GATE_DEV_ISSUER_RESOURCE` | No | `http://127.0.0.1:3001/mcp` | Token audience |
-| `INFRA_GATE_DEV_ISSUER_SCOPE` | No | `mcp:tools` | Token scope |
-| `INFRA_GATE_DEV_ISSUER_SUBJECT` | No | `infra-gate-dev-user` | Token subject claim |
-| `INFRA_GATE_DEV_ISSUER_INTERNAL_ENDPOINT_BASE` | No | — | Internal endpoint base for bridge-network discovery metadata |
-| `INFRA_GATE_DEV_ISSUER_APPROVAL_CLIENT_ID` | No | `infra-gate-approval-ui` | Pre-registered approval UI client id |
-| `INFRA_GATE_DEV_ISSUER_APPROVAL_REDIRECT_URI` | No | `http://127.0.0.1:3001/approvals/oauth/callback` | Pre-registered approval UI redirect |
-| `ASPNETCORE_URLS` | No | (framework default) | HTTP bind; keep aligned with issuer URL |
+The canonical environment variable, CI/CD, and release configuration reference is [docs/configuration.md](configuration.md). Keep the command snippets in this guide as runnable examples, and update the reference when defaults or production guidance change.
 
 ---
 
