@@ -277,6 +277,7 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 - Security model: [docs/security-model.md](docs/security-model.md)
 - Tool permissions matrix: [docs/tool-permissions.md](docs/tool-permissions.md)
 - Production OIDC guide: [docs/production-oidc.md](docs/production-oidc.md)
+- Public roadmap: [docs/roadmap.md](docs/roadmap.md)
 - Kubernetes MCP server: [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md)
 - HTTP MCP gateway: [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md)
 - Gateway auth: [src/InfraGate.McpGateway.Auth/README.md](src/InfraGate.McpGateway.Auth/README.md)
@@ -289,6 +290,8 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 
 - License: [Apache-2.0](LICENSE)
 - Security policy: [SECURITY.md](SECURITY.md)
+- Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
 - Release process: [docs/releasing.md](docs/releasing.md)
 
 ---

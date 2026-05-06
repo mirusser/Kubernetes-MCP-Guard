@@ -12,10 +12,11 @@ This file owns the release process for Kubernetes MCP Guard. Releases are marked
 6. Confirm GHCR packages are set to **public** if public pulls are intended; confirm Docker Hub repositories are public if intended.
 7. Confirm the GitHub Packages page links back to the GitHub repository and has a description.
 8. Confirm release notes include exact image names and tags.
-9. Mark the GitHub release as **pre-release** while the project is experimental.
-10. Verify quickstart commands (compose, README) reference the released tag.
-11. Verify no secrets, tokens, or live credentials are present in docs, logs, sample manifests, or example env files.
-12. Run the published-image smoke test from Epic 2 against the release tag before announcing.
+9. Confirm `CHANGELOG.md` has a release-ready entry for the version.
+10. Mark the GitHub release as **pre-release** while the project is experimental.
+11. Verify quickstart commands (compose, README) reference the released tag.
+12. Verify no secrets, tokens, or live credentials are present in docs, logs, sample manifests, or example env files.
+13. Run the published-image smoke test from Epic 2 against the release tag before announcing.
 
 ## Release Notes Template
 
@@ -44,7 +45,7 @@ Experimental. Not recommended for production workloads.
 
 ### Changes
 
-- ...
+- Summarize the `CHANGELOG.md` entry for this version.
 
 ### Known limitations
 
