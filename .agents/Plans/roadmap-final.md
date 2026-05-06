@@ -263,7 +263,7 @@ When writing the demo doc, follow the `.codex/skills/infragate-mcp-gateway` invo
 1. Deploy the broken workload into `mcp-nginx-demo`.
 2. Inspect status, events, and pod logs with read-only tools (`get_k8s_status`, `get_k8s_events`, `get_pod_logs`, `get_*_diagnostics`).
 3. Generate a mutation plan with `request_set_deployment_image` or `request_apply_manifest`.
-4. Show the approval step (MCP elicitation or `scripts/approve-plan.sh`).
+4. Show the approval step (out-of-band browser approval via Gateway-hosted challenge URL).
 5. Apply with `apply_approved_plan`.
 6. Verify recovery with the read-only tools.
 7. Show the JSONL audit output under `.mcp-guardrails/`.
@@ -281,14 +281,14 @@ When writing the demo doc, follow the `.codex/skills/infragate-mcp-gateway` invo
 - The demo exercises read-only and mutation flows.
 - The demo reinforces the safety model — approval is visible and required.
 - The demo does not require production credentials or a real OIDC provider.
-- For clients without elicitation support, the demo documents the `scripts/approve-plan.sh` fallback.
+- The demo documents the browser-based out-of-band approval flow; `scripts/approve-plan.sh` is documented as a direct-stdio-server-only fallback (not usable through the Gateway).
 
 #### Status
 
 Already in place:
 
 - 14 MCP tools are implemented and documented across [src/InfraGate.McpServer/README.md](../../src/InfraGate.McpServer/README.md) and [docs/setup-guide.md](../../docs/setup-guide.md).
-- `scripts/approve-plan.sh` exists for non-elicitation approval.
+- `scripts/approve-plan.sh` exists for direct stdio server approval (not usable through the Gateway).
 - `deploy/minikube/rbac.yaml` and `scripts/create-demo-kubeconfig.sh` already provision the `mcp-nginx-demo` namespace and ServiceAccount.
 
 Remaining:
@@ -568,7 +568,7 @@ Add `docs/architecture.md` containing:
 1. Component diagram (Mermaid).
 2. Read-only request flow.
 3. Mutation request flow (`request_*` plan creation).
-4. Approval flow (hash-bound, elicitation or `approve-plan.sh`).
+4. Approval flow (hash-bound, out-of-band browser approval via Gateway-hosted challenge URL).
 5. Auth flow (OAuth 2.1 + static bearer, scope check, 403 step-up).
 6. Audit flow (`.mcp-guardrails/audit.jsonl` and ApprovalStore audit).
 7. Image and registry layout (Docker Hub vs. GHCR).
@@ -690,7 +690,7 @@ For any incidental code edits triggered by an epic (renames, helpers, constants)
 - `Async` suffix and `CancellationToken` propagation on async I/O.
 - Prefer `internal` over `public` unless cross-project use is intentional.
 
-For any work that touches the gateway demo or Kubernetes invocations, use `.codex/skills/infragate-mcp-gateway` as the canonical contract: HTTP MCP at `http://127.0.0.1:3001/mcp`, demo namespace `mcp-nginx-demo`, plan-first mutation flow, MCP elicitation approval inside `apply_approved_plan`.
+For any work that touches the gateway demo or Kubernetes invocations, use `.codex/skills/infragate-mcp-gateway` as the canonical contract: HTTP MCP at `http://127.0.0.1:3001/mcp`, demo namespace `mcp-nginx-demo`, plan-first mutation flow, out-of-band browser approval via Gateway-hosted challenge URL inside `apply_approved_plan`.
 
 For each epic:
 

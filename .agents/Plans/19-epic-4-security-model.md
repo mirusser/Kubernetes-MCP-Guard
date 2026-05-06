@@ -87,9 +87,10 @@ Open section with: "The following controls are hard enforcement boundaries. Viol
 
 **1.4 Approval-Gated Mutation Flow**
 - `request_*` tools create a pending plan (no K8s write at request time)
-- `apply_approved_plan` triggers MCP elicitation; applies only after explicit user approval
-- SHA-256 of pending plan stored separately; recomputed at apply time; mismatch → refused + `approval_hash_mismatch` audit entry
-- Cross-link to `src/InfraGate.McpServer/README.md` for ApprovalStore contract
+- `apply_approved_plan` returns a Gateway-hosted browser approval URL (single-use challenge with cryptographic random ID and TTL); applies only after explicit out-of-band user approval in a browser with a separate OAuth session bound to the same identity
+- SHA-256 of pending plan stored separately; recomputed at both challenge creation and approval time; mismatch → refused + `approval_hash_mismatch` audit entry
+- Gateway enforces anti-forgery tokens, same-subject binding, challenge TTL expiry, and plan-hash TOCTOU re-verification at approval time
+- Cross-link to `src/InfraGate.McpServer/README.md` for ApprovalStore contract and `src/InfraGate.McpGateway/README.md` for GatewayApprovalService and browser approval endpoints
 
 ### Section 2 — Defense-in-Depth
 
@@ -196,7 +197,7 @@ All: `Destructive = false`, K8s Verbs at call time: **none** (creates plan only)
 
 ### Mutation Execution Tool (1 row)
 
-`apply_approved_plan`: `Destructive = true`, K8s Verbs: depends on approved plan, Approval Required: **Yes** (MCP elicitation or `scripts/approve-plan.sh`), validates SHA-256 hash match before any K8s call.
+`apply_approved_plan`: `Destructive = true`, K8s Verbs: depends on approved plan, Approval Required: **Yes** (out-of-band browser approval via Gateway-hosted single-use challenge URL; `scripts/approve-plan.sh` works only with direct stdio server, not through the Gateway), validates SHA-256 hash match and approved challenge record before any K8s call.
 
 Follow with a sub-table of verbs applied by plan type:
 
@@ -273,3 +274,5 @@ A full security model document covering hard boundaries, threat model, and non-g
 - **Hash-bound approvals appear in §1 and §2** — §1.4 = approval as hard boundary; §2.5 = SHA-256 integrity as defense-in-depth. Keep them separate.
 - **`apply_approved_plan` K8s verbs are plan-type-dependent** — use the sub-table rather than listing verbs in the main row.
 - **Do not imply production readiness** — both new docs need the experimental status note near the top.
+- **Approval is out-of-band, not MCP elicitation** — the plan's original §1.4 and tool matrix referenced MCP elicitation, but the codebase now uses browser-based out-of-band approval via Gateway-hosted single-use challenge URLs. The MCP client receives a URL as plain text and cannot submit approval content through MCP. See `GatewayApprovalService.cs` for the challenge architecture.
+- **`scripts/approve-plan.sh` only works with direct stdio server** — it writes an approval file but does not create an `ApprovalChallenge` record, so the Gateway will not accept it. The script is for direct `InfraGate.McpServer` use only.
