@@ -116,7 +116,7 @@ The server does not provide kubectl exec passthrough, shell execution, namespace
 ## 4. Non-Goals
 
 - Not a replacement for Kubernetes RBAC.
-- DevIssuer is not a production identity provider. `docs/production-oidc.md` is planned for production OIDC guidance.
+- DevIssuer is not a production identity provider. See [docs/production-oidc.md](production-oidc.md) for production OIDC guidance.
 - Not a full policy engine.
 - No guarantee that AI-generated actions are correct or safe.
 - Not production-certified; the project is experimental.

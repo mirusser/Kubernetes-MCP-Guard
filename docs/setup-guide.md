@@ -184,7 +184,7 @@ codex mcp add infra-gate \
 
 ### Mode B — HTTP Gateway + OAuth (DevIssuer)
 
-Use this for the full OAuth/OIDC flow (e.g., testing Codex CLI `mcp login`). The recommended local path is Docker Compose: the gateway and dev issuer run on a Docker bridge network, and the gateway launches the Kubernetes MCP server as a private stdio subprocess.
+Use this for the full OAuth/OIDC flow (e.g., testing Codex CLI `mcp login`). The recommended local path is Docker Compose: the gateway and dev issuer run on a Docker bridge network, and the gateway launches the Kubernetes MCP server as a private stdio subprocess. For production identity providers, see the [Production OIDC Guide](production-oidc.md).
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose

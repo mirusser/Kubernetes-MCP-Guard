@@ -20,7 +20,7 @@
 
 ## Configuration
 
-- `INFRA_GATE_OAUTH_AUTHORITY`: required OAuth issuer URL for JWT validation and discovery challenge metadata.
+- `INFRA_GATE_OAUTH_AUTHORITY`: required OAuth issuer URL for JWT validation and discovery challenge metadata. See [docs/production-oidc.md](../../docs/production-oidc.md) for production OIDC guidance.
 - `INFRA_GATE_OAUTH_METADATA_ADDRESS`: optional internal OIDC discovery URL; useful when the public issuer URL differs from the gateway's network path to the issuer.
 - `INFRA_GATE_OAUTH_RESOURCE`: expected JWT audience/resource. Defaults to `http://127.0.0.1:3001/mcp`.
 - `INFRA_GATE_OAUTH_SCOPE`: required scope. Defaults to `mcp:tools`.

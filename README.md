@@ -264,7 +264,7 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 | .NET | .NET 10 |
 | Kubernetes | minikube / local cluster initially |
 | MCP transport | HTTP MCP endpoint at `/mcp` |
-| OIDC | DevIssuer (dev), Keycloak planned, Entra ID later |
+| OIDC | DevIssuer (dev), Keycloak documented; Entra ID later |
 | Container registries | GHCR, Docker Hub |
 | Platforms | linux/amd64 initially |
 
@@ -275,6 +275,7 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 - MCP compliance notes: [docs/MCP-compliance.md](docs/MCP-compliance.md)
 - Security model: [docs/security-model.md](docs/security-model.md)
 - Tool permissions matrix: [docs/tool-permissions.md](docs/tool-permissions.md)
+- Production OIDC guide: [docs/production-oidc.md](docs/production-oidc.md)
 - Kubernetes MCP server: [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md)
 - HTTP MCP gateway: [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md)
 - Gateway auth: [src/InfraGate.McpGateway.Auth/README.md](src/InfraGate.McpGateway.Auth/README.md)
