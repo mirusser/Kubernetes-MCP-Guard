@@ -19,11 +19,9 @@
 - Approval storage defaults to `.mcp-approvals` and uses `pending/`, `approved/`, `applied/`, and `audit.jsonl`.
 - Do not rename MCP tool methods or tool-name constants without updating clients, tests, and README examples.
 
-## Configuration
+## Settings
 
-- `KUBECONFIG`: optional kubeconfig path. If unset, the Kubernetes client uses default config discovery.
-- `K8S_MCP_APPROVAL_ROOT`: optional approval file root.
-- `K8S_MCP_ALLOWED_NAMESPACES`: optional comma-separated namespace allow-list. Defaults to `mcp-nginx-demo`.
+Runtime environment variables, defaults, examples, and production guidance are documented in [docs/configuration.md](../../docs/configuration.md).
 
 ## Verification
 

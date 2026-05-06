@@ -113,7 +113,7 @@ flowchart TB
 ```
 
 <sub><em>Even if the AI agent is compromised, it cannot self-approve. The approval must come from your browser session a channel the AI has no control over.</em></sub>
-<sub><em>Simplified architectural graph. Full version [here](docs/full-architecture-diagram.md)</em></sub>
+<sub><em>Simplified architectural graph. Full version [here](docs/architecture.md)</em></sub>
 
 ### 🛠️ Technical & Architectural Highlights
 
@@ -264,7 +264,7 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 | .NET | .NET 10 |
 | Kubernetes | minikube / local cluster initially |
 | MCP transport | HTTP MCP endpoint at `/mcp` |
-| OIDC | DevIssuer (dev), Keycloak planned, Entra ID later |
+| OIDC | DevIssuer (dev), Keycloak documented; Entra ID later |
 | Container registries | GHCR, Docker Hub |
 | Platforms | linux/amd64 initially |
 
@@ -272,7 +272,12 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 
 - Developer runbook: [docs/devs-readme.md](docs/devs-readme.md)
 - Setup guide: [docs/setup-guide.md](docs/setup-guide.md)
+- Configuration reference: [docs/configuration.md](docs/configuration.md)
 - MCP compliance notes: [docs/MCP-compliance.md](docs/MCP-compliance.md)
+- Security model: [docs/security-model.md](docs/security-model.md)
+- Tool permissions matrix: [docs/tool-permissions.md](docs/tool-permissions.md)
+- Production OIDC guide: [docs/production-oidc.md](docs/production-oidc.md)
+- Public roadmap: [docs/roadmap.md](docs/roadmap.md)
 - Kubernetes MCP server: [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md)
 - HTTP MCP gateway: [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md)
 - Gateway auth: [src/InfraGate.McpGateway.Auth/README.md](src/InfraGate.McpGateway.Auth/README.md)
@@ -285,6 +290,8 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 
 - License: [Apache-2.0](LICENSE)
 - Security policy: [SECURITY.md](SECURITY.md)
+- Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
 - Release process: [docs/releasing.md](docs/releasing.md)
 
 ---

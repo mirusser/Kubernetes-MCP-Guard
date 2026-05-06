@@ -18,17 +18,9 @@
 - OAuth identities are normalized for guardrail audit entries.
 - Do not move auth env var names or scheme names without updating gateway setup and tests.
 
-## Configuration
+## Settings
 
-- `INFRA_GATE_OAUTH_AUTHORITY`: required OAuth issuer URL for JWT validation and discovery challenge metadata.
-- `INFRA_GATE_OAUTH_METADATA_ADDRESS`: optional internal OIDC discovery URL; useful when the public issuer URL differs from the gateway's network path to the issuer.
-- `INFRA_GATE_OAUTH_RESOURCE`: expected JWT audience/resource. Defaults to `http://127.0.0.1:3001/mcp`.
-- `INFRA_GATE_OAUTH_SCOPE`: required scope. Defaults to `mcp:tools`.
-- `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA`: controls JWT metadata HTTPS requirement.
-- `INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID`: public OAuth client id used by the browser approval UI.
-- `INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT`: optional browser-visible authorization endpoint override.
-- `INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT`: optional gateway-visible token endpoint override.
-- `INFRA_GATE_APPROVAL_OAUTH_CALLBACK_PATH`: optional approval UI OAuth callback path.
+Runtime environment variables, defaults, examples, and production guidance are documented in [docs/configuration.md](../../docs/configuration.md). See [docs/production-oidc.md](../../docs/production-oidc.md) for production OIDC provider setup.
 
 ## Verification
 

@@ -92,11 +92,7 @@ git tag v1.0.0 && git push origin v1.0.0
 
 Or trigger manually from Actions → Docker workflow → Run workflow → check `push_images`.
 
-Required repository configuration:
-
-- `vars.DOCKERHUB_USERNAME`
-- `vars.DOCKERHUB_NAMESPACE`
-- `secrets.DOCKERHUB_TOKEN`
+Required repository variables and secrets are listed in the [configuration reference](configuration.md).
 
 Images built: `kubernetes-mcp-guard-devissuer`, `kubernetes-mcp-guard-gateway`.
 
@@ -110,7 +106,7 @@ For local OAuth/Codex login without an external issuer, run the repo-local dev i
 dotnet run --project src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj
 ```
 
-The dev issuer listens on `http://127.0.0.1:3011` by default, exposes OAuth/OIDC discovery metadata, dynamic client registration, authorization-code + PKCE, and JWKS endpoints, and issues ephemeral JWT access tokens for `http://127.0.0.1:3001/mcp` with `mcp:tools`. It is for localhost development only; registrations, authorization codes, and signing keys are in memory and are reset on restart.
+The dev issuer listens on `http://127.0.0.1:3011` by default, exposes OAuth/OIDC discovery metadata, dynamic client registration, authorization-code + PKCE, and JWKS endpoints, and issues ephemeral JWT access tokens for `http://127.0.0.1:3001/mcp` with `mcp:tools`. It is for localhost development only; registrations, authorization codes, and signing keys are in memory and are reset on restart. See [configuration.md](configuration.md) for environment variable defaults and production guidance.
 
 Then start the gateway with OAuth enabled:
 
@@ -134,21 +130,9 @@ dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
 
 Set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` only for a localhost-only issuer during development.
 
-For an external OAuth/OIDC issuer, use its issuer URL for `INFRA_GATE_OAUTH_AUTHORITY`. The gateway remains a resource server only; external issuer setup, users, clients, login, consent, PKCE policy, and token issuance stay outside the gateway.
+For an external OAuth/OIDC issuer, use its issuer URL for `INFRA_GATE_OAUTH_AUTHORITY`. The gateway remains a resource server only; external issuer setup, users, clients, login, consent, PKCE policy, and token issuance stay outside the gateway. See [docs/production-oidc.md](production-oidc.md) for production OIDC guidance.
 
-Optional dev issuer settings:
-
-```bash
-export INFRA_GATE_DEV_ISSUER_ISSUER="http://127.0.0.1:3011"
-export INFRA_GATE_DEV_ISSUER_RESOURCE="http://127.0.0.1:3001/mcp"
-export INFRA_GATE_DEV_ISSUER_SCOPE="mcp:tools"
-export INFRA_GATE_DEV_ISSUER_SUBJECT="infra-gate-dev-user"
-export INFRA_GATE_DEV_ISSUER_INTERNAL_ENDPOINT_BASE="http://devissuer:3011"
-export INFRA_GATE_DEV_ISSUER_APPROVAL_CLIENT_ID="infra-gate-approval-ui"
-export INFRA_GATE_DEV_ISSUER_APPROVAL_REDIRECT_URI="http://127.0.0.1:3001/approvals/oauth/callback"
-```
-
-Use `ASPNETCORE_URLS` to bind the dev issuer to a different URL, and keep `INFRA_GATE_DEV_ISSUER_ISSUER` aligned with the URL clients use for discovery.
+Optional dev issuer settings are documented in [configuration.md](configuration.md). For the containerized Docker bridge path, the Compose files set the internal endpoint and approval redirect values for you.
 
 Codex CLI HTTP MCP config:
 
@@ -165,7 +149,7 @@ Then run:
 codex mcp login infra-gate
 ```
 
-Guardrail audit events are written to `.mcp-guardrails/audit.jsonl` by default. Set `INFRA_GATE_GUARD_AUDIT_ROOT` to choose another directory.
+Guardrail audit output settings are listed in [configuration.md](configuration.md).
 
 ### Run the stdio MCP server directly
 
