@@ -1,7 +1,5 @@
 # Kubernetes-MCP-Guard Security Implementation Roadmap
 
-**Repository:** `mirusser/Kubernetes-MCP-Guard`  
-**Suggested file name:** `docs/security-implementation-roadmap.md` or `SECURITY_ROADMAP.md`  
 **Purpose:** convert the current security review findings into an actionable implementation plan.
 
 ---
