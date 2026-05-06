@@ -35,7 +35,7 @@ Keep the current direction. Do not weaken or bypass:
 - Narrow MCP tool surface (no raw shell, no `kubectl` exec passthrough).
 - Kubernetes API access via the typed client.
 - Namespace-scoped RBAC as the hard permission boundary.
-- OAuth 2.1 / static-bearer auth at the gateway.
+- OAuth 2.1 JWT auth at the gateway (no static bearer token mode).
 - Approval-gated mutations (`request_*` plans + `apply_approved_plan`).
 - Hash-bound approvals so a plan cannot be modified after approval.
 - Manifest validation limited to `apps/v1 Deployment`, `v1 Service`, `v1 ConfigMap`.
@@ -157,15 +157,18 @@ Bake this into `docs/releasing.md` so every release follows the same path:
 Already in place:
 
 - README has badges (unit tests, integration tests, SonarCloud quality gate, SonarCloud coverage).
-- README has architecture summary, safety model bullets, and a Mermaid diagram.
+- README has architecture summary, safety model bullets, a Mermaid diagram.
 - Docker Hub and GHCR image *publishing* is configured in `package-docker.yml`.
+- `LICENSE` (Apache-2.0) exists at the repo root.
+- `SECURITY.md` exists with supported versions, reporting channel, and disclosure policy.
+- Release checklist is documented in `docs/releasing.md`.
+- Docker Hub and GHCR image references are visible in the README quickstart section.
+- README includes the InfraGate vs. Kubernetes MCP Guard naming note.
+- README includes a compatibility/support matrix.
 
 Remaining:
 
-- `LICENSE`, `SECURITY.md`, release-notes template do not exist.
-- README does not yet surface the published image references in a quickstart-grade way.
-- README does not yet explain the InfraGate vs. Kubernetes MCP Guard naming.
-- README does not yet include a compatibility/support matrix.
+- Nothing. Epic 1 is complete.
 
 #### Compatibility / support matrix
 
@@ -238,11 +241,14 @@ Already in place:
 
 - `package-docker.yml` builds and publishes both `kubernetes-mcp-guard-gateway` and `kubernetes-mcp-guard-devissuer` to Docker Hub and `ghcr.io/<owner>/...` on `v*` tags and manual dispatch.
 - `deploy/mode-c/compose.yaml` exists and works for local builds.
+- `deploy/mode-c/compose.release.yaml` exists using published image tags.
+- `docs/setup-guide.md` has a "Run from published images" section.
+- `README.md` links to both the local-build and released-image quickstart.
+- Tag references in docs and compose files reference the current release tag.
 
 Remaining:
 
-- No compose file or doc section uses published image tags yet.
-- `docs/devs-readme.md` mentions the image short names but not full registry paths.
+- Nothing. Epic 2 is complete.
 
 ---
 
@@ -290,11 +296,13 @@ Already in place:
 - 14 MCP tools are implemented and documented across [src/InfraGate.McpServer/README.md](../../src/InfraGate.McpServer/README.md) and [docs/setup-guide.md](../../docs/setup-guide.md).
 - `scripts/approve-plan.sh` exists for direct stdio server approval (not usable through the Gateway).
 - `deploy/minikube/rbac.yaml` and `scripts/create-demo-kubeconfig.sh` already provision the `mcp-nginx-demo` namespace and ServiceAccount.
+- `examples/failing-deployment/` contains `deployment.yaml` (broken image tag) and `fix.yaml`.
+- `docs/demo-failing-deployment.md` provides the narrated walkthrough exercising read-only diagnosis, mutation proposal, out-of-band browser approval, apply, verification, and audit inspection.
+- `README.md` links to the demo.
 
 Remaining:
 
-- No `examples/` directory.
-- No demo doc.
+- Nothing. Epic 3 is complete.
 
 ---
 
@@ -389,16 +397,15 @@ The actual scope value reflects the gateway default `INFRA_GATE_OAUTH_SCOPE=mcp:
 
 Already in place:
 
+- [docs/security-model.md](../../docs/security-model.md) is implemented with five sections: hard boundaries, defense-in-depth, threat model, non-goals, and development-only components.
+- [docs/tool-permissions.md](../../docs/tool-permissions.md) is implemented with a 14-tool matrix across three tables: read-only (8), plan mutation (5), and mutation execution (1), plus a plan-operation sub-table.
+- Both docs are linked from `README.md` and cross-linked to each other and to `docs/MCP-compliance.md`.
 - [docs/MCP-compliance.md](../../docs/MCP-compliance.md) covers OAuth 2.1, PKCE S256, RFC 8707, token-passthrough prevention, loopback redirect URI handling.
-- `src/InfraGate.McpGateway.Auth/README.md` describes scope checks, 403 step-up challenges, and identity normalization.
-- `src/InfraGate.McpServer/README.md` describes manifest validation and hash-bound approvals.
+- `SECURITY.md` section 34 references the security model instead of the old forward reference placeholder.
 
 Remaining:
 
-- No standalone `docs/security-model.md`.
-- No threat model section anywhere in the repo.
-- No per-tool RBAC/scope matrix.
-- Non-goals and production warnings are not consolidated anywhere a reader can find them quickly.
+- Nothing. Epic 4 is complete.
 
 ---
 
@@ -440,11 +447,14 @@ Already in place:
 
 - DevIssuer is implemented and tested with PKCE S256 and resource binding.
 - Gateway already supports OIDC via `INFRA_GATE_OAUTH_AUTHORITY`, `INFRA_GATE_OAUTH_METADATA_ADDRESS`, `INFRA_GATE_OAUTH_RESOURCE`, `INFRA_GATE_OAUTH_SCOPE`, `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA`.
+- `docs/production-oidc.md` exists with OIDC assumptions, required claims, config variables, and a Keycloak walkthrough.
+- DevIssuer is explicitly marked as development-only in the production doc.
 
 Remaining:
 
-- No production OIDC walkthrough exists.
-- No worked example for any real provider.
+- Entra ID (or other enterprise provider) example planned for a future revision.
+
+Epic 5 core (Keycloak walkthrough) is complete. The Entra ID example remains as a future addition.
 
 ---
 
@@ -507,14 +517,17 @@ Already in place:
 
 - `package-docker.yml` already builds and pushes to **both** Docker Hub and `ghcr.io/<owner>/...` (matrix over both images, login steps for both registries, metadata action emits tags for both).
 - `unit-tests.yml`, `integration-tests.yml`, `sonar.yml`, and `dotnet-build.yml` cover .NET CI quality.
+- Trivy image scanning runs in `package-docker.yml` with SARIF upload to the GitHub Security tab.
+- `.github/dependabot.yml` is configured for NuGet and GitHub Actions ecosystems.
+- Workflow `description:` text names both Docker Hub and GHCR.
+- `.trivyignore` and dependency ignore policy are documented.
 
 Remaining:
 
-- No image scan in any workflow; no SARIF upload.
-- No .NET dependency vulnerability scan in any workflow.
-- No `.github/dependabot.yml` configured for NuGet or GitHub Actions ecosystems.
-- Workflow `description:` text still reads "Push images to Docker Hub" — wording-only drift now that GHCR is wired.
-- Actions are pinned by major version, not by SHA.
+- Actions are pinned by major version, not by SHA (low-risk hardening item).
+- SBOM, provenance, and image signing tracked as future supply-chain hardening (Epic 6 future items).
+
+Epic 6 core (scanning + Dependabot + description fix) is complete. SHA-pinning and SBOM/signing remain as tracked future work.
 
 ---
 
@@ -545,13 +558,15 @@ Other docs reference this file rather than restate variables.
 
 Already in place:
 
-- `INFRA_GATE_*` variables are documented in [src/InfraGate.McpGateway.Auth/README.md](../../src/InfraGate.McpGateway.Auth/README.md), [src/InfraGate.DevIssuer/README.md](../../src/InfraGate.DevIssuer/README.md), and [docs/setup-guide.md](../../docs/setup-guide.md).
-- `K8S_MCP_*` variables are documented in [src/InfraGate.McpServer/README.md](../../src/InfraGate.McpServer/README.md).
+- [docs/configuration.md](../../docs/configuration.md) is implemented with five canonical tables: McpServer (3 vars), McpGateway (7 vars), McpGateway.Auth (9 vars), DevIssuer (8 vars), and CI/Release/Scripts (14 vars). Each table uses columns Variable, Component, Required, Default, Example, Description, and Production guidance.
+- Dev-only and production-dangerous settings are clearly flagged with per-row production guidance.
+- All four runtime project READMEs (`src/InfraGate.*/README.md`), `docs/setup-guide.md`, and `docs/devs-readme.md` link to `docs/configuration.md` instead of duplicating env-var references. Old `## Configuration` sections were removed.
+- `README.md` links to `docs/configuration.md` from the project map.
+- Runnable shell snippets and compose examples are preserved; only prose/table description duplicates were removed.
 
 Remaining:
 
-- No single-source-of-truth file.
-- Risk of drift across the three current locations grows as new variables are added.
+- Nothing. Epic 7 is complete.
 
 ---
 
@@ -569,7 +584,7 @@ Add `docs/architecture.md` containing:
 2. Read-only request flow.
 3. Mutation request flow (`request_*` plan creation).
 4. Approval flow (hash-bound, out-of-band browser approval via Gateway-hosted challenge URL).
-5. Auth flow (OAuth 2.1 + static bearer, scope check, 403 step-up).
+5. Auth flow (OAuth 2.1 JWT validation, scope check, 403 insufficient-scope challenge, and browser approval OAuth PKCE session).
 6. Audit flow (`.mcp-guardrails/audit.jsonl` and ApprovalStore audit).
 7. Image and registry layout (Docker Hub vs. GHCR).
 
