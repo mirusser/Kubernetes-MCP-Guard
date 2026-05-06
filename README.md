@@ -113,7 +113,7 @@ flowchart TB
 ```
 
 <sub><em>Even if the AI agent is compromised, it cannot self-approve. The approval must come from your browser session a channel the AI has no control over.</em></sub>
-<sub><em>Simplified architectural graph. Full version [here](docs/full-architecture-diagram.md)</em></sub>
+<sub><em>Simplified architectural graph. Full version [here](docs/architecture.md)</em></sub>
 
 ### 🛠️ Technical & Architectural Highlights
 
