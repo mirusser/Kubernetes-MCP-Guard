@@ -1,4 +1,4 @@
-namespace InfraGate.McpGateway;
+namespace InfraGate.Approvals;
 
 public sealed record ApprovalChallenge(
     string Id,

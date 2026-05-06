@@ -34,6 +34,14 @@ public static class ApprovalConventions
         public const string ApprovalChallengeRejected = "approval_challenge_rejected";
     }
 
+    public static class ChallengeStatuses
+    {
+        public const string Pending = "pending";
+        public const string Approved = "approved";
+        public const string Denied = "denied";
+        public const string Expired = "expired";
+    }
+
     public static class ApprovalSources
     {
         public const string GatewayOutOfBand = "gateway_oob";

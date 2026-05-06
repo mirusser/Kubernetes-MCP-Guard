@@ -847,7 +847,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             RequesterAuthenticationType: null,
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow.AddHours(1),
-            McpGatewayConventions.ApprovalChallengeStatuses.Approved,
+            ApprovalConventions.ChallengeStatuses.Approved,
             ApproverSubject: subject,
             DecidedAtUtc: DateTimeOffset.UtcNow);
         var challengesDir = Path.Combine(approvalRoot, ApprovalConventions.Storage.ChallengesDirectory);

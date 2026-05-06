@@ -40,7 +40,7 @@ public sealed class GatewayApprovalServiceTests
         Assert.True(File.Exists(context.Store.GetApprovedPath(plan.Id)));
         Assert.False(reused.Succeeded);
         Assert.Contains("already approved", reused.Message);
-        Assert.Equal(McpGatewayConventions.ApprovalChallengeStatuses.Approved, challenge?.Status);
+        Assert.Equal(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public sealed class GatewayApprovalServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Contains("expired", result.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(McpGatewayConventions.ApprovalChallengeStatuses.Expired, updated?.Status);
+        Assert.Equal(ApprovalConventions.ChallengeStatuses.Expired, updated?.Status);
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public sealed class GatewayApprovalServiceTests
         var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(McpGatewayConventions.ApprovalChallengeStatuses.Denied, challenge?.Status);
+        Assert.Equal(ApprovalConventions.ChallengeStatuses.Denied, challenge?.Status);
         Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
     }
 

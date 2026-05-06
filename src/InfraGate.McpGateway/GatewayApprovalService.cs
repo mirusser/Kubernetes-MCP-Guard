@@ -116,7 +116,7 @@ public sealed class GatewayApprovalService
         var decidedAt = DateTimeOffset.UtcNow;
         var updated = validation.Challenge with
         {
-            Status = McpGatewayConventions.ApprovalChallengeStatuses.Approved,
+            Status = ApprovalConventions.ChallengeStatuses.Approved,
             ApproverSubject = approver.Subject,
             DecidedAtUtc = decidedAt
         };
@@ -171,7 +171,7 @@ public sealed class GatewayApprovalService
         var decidedAt = DateTimeOffset.UtcNow;
         var denied = challenge with
         {
-            Status = McpGatewayConventions.ApprovalChallengeStatuses.Denied,
+            Status = ApprovalConventions.ChallengeStatuses.Denied,
             ApproverSubject = approver.Subject,
             DecidedAtUtc = decidedAt
         };
@@ -206,7 +206,7 @@ public sealed class GatewayApprovalService
 
         if (challenge.ExpiresAtUtc <= DateTimeOffset.UtcNow)
         {
-            var expired = challenge with { Status = McpGatewayConventions.ApprovalChallengeStatuses.Expired };
+            var expired = challenge with { Status = ApprovalConventions.ChallengeStatuses.Expired };
             await challengeStore.SaveAsync(expired, cancellationToken);
             await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApprovalChallengeExpired, new
             {
@@ -321,7 +321,7 @@ public sealed class GatewayApprovalService
     }
 
     private static bool IsPending(ApprovalChallenge challenge) =>
-        string.Equals(challenge.Status, McpGatewayConventions.ApprovalChallengeStatuses.Pending, StringComparison.Ordinal);
+        string.Equals(challenge.Status, ApprovalConventions.ChallengeStatuses.Pending, StringComparison.Ordinal);
 
     private static bool SameSubject(string left, string right) =>
         string.Equals(left, right, StringComparison.Ordinal);

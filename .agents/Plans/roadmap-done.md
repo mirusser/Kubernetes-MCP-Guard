@@ -607,11 +607,14 @@ Already in place:
 
 - Root README has a high-level Mermaid diagram.
 - `docs/MCP-compliance.md` includes a sequence diagram for the OAuth login flow.
+- [docs/architecture.md](../../docs/architecture.md) is implemented (316 lines) with seven sections: component map (Mermaid), OAuth login and MCP authorization flow, read-only tool call flow, mutation plan request flow, browser approval challenge flow, approved apply flow, audit flow, and image/registry layout.
+- The doc cross-links to `docs/MCP-compliance.md`, `docs/security-model.md`, `docs/tool-permissions.md`, and `docs/configuration.md` rather than restating their content.
+- Mutation approval flow is documented end-to-end through three sequence diagrams (plan request, browser challenge, approved apply).
+- Registry/image layout table documents both GHCR and Docker Hub images.
 
 Remaining:
 
-- No consolidated architecture doc with all six flows.
-- No diagram of the registry/image layout.
+- Nothing. Epic 8 is complete.
 
 ---
 
@@ -653,11 +656,17 @@ Add or improve:
 Already in place:
 
 - `.agents/Plans/` contains internal planning docs (this file, `roadmap.md`, `roadmap-revision.md`, archived plans).
-- AGENTS.md captures the agent collaboration norms.
+- `AGENTS.md` captures the agent collaboration norms.
+- [CONTRIBUTING.md](../../CONTRIBUTING.md) covers local setup, verification, MCP tool change rules, and documentation ownership.
+- [.github/PULL_REQUEST_TEMPLATE.md](../../.github/PULL_REQUEST_TEMPLATE.md) includes a safety checklist surfacing auth, approval, RBAC, guardrail, and tool-surface concerns.
+- [.github/ISSUE_TEMPLATE/bug_report.md](../../.github/ISSUE_TEMPLATE/bug_report.md) and [.github/ISSUE_TEMPLATE/feature_request.md](../../.github/ISSUE_TEMPLATE/feature_request.md) exist.
+- [CHANGELOG.md](../../CHANGELOG.md) follows Keep-a-Changelog format with pre-release tags.
+- [docs/roadmap.md](../../docs/roadmap.md) provides the outward-facing public roadmap and is linked from the README.
+- `CODE_OF_CONDUCT.md` was marked as optional and is not present; the existing ground rules in `CONTRIBUTING.md` and issue templates cover community expectations.
 
 Remaining:
 
-- No `CONTRIBUTING.md`, `CHANGELOG.md`, `CODE_OF_CONDUCT.md`, PR template, issue templates, or outward-facing `docs/roadmap.md`.
+- Nothing. Epic 9 is complete.
 
 ---
 
@@ -743,3 +752,5 @@ This roadmap is considered implemented when:
 - The `package-docker.yml` workflow description names both Docker Hub and GHCR.
 - `CONTRIBUTING.md`, PR template, issue templates, and `CHANGELOG.md` exist.
 - The repository is ready for external experimental users to evaluate safely.
+
+✅ All 21 criteria are met. The roadmap is fully implemented.

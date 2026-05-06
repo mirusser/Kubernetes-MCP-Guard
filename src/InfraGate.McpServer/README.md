@@ -16,7 +16,7 @@
 - Approval is hash-bound. If a pending plan changes after approval, application is refused.
 - Observability tools are read-only and bounded. They expose Events, Pod logs, focused summaries, and diagnostics, but not Secret values, ConfigMap values, raw manifests, exec, attach, or port-forward.
 - Allowed namespaces come from `K8S_MCP_ALLOWED_NAMESPACES`; unsupported namespaces are rejected before Kubernetes API calls.
-- Approval storage defaults to `.mcp-approvals` and uses `pending/`, `approved/`, `applied/`, and `audit.jsonl`.
+- Approval storage defaults to `.mcp-approvals` and uses `pending/`, `approved/`, `applied/`, `challenges/`, and `audit.jsonl`.
 - Do not rename MCP tool methods or tool-name constants without updating clients, tests, and README examples.
 
 ## Settings
