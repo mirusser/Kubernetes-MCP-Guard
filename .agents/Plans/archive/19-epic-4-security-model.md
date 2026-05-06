@@ -61,7 +61,7 @@ Opening sentence: orient reader and cross-link to `docs/MCP-compliance.md` (owns
 ## 5. Development-Only Components
 ### 5.1 DevIssuer
 ### 5.2 INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false
-### 5.3 Static Bearer Token Authentication
+### 5.3 Static Bearer Tokens
 ### 5.4 scripts/create-demo-kubeconfig.sh
 ```
 
@@ -144,7 +144,7 @@ Open with: "Must not be used in any production or shared environment."
 
 **5.2 INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false** — disables HTTPS check for OIDC discovery metadata; only acceptable pointing at localhost DevIssuer. Cross-link to `src/InfraGate.McpGateway.Auth/README.md`.
 
-**5.3 Static Bearer Token Authentication** — constant-time comparison; no rotation, no expiry, no audience binding; for local demos only. Cross-link to `src/InfraGate.McpGateway.Auth/README.md`.
+**5.3 Static Bearer Tokens** — not a supported gateway mode. Opaque bearer values (e.g. `change-me`) are rejected by JWT validation before any signature or scope check. There is no static bearer token handler in the gateway. For local development use DevIssuer; for shared environments use a production OIDC provider. Cross-link to `src/InfraGate.McpGateway.Auth/README.md` and `docs/mcp-clients-quirks.md`.
 
 **5.4 scripts/create-demo-kubeconfig.sh** — generates 24-hour SA token for minikube only; gitignored. Cross-link to `docs/setup-guide.md`.
 

@@ -273,6 +273,8 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 - Developer runbook: [docs/devs-readme.md](docs/devs-readme.md)
 - Setup guide: [docs/setup-guide.md](docs/setup-guide.md)
 - MCP compliance notes: [docs/MCP-compliance.md](docs/MCP-compliance.md)
+- Security model: [docs/security-model.md](docs/security-model.md)
+- Tool permissions matrix: [docs/tool-permissions.md](docs/tool-permissions.md)
 - Kubernetes MCP server: [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md)
 - HTTP MCP gateway: [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md)
 - Gateway auth: [src/InfraGate.McpGateway.Auth/README.md](src/InfraGate.McpGateway.Auth/README.md)

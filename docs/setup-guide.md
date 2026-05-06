@@ -417,7 +417,7 @@ The stdio integration flag verifies the direct MCP server path. The gateway inte
 ├── src/
 │   ├── InfraGate.McpServer/              # Stdio MCP server (Kubernetes tools)
 │   ├── InfraGate.McpGateway/             # HTTP gateway (guardrails, downstream client)
-│   ├── InfraGate.McpGateway.Auth/        # Auth library (bearer + OAuth JWT)
+│   ├── InfraGate.McpGateway.Auth/        # Auth library (OAuth JWT + browser approval cookie)
 │   └── InfraGate.DevIssuer/             # Dev-only OAuth issuer
 ├── tests/
 │   ├── InfraGate.McpServer.Tests/
