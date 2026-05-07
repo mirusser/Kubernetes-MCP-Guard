@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.McpServer.Policy;
 using k8s;
 using k8s.Models;
 
@@ -24,6 +25,13 @@ public sealed partial class K8sManager
             return Task.FromResult(ex.Message);
         }
 
+        var policyResult = K8sPolicyValidator.Validate(parsed.Objects, K8sPolicyOptions.Default);
+        if (policyResult.IsDenied)
+        {
+            return Task.FromResult(
+                $"Manifest rejected by policy:{Environment.NewLine}{policyResult.FormatRefusal()}");
+        }
+
         var plan = CreatePlan(
             operation: K8sConventions.PlanOperations.Apply,
             namespaceName,
@@ -35,7 +43,7 @@ public sealed partial class K8sManager
             objects: parsed.ObjectRefs,
             manifest);
 
-        return CreateAndFormatPlanAsync(plan, cancellationToken);
+        return CreateAndFormatPlanAsync(plan, policyResult, cancellationToken);
     }
 
     public Task<string> RequestDeleteManifestAsync(string namespaceName, string manifest, CancellationToken cancellationToken)
@@ -155,15 +163,22 @@ public sealed partial class K8sManager
         }
     }
 
-    private async Task<string> CreateAndFormatPlanAsync(K8sPlan plan, CancellationToken cancellationToken)
+    private Task<string> CreateAndFormatPlanAsync(K8sPlan plan, CancellationToken cancellationToken) =>
+        CreateAndFormatPlanAsync(plan, policyResult: null, cancellationToken);
+
+    private async Task<string> CreateAndFormatPlanAsync(
+        K8sPlan plan,
+        K8sPolicyResult? policyResult,
+        CancellationToken cancellationToken)
     {
         var result = await approvalStore.CreatePlanAsync(plan, cancellationToken);
         var objects = string.Join(
             Environment.NewLine,
             result.Plan.Objects.Select(obj => $"  - {obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}"));
-        var manifestBlock = string.IsNullOrWhiteSpace(result.Plan.Manifest)
-            ? string.Empty
-            : $"{Environment.NewLine}Manifest:{Environment.NewLine}```yaml{Environment.NewLine}{result.Plan.Manifest}```{Environment.NewLine}";
+
+        var warnings = policyResult is not null && policyResult.Findings.Any(f => f.Severity == K8sPolicySeverity.Warning)
+            ? $"{Environment.NewLine}Policy warnings:{Environment.NewLine}{policyResult.FormatWarnings()}"
+            : string.Empty;
 
         return $"""
                PlanId: {result.Plan.Id}
@@ -177,7 +192,7 @@ public sealed partial class K8sManager
 
                Next step:
                  Call {K8sConventions.ToolNames.ApplyApprovedPlan} with {K8sConventions.ToolArguments.PlanId} '{result.Plan.Id}'. The Gateway will return a browser approval URL before applying it.
-               {manifestBlock}
+               {warnings}
                """;
     }
 

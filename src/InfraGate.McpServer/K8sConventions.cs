@@ -73,6 +73,18 @@ internal static class K8sConventions
         public const string GetAllowedNamespaces = "get_allowed_namespaces";
     }
 
+    public static class PolicyCodes
+    {
+        public const string DeploymentPrivilegedContainer = "DEPLOYMENT_PRIVILEGED_CONTAINER";
+        public const string DeploymentHostPath = "DEPLOYMENT_HOST_PATH";
+        public const string DeploymentHostNamespace = "DEPLOYMENT_HOST_NAMESPACE";
+        public const string DeploymentAddedCapabilities = "DEPLOYMENT_ADDED_CAPABILITIES";
+        public const string ImageLatestTag = "IMAGE_LATEST_TAG";
+        public const string ServiceLoadBalancer = "SERVICE_LOAD_BALANCER";
+        public const string ServiceNodePort = "SERVICE_NODE_PORT";
+        public const string ConfigMapSecretLikeKey = "CONFIG_MAP_SECRET_LIKE_KEY";
+    }
+
     public static class LabelSelectorOperators
     {
         public const string In = "In";

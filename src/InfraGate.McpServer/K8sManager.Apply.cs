@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.McpServer.Policy;
 using k8s;
 using k8s.Models;
 
@@ -86,6 +87,13 @@ public sealed partial class K8sManager
         if (!SameObjects(parsed.ObjectRefs, plan.Objects))
         {
             return ApplyResult.Failed("Apply plan manifest no longer matches the planned object references.");
+        }
+
+        var policyResult = K8sPolicyValidator.Validate(parsed.Objects, K8sPolicyOptions.Default);
+        if (policyResult.IsDenied)
+        {
+            return ApplyResult.Failed(
+                $"Apply refused by policy (re-validated at apply time):{Environment.NewLine}{policyResult.FormatRefusal()}");
         }
 
         var messages = new List<string>();

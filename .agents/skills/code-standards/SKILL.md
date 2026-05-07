@@ -59,6 +59,10 @@ Prefer one meaningful top-level type per file. If a file contains multiple class
 
 Keeping multiple types in one file is acceptable when the extra types are tiny implementation details that are tightly bound to the primary type and are not useful elsewhere. Avoid broad "grab bag" files that collect loosely related auth, storage, transport, or validation types together.
 
+## Formatting
+
+Match the formatting of the surrounding code exactly. Do not introduce column-aligned spacing.
+
 ## .NET Norms
 
 - Async methods should end in `Async`.

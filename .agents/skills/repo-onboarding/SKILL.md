@@ -12,6 +12,7 @@ Use this skill when you need to get oriented in `k8s-toolkit`, start a broad inv
 1. Read `AGENTS.md` first. Follow its rules for surfacing assumptions, keeping changes simple, making surgical edits, and verifying the result.
 2. Inspect `.agents/skills/` and load any relevant repo-local skills:
    - `code-standards` for code edits, reviews, refactors, and convention work.
+   - `writing-tests` for adding or modifying tests, or when the task involves internal types.
    - `infragate-mcp-gateway` for Kubernetes or local MCP gateway inspection and guarded changes.
    - `verify-readme-docs` for README audits or documentation refreshes.
 3. Read `README.md` for project purpose, architecture, quick starts, capabilities, and the project map.

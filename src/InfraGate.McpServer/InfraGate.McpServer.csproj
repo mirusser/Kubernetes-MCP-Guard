@@ -17,4 +17,8 @@
     <ProjectReference Include="..\InfraGate.Approvals\InfraGate.Approvals.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="InfraGate.McpServer.Tests" />
+  </ItemGroup>
+
 </Project>
