@@ -88,6 +88,12 @@ logger.LogInformation("Evicted pod {PodName} from {Namespace}", pod.Name, pod.Na
 logger.LogInformation($"Evicted pod {pod.Name} from {pod.Namespace}");
 ```
 
+## Analyzer and Build Hygiene
+
+Respect existing `.editorconfig`, analyzer, nullable, and warning settings. Do not silence analyzer warnings.
+
+Do not introduce broad `NoWarn`, disabled nullable contexts, or project-wide analyzer changes as part of a local code edit.
+
 ## Tests
 
 - One test class per production class, named `{TypeUnderTest}Tests`. Use `[Theory]` with `[InlineData]` or `[MemberData]` over duplicated `[Fact]` tests. No shared mutable state between test cases. Assert on observable outputs, not implementation details. - - Name tests `Method_State_ExpectedResult`.
