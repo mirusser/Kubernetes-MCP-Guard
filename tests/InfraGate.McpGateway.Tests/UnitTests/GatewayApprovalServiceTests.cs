@@ -26,6 +26,20 @@ public sealed class GatewayApprovalServiceTests
     }
 
     [Fact]
+    public async Task EnsureApprovedOrCreateChallengeAsync_NoAuthenticatedUser_ReturnsRefusal()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        SetUnauthenticatedUser(context.HttpContextAccessor);
+
+        var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+
+        Assert.False(result.IsApproved);
+        Assert.Contains("authenticated OAuth subject", result.Message);
+        Assert.Empty(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
+    }
+
+    [Fact]
     public async Task ApproveChallengeAsync_SameSubject_WritesApprovalAndRejectsReuse()
     {
         var context = CreateContext();
@@ -41,6 +55,74 @@ public sealed class GatewayApprovalServiceTests
         Assert.False(reused.Succeeded);
         Assert.Contains("already approved", reused.Message);
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
+    }
+
+    [Fact]
+    public async Task ApproveChallengeAsync_NoAuthenticatedUser_Rejects()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+        SetUnauthenticatedUser(context.HttpContextAccessor);
+
+        var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("authenticated OAuth subject", result.Message);
+        Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
+    }
+
+    [Fact]
+    public async Task ApproveChallengeAsync_NonExistentChallenge_Rejects()
+    {
+        var context = CreateContext();
+
+        var result = await context.Service.ApproveChallengeAsync("abc123", CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("not found", result.Message);
+    }
+
+    [Fact]
+    public async Task ApproveChallengeAsync_PendingPlanMissing_Rejects()
+    {
+        var context = CreateContext();
+        var challengeId = await CreateStoredChallengeAsync(context, "missing-plan", "missing-hash");
+
+        var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("No pending plan exists", result.Message);
+    }
+
+    [Fact]
+    public async Task ApproveChallengeAsync_PendingPlanWithoutDryRun_Rejects()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store, includeDryRun: false);
+        var hash = await ApprovalStore.ComputeSha256Async(context.Store.GetPendingPath(plan.Id), CancellationToken.None);
+        var challengeId = await CreateStoredChallengeAsync(context, plan.Id, hash);
+
+        var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("missing recorded server-side dry-run data", result.Message);
+        Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
+    }
+
+    [Fact]
+    public async Task ApproveChallengeAsync_PendingPlanWithoutDiff_Rejects()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store, includeDiff: false);
+        var hash = await ApprovalStore.ComputeSha256Async(context.Store.GetPendingPath(plan.Id), CancellationToken.None);
+        var challengeId = await CreateStoredChallengeAsync(context, plan.Id, hash);
+
+        var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("missing recorded diff data", result.Message);
+        Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
     }
 
     [Fact]
@@ -148,6 +230,21 @@ public sealed class GatewayApprovalServiceTests
     }
 
     [Fact]
+    public async Task EnsureApprovedOrCreateChallengeAsync_ApprovedPlanWithoutDiff_ReturnsRefusal()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store, includeDiff: false);
+        var hash = await ApprovalStore.ComputeSha256Async(context.Store.GetPendingPath(plan.Id), CancellationToken.None);
+        Directory.CreateDirectory(Path.GetDirectoryName(context.Store.GetApprovedPath(plan.Id))!);
+        await File.WriteAllTextAsync(context.Store.GetApprovedPath(plan.Id), hash, CancellationToken.None);
+
+        var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+
+        Assert.False(result.IsApproved);
+        Assert.Contains("missing recorded diff data", result.Message);
+    }
+
+    [Fact]
     public async Task EnsureApprovedOrCreateChallengeAsync_PlanWithoutDiff_ReturnsRefusal()
     {
         var context = CreateContext();
@@ -208,6 +305,62 @@ public sealed class GatewayApprovalServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Denied, challenge?.Status);
         Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
+    }
+
+    [Fact]
+    public async Task DenyChallengeAsync_NonExistentChallenge_Rejects()
+    {
+        var context = CreateContext();
+
+        var result = await context.Service.DenyChallengeAsync("abc123", CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("not found", result.Message);
+    }
+
+    [Fact]
+    public async Task DenyChallengeAsync_NoAuthenticatedUser_Rejects()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+        SetUnauthenticatedUser(context.HttpContextAccessor);
+
+        var result = await context.Service.DenyChallengeAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("authenticated OAuth subject", result.Message);
+    }
+
+    [Fact]
+    public async Task DenyChallengeAsync_AlreadyDeniedChallenge_Rejects()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+
+        var denied = await context.Service.DenyChallengeAsync(challengeId, CancellationToken.None);
+        var reused = await context.Service.DenyChallengeAsync(challengeId, CancellationToken.None);
+
+        Assert.True(denied.Succeeded);
+        Assert.False(reused.Succeeded);
+        Assert.Contains("already denied", reused.Message);
+    }
+
+    [Fact]
+    public async Task DenyChallengeAsync_DifferentSubject_Rejects()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+        SetUser(context.HttpContextAccessor, "other-user");
+
+        var result = await context.Service.DenyChallengeAsync(challengeId, CancellationToken.None);
+        var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("same authenticated subject", result.Message);
+        Assert.Equal(ApprovalConventions.ChallengeStatuses.Pending, challenge?.Status);
     }
 
     private static async Task<K8sPlan> CreatePendingPlanAsync(
@@ -275,6 +428,19 @@ public sealed class GatewayApprovalServiceTests
             .Last();
     }
 
+    private static async Task<string> CreateStoredChallengeAsync(TestContext context, string planId, string planHash)
+    {
+        var challenge = await context.Challenges.CreateAsync(
+            planId,
+            planHash,
+            Subject,
+            "test",
+            McpGatewayOptions.DefaultApprovalChallengeTtl,
+            CancellationToken.None);
+
+        return challenge.Id;
+    }
+
     private static TestContext CreateContext()
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-approval-tests", Guid.NewGuid().ToString("N"));
@@ -308,6 +474,17 @@ public sealed class GatewayApprovalServiceTests
                 new Claim(GatewayAuthConventions.Claims.Subject, subject),
                 new Claim(GatewayAuthConventions.Claims.Scope, "mcp:tools")
             ], "test"))
+        };
+    }
+
+    private static void SetUnauthenticatedUser(HttpContextAccessor accessor)
+    {
+        accessor.HttpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(
+            [
+                new Claim(GatewayAuthConventions.Claims.Subject, Subject)
+            ]))
         };
     }
 

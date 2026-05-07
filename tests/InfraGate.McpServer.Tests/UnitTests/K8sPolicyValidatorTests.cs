@@ -47,6 +47,30 @@ public sealed class K8sPolicyValidatorTests
     }
 
     [Fact]
+    public void Validate_DeploymentWithoutPodSpec_HasNoFindings()
+    {
+        var manifest = """
+                       apiVersion: apps/v1
+                       kind: Deployment
+                       metadata:
+                         name: no-pod-spec
+                         namespace: demo
+                       spec:
+                         selector:
+                           matchLabels:
+                             app: no-pod-spec
+                         template:
+                           metadata:
+                             labels:
+                               app: no-pod-spec
+                       """;
+
+        var result = Validate(manifest);
+
+        Assert.Empty(result.Findings);
+    }
+
+    [Fact]
     public void Validate_HostPathVolume_IsDenied()
     {
         var manifest = """
@@ -276,6 +300,42 @@ public sealed class K8sPolicyValidatorTests
     }
 
     [Fact]
+    public void Validate_InitContainerPrivileged_IsDenied()
+    {
+        var manifest = """
+                       apiVersion: apps/v1
+                       kind: Deployment
+                       metadata:
+                         name: init-priv
+                         namespace: demo
+                       spec:
+                         selector:
+                           matchLabels:
+                             app: init-priv
+                         template:
+                           metadata:
+                             labels:
+                               app: init-priv
+                           spec:
+                             initContainers:
+                               - name: init
+                                 image: busybox:1.36
+                                 securityContext:
+                                   privileged: true
+                             containers:
+                               - name: app
+                                 image: nginx:1.27
+                       """;
+
+        var result = Validate(manifest);
+
+        Assert.True(result.IsDenied);
+        Assert.Contains(result.Findings, f =>
+            f.Severity == K8sPolicySeverity.Deny &&
+            f.Code == K8sConventions.PolicyCodes.DeploymentPrivilegedContainer);
+    }
+
+    [Fact]
     public void Validate_LatestImageTag_IsDenied()
     {
         var manifest = """
@@ -464,6 +524,22 @@ public sealed class K8sPolicyValidatorTests
         Assert.Contains(result.Findings, f =>
             f.Severity == K8sPolicySeverity.Warning &&
             f.Code == K8sConventions.PolicyCodes.ConfigMapSecretLikeKey);
+    }
+
+    [Fact]
+    public void Validate_ConfigMapWithoutData_HasNoFindings()
+    {
+        var manifest = """
+                       apiVersion: v1
+                       kind: ConfigMap
+                       metadata:
+                         name: cfg
+                         namespace: demo
+                       """;
+
+        var result = Validate(manifest);
+
+        Assert.Empty(result.Findings);
     }
 
     [Fact]

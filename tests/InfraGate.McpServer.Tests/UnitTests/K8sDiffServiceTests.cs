@@ -1,6 +1,7 @@
 using InfraGate.Approvals;
 using InfraGate.McpServer;
 using InfraGate.McpServer.Diff;
+using k8s;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
 
@@ -79,6 +80,82 @@ public sealed class K8sDiffServiceTests
         Assert.Contains("/data/hello", diff.ChangedPaths);
         Assert.DoesNotContain("managedFields", diff.UnifiedDiff);
         Assert.DoesNotContain("resourceVersion", diff.UnifiedDiff);
+    }
+
+    [Fact]
+    public void BuildDiff_ObjectPropertyAdded_RecordsAddedPath()
+    {
+        var diff = K8sDiffService.BuildDiff(
+            ConfigMapRef,
+            """{"data":{"hello":"world"}}""",
+            """{"data":{"hello":"world","new-key":"new-value"}}""");
+
+        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Contains("/data/new-key", diff.AddedPaths);
+        Assert.Empty(diff.RemovedPaths);
+    }
+
+    [Fact]
+    public void BuildDiff_ObjectPropertyRemoved_RecordsRemovedPath()
+    {
+        var diff = K8sDiffService.BuildDiff(
+            ConfigMapRef,
+            """{"data":{"hello":"world","old-key":"old-value"}}""",
+            """{"data":{"hello":"world"}}""");
+
+        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Contains("/data/old-key", diff.RemovedPaths);
+        Assert.Empty(diff.AddedPaths);
+    }
+
+    [Fact]
+    public void BuildDiff_ArrayItemAdded_RecordsAddedPath()
+    {
+        var diff = K8sDiffService.BuildDiff(
+            DeploymentRef,
+            """{"spec":{"containers":[{"name":"app","image":"nginx:1.27"}]}}""",
+            """{"spec":{"containers":[{"name":"app","image":"nginx:1.27"},{"name":"sidecar","image":"busybox:1.36"}]}}""");
+
+        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Contains("/spec/containers/1/image", diff.AddedPaths);
+        Assert.Contains("/spec/containers/1/name", diff.AddedPaths);
+    }
+
+    [Fact]
+    public void BuildDiff_ArrayItemRemoved_RecordsRemovedPath()
+    {
+        var diff = K8sDiffService.BuildDiff(
+            DeploymentRef,
+            """{"spec":{"containers":[{"name":"app","image":"nginx:1.27"},{"name":"sidecar","image":"busybox:1.36"}]}}""",
+            """{"spec":{"containers":[{"name":"app","image":"nginx:1.27"}]}}""");
+
+        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Contains("/spec/containers/1/image", diff.RemovedPaths);
+        Assert.Contains("/spec/containers/1/name", diff.RemovedPaths);
+    }
+
+    [Fact]
+    public async Task FindDriftAsync_MissingDiffs_ReturnsMessage()
+    {
+        var client = new Kubernetes(new KubernetesClientConfiguration
+        {
+            Host = "http://127.0.0.1:1",
+            SkipTlsVerify = true
+        });
+        var plan = new K8sPlan(
+            "plan-1",
+            "apply",
+            "demo",
+            DateTimeOffset.UtcNow,
+            "Apply ConfigMap.",
+            [],
+            [ConfigMapRef],
+            Manifest: null,
+            Diffs: []);
+
+        var drift = await K8sDiffService.FindDriftAsync(client, plan, CancellationToken.None);
+
+        Assert.Equal("Plan 'plan-1' is missing recorded diff data. Re-request the plan.", drift);
     }
 
     private static string DeploymentJson(
