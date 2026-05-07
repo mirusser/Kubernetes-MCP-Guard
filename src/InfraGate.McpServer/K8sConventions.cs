@@ -41,6 +41,24 @@ internal static class K8sConventions
         public const string Image = "image";
     }
 
+    public static class DryRunPhases
+    {
+        public const string Request = "request";
+        public const string Apply = "apply";
+    }
+
+    public static class DryRunStatuses
+    {
+        public const string Succeeded = "succeeded";
+    }
+
+    public static class K8sApi
+    {
+        public const string DryRunAll = "All";
+        public const string FieldValidationStrict = "Strict";
+        public const string WarningHeader = "Warning";
+    }
+
     public static class ToolArguments
     {
         public const string PlanId = "planId";
@@ -71,6 +89,18 @@ internal static class K8sConventions
         public const string RequestSetDeploymentImage = "request_set_deployment_image";
         public const string ApplyApprovedPlan = "apply_approved_plan";
         public const string GetAllowedNamespaces = "get_allowed_namespaces";
+    }
+
+    public static class PolicyCodes
+    {
+        public const string DeploymentPrivilegedContainer = "DEPLOYMENT_PRIVILEGED_CONTAINER";
+        public const string DeploymentHostPath = "DEPLOYMENT_HOST_PATH";
+        public const string DeploymentHostNamespace = "DEPLOYMENT_HOST_NAMESPACE";
+        public const string DeploymentAddedCapabilities = "DEPLOYMENT_ADDED_CAPABILITIES";
+        public const string ImageLatestTag = "IMAGE_LATEST_TAG";
+        public const string ServiceLoadBalancer = "SERVICE_LOAD_BALANCER";
+        public const string ServiceNodePort = "SERVICE_NODE_PORT";
+        public const string ConfigMapSecretLikeKey = "CONFIG_MAP_SECRET_LIKE_KEY";
     }
 
     public static class LabelSelectorOperators

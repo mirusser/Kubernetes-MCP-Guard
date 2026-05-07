@@ -50,14 +50,6 @@ internal static class McpGatewayConventions
         public const string RequestVerificationToken = "__RequestVerificationToken";
     }
 
-    public static class ApprovalChallengeStatuses
-    {
-        public const string Pending = "pending";
-        public const string Approved = "approved";
-        public const string Denied = "denied";
-        public const string Expired = "expired";
-    }
-
     public static class ToolNames
     {
         public const string GetK8sStatus = "get_k8s_status";

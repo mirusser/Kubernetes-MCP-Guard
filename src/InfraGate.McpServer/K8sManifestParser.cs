@@ -23,7 +23,7 @@ public static class K8sManifestParser
         object[] objects;
         try
         {
-            objects = KubernetesYaml.LoadAllFromString(manifest, TypeMap, strict: false)
+            objects = KubernetesYaml.LoadAllFromString(manifest, TypeMap, strict: true)
                 .Where(obj => obj is not null)
                 .ToArray();
         }

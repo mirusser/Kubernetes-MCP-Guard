@@ -1,8 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
-using InfraGate.Approvals;
 
-namespace InfraGate.McpGateway;
+namespace InfraGate.Approvals;
 
 public sealed class ApprovalChallengeStore
 {
@@ -39,7 +38,7 @@ public sealed class ApprovalChallengeStore
             requesterAuthenticationType,
             now,
             now.Add(ttl),
-            McpGatewayConventions.ApprovalChallengeStatuses.Pending,
+            ApprovalConventions.ChallengeStatuses.Pending,
             ApproverSubject: null,
             DecidedAtUtc: null);
 
@@ -136,7 +135,7 @@ public sealed class ApprovalChallengeStore
         string planHash,
         string subject)
     {
-        return string.Equals(challenge.Status, McpGatewayConventions.ApprovalChallengeStatuses.Approved, StringComparison.Ordinal) &&
+        return string.Equals(challenge.Status, ApprovalConventions.ChallengeStatuses.Approved, StringComparison.Ordinal) &&
                string.Equals(challenge.PlanId, planId, StringComparison.Ordinal) &&
                FixedTimeStringComparer.Equals(challenge.PlanHash, planHash) &&
                string.Equals(challenge.RequesterSubject, subject, StringComparison.Ordinal) &&

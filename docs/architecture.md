@@ -193,8 +193,8 @@ sequenceDiagram
     Note over Svr: Plan creation
     Svr->>Svr: validate namespace, name, replicas, or manifest kind
     Svr->>Svr: K8sManifestParser allows Deployment / Service / ConfigMap
-    Svr->>K8s: dry-run against K8s API<br/>(server-side apply, force-conflicts)
-    Svr->>Store: write pending plan<br/>+ compute SHA-256 hash
+    Svr->>K8s: dry-run against K8s API<br/>(dryRun=All, strict field validation)
+    Svr->>Store: write pending plan with dry-run result<br/>+ compute SHA-256 hash
     Store-->>Svr: PlanId + pending path + plan hash
     Note over Svr,Store: K8sManager.Request*<br/>ApprovalStore (.mcp-approvals/pending/)
     Svr-->>GW: PlanId + plan summary<br/>(dry-run result, affected resources)
@@ -231,7 +231,7 @@ sequenceDiagram
     GW->>GW: require approval OAuth cookie<br/>or redirect to /approvals/login
     GW->>GW: validate same authenticated subject<br/>+ challenge status + expiry
     GW->>Store: read actual pending plan from disk
-    GW-->>Browser: render Gateway-owned approval page<br/>PlanId + hash + objects + expiry
+    GW-->>Browser: render Gateway-owned approval page<br/>PlanId + hash + objects + dry-run status + expiry
 
     User->>Browser: approve or deny
     Browser->>GW: POST /approvals/{challengeId}/approve<br/>or /deny with anti-forgery token
@@ -273,6 +273,7 @@ sequenceDiagram
     Svr->>Store: read pending plan + approved hash
     Svr->>Store: recompute pending plan SHA-256
     alt hash still matches
+        Svr->>K8s: repeat dry-run<br/>(dryRun=All)
         Svr->>K8s: apply mutation<br/>(server-side apply / patch / delete)
         K8s-->>Svr: Kubernetes API response
         Svr->>Store: write applied plan<br/>+ plan_applied audit event

@@ -84,7 +84,7 @@ flowchart TB
     subgraph AI["① AI / MCP Channel"]
         direction TB
         A1["🤖 AI agent requests a change e.g. scale deployment to 3 replicas"]
-        A2["Gateway validates identity and creates a pending plan locked with a SHA-256 hash"]
+        A2["Gateway validates identity; server dry-runs and creates a pending plan locked with a SHA-256 hash"]
         A3["⛔ AI receives an approval URL only.
          It cannot approve on your behalf"]
         A4["AI calls apply again once human has approved"]
@@ -246,12 +246,12 @@ Connect Codex the same way as Option 1.
 
 | Tool | Purpose |
 |---|---|
-| `request_apply_manifest` | Plan a server-side apply for `Deployment`, `Service`, or `ConfigMap` |
-| `request_delete_manifest` | Plan a resource deletion |
-| `request_scale_deployment` | Plan a replica count change |
-| `request_restart_deployment` | Plan a rollout restart |
-| `request_set_deployment_image` | Plan a container image update |
-| `apply_approved_plan` | Apply an exact-hash-verified, user-approved plan |
+| `request_apply_manifest` | Dry-run and plan a server-side apply for `Deployment`, `Service`, or `ConfigMap` |
+| `request_delete_manifest` | Dry-run and plan a resource deletion |
+| `request_scale_deployment` | Dry-run and plan a replica count change |
+| `request_restart_deployment` | Dry-run and plan a rollout restart |
+| `request_set_deployment_image` | Dry-run and plan a container image update |
+| `apply_approved_plan` | Repeat dry-run, then apply an exact-hash-verified, user-approved plan |
 
 ## 🎬 See It In Action 
 

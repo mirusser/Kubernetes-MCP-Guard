@@ -1,8 +1,8 @@
-## .NET 10 Kubernetes MCP server
+# Developer Runbook
 
 This is the developer/runbook guide. Unless noted otherwise, run commands from the repository root.
 
-This repo contains a narrow Kubernetes governance slice for the larger Open WebUI/LibreChat + remote MCP idea:
+Kubernetes MCP Guard is a .NET 10 MCP gateway/server for AI-safe Kubernetes operations:
 
 - `src/InfraGate.McpServer` is a .NET 10 stdio Kubernetes MCP server using the official C# MCP SDK.
 - `src/InfraGate.McpGateway` is a local HTTP MCP gateway that fronts the MCP server with OAuth auth, browser approval pages, and warn+redact prompt-injection guardrails.
@@ -15,39 +15,34 @@ This repo contains a narrow Kubernetes governance slice for the larger Open WebU
 - `scripts/create-demo-kubeconfig.sh` creates a short-lived service-account kubeconfig at `.kube/mcp-nginx-demo.config`; `--compose` also writes `.kube/mcp-nginx-demo.compose.config`.
 - MCP transport and OAuth compliance notes for the HTTP gateway path are tracked in [MCP-compliance.md](MCP-compliance.md).
 
-General idea:
+Current architecture delivers:
 
-```text
-Open WebUI (or/and LibreChat)
-+ remote MCP
-+ gateway/proxy
-+ Kubernetes MCP (and maybe Docker MCP)
-+ strict Kubernetes RBAC
-+ auth
-+ audit
-+ multi-user isolation
-+ approvals
-```
+- HTTP MCP gateway with OAuth JWT auth at `/mcp`
+- Stdio Kubernetes MCP server (private subprocess, no bearer token passthrough)
+- Namespace-scoped RBAC as the hard permission boundary
+- Bounded read-only observability + approval-gated mutation plans
+- Browser-based out-of-band approval with same-subject binding
+- Prompt-injection guardrails + JSONL audit logging
 
 ```mermaid
 graph LR
-    Client["Open WebUI / LibreChat"]
-    RemoteMcp["Remote MCP"]
-    Gateway["Gateway / Proxy"]
-    Auth["Auth"]
-    Guardrails["Guardrails + Audit"]
-    Isolation["Multi-user Isolation"]
-    Approval["Approval Flow"]
-    DockerMcp["Docker MCP"]
-    K8sMcp["Kubernetes MCP"]
-    Rbac["Strict Kubernetes RBAC"]
+    Client["MCP client<br/>(Codex / Claude Code)"]
+    Gateway["HTTP MCP Gateway :3001"]
+    Auth["OAuth JWT + scope enforcement"]
+    Guardrails["Guardrails + audit"]
+    K8sMcp["Kubernetes MCP Server<br/>(stdio subprocess)"]
+    Approval["Out-of-band browser<br/>approval UI"]
+    Rbac["Namespace-scoped RBAC"]
     K8s["Kubernetes API"]
 
-    Client --> RemoteMcp --> Gateway
-    Gateway --> Auth --> Guardrails --> Isolation --> Approval
-    Approval --> DockerMcp
-    Approval --> K8sMcp --> Rbac --> K8s
+    Client -->|"/mcp + JWT"| Gateway
+    Gateway --> Auth --> Guardrails
+    Guardrails -->|"stdio, no token"| K8sMcp --> Rbac --> K8s
+    Client -->|"receive approval URL"| Approval
+    Approval -->|"cookie session"| Gateway
 ```
+
+Future directions include multi-user isolation, Docker MCP support, and integration with additional MCP hosts (Open WebUI, LibreChat).
 
 ### Bootstrap Minikube RBAC
 
@@ -74,6 +69,15 @@ Expected: `yes`, `yes`, `yes`, `yes`, `no`, then `no`.
 
 This is the recommended local OAuth path. See [Mode B in the setup guide](setup-guide.md#mode-b--http-gateway--oauth-devissuer) for full details, Codex CLI config, and tradeoff notes.
 
+For published images (no local build):
+
+```bash
+./scripts/create-demo-kubeconfig.sh --compose
+TAG=latest docker compose -f deploy/mode-c/compose.release.yaml up
+```
+
+For building from source:
+
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
 docker compose -f deploy/mode-c/compose.yaml up --build
@@ -81,7 +85,7 @@ docker compose -f deploy/mode-c/compose.yaml up --build
 
 ### Docker image publishing
 
-Images are pushed to Docker Hub only on version tags or manual dispatch.
+Images are pushed to Docker Hub and GitHub Container Registry (GHCR) on version tags or manual dispatch.
 PRs and pushes to `main` build without pushing.
 
 Trigger a push:
@@ -219,15 +223,15 @@ Observability bounds: Events and diagnostics default to `limit = 50` and allow u
 
 Approval flow:
 
-1. Ask the MCP server for a plan with `request_apply_manifest`, `request_scale_deployment`, etc.
+1. Ask the MCP server for a plan with `request_apply_manifest`, `request_scale_deployment`, etc. The server runs Kubernetes `dryRun=All` first and stores the dry-run result in the pending plan.
 2. Call `apply_approved_plan` with the returned `PlanId`.
 3. The Gateway returns an approval URL instead of applying.
-4. Open the URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan, and approve or deny it.
-5. Call `apply_approved_plan` again. The Gateway forwards only after the approved hash exists and still matches.
+4. Open the URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan and dry-run status, and approve or deny it.
+5. Call `apply_approved_plan` again. The Gateway forwards only after the approved hash exists and still matches; the server repeats dry-run immediately before the real write.
 
 The MCP client never submits approval content. Approval challenges are bound to the plan id, current plan hash, requester subject, expiry, and single-use status.
 
-The approval file stores the SHA-256 hash of the pending plan. If the pending plan changes after approval, the MCP server refuses to apply it. Audit events are written under `.mcp-approvals/audit.jsonl`.
+The approval file stores the SHA-256 hash of the pending plan, including recorded dry-run data. If the pending plan changes after approval, or a fresh pre-apply dry-run fails, the MCP server refuses to apply it. Audit events are written under `.mcp-approvals/audit.jsonl`.
 
 ### Verification
 

@@ -6,7 +6,7 @@
 
 - `Program.cs` configures the HTTP MCP server at `/mcp`, registers auth, approval endpoints, guardrails, the downstream client, and the gateway tool facade.
 - `K8sGatewayTools.cs` exposes the same MCP tools as the stdio server and delegates to `GuardedToolRunner`.
-- `GatewayApprovalService.cs` and `GatewayApprovalEndpoints.cs` create short-lived approval URLs and render pending plans from the shared approval store.
+- `GatewayApprovalService.cs` and `GatewayApprovalEndpoints.cs` create short-lived approval URLs and render pending plans from the shared approval store; `ApprovalChallengeStore` lives in `InfraGate.Approvals`.
 - `GuardedToolRunner.cs` scans inbound arguments, calls the downstream stdio server, sanitizes risky model-visible output, and writes audit events.
 - `DownstreamMcpClient.cs` starts and reuses the downstream `InfraGate.McpServer` process via the Model Context Protocol client.
 - `PromptInjectionGuard*.cs` contains argument scanning, response redaction, operational-line allow-listing, and regex patterns.
@@ -22,6 +22,7 @@
 - Authentication behavior is provided by `InfraGate.McpGateway.Auth`; this project should not duplicate auth rules.
 - OAuth access tokens are terminated at the gateway. The downstream stdio server receives tool calls, not bearer tokens.
 - Approval is browser-based and out-of-band: MCP clients receive an approval URL but cannot submit approval content through MCP.
+- Browser approval pages render the stored server-side dry-run status and refuse legacy pending plans without dry-run data.
 - Approval challenges are bound to plan id, plan hash, requester subject, expiry, and single-use status.
 - Guardrail audit entries must not include bearer tokens or raw credentials.
 

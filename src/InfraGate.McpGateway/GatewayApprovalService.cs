@@ -34,6 +34,16 @@ public sealed class GatewayApprovalService
         var approved = await approvalStore.GetApprovedPlanAsync(planId, cancellationToken);
         if (approved.IsApproved)
         {
+            if (approved.Plan?.DryRun is null)
+            {
+                return ApprovalGateResult.RequiresApproval($"Refused: {MissingDryRunMessage(planId)}");
+            }
+
+            if (approved.Plan.Diffs.Length == 0)
+            {
+                return ApprovalGateResult.RequiresApproval($"Refused: {MissingDiffMessage(planId)}");
+            }
+
             var approvedChallenge = await challengeStore.FindApprovedAsync(
                 planId,
                 approved.Hash!,
@@ -49,6 +59,16 @@ public sealed class GatewayApprovalService
         if (!pending.IsPending || pending.Plan is null || pending.Hash is null)
         {
             return ApprovalGateResult.RequiresApproval($"Refused: {pending.Message}");
+        }
+
+        if (pending.Plan.DryRun is null)
+        {
+            return ApprovalGateResult.RequiresApproval($"Refused: {MissingDryRunMessage(planId)}");
+        }
+
+        if (pending.Plan.Diffs.Length == 0)
+        {
+            return ApprovalGateResult.RequiresApproval($"Refused: {MissingDiffMessage(planId)}");
         }
 
         var challenge = await challengeStore.CreateAsync(
@@ -116,7 +136,7 @@ public sealed class GatewayApprovalService
         var decidedAt = DateTimeOffset.UtcNow;
         var updated = validation.Challenge with
         {
-            Status = McpGatewayConventions.ApprovalChallengeStatuses.Approved,
+            Status = ApprovalConventions.ChallengeStatuses.Approved,
             ApproverSubject = approver.Subject,
             DecidedAtUtc = decidedAt
         };
@@ -171,7 +191,7 @@ public sealed class GatewayApprovalService
         var decidedAt = DateTimeOffset.UtcNow;
         var denied = challenge with
         {
-            Status = McpGatewayConventions.ApprovalChallengeStatuses.Denied,
+            Status = ApprovalConventions.ChallengeStatuses.Denied,
             ApproverSubject = approver.Subject,
             DecidedAtUtc = decidedAt
         };
@@ -206,7 +226,7 @@ public sealed class GatewayApprovalService
 
         if (challenge.ExpiresAtUtc <= DateTimeOffset.UtcNow)
         {
-            var expired = challenge with { Status = McpGatewayConventions.ApprovalChallengeStatuses.Expired };
+            var expired = challenge with { Status = ApprovalConventions.ChallengeStatuses.Expired };
             await challengeStore.SaveAsync(expired, cancellationToken);
             await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApprovalChallengeExpired, new
             {
@@ -252,6 +272,30 @@ public sealed class GatewayApprovalService
         if (!FixedTimeStringComparer.Equals(challenge.PlanHash, pending.Hash))
         {
             const string message = "The pending plan changed after this approval URL was created. Ask the MCP client to request a new approval URL.";
+            await WriteChallengeRejectedAuditAsync(
+                challenge,
+                approver.Subject,
+                message,
+                cancellationToken);
+
+            return ChallengeValidation.Invalid(message, challenge, pending.Plan);
+        }
+
+        if (pending.Plan.DryRun is null)
+        {
+            var message = MissingDryRunMessage(challenge.PlanId);
+            await WriteChallengeRejectedAuditAsync(
+                challenge,
+                approver.Subject,
+                message,
+                cancellationToken);
+
+            return ChallengeValidation.Invalid(message, challenge, pending.Plan);
+        }
+
+        if (pending.Plan.Diffs.Length == 0)
+        {
+            var message = MissingDiffMessage(challenge.PlanId);
             await WriteChallengeRejectedAuditAsync(
                 challenge,
                 approver.Subject,
@@ -321,10 +365,16 @@ public sealed class GatewayApprovalService
     }
 
     private static bool IsPending(ApprovalChallenge challenge) =>
-        string.Equals(challenge.Status, McpGatewayConventions.ApprovalChallengeStatuses.Pending, StringComparison.Ordinal);
+        string.Equals(challenge.Status, ApprovalConventions.ChallengeStatuses.Pending, StringComparison.Ordinal);
 
     private static bool SameSubject(string left, string right) =>
         string.Equals(left, right, StringComparison.Ordinal);
+
+    private static string MissingDryRunMessage(string planId) =>
+        $"Plan '{planId}' is missing recorded server-side dry-run data. Ask the MCP client to re-request the plan.";
+
+    private static string MissingDiffMessage(string planId) =>
+        $"Plan '{planId}' is missing recorded diff data. Ask the MCP client to re-request the plan.";
 
     private sealed record ChallengeValidation(
         string? Error,

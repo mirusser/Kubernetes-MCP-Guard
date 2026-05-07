@@ -11,14 +11,9 @@ Apply these standards alongside the repo's `AGENTS.md` instructions. Keep change
 
 ## Magic Strings
 
+Avoid repeated or unexplained string literals. Prefer named conventions when a string is repeated, part of an external contract (MCP tool names, JSON keys, env vars, HTTP paths, Kubernetes apiVersion/kind, audit event names), used for both declaration and invocation, or easy to mistype.
+
 Avoid introducing repeated or unexplained string literals in code.
-
-Prefer named conventions when a string is:
-
-- Repeated in multiple places.
-- Part of an external contract, such as MCP tool names, JSON keys, environment variable names, HTTP paths, Kubernetes apiVersion/kind values, audit event names, file extensions, or persisted operation names.
-- Used both for declaration and invocation, such as an attribute name and the downstream call using the same tool name.
-- Easy to mistype and hard to catch with the compiler.
 
 Choose the smallest suitable shape:
 
@@ -26,46 +21,79 @@ Choose the smallest suitable shape:
 - Use nested static classes for related names when the project already groups conventions that way.
 - Use enums only when serialization, persistence, and display text are either not involved or explicitly handled.
 - Keep one-off user-facing sentences inline unless extracting them makes the code clearer.
-
-When changing existing literals, preserve behavior and public contracts. Do not rename external values just to make the constant name prettier.
+- When changing existing literals, preserve behavior and public contracts.
 
 ## Scope
 
 Keep conventions local to the project unless there is already a shared project or the same contract is intentionally shared across projects. Avoid creating shared abstractions only to remove a small amount of duplication.
 
-After replacing magic strings, run the narrowest useful build or tests for the touched project.
-
 ## Field Naming
 
-Use lower camel case for private fields. Do not prefix private fields with `_`.
-
-Example:
-
-```csharp
-private readonly JsonSerializerOptions jsonOptions;
-```
-
-Do not introduce:
-
-```csharp
-private readonly JsonSerializerOptions _jsonOptions;
-```
-
-When touching existing code, prefer aligning fields you edit with this convention. Do not churn unrelated fields just to rename them.
+Lower camel case for private fields, no `_` prefix: `private readonly JsonSerializerOptions jsonOptions;`
+Align fields you edit with this convention. Do not churn unrelated fields.
 
 ## Type Organization
 
-Prefer one meaningful top-level type per file. If a file contains multiple classes, handlers, helpers, records, or stores that are not tightly coupled, split them into separate files with matching type names.
+One meaningful top-level type per file. Split files when types are not tightly coupled. Multiple types in one file are acceptable only for tiny implementation details bound to the primary type. No broad "grab bag" files. No `#region` — if a file needs them, split it instead.
 
-Keeping multiple types in one file is acceptable when the extra types are tiny implementation details that are tightly bound to the primary type and are not useful elsewhere. Avoid broad "grab bag" files that collect loosely related auth, storage, transport, or validation types together.
+## Formatting
+
+Match surrounding code exactly. No column-aligned spacing.
 
 ## .NET Norms
 
-- Async methods should end in `Async`.
-- Pass `CancellationToken` through async I/O and external calls.
+- Async methods end in `Async`.
+- Pass `CancellationToken` through all async I/O and external calls.
 - Keep public surface minimal; prefer `internal` unless cross-project use is intentional.
-- Use nullable reference types honestly; avoid `!` unless there is a clear invariant.
-- Prefer constructor injection for dependencies and options records for configuration.
+- Use nullable reference types honestly; avoid `!` without a clear invariant.
+- Constructor injection for dependencies; options records for configuration.
 - Keep DTOs/contracts separate from behavior-heavy services when they grow.
-- Name tests by behavior using `Method_State_ExpectedResult`.
-- Use primary constructors where applicable
+- Use primary constructors where applicable.
+- File-scoped namespaces (`namespace Foo.Bar;`) in all new files.
+- `global using` directives go in a single `GlobalUsings.cs` per project.
+- Call `ConfigureAwait(false)` on all awaited tasks in library/tool code.
+- Use `using var` declarations unless early disposal is needed.
+- Prefer `IReadOnlyList<T>` / `IReadOnlyDictionary<K,V>` on public and internal API surfaces.
+- Mark classes `sealed` by default; only leave them open when subclassing is intentional.
+
+## var
+
+Use `var` when the type is obvious from the right-hand side (e.g. `new`, casts, named factories). Use explicit types when the initializer doesn't make the type clear. Never use `var` for primitives (`int`, `bool`, `string`).
+
+## Boolean Members
+
+Name booleans as questions: `IsReady`, `HasFailed`, `CanRetry`. Avoid negated names like `IsNotReady` or `NoCache`.
+
+## Exception Handling
+
+Catch specific exceptions, not `Exception`, except at top-level boundaries. Do not swallow exceptions silently. Use static guard helpers: `ArgumentNullException.ThrowIfNull`, `ArgumentException.ThrowIfNullOrEmpty`, `ArgumentOutOfRangeException.ThrowIfNegativeOrZero`. Do not use exceptions for control flow.
+
+## Pattern Matching
+
+Prefer `is` patterns over `as`-casts with null checks. Prefer `switch` expressions for exhaustive dispatch. Avoid hard `(T)obj` casts without a clear invariant.
+
+## Records
+
+Use `record` or `record struct` for immutable value objects, DTOs, and configuration snapshots. Prefer positional records for small types. Avoid adding behavior beyond simple accessors — if a type needs methods, use a `class`.
+
+## Structured Logging
+
+Use `ILogger<T>` with message templates. Never use string interpolation in log calls. For high-frequency paths, use the `[LoggerMessage]` source generator.
+
+```csharp
+// correct
+logger.LogInformation("Evicted pod {PodName} from {Namespace}", pod.Name, pod.Namespace);
+
+// avoid
+logger.LogInformation($"Evicted pod {pod.Name} from {pod.Namespace}");
+```
+
+## Analyzer and Build Hygiene
+
+Respect existing `.editorconfig`, analyzer, nullable, and warning settings. Do not silence analyzer warnings.
+
+Do not introduce broad `NoWarn`, disabled nullable contexts, or project-wide analyzer changes as part of a local code edit.
+
+## Tests
+
+- One test class per production class, named `{TypeUnderTest}Tests`. Use `[Theory]` with `[InlineData]` or `[MemberData]` over duplicated `[Fact]` tests. No shared mutable state between test cases. Assert on observable outputs, not implementation details. - - Name tests `Method_State_ExpectedResult`.

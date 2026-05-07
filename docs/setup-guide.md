@@ -327,7 +327,7 @@ Once running, the server exposes these tools:
 
 Logs and Events are untrusted Kubernetes workload/cluster output. Prefer the HTTP gateway for model-visible diagnostics because it sanitizes suspicious output before returning it; direct stdio use bypasses that gateway guardrail layer.
 
-**Approval flow:** `request_*` → returns `planId` → `apply_approved_plan(planId)` → Gateway returns approval URL → browser OAuth approval → call `apply_approved_plan(planId)` again → applied.
+**Approval flow:** `request_*` → Kubernetes `dryRun=All` succeeds → returns `planId` → `apply_approved_plan(planId)` → Gateway returns approval URL → browser OAuth approval → call `apply_approved_plan(planId)` again → repeat dry-run → applied.
 
 Allowed manifest kinds: `apps/v1 Deployment`, `v1 Service`, `v1 ConfigMap`.
 

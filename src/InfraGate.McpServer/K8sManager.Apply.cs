@@ -1,4 +1,6 @@
 using InfraGate.Approvals;
+using InfraGate.McpServer.Diff;
+using InfraGate.McpServer.Policy;
 using k8s;
 using k8s.Models;
 
@@ -57,6 +59,11 @@ public sealed partial class K8sManager
 
     private async Task<ApplyResult> ApplyPlanAsync(K8sPlan plan, CancellationToken cancellationToken)
     {
+        if (plan.DryRun is null)
+        {
+            return ApplyResult.Failed($"Plan '{plan.Id}' is missing recorded server-side dry-run data. Re-request the plan.");
+        }
+
         try
         {
             return plan.Operation switch
@@ -75,6 +82,32 @@ public sealed partial class K8sManager
         }
     }
 
+    private async Task<ApplyResult?> RefuseIfPlanDiffsMissingOrLiveDriftedAsync(
+        K8sPlan plan,
+        CancellationToken cancellationToken)
+    {
+        if (plan.Diffs.Length == 0)
+        {
+            return ApplyResult.Failed($"Plan '{plan.Id}' is missing recorded diff data. Re-request the plan.");
+        }
+
+        var drift = await K8sDiffService.FindDriftAsync(client, plan, cancellationToken);
+        if (drift is null)
+        {
+            return null;
+        }
+
+        await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApplyDriftDetected, new
+        {
+            plan.Id,
+            plan.Operation,
+            plan.Namespace,
+            message = drift
+        }, cancellationToken);
+
+        return ApplyResult.Failed($"Live Kubernetes state changed after approval; refusing to mutate Kubernetes.{Environment.NewLine}{drift}");
+    }
+
     private async Task<ApplyResult> ApplyManifestPlanAsync(K8sPlan plan, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(plan.Manifest))
@@ -86,6 +119,28 @@ public sealed partial class K8sManager
         if (!SameObjects(parsed.ObjectRefs, plan.Objects))
         {
             return ApplyResult.Failed("Apply plan manifest no longer matches the planned object references.");
+        }
+
+        var policyResult = K8sPolicyValidator.Validate(parsed.Objects, K8sPolicyOptions.Default);
+        if (policyResult.IsDenied)
+        {
+            return ApplyResult.Failed(
+                $"Apply refused by policy (re-validated at apply time):{Environment.NewLine}{policyResult.FormatRefusal()}");
+        }
+
+        var driftRefusal = await RefuseIfPlanDiffsMissingOrLiveDriftedAsync(plan, cancellationToken);
+        if (driftRefusal is not null)
+        {
+            return driftRefusal;
+        }
+
+        var dryRunRefusal = await RefuseIfPreApplyDryRunFailsAsync(
+            plan,
+            DryRunApplyManifestAsync(parsed.Objects, cancellationToken),
+            cancellationToken);
+        if (dryRunRefusal is not null)
+        {
+            return dryRunRefusal;
         }
 
         var messages = new List<string>();
@@ -100,6 +155,21 @@ public sealed partial class K8sManager
 
     private async Task<ApplyResult> DeleteManifestPlanAsync(K8sPlan plan, CancellationToken cancellationToken)
     {
+        var driftRefusal = await RefuseIfPlanDiffsMissingOrLiveDriftedAsync(plan, cancellationToken);
+        if (driftRefusal is not null)
+        {
+            return driftRefusal;
+        }
+
+        var dryRunRefusal = await RefuseIfPreApplyDryRunFailsAsync(
+            plan,
+            DryRunDeleteManifestAsync(plan.Objects, cancellationToken),
+            cancellationToken);
+        if (dryRunRefusal is not null)
+        {
+            return dryRunRefusal;
+        }
+
         var messages = new List<string>();
         foreach (var obj in plan.Objects)
         {
@@ -113,16 +183,23 @@ public sealed partial class K8sManager
     {
         var name = plan.Parameters[K8sConventions.PlanParameters.Name];
         var replicas = int.Parse(plan.Parameters[K8sConventions.PlanParameters.Replicas]);
-        var patch = new
+        var driftRefusal = await RefuseIfPlanDiffsMissingOrLiveDriftedAsync(plan, cancellationToken);
+        if (driftRefusal is not null)
         {
-            spec = new
-            {
-                replicas
-            }
-        };
+            return driftRefusal;
+        }
+
+        var dryRunRefusal = await RefuseIfPreApplyDryRunFailsAsync(
+            plan,
+            DryRunScaleDeploymentAsync(plan.Namespace, name, replicas, cancellationToken),
+            cancellationToken);
+        if (dryRunRefusal is not null)
+        {
+            return dryRunRefusal;
+        }
 
         await client.AppsV1.PatchNamespacedDeploymentScaleAsync(
-            new V1Patch(patch, V1Patch.PatchType.MergePatch),
+            CreateScaleDeploymentPatch(replicas),
             name,
             plan.Namespace,
             fieldManager: FieldManager,
@@ -136,25 +213,23 @@ public sealed partial class K8sManager
     {
         var name = plan.Parameters[K8sConventions.PlanParameters.Name];
         var restartedAtUtc = plan.Parameters[K8sConventions.PlanParameters.RestartedAtUtc];
-        var patch = new
+        var driftRefusal = await RefuseIfPlanDiffsMissingOrLiveDriftedAsync(plan, cancellationToken);
+        if (driftRefusal is not null)
         {
-            spec = new
-            {
-                template = new
-                {
-                    metadata = new
-                    {
-                        annotations = new Dictionary<string, string>
-                        {
-                            [RestartedAtAnnotation] = restartedAtUtc
-                        }
-                    }
-                }
-            }
-        };
+            return driftRefusal;
+        }
+
+        var dryRunRefusal = await RefuseIfPreApplyDryRunFailsAsync(
+            plan,
+            DryRunRestartDeploymentAsync(plan.Namespace, name, restartedAtUtc, cancellationToken),
+            cancellationToken);
+        if (dryRunRefusal is not null)
+        {
+            return dryRunRefusal;
+        }
 
         await client.AppsV1.PatchNamespacedDeploymentAsync(
-            new V1Patch(patch, V1Patch.PatchType.StrategicMergePatch),
+            CreateRestartDeploymentPatch(restartedAtUtc),
             name,
             plan.Namespace,
             fieldManager: FieldManager,
@@ -186,29 +261,23 @@ public sealed partial class K8sManager
             return ApplyResult.Failed(imageValidation);
         }
 
-        var patch = new
+        var driftRefusal = await RefuseIfPlanDiffsMissingOrLiveDriftedAsync(plan, cancellationToken);
+        if (driftRefusal is not null)
         {
-            spec = new
-            {
-                template = new
-                {
-                    spec = new
-                    {
-                        containers = new[]
-                        {
-                            new
-                            {
-                                name = container,
-                                image
-                            }
-                        }
-                    }
-                }
-            }
-        };
+            return driftRefusal;
+        }
+
+        var dryRunRefusal = await RefuseIfPreApplyDryRunFailsAsync(
+            plan,
+            DryRunSetDeploymentImageAsync(plan.Namespace, name, container, image, cancellationToken),
+            cancellationToken);
+        if (dryRunRefusal is not null)
+        {
+            return dryRunRefusal;
+        }
 
         await client.AppsV1.PatchNamespacedDeploymentAsync(
-            new V1Patch(patch, V1Patch.PatchType.StrategicMergePatch),
+            CreateSetDeploymentImagePatch(container, image),
             name,
             plan.Namespace,
             fieldManager: FieldManager,
@@ -216,6 +285,26 @@ public sealed partial class K8sManager
 
         return ApplyResult.Success(
             $"Updated {K8sConventions.K8sResources.DeploymentDisplayName} {plan.Namespace}/{name} container '{container}' image from '{currentImage}' to '{image}'.");
+    }
+
+    private async Task<ApplyResult?> RefuseIfPreApplyDryRunFailsAsync(
+        K8sPlan plan,
+        Task<DryRunResult> dryRunTask,
+        CancellationToken cancellationToken)
+    {
+        var dryRun = await dryRunTask;
+        if (dryRun.Succeeded)
+        {
+            return null;
+        }
+
+        await WriteDryRunFailedAuditAsync(
+            K8sConventions.DryRunPhases.Apply,
+            plan,
+            dryRun.Message,
+            cancellationToken);
+
+        return ApplyResult.Failed(FormatApplyDryRunRefusal(dryRun.Message));
     }
 
     private async Task ApplyObjectAsync(IKubernetesObject<V1ObjectMeta> obj, CancellationToken cancellationToken)

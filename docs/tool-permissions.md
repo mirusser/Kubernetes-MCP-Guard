@@ -23,21 +23,21 @@ All 14 tools require the `mcp:tools` OAuth scope at the gateway. All Kubernetes-
 
 ## Plan Mutation Tools (5 tools)
 
-These tools create pending plans. They do not apply Kubernetes writes. All require `mcp:tools`, are namespace-scoped, and use `Destructive = false`.
+These tools create pending plans. They run Kubernetes `dryRun=All` first, but they do not persist Kubernetes writes. All require `mcp:tools`, are namespace-scoped, and use `Destructive = false`.
 
 | MCP Tool | K8s Verbs at Request Time | K8s Resources at Request Time | Approval Required at Request Time | Bounds / Notes |
 |---|---|---|---|---|
-| `request_apply_manifest` | none | none | No | Manifest allow-list: `apps/v1 Deployment`, `v1 Service`, `v1 ConfigMap` only; creates SHA-256-bound pending plan |
-| `request_delete_manifest` | none | none | No | Same manifest allow-list; creates SHA-256-bound pending plan |
-| `request_scale_deployment` | none | none | No | Replicas bounded 0-5; creates SHA-256-bound pending plan |
-| `request_restart_deployment` | none | none | No | Creates SHA-256-bound pending plan for rollout restart |
-| `request_set_deployment_image` | `get` | Deployment | No | Reads the current Deployment image to bind the plan, then creates a SHA-256-bound pending plan for a container image patch |
+| `request_apply_manifest` | `create`, `update`, `patch` through server-side apply dry-run permissions | Deployment, Service, or ConfigMap | No | Manifest allow-list: `apps/v1 Deployment`, `v1 Service`, `v1 ConfigMap` only; stores dry-run result in the SHA-256-bound pending plan |
+| `request_delete_manifest` | `delete` with `dryRun=All` | Deployment, Service, or ConfigMap | No | Same manifest allow-list; stores dry-run result in the SHA-256-bound pending plan |
+| `request_scale_deployment` | `update`, `patch` with `dryRun=All` | Deployment `scale` subresource | No | Replicas bounded 0-5; stores dry-run result in the SHA-256-bound pending plan |
+| `request_restart_deployment` | `update`, `patch` with `dryRun=All` | Deployment | No | Stores dry-run result in the SHA-256-bound pending plan for rollout restart |
+| `request_set_deployment_image` | `get`, then `update`, `patch` with `dryRun=All` | Deployment | No | Reads the current Deployment image to bind the plan, then dry-runs and stores a container image patch |
 
 ## Mutation Execution Tool (1 tool)
 
 | MCP Tool | MCP Annotation | K8s Verbs | K8s Resources | Approval Required | Bounds / Notes |
 |---|---|---|---|---|---|
-| `apply_approved_plan` | `Destructive = true` | Depends on approved plan | Depends on approved plan | Yes | Through the gateway, requires out-of-band browser approval through a single-use challenge URL; the gateway checks the approved challenge record and the server validates the SHA-256 hash match before any Kubernetes write |
+| `apply_approved_plan` | `Destructive = true` | Depends on approved plan | Depends on approved plan | Yes | Through the gateway, requires out-of-band browser approval through a single-use challenge URL; the gateway checks the approved challenge record and the server validates the SHA-256 hash match and repeats `dryRun=All` before any Kubernetes write |
 
 `scripts/approve-plan.sh` writes a direct approval hash for local direct-stdio server experiments. It does not create a Gateway approval challenge record and is not the normal gateway approval path.
 
@@ -53,4 +53,4 @@ These tools create pending plans. They do not apply Kubernetes writes. All requi
 
 - Scope is a single flat `mcp:tools`; there is no `mcp:read` or `mcp:write` split today. If finer-grained scopes are added, update this matrix and [`src/InfraGate.McpGateway.Auth/README.md`](../src/InfraGate.McpGateway.Auth/README.md) together.
 - `get_allowed_namespaces` makes no Kubernetes API call. It reads in-process configuration, but it is still subject to gateway JWT and scope enforcement.
-- For plan mutation tools, no Kubernetes write occurs until `apply_approved_plan` is called and the user approves the plan.
+- For plan mutation tools, Kubernetes dry-run failures block plan creation and write a `dry_run_failed` approval audit event. No Kubernetes write is persisted until `apply_approved_plan` is called and the user approves the plan.

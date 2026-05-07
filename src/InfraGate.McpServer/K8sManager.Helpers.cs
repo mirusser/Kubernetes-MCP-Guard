@@ -58,6 +58,40 @@ public sealed partial class K8sManager
             .SequenceEqual(right.Select(Key).Order(StringComparer.Ordinal), StringComparer.Ordinal);
     }
 
+    private Task WriteDryRunFailedAuditAsync(
+        string phase,
+        K8sPlan plan,
+        string message,
+        CancellationToken cancellationToken) =>
+        approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.DryRunFailed, new
+        {
+            phase,
+            planId = plan.Id,
+            plan.Operation,
+            plan.Namespace,
+            objects = plan.Objects.Select(FormatObjectRef).ToArray(),
+            message
+        }, cancellationToken);
+
+    private Task WriteDiffFailedAuditAsync(
+        K8sPlan plan,
+        string message,
+        CancellationToken cancellationToken) =>
+        approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.DiffFailed, new
+        {
+            planId = plan.Id,
+            plan.Operation,
+            plan.Namespace,
+            objects = plan.Objects.Select(FormatObjectRef).ToArray(),
+            message
+        }, cancellationToken);
+
+    private static string FormatRequestDryRunRefusal(string message) =>
+        $"Server-side dry-run failed; no approval plan was created.{Environment.NewLine}{message}";
+
+    private static string FormatApplyDryRunRefusal(string message) =>
+        $"Server-side dry-run failed immediately before apply; refusing to mutate Kubernetes.{Environment.NewLine}{message}";
+
     private static bool IsNotFound(Exception ex)
     {
         return ex is KubernetesException { Status.Code: 404 } ||
