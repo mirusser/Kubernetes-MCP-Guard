@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="InfraGate.DevIssuer.Tests" />
-    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.0.1" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.18.0" />
   </ItemGroup>
 
 </Project>

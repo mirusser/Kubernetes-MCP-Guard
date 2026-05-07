@@ -4,9 +4,11 @@ on:
   pull_request:
     branches:
       - main
+      - dev
   push:
     branches:
       - main
+      - dev
     tags:
       - v*
   workflow_dispatch:
@@ -96,7 +98,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8  # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
         with:
           image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
           format: sarif
@@ -108,7 +110,7 @@ jobs:
 
       - name: Upload Trivy SARIF results
         if: always()
-        uses: github/codeql-action/upload-sarif@0daab03d71ff584ef619d027a3fd9146679c5d84  # v3
+        uses: github/codeql-action/upload-sarif@e46ed2cbd01164d986452f91f178727624ae40d7  # v4.35.3
         with:
           sarif_file: trivy-${{ matrix.image }}.sarif
           category: trivy-${{ matrix.image }}
