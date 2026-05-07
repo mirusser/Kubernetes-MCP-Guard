@@ -73,6 +73,19 @@ public sealed partial class K8sManager
             message
         }, cancellationToken);
 
+    private Task WriteDiffFailedAuditAsync(
+        K8sPlan plan,
+        string message,
+        CancellationToken cancellationToken) =>
+        approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.DiffFailed, new
+        {
+            planId = plan.Id,
+            plan.Operation,
+            plan.Namespace,
+            objects = plan.Objects.Select(FormatObjectRef).ToArray(),
+            message
+        }, cancellationToken);
+
     private static string FormatRequestDryRunRefusal(string message) =>
         $"Server-side dry-run failed; no approval plan was created.{Environment.NewLine}{message}";
 

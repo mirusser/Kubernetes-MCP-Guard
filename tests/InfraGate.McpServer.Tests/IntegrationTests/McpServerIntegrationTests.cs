@@ -70,6 +70,7 @@ public sealed partial class McpServerIntegrationTests
             },
             cancellationToken: CancellationToken.None);
 
+        await AssertPendingPlanHasDiffsAsync(approvalRoot, applyRequestText);
         var applyPlanId = await ApprovePlanAsync(approvalRoot, applyRequestText);
         var applyText = await CallTextAsync(
             client,
@@ -211,6 +212,7 @@ public sealed partial class McpServerIntegrationTests
                 ["image"] = "nginx:1.27-alpine"
             },
             cancellationToken: CancellationToken.None);
+        await AssertPendingPlanHasDiffsAsync(approvalRoot, setImageRequestText);
         var setImagePlanId = await ApprovePlanAsync(approvalRoot, setImageRequestText);
         var setImageText = await CallTextAsync(
             client,
@@ -233,6 +235,7 @@ public sealed partial class McpServerIntegrationTests
                 ["replicas"] = 2
             },
             cancellationToken: CancellationToken.None);
+        await AssertPendingPlanHasDiffsAsync(approvalRoot, scaleRequestText);
         var scalePlanId = await ApprovePlanAsync(approvalRoot, scaleRequestText);
         var scaleText = await CallTextAsync(
             client,
@@ -254,6 +257,7 @@ public sealed partial class McpServerIntegrationTests
                 ["name"] = "mcp-api-demo"
             },
             cancellationToken: CancellationToken.None);
+        await AssertPendingPlanHasDiffsAsync(approvalRoot, restartRequestText);
         var restartPlanId = await ApprovePlanAsync(approvalRoot, restartRequestText);
         var restartText = await CallTextAsync(
             client,
@@ -275,6 +279,7 @@ public sealed partial class McpServerIntegrationTests
                 ["manifest"] = DemoManifest
             },
             cancellationToken: CancellationToken.None);
+        await AssertPendingPlanHasDiffsAsync(approvalRoot, deleteRequestText);
         var deletePlanId = await ApprovePlanAsync(approvalRoot, deleteRequestText);
         var deleteText = await CallTextAsync(
             client,
@@ -312,6 +317,24 @@ public sealed partial class McpServerIntegrationTests
         await File.WriteAllTextAsync(approvedPath, hash, CancellationToken.None);
 
         return planId;
+    }
+
+    private static async Task AssertPendingPlanHasDiffsAsync(string approvalRoot, string requestText)
+    {
+        var planId = PlanIdPattern().Match(requestText).Groups["id"].Value;
+        Assert.False(string.IsNullOrWhiteSpace(planId));
+
+        var pendingPath = Path.Combine(approvalRoot, "pending", $"{planId}.json");
+        var json = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
+        var plan = JsonSerializer.Deserialize<K8sPlan>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.NotNull(plan);
+        Assert.NotEmpty(plan.Diffs);
+        Assert.All(plan.Diffs, diff =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(diff.Summary));
+            Assert.False(string.IsNullOrWhiteSpace(diff.UnifiedDiff));
+        });
     }
 
     private static string GetText(CallToolResult result) =>

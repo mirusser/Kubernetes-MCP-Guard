@@ -39,6 +39,11 @@ public sealed class GatewayApprovalService
                 return ApprovalGateResult.RequiresApproval($"Refused: {MissingDryRunMessage(planId)}");
             }
 
+            if (approved.Plan.Diffs.Length == 0)
+            {
+                return ApprovalGateResult.RequiresApproval($"Refused: {MissingDiffMessage(planId)}");
+            }
+
             var approvedChallenge = await challengeStore.FindApprovedAsync(
                 planId,
                 approved.Hash!,
@@ -59,6 +64,11 @@ public sealed class GatewayApprovalService
         if (pending.Plan.DryRun is null)
         {
             return ApprovalGateResult.RequiresApproval($"Refused: {MissingDryRunMessage(planId)}");
+        }
+
+        if (pending.Plan.Diffs.Length == 0)
+        {
+            return ApprovalGateResult.RequiresApproval($"Refused: {MissingDiffMessage(planId)}");
         }
 
         var challenge = await challengeStore.CreateAsync(
@@ -283,6 +293,18 @@ public sealed class GatewayApprovalService
             return ChallengeValidation.Invalid(message, challenge, pending.Plan);
         }
 
+        if (pending.Plan.Diffs.Length == 0)
+        {
+            var message = MissingDiffMessage(challenge.PlanId);
+            await WriteChallengeRejectedAuditAsync(
+                challenge,
+                approver.Subject,
+                message,
+                cancellationToken);
+
+            return ChallengeValidation.Invalid(message, challenge, pending.Plan);
+        }
+
         return ChallengeValidation.Valid(challenge, pending.Plan);
     }
 
@@ -350,6 +372,9 @@ public sealed class GatewayApprovalService
 
     private static string MissingDryRunMessage(string planId) =>
         $"Plan '{planId}' is missing recorded server-side dry-run data. Ask the MCP client to re-request the plan.";
+
+    private static string MissingDiffMessage(string planId) =>
+        $"Plan '{planId}' is missing recorded diff data. Ask the MCP client to re-request the plan.";
 
     private sealed record ChallengeValidation(
         string? Error,

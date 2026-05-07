@@ -28,6 +28,8 @@ public static class ApprovalConventions
         public const string ApplyDenied = "apply_denied";
         public const string ApplyFailed = "apply_failed";
         public const string DryRunFailed = "dry_run_failed";
+        public const string DiffFailed = "diff_failed";
+        public const string ApplyDriftDetected = "apply_drift_detected";
         public const string ApprovalChallengeCreated = "approval_challenge_created";
         public const string ApprovalChallengeApproved = "approval_challenge_approved";
         public const string ApprovalChallengeDenied = "approval_challenge_denied";
@@ -47,6 +49,14 @@ public static class ApprovalConventions
     {
         public const string GatewayOutOfBand = "gateway_oob";
         public const string DirectStore = "direct_store";
+    }
+
+    public static class DiffChangeTypes
+    {
+        public const string Create = "create";
+        public const string Update = "update";
+        public const string Delete = "delete";
+        public const string NoOp = "no-op";
     }
 
     public static class DateTimeFormats

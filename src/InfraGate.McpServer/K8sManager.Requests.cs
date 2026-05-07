@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.McpServer.Diff;
 using InfraGate.McpServer.Policy;
 using k8s;
 using k8s.Models;
@@ -205,7 +206,31 @@ public sealed partial class K8sManager
             return FormatRequestDryRunRefusal(dryRun.Message);
         }
 
-        return await CreateAndFormatPlanAsync(plan with { DryRun = dryRun.DryRun }, policyResult, cancellationToken);
+        var planWithDryRun = plan with
+        {
+            DryRun = dryRun.DryRun,
+            PolicyFindings = ToPlanPolicyFindings(policyResult)
+        };
+
+        K8sPlanDiff[] diffs;
+        try
+        {
+            diffs = await K8sDiffService.BuildDiffsAsync(
+                client,
+                planWithDryRun.Operation,
+                planWithDryRun.Objects,
+                planWithDryRun.DryRun.Objects,
+                cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            var message = FormatApiException("Diff generation failed", ex);
+            await WriteDiffFailedAuditAsync(plan, message, cancellationToken);
+
+            return $"Diff generation failed; no approval plan was created.{Environment.NewLine}{message}";
+        }
+
+        return await CreateAndFormatPlanAsync(planWithDryRun with { Diffs = diffs }, policyResult, cancellationToken);
     }
 
     private async Task<string> CreateAndFormatPlanAsync(
@@ -230,6 +255,7 @@ public sealed partial class K8sManager
                Objects:
                {objects}
                Dry-run: {result.Plan.DryRun?.Status ?? "not recorded"}
+               Diff: recorded for browser approval
                Pending file: {result.PendingPath}
                Plan hash: {result.Hash}
 
@@ -279,5 +305,16 @@ public sealed partial class K8sManager
             },
             objects: [K8sConventions.K8sResources.DeploymentRef(namespaceName, name)],
             manifest: null);
+    }
+
+    private static K8sPlanPolicyFinding[] ToPlanPolicyFindings(K8sPolicyResult? policyResult)
+    {
+        return policyResult?.Findings
+            .Select(finding => new K8sPlanPolicyFinding(
+                finding.Severity.ToString(),
+                finding.Code,
+                finding.ObjectRef,
+                finding.Message))
+            .ToArray() ?? [];
     }
 }

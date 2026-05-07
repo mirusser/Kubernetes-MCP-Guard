@@ -8,6 +8,8 @@ namespace InfraGate.McpServer.Tests.UnitTests;
 
 public sealed class K8sManagerRequestTests
 {
+    private static readonly JsonSerializerOptions PlanJsonOptions = new(JsonSerializerDefaults.Web);
+
     [Fact]
     public async Task RequestApplyManifestAsync_CreatesPlan_ForSupportedManifest()
     {
@@ -133,6 +135,155 @@ public sealed class K8sManagerRequestTests
         Assert.Equal(K8sConventions.K8sApi.DryRunAll, dryRun);
     }
 
+    [Fact]
+    public async Task RequestApplyManifestAsync_StoresDiffsInPendingPlan()
+    {
+        await using var api = new TestKubernetesApi(request => request.Method == "PATCH"
+            ? TestResponse.Json(ConfigMapJson("new"))
+            : TestResponse.Json(ConfigMapJson("old")));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestApplyManifestAsync("demo", DeleteManifest, CancellationToken.None);
+        var plan = await ReadPendingPlanAsync(context, ParsePlanId(result));
+        var diff = Assert.Single(plan.Diffs);
+
+        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Contains("/data/hello", diff.ChangedPaths);
+        Assert.Contains("Diff: recorded for browser approval", result);
+    }
+
+    [Fact]
+    public async Task RequestDeleteManifestAsync_StoresDeleteDiff()
+    {
+        await using var api = new TestKubernetesApi(request => request.Method == "DELETE"
+            ? TestResponse.Json(StatusJson("Success", 200))
+            : TestResponse.Json(ConfigMapJson("old")));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestDeleteManifestAsync("demo", DeleteManifest, CancellationToken.None);
+        var plan = await ReadPendingPlanAsync(context, ParsePlanId(result));
+        var diff = Assert.Single(plan.Diffs);
+
+        Assert.Equal(ApprovalConventions.DiffChangeTypes.Delete, diff.ChangeType);
+        Assert.Contains("/data/hello", diff.RemovedPaths);
+    }
+
+    [Fact]
+    public async Task RequestScaleDeploymentAsync_StoresScaleDiff()
+    {
+        await using var api = new TestKubernetesApi(request => request.Method == "PATCH"
+            ? TestResponse.Json(ScaleJson(3))
+            : TestResponse.Json(ScaleJson(1)));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestScaleDeploymentAsync("demo", "demo", 3, CancellationToken.None);
+        var plan = await ReadPendingPlanAsync(context, ParsePlanId(result));
+        var diff = Assert.Single(plan.Diffs);
+
+        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Contains("/spec/replicas", diff.ChangedPaths);
+    }
+
+    [Fact]
+    public async Task RequestRestartDeploymentAsync_StoresRestartDiff()
+    {
+        await using var api = new TestKubernetesApi(request => request.Method == "PATCH"
+            ? TestResponse.Json(DeploymentJson("nginx:1.27-alpine", restartedAtUtc: "2026-05-07T00:00:00Z"))
+            : TestResponse.Json(DeploymentJson("nginx:1.27-alpine")));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestRestartDeploymentAsync("demo", "demo", CancellationToken.None);
+        var plan = await ReadPendingPlanAsync(context, ParsePlanId(result));
+        var diff = Assert.Single(plan.Diffs);
+
+        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Contains("/spec/template/metadata/annotations/kubectl.kubernetes.io~1restartedAt", diff.AddedPaths);
+    }
+
+    [Fact]
+    public async Task RequestSetDeploymentImageAsync_StoresImageDiff()
+    {
+        await using var api = new TestKubernetesApi(request => request.Method == "PATCH"
+            ? TestResponse.Json(DeploymentJson("nginx:1.28-alpine"))
+            : TestResponse.Json(DeploymentJson("nginx:1.27-alpine")));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestSetDeploymentImageAsync(
+            "demo",
+            "demo",
+            "nginx",
+            "nginx:1.28-alpine",
+            CancellationToken.None);
+        var plan = await ReadPendingPlanAsync(context, ParsePlanId(result));
+        var diff = Assert.Single(plan.Diffs);
+
+        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Contains("/spec/template/spec/containers/0/image", diff.ChangedPaths);
+    }
+
+    [Fact]
+    public async Task RequestApplyManifestAsync_WhenLiveReadFails_DoesNotCreatePlan()
+    {
+        await using var api = new TestKubernetesApi(request => request.Method == "PATCH"
+            ? TestResponse.Json(ConfigMapJson("new"))
+            : TestResponse.Json(StatusJson("InternalError", 500), statusCode: 500));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestApplyManifestAsync("demo", DeleteManifest, CancellationToken.None);
+
+        Assert.Contains("Diff generation failed", result);
+        Assert.DoesNotContain("PlanId:", result);
+        Assert.Empty(Directory.EnumerateFiles(context.ApprovalStore.PendingDirectory));
+    }
+
+    [Fact]
+    public async Task RequestScaleDeploymentAsync_WhenDryRunFails_DoesNotCreatePlan()
+    {
+        await using var api = new TestKubernetesApi(_ =>
+            TestResponse.Json(StatusJson("Invalid", 422), statusCode: 422));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestScaleDeploymentAsync("demo", "demo", 3, CancellationToken.None);
+
+        Assert.Contains("Server-side dry-run failed", result);
+        Assert.DoesNotContain("PlanId:", result);
+        Assert.Empty(Directory.EnumerateFiles(context.ApprovalStore.PendingDirectory));
+    }
+
+    [Fact]
+    public async Task RequestRestartDeploymentAsync_WhenDryRunFails_DoesNotCreatePlan()
+    {
+        await using var api = new TestKubernetesApi(_ =>
+            TestResponse.Json(StatusJson("Invalid", 422), statusCode: 422));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestRestartDeploymentAsync("demo", "demo", CancellationToken.None);
+
+        Assert.Contains("Server-side dry-run failed", result);
+        Assert.DoesNotContain("PlanId:", result);
+        Assert.Empty(Directory.EnumerateFiles(context.ApprovalStore.PendingDirectory));
+    }
+
+    [Fact]
+    public async Task RequestSetDeploymentImageAsync_WhenDryRunFails_DoesNotCreatePlan()
+    {
+        await using var api = new TestKubernetesApi(request => request.Method == "PATCH"
+            ? TestResponse.Json(StatusJson("Invalid", 422), statusCode: 422)
+            : TestResponse.Json(MinimalDeploymentJson));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestSetDeploymentImageAsync(
+            "demo",
+            "demo",
+            "nginx",
+            "nginx:1.28-alpine",
+            CancellationToken.None);
+
+        Assert.Contains("Server-side dry-run failed", result);
+        Assert.DoesNotContain("PlanId:", result);
+        Assert.Empty(Directory.EnumerateFiles(context.ApprovalStore.PendingDirectory));
+    }
+
     private static K8sManager CreateManager(string namespaceName)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
@@ -164,6 +315,16 @@ public sealed class K8sManagerRequestTests
             .Single(line => line.StartsWith("PlanId:", StringComparison.Ordinal))
             ["PlanId: ".Length..];
 
+    private static async Task<K8sPlan> ReadPendingPlanAsync(ManagerContext context, string planId)
+    {
+        var json = await File.ReadAllTextAsync(
+            context.ApprovalStore.GetPendingPath(planId),
+            CancellationToken.None);
+
+        return JsonSerializer.Deserialize<K8sPlan>(json, PlanJsonOptions) ??
+               throw new InvalidOperationException("Pending plan could not be read.");
+    }
+
     private static string StatusJson(string reason, int code) =>
         $$"""
           {
@@ -175,6 +336,76 @@ public sealed class K8sManagerRequestTests
             "code": {{code}}
           }
           """;
+
+    private static string ConfigMapJson(string value) =>
+        $$"""
+          {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {
+              "name": "demo-config",
+              "namespace": "demo"
+            },
+            "data": {
+              "hello": "{{value}}"
+            }
+          }
+          """;
+
+    private static string ScaleJson(int replicas) =>
+        $$"""
+          {
+            "apiVersion": "autoscaling/v1",
+            "kind": "Scale",
+            "metadata": {
+              "name": "demo",
+              "namespace": "demo"
+            },
+            "spec": {
+              "replicas": {{replicas}}
+            },
+            "status": {
+              "replicas": {{replicas}}
+            }
+          }
+          """;
+
+    private static string DeploymentJson(string image, string? restartedAtUtc = null)
+    {
+        var annotations = restartedAtUtc is null
+            ? string.Empty
+            : $$"""
+                  "annotations": {
+                    "kubectl.kubernetes.io/restartedAt": "{{restartedAtUtc}}"
+                  },
+              """;
+
+        return $$"""
+                 {
+                   "apiVersion": "apps/v1",
+                   "kind": "Deployment",
+                   "metadata": {
+                     "name": "demo",
+                     "namespace": "demo"
+                   },
+                   "spec": {
+                     "replicas": 1,
+                     "selector": { "matchLabels": { "app": "demo" } },
+                     "template": {
+                       "metadata": {
+                         {{annotations}}
+                         "labels": { "app": "demo" }
+                       },
+                       "spec": {
+                         "containers": [
+                           { "name": "nginx", "image": "{{image}}" }
+                         ]
+                       }
+                     }
+                   }
+                 }
+                 """;
+    }
 
     private const string ValidManifest = """
                                          apiVersion: apps/v1
@@ -222,6 +453,26 @@ public sealed class K8sManagerRequestTests
                                           data:
                                             hello: world
                                           """;
+
+    private const string MinimalDeploymentJson = """
+                                                  {
+                                                    "apiVersion": "apps/v1",
+                                                    "kind": "Deployment",
+                                                    "metadata": { "name": "demo", "namespace": "demo" },
+                                                    "spec": {
+                                                      "replicas": 1,
+                                                      "selector": { "matchLabels": { "app": "demo" } },
+                                                      "template": {
+                                                        "metadata": { "labels": { "app": "demo" } },
+                                                        "spec": {
+                                                          "containers": [
+                                                            { "name": "nginx", "image": "nginx:1.27-alpine" }
+                                                          ]
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                  """;
 
     private sealed record ManagerContext(K8sManager Manager, ApprovalStore ApprovalStore);
 }

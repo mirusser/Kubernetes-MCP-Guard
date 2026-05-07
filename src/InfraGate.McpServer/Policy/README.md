@@ -71,10 +71,10 @@ ApplyManifestPlanAsync
 
 ### DEPLOYMENT_PRIVILEGED_CONTAINER
 
-**Object:** `apps/v1 Deployment`  
-**Field:** `spec.template.spec.containers[*].securityContext.privileged`  
-**Severity:** Deny  
-**Why:** Privileged containers have full access to the host kernel. AI-generated app deployments have no legitimate need for this.  
+**Object:** `apps/v1 Deployment`
+**Field:** `spec.template.spec.containers[*].securityContext.privileged`
+**Severity:** Deny
+**Why:** Privileged containers have full access to the host kernel. AI-generated app deployments have no legitimate need for this.
 **Trigger:**
 ```yaml
 containers:
@@ -87,10 +87,10 @@ containers:
 
 ### DEPLOYMENT_HOST_PATH
 
-**Object:** `apps/v1 Deployment`  
-**Field:** `spec.template.spec.volumes[*].hostPath`  
-**Severity:** Deny  
-**Why:** hostPath mounts expose node filesystem paths to the container. This can leak sensitive node data or be used for container escapes.  
+**Object:** `apps/v1 Deployment`
+**Field:** `spec.template.spec.volumes[*].hostPath`
+**Severity:** Deny
+**Why:** hostPath mounts expose node filesystem paths to the container. This can leak sensitive node data or be used for container escapes.
 **Trigger:**
 ```yaml
 volumes:
@@ -103,10 +103,10 @@ volumes:
 
 ### DEPLOYMENT_HOST_NAMESPACE
 
-**Object:** `apps/v1 Deployment`  
-**Fields:** `spec.template.spec.hostNetwork`, `hostPID`, `hostIPC`  
-**Severity:** Deny  
-**Why:** These flags break container isolation by sharing the node's network, process, or IPC namespace.  
+**Object:** `apps/v1 Deployment`
+**Fields:** `spec.template.spec.hostNetwork`, `hostPID`, `hostIPC`
+**Severity:** Deny
+**Why:** These flags break container isolation by sharing the node's network, process, or IPC namespace.
 **Trigger:**
 ```yaml
 spec:
@@ -117,10 +117,10 @@ spec:
 
 ### DEPLOYMENT_ADDED_CAPABILITIES
 
-**Object:** `apps/v1 Deployment`  
-**Field:** `spec.template.spec.containers[*].securityContext.capabilities.add`  
-**Severity:** Deny  
-**Why:** Added capabilities such as `SYS_ADMIN` or `NET_ADMIN` dramatically increase the blast radius of a compromised container.  
+**Object:** `apps/v1 Deployment`
+**Field:** `spec.template.spec.containers[*].securityContext.capabilities.add`
+**Severity:** Deny
+**Why:** Added capabilities such as `SYS_ADMIN` or `NET_ADMIN` dramatically increase the blast radius of a compromised container.
 **Trigger:**
 ```yaml
 securityContext:
@@ -133,10 +133,10 @@ securityContext:
 
 ### IMAGE_LATEST_TAG
 
-**Object:** `apps/v1 Deployment` (containers and initContainers)  
-**Field:** `spec.template.spec.containers[*].image`  
-**Severity:** Deny  
-**Why:** Unpinned images allow silent upgrades that change behavior without review. Applied to: empty image, no `:` separator (implicit latest), or explicit `:latest` suffix.  
+**Object:** `apps/v1 Deployment` (containers and initContainers)
+**Field:** `spec.template.spec.containers[*].image`
+**Severity:** Deny
+**Why:** Unpinned images allow silent upgrades that change behavior without review. Applied to: empty image, no `:` separator (implicit latest), or explicit `:latest` suffix.
 **Trigger:**
 ```yaml
 image: nginx          # implicit latest
@@ -151,10 +151,10 @@ image: nginx:1.27-alpine
 
 ### SERVICE_LOAD_BALANCER
 
-**Object:** `v1 Service`  
-**Field:** `spec.type`  
-**Severity:** Deny  
-**Why:** LoadBalancer services provision external cloud load balancers, which may expose workloads beyond the intended cluster boundary and incur cost.  
+**Object:** `v1 Service`
+**Field:** `spec.type`
+**Severity:** Deny
+**Why:** LoadBalancer services provision external cloud load balancers, which may expose workloads beyond the intended cluster boundary and incur cost.
 **Trigger:**
 ```yaml
 spec:
@@ -165,10 +165,10 @@ spec:
 
 ### SERVICE_NODE_PORT
 
-**Object:** `v1 Service`  
-**Field:** `spec.type`  
-**Severity:** Deny  
-**Why:** NodePort bypasses standard Service/network policy expectations and binds directly on node ports, which may conflict with other workloads.  
+**Object:** `v1 Service`
+**Field:** `spec.type`
+**Severity:** Deny
+**Why:** NodePort bypasses standard Service/network policy expectations and binds directly on node ports, which may conflict with other workloads.
 **Trigger:**
 ```yaml
 spec:
@@ -179,12 +179,12 @@ spec:
 
 ### CONFIG_MAP_SECRET_LIKE_KEY
 
-**Object:** `v1 ConfigMap`  
-**Field:** `data` (key names)  
-**Severity:** Warning  
-**Why:** ConfigMaps are not encrypted. Keys named `password`, `token`, `apikey`, `connectionstring`, etc. are likely secrets that should live in a `Secret` resource.  
+**Object:** `v1 ConfigMap`
+**Field:** `data` (key names)
+**Severity:** Warning
+**Why:** ConfigMaps are not encrypted. Keys named `password`, `token`, `apikey`, `connectionstring`, etc. are likely secrets that should live in a `Secret` resource.
 **Checked key patterns (case-insensitive, substring match):**
-`password`, `passwd`, `pwd`, `secret`, `token`, `apikey`, `api_key`, `private_key`, `connectionstring`, `connection_string`  
+`password`, `passwd`, `pwd`, `secret`, `token`, `apikey`, `api_key`, `private_key`, `connectionstring`, `connection_string`
 **Trigger:**
 ```yaml
 data:

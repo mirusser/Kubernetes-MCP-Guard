@@ -210,10 +210,14 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         Assert.Contains("Operation: apply", result);
         Assert.Contains($"v1 ConfigMap {NamespaceName}/smoke-config", result);
         Assert.Contains("Dry-run: succeeded", result);
-        var dryRun = Assert.Single(k8sApi.Requests);
+        Assert.Contains("Diff: recorded for browser approval", result);
+        var dryRun = Assert.Single(k8sApi.Requests, request => request.Method == "PATCH");
         Assert.Equal("PATCH", dryRun.Method);
         Assert.Contains("dryRun=All", dryRun.Query);
         Assert.Contains("fieldValidation=Strict", dryRun.Query);
+        Assert.Contains(k8sApi.Requests, request =>
+            request.Method == "GET" &&
+            request.Path == $"/api/v1/namespaces/{NamespaceName}/configmaps/smoke-config");
     }
 
     [Fact]
@@ -273,6 +277,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         Assert.Contains("Server-side dry-run: succeeded", pageText);
         Assert.Contains("Dry-run Objects", pageText);
         Assert.Contains("299 - admission warning", pageText);
+        Assert.Contains("<h2>Diff</h2>", pageText);
+        Assert.Contains("replicas: 1", pageText);
+        Assert.Contains("replicas: 2", pageText);
         Assert.Contains($"{NamespaceName}/demo", pageText);
 
         var token = ParseAntiforgeryToken(pageText);
@@ -301,6 +308,34 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             apiRequest.Method == "PATCH" &&
             apiRequest.Path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo/scale" &&
             !IsDryRun(apiRequest));
+    }
+
+    [Fact]
+    public async Task ApprovalPage_ForApplyManifest_RendersCreateAndUpdateDiffs()
+    {
+        var repoRoot = FindRepoRoot();
+        var serverProject = Path.Combine(repoRoot, "src", "InfraGate.McpServer", "InfraGate.McpServer.csproj");
+        var testRoot = Path.Combine(Path.GetTempPath(), "infra-gate-gateway-tests", Guid.NewGuid().ToString("N"));
+        var approvalRoot = Path.Combine(testRoot, "approvals");
+        await using var k8sApi = new TestKubernetesApi(HandleApplyDiffKubernetesRequest);
+        var kubeconfig = await WriteKubeconfigAsync(testRoot, k8sApi.Url);
+        using var environment = EnvironmentVariableScope.Set(
+            ("KUBECONFIG", kubeconfig),
+            ("K8S_MCP_APPROVAL_ROOT", approvalRoot),
+            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName));
+        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot));
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(downstream, audit, CreateGatewayOptions(serverProject, testRoot, repoRoot));
+        await using var client = await CreateHttpMcpClientAsync(server);
+
+        var updatePage = await RequestApprovalPageAsync(client, server, UpdatedConfigMapManifest);
+        Assert.Contains("v1 ConfigMap mcp-nginx-demo/smoke-config will be updated.", updatePage);
+        Assert.Contains("hello: world", updatePage);
+        Assert.Contains("hello: updated", updatePage);
+
+        var createPage = await RequestApprovalPageAsync(client, server, NewConfigMapManifest);
+        Assert.Contains("v1 ConfigMap mcp-nginx-demo/new-config will be created.", createPage);
+        Assert.Contains("+  hello: created", createPage);
     }
 
     [Fact]
@@ -338,7 +373,24 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [McpGatewayConventions.ToolArguments.Namespace] = NamespaceName,
                 [McpGatewayConventions.ToolArguments.Manifest] = DemoManifest
             });
-        var applyPlanId = await ApprovePlanAsync(approvalRoot, applyRequestText, Subject);
+        var applyPlanId = ParsePlanId(applyRequestText);
+        var applyApprovalRequired = await CallTextAsync(
+            client,
+            McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.PlanId] = applyPlanId
+            });
+        var applyChallengeId = ParseChallengeId(applyApprovalRequired);
+        using (var browser = await CreateAuthenticatedApprovalBrowserAsync(server, applyChallengeId))
+        {
+            var page = await browser.GetAsync($"/approvals/{applyChallengeId}");
+            page.EnsureSuccessStatusCode();
+            var pageText = await page.Content.ReadAsStringAsync();
+            Assert.Contains("<h2>Diff</h2>", pageText);
+        }
+
+        await ApprovePlanAsync(approvalRoot, applyRequestText, Subject);
         var applyText = await CallTextAsync(
             client,
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
@@ -741,7 +793,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
     {
         return request.Path switch
         {
-            var path when path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo/scale" =>
+            var path when path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo/scale" &&
+                          request.Method == "PATCH" =>
                 TestResponse.Json("""
                                   {
                                     "apiVersion": "autoscaling/v1",
@@ -751,6 +804,16 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                                     "status": { "replicas": 2 }
                                   }
                                   """, IsDryRun(request) ? DryRunWarningHeaders() : null),
+            var path when path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo/scale" =>
+                TestResponse.Json("""
+                                  {
+                                    "apiVersion": "autoscaling/v1",
+                                    "kind": "Scale",
+                                    "metadata": { "name": "demo", "namespace": "mcp-nginx-demo" },
+                                    "spec": { "replicas": 1 },
+                                    "status": { "replicas": 1 }
+                                  }
+                                  """),
             var path when path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo" =>
                 TestResponse.Json(DeploymentJson("demo", replicas: 2)),
             var path when path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments" =>
@@ -765,6 +828,63 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 TestResponse.Json(ListJson("apps/v1", "ReplicaSetList", [])),
             _ => TestResponse.Json("{}")
         };
+    }
+
+    private static TestResponse HandleApplyDiffKubernetesRequest(CapturedRequest request)
+    {
+        return request.Path switch
+        {
+            var path when path == $"/api/v1/namespaces/{NamespaceName}/configmaps/smoke-config" &&
+                          request.Method == "PATCH" =>
+                TestResponse.Json(ConfigMapJson("smoke-config", "updated")),
+            var path when path == $"/api/v1/namespaces/{NamespaceName}/configmaps/smoke-config" =>
+                TestResponse.Json(ConfigMapJson("smoke-config", "world")),
+            var path when path == $"/api/v1/namespaces/{NamespaceName}/configmaps/new-config" &&
+                          request.Method == "PATCH" =>
+                TestResponse.Json(ConfigMapJson("new-config", "created")),
+            var path when path == $"/api/v1/namespaces/{NamespaceName}/configmaps/new-config" =>
+                TestResponse.Json(StatusJson("NotFound", 404), statusCode: 404),
+            var path when path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments" =>
+                TestResponse.Json(ListJson("apps/v1", "DeploymentList", [])),
+            var path when path == $"/api/v1/namespaces/{NamespaceName}/services" =>
+                TestResponse.Json(ListJson("v1", "ServiceList", [])),
+            var path when path == $"/api/v1/namespaces/{NamespaceName}/configmaps" =>
+                TestResponse.Json(ListJson("v1", "ConfigMapList", [])),
+            var path when path == $"/api/v1/namespaces/{NamespaceName}/pods" =>
+                TestResponse.Json(ListJson("v1", "PodList", [])),
+            var path when path == $"/apis/apps/v1/namespaces/{NamespaceName}/replicasets" =>
+                TestResponse.Json(ListJson("apps/v1", "ReplicaSetList", [])),
+            _ => TestResponse.Json("{}")
+        };
+    }
+
+    private static async Task<string> RequestApprovalPageAsync(
+        McpClient client,
+        TestServer server,
+        string manifest)
+    {
+        var requestText = await CallTextAsync(
+            client,
+            McpGatewayConventions.ToolNames.RequestApplyManifest,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.Namespace] = NamespaceName,
+                [McpGatewayConventions.ToolArguments.Manifest] = manifest
+            });
+        var planId = ParsePlanId(requestText);
+        var approvalRequired = await CallTextAsync(
+            client,
+            McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.PlanId] = planId
+            });
+        var challengeId = ParseChallengeId(approvalRequired);
+        using var browser = await CreateAuthenticatedApprovalBrowserAsync(server, challengeId);
+        var page = await browser.GetAsync($"/approvals/{challengeId}");
+        page.EnsureSuccessStatusCode();
+
+        return await page.Content.ReadAsStringAsync();
     }
 
     private static bool IsDryRun(CapturedRequest request) =>
@@ -814,6 +934,33 @@ public sealed partial class GatewayHttpMcpIntegrationTests
               "availableReplicas": {{replicas}},
               "updatedReplicas": {{replicas}}
             }
+          }
+          """;
+
+    private static string ConfigMapJson(string name, string value) =>
+        $$"""
+          {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {
+              "name": "{{name}}",
+              "namespace": "{{NamespaceName}}"
+            },
+            "data": {
+              "hello": "{{value}}"
+            }
+          }
+          """;
+
+    private static string StatusJson(string reason, int code) =>
+        $$"""
+          {
+            "apiVersion": "v1",
+            "kind": "Status",
+            "status": "{{reason}}",
+            "reason": "{{reason}}",
+            "message": "{{reason}}",
+            "code": {{code}}
           }
           """;
 
@@ -975,6 +1122,24 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                                                   data:
                                                     hello: world
                                                   """;
+
+    private const string UpdatedConfigMapManifest = """
+                                                    apiVersion: v1
+                                                    kind: ConfigMap
+                                                    metadata:
+                                                      name: smoke-config
+                                                    data:
+                                                      hello: updated
+                                                    """;
+
+    private const string NewConfigMapManifest = """
+                                                apiVersion: v1
+                                                kind: ConfigMap
+                                                metadata:
+                                                  name: new-config
+                                                data:
+                                                  hello: created
+                                                """;
 
     private const string DemoManifest = """
                                         apiVersion: apps/v1
@@ -1200,5 +1365,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
     {
         public static TestResponse Json(string body, IReadOnlyDictionary<string, string[]>? headers = null) =>
             new((int)HttpStatusCode.OK, "application/json", body, headers ?? new Dictionary<string, string[]>());
+
+        public static TestResponse Json(string body, int statusCode, IReadOnlyDictionary<string, string[]>? headers = null) =>
+            new(statusCode, "application/json", body, headers ?? new Dictionary<string, string[]>());
     }
 }

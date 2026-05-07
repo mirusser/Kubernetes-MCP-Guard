@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.McpServer.Diff;
 using InfraGate.McpServer.Policy;
 using k8s;
 using k8s.Models;
@@ -81,6 +82,32 @@ public sealed partial class K8sManager
         }
     }
 
+    private async Task<ApplyResult?> RefuseIfPlanDiffsMissingOrLiveDriftedAsync(
+        K8sPlan plan,
+        CancellationToken cancellationToken)
+    {
+        if (plan.Diffs.Length == 0)
+        {
+            return ApplyResult.Failed($"Plan '{plan.Id}' is missing recorded diff data. Re-request the plan.");
+        }
+
+        var drift = await K8sDiffService.FindDriftAsync(client, plan, cancellationToken);
+        if (drift is null)
+        {
+            return null;
+        }
+
+        await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApplyDriftDetected, new
+        {
+            plan.Id,
+            plan.Operation,
+            plan.Namespace,
+            message = drift
+        }, cancellationToken);
+
+        return ApplyResult.Failed($"Live Kubernetes state changed after approval; refusing to mutate Kubernetes.{Environment.NewLine}{drift}");
+    }
+
     private async Task<ApplyResult> ApplyManifestPlanAsync(K8sPlan plan, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(plan.Manifest))
@@ -99,6 +126,12 @@ public sealed partial class K8sManager
         {
             return ApplyResult.Failed(
                 $"Apply refused by policy (re-validated at apply time):{Environment.NewLine}{policyResult.FormatRefusal()}");
+        }
+
+        var driftRefusal = await RefuseIfPlanDiffsMissingOrLiveDriftedAsync(plan, cancellationToken);
+        if (driftRefusal is not null)
+        {
+            return driftRefusal;
         }
 
         var dryRunRefusal = await RefuseIfPreApplyDryRunFailsAsync(
@@ -122,6 +155,12 @@ public sealed partial class K8sManager
 
     private async Task<ApplyResult> DeleteManifestPlanAsync(K8sPlan plan, CancellationToken cancellationToken)
     {
+        var driftRefusal = await RefuseIfPlanDiffsMissingOrLiveDriftedAsync(plan, cancellationToken);
+        if (driftRefusal is not null)
+        {
+            return driftRefusal;
+        }
+
         var dryRunRefusal = await RefuseIfPreApplyDryRunFailsAsync(
             plan,
             DryRunDeleteManifestAsync(plan.Objects, cancellationToken),
@@ -144,6 +183,12 @@ public sealed partial class K8sManager
     {
         var name = plan.Parameters[K8sConventions.PlanParameters.Name];
         var replicas = int.Parse(plan.Parameters[K8sConventions.PlanParameters.Replicas]);
+        var driftRefusal = await RefuseIfPlanDiffsMissingOrLiveDriftedAsync(plan, cancellationToken);
+        if (driftRefusal is not null)
+        {
+            return driftRefusal;
+        }
+
         var dryRunRefusal = await RefuseIfPreApplyDryRunFailsAsync(
             plan,
             DryRunScaleDeploymentAsync(plan.Namespace, name, replicas, cancellationToken),
@@ -168,6 +213,12 @@ public sealed partial class K8sManager
     {
         var name = plan.Parameters[K8sConventions.PlanParameters.Name];
         var restartedAtUtc = plan.Parameters[K8sConventions.PlanParameters.RestartedAtUtc];
+        var driftRefusal = await RefuseIfPlanDiffsMissingOrLiveDriftedAsync(plan, cancellationToken);
+        if (driftRefusal is not null)
+        {
+            return driftRefusal;
+        }
+
         var dryRunRefusal = await RefuseIfPreApplyDryRunFailsAsync(
             plan,
             DryRunRestartDeploymentAsync(plan.Namespace, name, restartedAtUtc, cancellationToken),
@@ -208,6 +259,12 @@ public sealed partial class K8sManager
         if (imageValidation is not null)
         {
             return ApplyResult.Failed(imageValidation);
+        }
+
+        var driftRefusal = await RefuseIfPlanDiffsMissingOrLiveDriftedAsync(plan, cancellationToken);
+        if (driftRefusal is not null)
+        {
+            return driftRefusal;
         }
 
         var dryRunRefusal = await RefuseIfPreApplyDryRunFailsAsync(

@@ -21,7 +21,7 @@ Implement the full security-roadmap section 3 dry-run behavior: every mutation p
 
 **Verification:** `dotnet test tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj`
 
-**Dependencies:** None  
+**Dependencies:** None
 **Estimated scope:** S
 
 ### Task 2: Add Kubernetes Dry-Run Executor
@@ -35,7 +35,7 @@ Implement the full security-roadmap section 3 dry-run behavior: every mutation p
 
 **Verification:** Unit tests assert captured fake-Kubernetes requests contain `dryRun=All`, `fieldManager=infra-gate-mcp`, and strict field validation where applicable.
 
-**Dependencies:** Task 1  
+**Dependencies:** Task 1
 **Estimated scope:** M
 
 ### Task 3: Enforce Request-Time Dry-Run Before Plan Creation
@@ -49,7 +49,7 @@ Implement the full security-roadmap section 3 dry-run behavior: every mutation p
 
 **Verification:** Add tests such as `RequestApplyManifestAsync_WhenDryRunFails_DoesNotCreatePlan`, `RequestScaleDeploymentAsync_DryRunsBeforePlan`, and `RequestDeleteManifestAsync_WhenDryRunDeleteFails_DoesNotCreatePlan`.
 
-**Dependencies:** Task 2  
+**Dependencies:** Task 2
 **Estimated scope:** M
 
 ### Task 4: Repeat Dry-Run Immediately Before Apply
@@ -63,7 +63,7 @@ Implement the full security-roadmap section 3 dry-run behavior: every mutation p
 
 **Verification:** Add tests proving pre-apply dry-run failure does not issue a non-dry-run PATCH/DELETE, and legacy no-dry-run plans are refused.
 
-**Dependencies:** Task 3  
+**Dependencies:** Task 3
 **Estimated scope:** M
 
 ### Task 5: Show Dry-Run In Gateway Approval
@@ -76,7 +76,7 @@ Implement the full security-roadmap section 3 dry-run behavior: every mutation p
 
 **Verification:** Gateway unit/integration tests cover dry-run rendering and challenge refusal for legacy plans.
 
-**Dependencies:** Task 1  
+**Dependencies:** Task 1
 **Estimated scope:** S
 
 ### Task 6: Update Tests And Docs
@@ -90,7 +90,7 @@ Implement the full security-roadmap section 3 dry-run behavior: every mutation p
 
 **Verification:** `dotnet build InfraGate.slnx`, `dotnet test tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj`, `dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj`; optional opt-in integration tests with the existing env flags.
 
-**Dependencies:** Tasks 3-5  
+**Dependencies:** Tasks 3-5
 **Estimated scope:** M
 
 ## Assumptions
