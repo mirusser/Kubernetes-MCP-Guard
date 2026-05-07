@@ -207,7 +207,7 @@ public sealed partial class K8sManager
                 using var response = await client.AppsV1.DeleteNamespacedDeploymentWithHttpMessagesAsync(
                     obj.Name,
                     obj.Namespace,
-                    body: new V1DeleteOptions(),
+                    body: CreateDryRunDeleteOptions(),
                     dryRun: K8sConventions.K8sApi.DryRunAll,
                     cancellationToken: cancellationToken);
 
@@ -218,7 +218,7 @@ public sealed partial class K8sManager
                 using var response = await client.CoreV1.DeleteNamespacedServiceWithHttpMessagesAsync(
                     obj.Name,
                     obj.Namespace,
-                    body: new V1DeleteOptions(),
+                    body: CreateDryRunDeleteOptions(),
                     dryRun: K8sConventions.K8sApi.DryRunAll,
                     cancellationToken: cancellationToken);
 
@@ -229,7 +229,7 @@ public sealed partial class K8sManager
                 using var response = await client.CoreV1.DeleteNamespacedConfigMapWithHttpMessagesAsync(
                     obj.Name,
                     obj.Namespace,
-                    body: new V1DeleteOptions(),
+                    body: CreateDryRunDeleteOptions(),
                     dryRun: K8sConventions.K8sApi.DryRunAll,
                     cancellationToken: cancellationToken);
 
@@ -239,6 +239,12 @@ public sealed partial class K8sManager
                 throw new InvalidOperationException($"Unsupported object for server-side dry-run: {FormatObjectRef(obj)}.");
         }
     }
+
+    private static V1DeleteOptions CreateDryRunDeleteOptions() =>
+        new()
+        {
+            DryRun = [K8sConventions.K8sApi.DryRunAll]
+        };
 
     private static V1Patch CreateScaleDeploymentPatch(int replicas) =>
         new(new

@@ -1,6 +1,8 @@
+using System.Text.Json;
 using InfraGate.Approvals;
 using InfraGate.McpServer;
 using k8s;
+using k8s.Models;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
 
@@ -112,6 +114,23 @@ public sealed class K8sManagerRequestTests
         Assert.Contains("Server-side dry-run failed", result);
         Assert.DoesNotContain("PlanId:", result);
         Assert.Empty(Directory.EnumerateFiles(context.ApprovalStore.PendingDirectory));
+    }
+
+    [Fact]
+    public async Task RequestDeleteManifestAsync_SendsDryRunDeleteOptionsBody()
+    {
+        await using var api = new TestKubernetesApi(_ => TestResponse.Json(StatusJson("Success", 200)));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestDeleteManifestAsync("demo", DeleteManifest, CancellationToken.None);
+
+        var request = Assert.Single(api.Requests, request =>
+            request.Method == "DELETE" &&
+            request.Path == "/api/v1/namespaces/demo/configmaps/demo-config");
+        var options = JsonSerializer.Deserialize<V1DeleteOptions>(request.Body);
+        var dryRun = Assert.Single(options?.DryRun ?? []);
+        Assert.Contains("Dry-run: succeeded", result);
+        Assert.Equal(K8sConventions.K8sApi.DryRunAll, dryRun);
     }
 
     private static K8sManager CreateManager(string namespaceName)
