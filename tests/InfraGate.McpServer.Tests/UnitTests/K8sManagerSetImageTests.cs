@@ -78,8 +78,11 @@ public sealed class K8sManagerSetImageTests
 
         Assert.Contains("Operation: set-image", result);
         Assert.Contains("apps/v1 Deployment demo/demo", result);
+        Assert.Contains("Dry-run: succeeded", result);
         Assert.Contains("\"currentImage\": \"nginx:1.27-alpine\"", pending);
         Assert.Contains("\"image\": \"nginx:1.28-alpine\"", pending);
+        Assert.Contains("\"dryRun\":", pending);
+        Assert.Contains(api.Requests, request => request.Method == "PATCH" && IsDryRun(request));
     }
 
     [Fact]
@@ -110,7 +113,7 @@ public sealed class K8sManagerSetImageTests
         var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
 
         Assert.Contains("image changed from planned 'nginx:1.27-alpine' to 'nginx:1.27.1-alpine'", result);
-        Assert.DoesNotContain(api.Requests, request => request.Method == "PATCH");
+        Assert.DoesNotContain(api.Requests, request => request.Method == "PATCH" && !IsDryRun(request));
     }
 
     [Fact]
@@ -143,7 +146,7 @@ public sealed class K8sManagerSetImageTests
         var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
 
         Assert.Contains("does not contain container 'nginx'", result);
-        Assert.DoesNotContain(api.Requests, request => request.Method == "PATCH");
+        Assert.DoesNotContain(api.Requests, request => request.Method == "PATCH" && !IsDryRun(request));
     }
 
     [Fact]
@@ -169,11 +172,14 @@ public sealed class K8sManagerSetImageTests
         var planId = await ApprovePlanAsync(context.ApprovalRoot, requestText);
 
         var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
-        var patch = Assert.Single(api.Requests, request => request.Method == "PATCH");
+        var patch = Assert.Single(api.Requests, request => request.Method == "PATCH" && !IsDryRun(request));
+        var dryRuns = api.Requests.Where(request => request.Method == "PATCH" && IsDryRun(request)).ToArray();
 
         Assert.Contains("Updated apps/v1 Deployment demo/demo container 'nginx' image", result);
         Assert.Equal("/apis/apps/v1/namespaces/demo/deployments/demo", patch.Path);
         Assert.Contains("fieldManager=infra-gate-mcp", patch.Query);
+        Assert.Equal(2, dryRuns.Length);
+        Assert.All(dryRuns, request => Assert.Contains("fieldValidation=Strict", request.Query));
 
         using var document = JsonDocument.Parse(patch.Body);
         AssertSingleProperty(document.RootElement, "spec");
@@ -234,6 +240,9 @@ public sealed class K8sManagerSetImageTests
         text.Split(Environment.NewLine)
             .Single(line => line.StartsWith("PlanId:", StringComparison.Ordinal))
             ["PlanId: ".Length..];
+
+    private static bool IsDryRun(CapturedRequest request) =>
+        request.Query.Contains("dryRun=All", StringComparison.Ordinal);
 
     private static string DeploymentJson(string image, bool includeSidecar = true, bool includeNginx = true)
     {

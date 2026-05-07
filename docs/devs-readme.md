@@ -223,15 +223,15 @@ Observability bounds: Events and diagnostics default to `limit = 50` and allow u
 
 Approval flow:
 
-1. Ask the MCP server for a plan with `request_apply_manifest`, `request_scale_deployment`, etc.
+1. Ask the MCP server for a plan with `request_apply_manifest`, `request_scale_deployment`, etc. The server runs Kubernetes `dryRun=All` first and stores the dry-run result in the pending plan.
 2. Call `apply_approved_plan` with the returned `PlanId`.
 3. The Gateway returns an approval URL instead of applying.
-4. Open the URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan, and approve or deny it.
-5. Call `apply_approved_plan` again. The Gateway forwards only after the approved hash exists and still matches.
+4. Open the URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan and dry-run status, and approve or deny it.
+5. Call `apply_approved_plan` again. The Gateway forwards only after the approved hash exists and still matches; the server repeats dry-run immediately before the real write.
 
 The MCP client never submits approval content. Approval challenges are bound to the plan id, current plan hash, requester subject, expiry, and single-use status.
 
-The approval file stores the SHA-256 hash of the pending plan. If the pending plan changes after approval, the MCP server refuses to apply it. Audit events are written under `.mcp-approvals/audit.jsonl`.
+The approval file stores the SHA-256 hash of the pending plan, including recorded dry-run data. If the pending plan changes after approval, or a fresh pre-apply dry-run fails, the MCP server refuses to apply it. Audit events are written under `.mcp-approvals/audit.jsonl`.
 
 ### Verification
 

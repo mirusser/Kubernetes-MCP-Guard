@@ -209,7 +209,11 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         Assert.Contains("PlanId:", result);
         Assert.Contains("Operation: apply", result);
         Assert.Contains($"v1 ConfigMap {NamespaceName}/smoke-config", result);
-        Assert.Empty(k8sApi.Requests);
+        Assert.Contains("Dry-run: succeeded", result);
+        var dryRun = Assert.Single(k8sApi.Requests);
+        Assert.Equal("PATCH", dryRun.Method);
+        Assert.Contains("dryRun=All", dryRun.Query);
+        Assert.Contains("fieldValidation=Strict", dryRun.Query);
     }
 
     [Fact]
@@ -245,7 +249,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         Assert.DoesNotContain("Scaled apps/v1 Deployment", approvalRequired);
         Assert.DoesNotContain(k8sApi.Requests, apiRequest =>
             apiRequest.Method == "PATCH" &&
-            apiRequest.Path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo/scale");
+            apiRequest.Path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo/scale" &&
+            !IsDryRun(apiRequest));
 
         var challengeId = ParseChallengeId(approvalRequired);
         using var unauthenticatedBrowser = new HttpClient(server.CreateHandler())
@@ -265,6 +270,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         var pageText = await page.Content.ReadAsStringAsync();
         Assert.Contains($"PlanId</dt><dd>{planId}</dd>", pageText);
         Assert.Contains("Plan hash", pageText);
+        Assert.Contains("Server-side dry-run: succeeded", pageText);
+        Assert.Contains("Dry-run Objects", pageText);
+        Assert.Contains("299 - admission warning", pageText);
         Assert.Contains($"{NamespaceName}/demo", pageText);
 
         var token = ParseAntiforgeryToken(pageText);
@@ -291,7 +299,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         Assert.True(File.Exists(Path.Combine(approvalRoot, "approved", $"{planId}.sha256")));
         Assert.Contains(k8sApi.Requests, apiRequest =>
             apiRequest.Method == "PATCH" &&
-            apiRequest.Path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo/scale");
+            apiRequest.Path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo/scale" &&
+            !IsDryRun(apiRequest));
     }
 
     [Fact]
@@ -741,7 +750,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                                     "spec": { "replicas": 2 },
                                     "status": { "replicas": 2 }
                                   }
-                                  """),
+                                  """, IsDryRun(request) ? DryRunWarningHeaders() : null),
             var path when path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo" =>
                 TestResponse.Json(DeploymentJson("demo", replicas: 2)),
             var path when path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments" =>
@@ -757,6 +766,15 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             _ => TestResponse.Json("{}")
         };
     }
+
+    private static bool IsDryRun(CapturedRequest request) =>
+        request.Query.Contains("dryRun=All", StringComparison.Ordinal);
+
+    private static IReadOnlyDictionary<string, string[]> DryRunWarningHeaders() =>
+        new Dictionary<string, string[]>
+        {
+            ["Warning"] = ["299 - admission warning"]
+        };
 
     private static string ListJson(string apiVersion, string kind, IEnumerable<string> items) =>
         $$"""
@@ -1151,6 +1169,14 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             context.Response.StatusCode = response.StatusCode;
             context.Response.ContentType = response.ContentType;
             context.Response.ContentLength64 = responseBody.Length;
+            foreach (var header in response.Headers)
+            {
+                foreach (var value in header.Value)
+                {
+                    context.Response.Headers.Add(header.Key, value);
+                }
+            }
+
             await context.Response.OutputStream.WriteAsync(responseBody);
             context.Response.Close();
         }
@@ -1166,8 +1192,13 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
     private sealed record CapturedRequest(string Method, string Path, string Query, string Body);
 
-    private sealed record TestResponse(int StatusCode, string ContentType, string Body)
+    private sealed record TestResponse(
+        int StatusCode,
+        string ContentType,
+        string Body,
+        IReadOnlyDictionary<string, string[]> Headers)
     {
-        public static TestResponse Json(string body) => new((int)HttpStatusCode.OK, "application/json", body);
+        public static TestResponse Json(string body, IReadOnlyDictionary<string, string[]>? headers = null) =>
+            new((int)HttpStatusCode.OK, "application/json", body, headers ?? new Dictionary<string, string[]>());
     }
 }

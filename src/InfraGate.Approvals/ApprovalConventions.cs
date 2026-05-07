@@ -27,6 +27,7 @@ public static class ApprovalConventions
         public const string PlanApplied = "plan_applied";
         public const string ApplyDenied = "apply_denied";
         public const string ApplyFailed = "apply_failed";
+        public const string DryRunFailed = "dry_run_failed";
         public const string ApprovalChallengeCreated = "approval_challenge_created";
         public const string ApprovalChallengeApproved = "approval_challenge_approved";
         public const string ApprovalChallengeDenied = "approval_challenge_denied";

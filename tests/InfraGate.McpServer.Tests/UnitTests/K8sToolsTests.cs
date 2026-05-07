@@ -124,7 +124,8 @@ public sealed class K8sToolsTests
     [Fact]
     public async Task RequestApplyManifest_Delegates()
     {
-        var manager = CreateManager();
+        await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
+        var manager = CreateManager(api);
 
         var result = await K8sTools.RequestApplyManifest(manager, DemoNamespace, DeploymentManifest);
 
@@ -134,7 +135,8 @@ public sealed class K8sToolsTests
     [Fact]
     public async Task RequestDeleteManifest_Delegates()
     {
-        var manager = CreateManager();
+        await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
+        var manager = CreateManager(api);
 
         var result = await K8sTools.RequestDeleteManifest(manager, DemoNamespace, DeploymentManifest);
 
@@ -144,7 +146,8 @@ public sealed class K8sToolsTests
     [Fact]
     public async Task RequestScaleDeployment_Delegates()
     {
-        var manager = CreateManager();
+        await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
+        var manager = CreateManager(api);
 
         var result = await K8sTools.RequestScaleDeployment(manager, DemoNamespace, "demo", 2);
 
@@ -154,7 +157,8 @@ public sealed class K8sToolsTests
     [Fact]
     public async Task RequestRestartDeployment_Delegates()
     {
-        var manager = CreateManager();
+        await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
+        var manager = CreateManager(api);
 
         var result = await K8sTools.RequestRestartDeployment(manager, DemoNamespace, "demo");
 

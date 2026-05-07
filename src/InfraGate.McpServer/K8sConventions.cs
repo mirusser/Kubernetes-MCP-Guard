@@ -41,6 +41,24 @@ internal static class K8sConventions
         public const string Image = "image";
     }
 
+    public static class DryRunPhases
+    {
+        public const string Request = "request";
+        public const string Apply = "apply";
+    }
+
+    public static class DryRunStatuses
+    {
+        public const string Succeeded = "succeeded";
+    }
+
+    public static class K8sApi
+    {
+        public const string DryRunAll = "All";
+        public const string FieldValidationStrict = "Strict";
+        public const string WarningHeader = "Warning";
+    }
+
     public static class ToolArguments
     {
         public const string PlanId = "planId";

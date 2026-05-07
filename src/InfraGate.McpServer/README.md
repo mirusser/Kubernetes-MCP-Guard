@@ -1,6 +1,6 @@
 # InfraGate.McpServer
 
-`InfraGate.McpServer` is the stdio MCP server that owns the Kubernetes governance behavior. It exposes MCP tools, validates requested namespaces and manifest kinds, creates approval plans, and applies approved plans through the Kubernetes .NET client.
+`InfraGate.McpServer` is the stdio MCP server that owns the Kubernetes governance behavior. It exposes MCP tools, validates requested namespaces and manifest kinds, dry-run-validates approval plans, and applies approved plans through the Kubernetes .NET client.
 
 ## Runtime Flow
 
@@ -12,7 +12,8 @@
 
 ## Important Contracts
 
-- Mutations are two-step: create a pending plan, then call `apply_approved_plan` after the Gateway writes out-of-band approval.
+- Mutations are two-step: create a dry-run-validated pending plan, then call `apply_approved_plan` after the Gateway writes out-of-band approval.
+- The server repeats Kubernetes `dryRun=All` immediately before applying an approved plan; failure blocks the real write.
 - Approval is hash-bound. If a pending plan changes after approval, application is refused.
 - Observability tools are read-only and bounded. They expose Events, Pod logs, focused summaries, and diagnostics, but not Secret values, ConfigMap values, raw manifests, exec, attach, or port-forward.
 - Allowed namespaces come from `K8S_MCP_ALLOWED_NAMESPACES`; unsupported namespaces are rejected before Kubernetes API calls.

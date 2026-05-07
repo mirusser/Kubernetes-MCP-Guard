@@ -120,6 +120,13 @@ internal static class GatewayApprovalEndpoints
             string.Empty,
             plan.Objects.Select(obj =>
                 $"<li>{Html(obj.ApiVersion)} {Html(obj.Kind)} {Html(obj.Namespace)}/{Html(obj.Name)}</li>"));
+        var dryRun = plan.DryRun!;
+        var dryRunObjects = string.Join(
+            string.Empty,
+            dryRun.Objects.Select(obj => $"<li>{Html(obj.Object)}</li>"));
+        var warnings = dryRun.Warnings.Length == 0
+            ? "<li>None</li>"
+            : string.Join(string.Empty, dryRun.Warnings.Select(warning => $"<li>{Html(warning)}</li>"));
         var token = Html(requestToken ?? string.Empty);
 
         return $"""
@@ -134,6 +141,16 @@ internal static class GatewayApprovalEndpoints
                </dl>
                <h2>Objects</h2>
                <ul>{objects}</ul>
+               <h2>Server-side Dry-run</h2>
+               <p class="success">Server-side dry-run: {Html(dryRun.Status)}</p>
+               <dl>
+                 <dt>Checked at UTC</dt><dd>{Html(dryRun.CheckedAtUtc.ToString("O"))}</dd>
+                 <dt>Message</dt><dd>{Html(dryRun.Message)}</dd>
+               </dl>
+               <h2>Dry-run Objects</h2>
+               <ul>{dryRunObjects}</ul>
+               <h2>Admission Warnings</h2>
+               <ul>{warnings}</ul>
                <div class="actions">
                  <form method="post" action="{McpGatewayConventions.Approvals.PathPrefix}/{Html(challenge.Id)}/approve">
                    <input type="hidden" name="{McpGatewayConventions.Approvals.RequestVerificationToken}" value="{token}">
