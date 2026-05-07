@@ -133,6 +133,69 @@ public sealed class GatewayApprovalServiceTests
     }
 
     [Fact]
+    public async Task EnsureApprovedOrCreateChallengeAsync_ApprovedPlanWithoutDryRun_ReturnsRefusal()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store, includeDryRun: false);
+        var hash = await ApprovalStore.ComputeSha256Async(context.Store.GetPendingPath(plan.Id), CancellationToken.None);
+        Directory.CreateDirectory(Path.GetDirectoryName(context.Store.GetApprovedPath(plan.Id))!);
+        await File.WriteAllTextAsync(context.Store.GetApprovedPath(plan.Id), hash, CancellationToken.None);
+
+        var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+
+        Assert.False(result.IsApproved);
+        Assert.Contains("missing recorded server-side dry-run data", result.Message);
+    }
+
+    [Fact]
+    public async Task EnsureApprovedOrCreateChallengeAsync_PlanWithoutDiff_ReturnsRefusal()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store, includeDiff: false);
+
+        var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+
+        Assert.False(result.IsApproved);
+        Assert.Contains("missing recorded diff data", result.Message);
+        Assert.Empty(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
+    }
+
+    [Fact]
+    public async Task GetApprovalPageAsync_ValidPlan_IncludesDiffModel()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+
+        var page = await context.Service.GetApprovalPageAsync(challengeId, CancellationToken.None);
+
+        Assert.True(page.CanDecide);
+        var diff = Assert.Single(page.Plan?.Diffs ?? []);
+        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Contains("/spec/replicas", diff.ChangedPaths);
+    }
+
+    [Fact]
+    public async Task ApproveChallengeAsync_PlanHashDriftAfterDiffChange_Rejects()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+        var pendingPath = context.Store.GetPendingPath(plan.Id);
+        var json = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
+        await File.WriteAllTextAsync(
+            pendingPath,
+            json.Replace("/spec/replicas", "/spec/template/spec/containers/0/image", StringComparison.Ordinal),
+            CancellationToken.None);
+
+        var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("pending plan changed", result.Message);
+        Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
+    }
+
+    [Fact]
     public async Task DenyChallengeAsync_MarksDeniedWithoutApproving()
     {
         var context = CreateContext();
@@ -147,7 +210,10 @@ public sealed class GatewayApprovalServiceTests
         Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
     }
 
-    private static async Task<K8sPlan> CreatePendingPlanAsync(ApprovalStore store, bool includeDryRun = true)
+    private static async Task<K8sPlan> CreatePendingPlanAsync(
+        ApprovalStore store,
+        bool includeDryRun = true,
+        bool includeDiff = true)
     {
         var objects = new[] { new K8sObjectRef("apps/v1", "Deployment", NamespaceName, "demo") };
         var plan = new K8sPlan(
@@ -163,7 +229,8 @@ public sealed class GatewayApprovalServiceTests
             },
             objects,
             Manifest: null,
-            DryRun: includeDryRun ? CreateDryRun(objects) : null);
+            DryRun: includeDryRun ? CreateDryRun(objects) : null,
+            Diffs: includeDiff ? CreateDiffs(objects) : []);
         await store.CreatePlanAsync(plan, CancellationToken.None);
 
         return plan;
@@ -178,6 +245,24 @@ public sealed class GatewayApprovalServiceTests
                 "{}")).ToArray(),
             ["299 - admission warning"],
             "Server-side dry-run succeeded.");
+
+    private static K8sPlanDiff[] CreateDiffs(IReadOnlyList<K8sObjectRef> objects) =>
+        objects.Select(obj => new K8sPlanDiff(
+            obj,
+            ApprovalConventions.DiffChangeTypes.Update,
+            $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name} will be updated.",
+            """
+            --- live
+            +++ proposed
+             spec:
+            -  replicas: 1
+            +  replicas: 2
+            """,
+            """{"spec":{"replicas":1}}""",
+            """{"spec":{"replicas":2}}""",
+            [],
+            [],
+            ["/spec/replicas"])).ToArray();
 
     private static async Task<string> CreateChallengeAsync(TestContext context, string planId)
     {
