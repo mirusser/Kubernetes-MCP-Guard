@@ -58,6 +58,11 @@ public sealed partial class K8sManager
 
     private async Task<ApplyResult> ApplyPlanAsync(K8sPlan plan, CancellationToken cancellationToken)
     {
+        if (plan.DryRun is null)
+        {
+            return ApplyResult.Failed($"Plan '{plan.Id}' is missing recorded server-side dry-run data. Re-request the plan.");
+        }
+
         try
         {
             return plan.Operation switch
@@ -96,6 +101,15 @@ public sealed partial class K8sManager
                 $"Apply refused by policy (re-validated at apply time):{Environment.NewLine}{policyResult.FormatRefusal()}");
         }
 
+        var dryRunRefusal = await RefuseIfPreApplyDryRunFailsAsync(
+            plan,
+            DryRunApplyManifestAsync(parsed.Objects, cancellationToken),
+            cancellationToken);
+        if (dryRunRefusal is not null)
+        {
+            return dryRunRefusal;
+        }
+
         var messages = new List<string>();
         foreach (var obj in parsed.Objects)
         {
@@ -108,6 +122,15 @@ public sealed partial class K8sManager
 
     private async Task<ApplyResult> DeleteManifestPlanAsync(K8sPlan plan, CancellationToken cancellationToken)
     {
+        var dryRunRefusal = await RefuseIfPreApplyDryRunFailsAsync(
+            plan,
+            DryRunDeleteManifestAsync(plan.Objects, cancellationToken),
+            cancellationToken);
+        if (dryRunRefusal is not null)
+        {
+            return dryRunRefusal;
+        }
+
         var messages = new List<string>();
         foreach (var obj in plan.Objects)
         {
@@ -121,16 +144,17 @@ public sealed partial class K8sManager
     {
         var name = plan.Parameters[K8sConventions.PlanParameters.Name];
         var replicas = int.Parse(plan.Parameters[K8sConventions.PlanParameters.Replicas]);
-        var patch = new
+        var dryRunRefusal = await RefuseIfPreApplyDryRunFailsAsync(
+            plan,
+            DryRunScaleDeploymentAsync(plan.Namespace, name, replicas, cancellationToken),
+            cancellationToken);
+        if (dryRunRefusal is not null)
         {
-            spec = new
-            {
-                replicas
-            }
-        };
+            return dryRunRefusal;
+        }
 
         await client.AppsV1.PatchNamespacedDeploymentScaleAsync(
-            new V1Patch(patch, V1Patch.PatchType.MergePatch),
+            CreateScaleDeploymentPatch(replicas),
             name,
             plan.Namespace,
             fieldManager: FieldManager,
@@ -144,25 +168,17 @@ public sealed partial class K8sManager
     {
         var name = plan.Parameters[K8sConventions.PlanParameters.Name];
         var restartedAtUtc = plan.Parameters[K8sConventions.PlanParameters.RestartedAtUtc];
-        var patch = new
+        var dryRunRefusal = await RefuseIfPreApplyDryRunFailsAsync(
+            plan,
+            DryRunRestartDeploymentAsync(plan.Namespace, name, restartedAtUtc, cancellationToken),
+            cancellationToken);
+        if (dryRunRefusal is not null)
         {
-            spec = new
-            {
-                template = new
-                {
-                    metadata = new
-                    {
-                        annotations = new Dictionary<string, string>
-                        {
-                            [RestartedAtAnnotation] = restartedAtUtc
-                        }
-                    }
-                }
-            }
-        };
+            return dryRunRefusal;
+        }
 
         await client.AppsV1.PatchNamespacedDeploymentAsync(
-            new V1Patch(patch, V1Patch.PatchType.StrategicMergePatch),
+            CreateRestartDeploymentPatch(restartedAtUtc),
             name,
             plan.Namespace,
             fieldManager: FieldManager,
@@ -194,29 +210,17 @@ public sealed partial class K8sManager
             return ApplyResult.Failed(imageValidation);
         }
 
-        var patch = new
+        var dryRunRefusal = await RefuseIfPreApplyDryRunFailsAsync(
+            plan,
+            DryRunSetDeploymentImageAsync(plan.Namespace, name, container, image, cancellationToken),
+            cancellationToken);
+        if (dryRunRefusal is not null)
         {
-            spec = new
-            {
-                template = new
-                {
-                    spec = new
-                    {
-                        containers = new[]
-                        {
-                            new
-                            {
-                                name = container,
-                                image
-                            }
-                        }
-                    }
-                }
-            }
-        };
+            return dryRunRefusal;
+        }
 
         await client.AppsV1.PatchNamespacedDeploymentAsync(
-            new V1Patch(patch, V1Patch.PatchType.StrategicMergePatch),
+            CreateSetDeploymentImagePatch(container, image),
             name,
             plan.Namespace,
             fieldManager: FieldManager,
@@ -224,6 +228,26 @@ public sealed partial class K8sManager
 
         return ApplyResult.Success(
             $"Updated {K8sConventions.K8sResources.DeploymentDisplayName} {plan.Namespace}/{name} container '{container}' image from '{currentImage}' to '{image}'.");
+    }
+
+    private async Task<ApplyResult?> RefuseIfPreApplyDryRunFailsAsync(
+        K8sPlan plan,
+        Task<DryRunResult> dryRunTask,
+        CancellationToken cancellationToken)
+    {
+        var dryRun = await dryRunTask;
+        if (dryRun.Succeeded)
+        {
+            return null;
+        }
+
+        await WriteDryRunFailedAuditAsync(
+            K8sConventions.DryRunPhases.Apply,
+            plan,
+            dryRun.Message,
+            cancellationToken);
+
+        return ApplyResult.Failed(FormatApplyDryRunRefusal(dryRun.Message));
     }
 
     private async Task ApplyObjectAsync(IKubernetesObject<V1ObjectMeta> obj, CancellationToken cancellationToken)

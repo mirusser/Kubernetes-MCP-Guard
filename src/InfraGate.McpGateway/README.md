@@ -22,6 +22,7 @@
 - Authentication behavior is provided by `InfraGate.McpGateway.Auth`; this project should not duplicate auth rules.
 - OAuth access tokens are terminated at the gateway. The downstream stdio server receives tool calls, not bearer tokens.
 - Approval is browser-based and out-of-band: MCP clients receive an approval URL but cannot submit approval content through MCP.
+- Browser approval pages render the stored server-side dry-run status and refuse legacy pending plans without dry-run data.
 - Approval challenges are bound to plan id, plan hash, requester subject, expiry, and single-use status.
 - Guardrail audit entries must not include bearer tokens or raw credentials.
 

@@ -7,12 +7,12 @@ namespace InfraGate.McpServer;
 
 public sealed partial class K8sManager
 {
-    public Task<string> RequestApplyManifestAsync(string namespaceName, string manifest, CancellationToken cancellationToken)
+    public async Task<string> RequestApplyManifestAsync(string namespaceName, string manifest, CancellationToken cancellationToken)
     {
         var validation = ValidateNamespace(namespaceName);
         if (validation is not null)
         {
-            return Task.FromResult(validation);
+            return validation;
         }
 
         K8sParsedManifest parsed;
@@ -22,14 +22,13 @@ public sealed partial class K8sManager
         }
         catch (K8sValidationException ex)
         {
-            return Task.FromResult(ex.Message);
+            return ex.Message;
         }
 
         var policyResult = K8sPolicyValidator.Validate(parsed.Objects, K8sPolicyOptions.Default);
         if (policyResult.IsDenied)
         {
-            return Task.FromResult(
-                $"Manifest rejected by policy:{Environment.NewLine}{policyResult.FormatRefusal()}");
+            return $"Manifest rejected by policy:{Environment.NewLine}{policyResult.FormatRefusal()}";
         }
 
         var plan = CreatePlan(
@@ -43,15 +42,19 @@ public sealed partial class K8sManager
             objects: parsed.ObjectRefs,
             manifest);
 
-        return CreateAndFormatPlanAsync(plan, policyResult, cancellationToken);
+        return await CreateDryRunPlanAsync(
+            plan,
+            DryRunApplyManifestAsync(parsed.Objects, cancellationToken),
+            policyResult,
+            cancellationToken);
     }
 
-    public Task<string> RequestDeleteManifestAsync(string namespaceName, string manifest, CancellationToken cancellationToken)
+    public async Task<string> RequestDeleteManifestAsync(string namespaceName, string manifest, CancellationToken cancellationToken)
     {
         var validation = ValidateNamespace(namespaceName);
         if (validation is not null)
         {
-            return Task.FromResult(validation);
+            return validation;
         }
 
         K8sParsedManifest parsed;
@@ -61,7 +64,7 @@ public sealed partial class K8sManager
         }
         catch (K8sValidationException ex)
         {
-            return Task.FromResult(ex.Message);
+            return ex.Message;
         }
 
         var plan = CreatePlan(
@@ -75,15 +78,18 @@ public sealed partial class K8sManager
             objects: parsed.ObjectRefs,
             manifest);
 
-        return CreateAndFormatPlanAsync(plan, cancellationToken);
+        return await CreateDryRunPlanAsync(
+            plan,
+            DryRunDeleteManifestAsync(plan.Objects, cancellationToken),
+            cancellationToken);
     }
 
-    public Task<string> RequestScaleDeploymentAsync(string namespaceName, string name, int replicas, CancellationToken cancellationToken)
+    public async Task<string> RequestScaleDeploymentAsync(string namespaceName, string name, int replicas, CancellationToken cancellationToken)
     {
         var validation = ValidateNamespace(namespaceName) ?? ValidateName(name) ?? ValidateReplicas(replicas);
         if (validation is not null)
         {
-            return Task.FromResult(validation);
+            return validation;
         }
 
         var plan = CreatePlan(
@@ -98,15 +104,18 @@ public sealed partial class K8sManager
             objects: [K8sConventions.K8sResources.DeploymentRef(namespaceName, name)],
             manifest: null);
 
-        return CreateAndFormatPlanAsync(plan, cancellationToken);
+        return await CreateDryRunPlanAsync(
+            plan,
+            DryRunScaleDeploymentAsync(namespaceName, name, replicas, cancellationToken),
+            cancellationToken);
     }
 
-    public Task<string> RequestRestartDeploymentAsync(string namespaceName, string name, CancellationToken cancellationToken)
+    public async Task<string> RequestRestartDeploymentAsync(string namespaceName, string name, CancellationToken cancellationToken)
     {
         var validation = ValidateNamespace(namespaceName) ?? ValidateName(name);
         if (validation is not null)
         {
-            return Task.FromResult(validation);
+            return validation;
         }
 
         var restartedAtUtc = DateTimeOffset.UtcNow.ToString(ApprovalConventions.DateTimeFormats.RoundTrip);
@@ -122,7 +131,10 @@ public sealed partial class K8sManager
             objects: [K8sConventions.K8sResources.DeploymentRef(namespaceName, name)],
             manifest: null);
 
-        return CreateAndFormatPlanAsync(plan, cancellationToken);
+        return await CreateDryRunPlanAsync(
+            plan,
+            DryRunRestartDeploymentAsync(namespaceName, name, restartedAtUtc, cancellationToken),
+            cancellationToken);
     }
 
     public async Task<string> RequestSetDeploymentImageAsync(
@@ -155,7 +167,10 @@ public sealed partial class K8sManager
 
             var plan = CreateSetDeploymentImagePlan(namespaceName, name, container, image, deploymentContainer);
 
-            return await CreateAndFormatPlanAsync(plan, cancellationToken);
+            return await CreateDryRunPlanAsync(
+                plan,
+                DryRunSetDeploymentImageAsync(namespaceName, name, container, image, cancellationToken),
+                cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -165,6 +180,33 @@ public sealed partial class K8sManager
 
     private Task<string> CreateAndFormatPlanAsync(K8sPlan plan, CancellationToken cancellationToken) =>
         CreateAndFormatPlanAsync(plan, policyResult: null, cancellationToken);
+
+    private Task<string> CreateDryRunPlanAsync(
+        K8sPlan plan,
+        Task<DryRunResult> dryRunTask,
+        CancellationToken cancellationToken) =>
+        CreateDryRunPlanAsync(plan, dryRunTask, policyResult: null, cancellationToken);
+
+    private async Task<string> CreateDryRunPlanAsync(
+        K8sPlan plan,
+        Task<DryRunResult> dryRunTask,
+        K8sPolicyResult? policyResult,
+        CancellationToken cancellationToken)
+    {
+        var dryRun = await dryRunTask;
+        if (!dryRun.Succeeded || dryRun.DryRun is null)
+        {
+            await WriteDryRunFailedAuditAsync(
+                K8sConventions.DryRunPhases.Request,
+                plan,
+                dryRun.Message,
+                cancellationToken);
+
+            return FormatRequestDryRunRefusal(dryRun.Message);
+        }
+
+        return await CreateAndFormatPlanAsync(plan with { DryRun = dryRun.DryRun }, policyResult, cancellationToken);
+    }
 
     private async Task<string> CreateAndFormatPlanAsync(
         K8sPlan plan,
@@ -187,6 +229,7 @@ public sealed partial class K8sManager
                Namespace: {result.Plan.Namespace}
                Objects:
                {objects}
+               Dry-run: {result.Plan.DryRun?.Status ?? "not recorded"}
                Pending file: {result.PendingPath}
                Plan hash: {result.Hash}
 

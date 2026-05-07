@@ -8,4 +8,5 @@ public sealed record K8sPlan(
     string Description,
     Dictionary<string, string> Parameters,
     K8sObjectRef[] Objects,
-    string? Manifest);
+    string? Manifest,
+    K8sPlanDryRun? DryRun = null);

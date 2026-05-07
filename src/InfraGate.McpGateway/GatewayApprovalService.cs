@@ -34,6 +34,11 @@ public sealed class GatewayApprovalService
         var approved = await approvalStore.GetApprovedPlanAsync(planId, cancellationToken);
         if (approved.IsApproved)
         {
+            if (approved.Plan?.DryRun is null)
+            {
+                return ApprovalGateResult.RequiresApproval($"Refused: {MissingDryRunMessage(planId)}");
+            }
+
             var approvedChallenge = await challengeStore.FindApprovedAsync(
                 planId,
                 approved.Hash!,
@@ -49,6 +54,11 @@ public sealed class GatewayApprovalService
         if (!pending.IsPending || pending.Plan is null || pending.Hash is null)
         {
             return ApprovalGateResult.RequiresApproval($"Refused: {pending.Message}");
+        }
+
+        if (pending.Plan.DryRun is null)
+        {
+            return ApprovalGateResult.RequiresApproval($"Refused: {MissingDryRunMessage(planId)}");
         }
 
         var challenge = await challengeStore.CreateAsync(
@@ -261,6 +271,18 @@ public sealed class GatewayApprovalService
             return ChallengeValidation.Invalid(message, challenge, pending.Plan);
         }
 
+        if (pending.Plan.DryRun is null)
+        {
+            var message = MissingDryRunMessage(challenge.PlanId);
+            await WriteChallengeRejectedAuditAsync(
+                challenge,
+                approver.Subject,
+                message,
+                cancellationToken);
+
+            return ChallengeValidation.Invalid(message, challenge, pending.Plan);
+        }
+
         return ChallengeValidation.Valid(challenge, pending.Plan);
     }
 
@@ -325,6 +347,9 @@ public sealed class GatewayApprovalService
 
     private static bool SameSubject(string left, string right) =>
         string.Equals(left, right, StringComparison.Ordinal);
+
+    private static string MissingDryRunMessage(string planId) =>
+        $"Plan '{planId}' is missing recorded server-side dry-run data. Ask the MCP client to re-request the plan.";
 
     private sealed record ChallengeValidation(
         string? Error,

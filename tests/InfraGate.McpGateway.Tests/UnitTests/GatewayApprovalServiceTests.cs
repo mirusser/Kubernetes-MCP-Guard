@@ -120,6 +120,19 @@ public sealed class GatewayApprovalServiceTests
     }
 
     [Fact]
+    public async Task EnsureApprovedOrCreateChallengeAsync_PlanWithoutDryRun_ReturnsRefusal()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store, includeDryRun: false);
+
+        var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+
+        Assert.False(result.IsApproved);
+        Assert.Contains("missing recorded server-side dry-run data", result.Message);
+        Assert.Empty(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
+    }
+
+    [Fact]
     public async Task DenyChallengeAsync_MarksDeniedWithoutApproving()
     {
         var context = CreateContext();
@@ -134,8 +147,9 @@ public sealed class GatewayApprovalServiceTests
         Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
     }
 
-    private static async Task<K8sPlan> CreatePendingPlanAsync(ApprovalStore store)
+    private static async Task<K8sPlan> CreatePendingPlanAsync(ApprovalStore store, bool includeDryRun = true)
     {
+        var objects = new[] { new K8sObjectRef("apps/v1", "Deployment", NamespaceName, "demo") };
         var plan = new K8sPlan(
             ApprovalStore.NewPlanId(),
             "scale",
@@ -147,12 +161,23 @@ public sealed class GatewayApprovalServiceTests
                 ["name"] = "demo",
                 ["replicas"] = "2"
             },
-            [new K8sObjectRef("apps/v1", "Deployment", NamespaceName, "demo")],
-            Manifest: null);
+            objects,
+            Manifest: null,
+            DryRun: includeDryRun ? CreateDryRun(objects) : null);
         await store.CreatePlanAsync(plan, CancellationToken.None);
 
         return plan;
     }
+
+    private static K8sPlanDryRun CreateDryRun(IReadOnlyList<K8sObjectRef> objects) =>
+        new(
+            "succeeded",
+            DateTimeOffset.UtcNow,
+            objects.Select(obj => new K8sPlanDryRunObject(
+                $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}",
+                "{}")).ToArray(),
+            ["299 - admission warning"],
+            "Server-side dry-run succeeded.");
 
     private static async Task<string> CreateChallengeAsync(TestContext context, string planId)
     {
