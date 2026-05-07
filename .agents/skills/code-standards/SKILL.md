@@ -29,7 +29,7 @@ Keep conventions local to the project unless there is already a shared project o
 
 ## Field Naming
 
-Lower camel case for private fields, no `_` prefix: `private readonly JsonSerializerOptions jsonOptions;` 
+Lower camel case for private fields, no `_` prefix: `private readonly JsonSerializerOptions jsonOptions;`
 Align fields you edit with this convention. Do not churn unrelated fields.
 
 ## Type Organization
