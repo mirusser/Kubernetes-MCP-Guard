@@ -34,6 +34,7 @@ public sealed class K8sManagerRequestTests
             Assert.Contains("dryRun=All", request.Query);
             Assert.Contains("fieldManager=infra-gate-mcp", request.Query);
             Assert.Contains("fieldValidation=Strict", request.Query);
+            Assert.DoesNotContain("force=", request.Query, StringComparison.OrdinalIgnoreCase);
         });
     }
 
@@ -102,6 +103,25 @@ public sealed class K8sManagerRequestTests
         Assert.Contains("Server-side dry-run failed", result);
         Assert.DoesNotContain("PlanId:", result);
         Assert.Empty(Directory.EnumerateFiles(context.ApprovalStore.PendingDirectory));
+    }
+
+    [Fact]
+    public async Task RequestApplyManifestAsync_WhenFieldOwnershipConflict_DoesNotCreatePlan()
+    {
+        await using var api = new TestKubernetesApi(_ =>
+            TestResponse.Json(StatusJson("Conflict", 409), statusCode: 409));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestApplyManifestAsync("demo", ValidManifest, CancellationToken.None);
+        var audit = await File.ReadAllTextAsync(context.ApprovalStore.AuditPath, CancellationToken.None);
+
+        Assert.Contains("Apply refused by Kubernetes field ownership conflict.", result);
+        Assert.Contains("force apply can take ownership of fields from another manager", result);
+        Assert.Contains("409", result);
+        Assert.DoesNotContain("PlanId:", result);
+        Assert.Empty(Directory.EnumerateFiles(context.ApprovalStore.PendingDirectory));
+        Assert.Contains(ApprovalConventions.AuditEvents.DryRunFailed, audit);
+        Assert.Contains("field ownership conflict", audit);
     }
 
     [Fact]

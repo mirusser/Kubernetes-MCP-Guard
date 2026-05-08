@@ -200,6 +200,19 @@ public sealed class K8sToolsTests
         Assert.Contains("Applied plan:", result);
     }
 
+    [Theory]
+    [InlineData(nameof(K8sTools.RequestApplyManifest))]
+    [InlineData(nameof(K8sTools.ApplyApprovedPlan))]
+    public void ToolMethod_ForceApplyArgument_IsNotExposed(string methodName)
+    {
+        var method = typeof(K8sTools).GetMethod(methodName) ??
+                     throw new InvalidOperationException($"Tool method '{methodName}' was not found.");
+        var parameterNames = method.GetParameters().Select(parameter => parameter.Name).ToArray();
+
+        Assert.DoesNotContain(parameterNames, name => string.Equals(name, "force", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(parameterNames, name => string.Equals(name, "allowForceApply", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static K8sManager CreateManager(TestKubernetesApi? api = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));

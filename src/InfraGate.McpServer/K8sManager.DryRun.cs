@@ -28,7 +28,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return DryRunResult.Failed(FormatApiException("Server-side dry-run failed", ex));
+            return DryRunResult.Failed(FormatServerSideApplyException("Server-side dry-run failed", ex));
         }
     }
 
@@ -157,7 +157,6 @@ public sealed partial class K8sManager
                 dryRun: K8sConventions.K8sApi.DryRunAll,
                 fieldManager: FieldManager,
                 fieldValidation: K8sConventions.K8sApi.FieldValidationStrict,
-                force: true,
                 cancellationToken: cancellationToken);
 
             return CaptureDryRunResult(deployment, response);
@@ -172,7 +171,6 @@ public sealed partial class K8sManager
                 dryRun: K8sConventions.K8sApi.DryRunAll,
                 fieldManager: FieldManager,
                 fieldValidation: K8sConventions.K8sApi.FieldValidationStrict,
-                force: true,
                 cancellationToken: cancellationToken);
 
             return CaptureDryRunResult(service, response);
@@ -187,7 +185,6 @@ public sealed partial class K8sManager
                 dryRun: K8sConventions.K8sApi.DryRunAll,
                 fieldManager: FieldManager,
                 fieldValidation: K8sConventions.K8sApi.FieldValidationStrict,
-                force: true,
                 cancellationToken: cancellationToken);
 
             return CaptureDryRunResult(configMap, response);
