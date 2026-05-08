@@ -78,7 +78,8 @@ public sealed class K8sManagerSetImageTests
 
         Assert.Contains("Operation: set-image", result);
         Assert.Contains("apps/v1 Deployment demo/demo", result);
-        Assert.Contains("Dry-run: succeeded", result);
+        Assert.Contains("Policy: not_applicable", result);
+        AssertCompactSuccessfulResponse(result);
         Assert.Contains("\"currentImage\": \"nginx:1.27-alpine\"", pending);
         Assert.Contains("\"image\": \"nginx:1.28-alpine\"", pending);
         Assert.Contains("\"dryRun\":", pending);
@@ -240,6 +241,18 @@ public sealed class K8sManagerSetImageTests
         text.Split(Environment.NewLine)
             .Single(line => line.StartsWith("PlanId:", StringComparison.Ordinal))
             ["PlanId: ".Length..];
+
+    private static void AssertCompactSuccessfulResponse(string result)
+    {
+        Assert.Contains("Status: pending_gateway_approval", result);
+        Assert.Contains("Risk: medium", result);
+        Assert.Contains("Next step: call apply_approved_plan with this PlanId.", result);
+        Assert.DoesNotContain("Pending file:", result);
+        Assert.DoesNotContain("Plan hash:", result);
+        Assert.DoesNotContain("Dry-run:", result);
+        Assert.DoesNotContain("Diff:", result);
+        Assert.DoesNotContain("Manifest:", result);
+    }
 
     private static bool IsDryRun(CapturedRequest request) =>
         request.Query.Contains("dryRun=All", StringComparison.Ordinal);

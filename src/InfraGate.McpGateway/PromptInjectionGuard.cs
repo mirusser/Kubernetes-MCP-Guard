@@ -17,7 +17,8 @@ public sealed partial class PromptInjectionGuard
     private const string SupportedK8sResourcePattern = @"(?:apps\/v1|v1)\s+(?:Deployment|Service|ConfigMap)";
 
     private const string OperationalLinePattern =
-        @"^\s*(?:PlanId|Pending file|Approval file|Plan hash|Next step|Applied plan|Status|Operation|Namespace|Objects|API operations|Rollout|Current status):\b" +
+        @"^\s*(?:PlanId|Next step|Applied plan|Status|Operation|Namespace|Objects|API operations|Rollout|Current status):\b" +
+        @"|^\s*Next step:\s+call " + McpGatewayConventions.ToolNames.ApplyApprovedPlan + @" with this PlanId\.\s*$" +
         @"|^\s*Call " + McpGatewayConventions.ToolNames.ApplyApprovedPlan + @"\b" +
         @"|^\s*-\s+" + SupportedK8sResourcePattern + @"/\S+\b" +
         @"|^\s*(?:Applied|Deleted|Scaled|Restarted)\s+" + SupportedK8sResourcePattern + @"\b" +

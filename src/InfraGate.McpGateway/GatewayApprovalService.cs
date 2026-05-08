@@ -34,14 +34,10 @@ public sealed class GatewayApprovalService
         var approved = await approvalStore.GetApprovedPlanAsync(planId, cancellationToken);
         if (approved.IsApproved)
         {
-            if (approved.Plan?.DryRun is null)
+            var approvedRefusal = GetPlanReadinessRefusal(approved.Plan, planId);
+            if (approvedRefusal is not null)
             {
-                return ApprovalGateResult.RequiresApproval($"Refused: {MissingDryRunMessage(planId)}");
-            }
-
-            if (approved.Plan.Diffs.Length == 0)
-            {
-                return ApprovalGateResult.RequiresApproval($"Refused: {MissingDiffMessage(planId)}");
+                return ApprovalGateResult.RequiresApproval($"Refused: {approvedRefusal}");
             }
 
             var approvedChallenge = await challengeStore.FindApprovedAsync(
@@ -61,14 +57,10 @@ public sealed class GatewayApprovalService
             return ApprovalGateResult.RequiresApproval($"Refused: {pending.Message}");
         }
 
-        if (pending.Plan.DryRun is null)
+        var pendingRefusal = GetPlanReadinessRefusal(pending.Plan, planId);
+        if (pendingRefusal is not null)
         {
-            return ApprovalGateResult.RequiresApproval($"Refused: {MissingDryRunMessage(planId)}");
-        }
-
-        if (pending.Plan.Diffs.Length == 0)
-        {
-            return ApprovalGateResult.RequiresApproval($"Refused: {MissingDiffMessage(planId)}");
+            return ApprovalGateResult.RequiresApproval($"Refused: {pendingRefusal}");
         }
 
         var challenge = await challengeStore.CreateAsync(
@@ -89,6 +81,21 @@ public sealed class GatewayApprovalService
         }, cancellationToken);
 
         return ApprovalGateResult.RequiresApproval(FormatApprovalRequiredMessage(pending.Plan, pending.Hash, challenge));
+    }
+
+    private static string? GetPlanReadinessRefusal(K8sPlan? plan, string planId)
+    {
+        if (plan?.DryRun is null)
+        {
+            return MissingDryRunMessage(planId);
+        }
+
+        if (plan.Diffs.Length == 0)
+        {
+            return MissingDiffMessage(planId);
+        }
+
+        return null;
     }
 
     public async Task<ApprovalPageModel> GetApprovalPageAsync(

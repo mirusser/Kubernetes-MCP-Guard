@@ -41,4 +41,10 @@ public sealed partial class PromptInjectionGuard
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
         matchTimeoutMilliseconds: McpGatewayConventions.RegexTimeoutMilliseconds)]
     private static partial Regex OperationalLineRegex();
+
+    [GeneratedRegex(
+        @"^\s*(?:Pending file|Approval file|Plan hash):(?:\s|$)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: McpGatewayConventions.RegexTimeoutMilliseconds)]
+    private static partial Regex SensitivePlanMetadataLineRegex();
 }

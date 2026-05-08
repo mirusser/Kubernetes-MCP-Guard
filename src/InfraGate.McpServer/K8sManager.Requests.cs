@@ -243,25 +243,17 @@ public sealed partial class K8sManager
             Environment.NewLine,
             result.Plan.Objects.Select(obj => $"  - {obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}"));
 
-        var warnings = policyResult is not null && policyResult.Findings.Any(f => f.Severity == K8sPolicySeverity.Warning)
-            ? $"{Environment.NewLine}Policy warnings:{Environment.NewLine}{policyResult.FormatWarnings()}"
-            : string.Empty;
-
         return $"""
                PlanId: {result.Plan.Id}
-               Status: pending Gateway approval
+               Status: {K8sConventions.PlanResponse.PendingGatewayApproval}
                Operation: {result.Plan.Operation}
                Namespace: {result.Plan.Namespace}
                Objects:
                {objects}
-               Dry-run: {result.Plan.DryRun?.Status ?? "not recorded"}
-               Diff: recorded for browser approval
-               Pending file: {result.PendingPath}
-               Plan hash: {result.Hash}
-
-               Next step:
-                 Call {K8sConventions.ToolNames.ApplyApprovedPlan} with {K8sConventions.ToolArguments.PlanId} '{result.Plan.Id}'. The Gateway will return a browser approval URL before applying it.
-               {warnings}
+               Policy: {FormatPolicySummary(policyResult)}
+               Risk: {K8sConventions.PlanResponse.RiskMedium}
+               Next step: call {K8sConventions.ToolNames.ApplyApprovedPlan} with this PlanId.
+               Browser approval will show the full server-rendered plan, policy findings, dry-run result, and diff.
                """;
     }
 
@@ -316,5 +308,25 @@ public sealed partial class K8sManager
                 finding.ObjectRef,
                 finding.Message))
             .ToArray() ?? [];
+    }
+
+    private static string FormatPolicySummary(K8sPolicyResult? policyResult)
+    {
+        if (policyResult is null)
+        {
+            return K8sConventions.PlanResponse.PolicyNotApplicable;
+        }
+
+        int warningCount = policyResult.Findings.Count(finding => finding.Severity == K8sPolicySeverity.Warning);
+        if (warningCount == 0)
+        {
+            return K8sConventions.PlanResponse.PolicyPassed;
+        }
+
+        string suffix = warningCount == 1
+            ? K8sConventions.PlanResponse.PolicyWarningSuffix
+            : K8sConventions.PlanResponse.PolicyWarningsSuffix;
+
+        return $"{K8sConventions.PlanResponse.PolicyPassedWithPrefix}{warningCount}{suffix}";
     }
 }

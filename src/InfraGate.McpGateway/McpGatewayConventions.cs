@@ -124,6 +124,7 @@ internal static class McpGatewayConventions
     {
         public const string PromptInjectionRisk = "[redacted: prompt-injection-risk]";
         public const string InspectPendingPlan = "[redacted: inspect the pending plan file before approval]";
+        public const string SensitivePlanMetadata = "[redacted: sensitive plan metadata]";
     }
 
 }

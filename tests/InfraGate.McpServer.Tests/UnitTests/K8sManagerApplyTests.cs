@@ -367,6 +367,110 @@ public sealed class K8sManagerApplyTests
             !IsDryRun(request));
     }
 
+    [Fact]
+    public async Task ApplyApprovedPlanAsync_AppliesManifestWithoutForce()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/api/v1/namespaces/demo/configmaps/demo-config" when request.Method == "PATCH" =>
+                TestResponse.Json(ConfigMapJson("new")),
+            "/api/v1/namespaces/demo/configmaps/demo-config" when request.Method == "GET" =>
+                TestResponse.Json(ConfigMapJson("old")),
+            _ => StatusResponse(request, DeploymentJson())
+        });
+        var context = CreateManager(api);
+        var requestText = await context.Manager.RequestApplyManifestAsync(
+            DemoNamespace,
+            ConfigMapManifest,
+            CancellationToken.None);
+        var planId = await ApproveRequestPlanAsync(context, requestText);
+
+        var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
+        var patches = api.Requests.Where(request =>
+            request.Method == "PATCH" &&
+            request.Path == "/api/v1/namespaces/demo/configmaps/demo-config").ToArray();
+        var dryRuns = patches.Where(IsDryRun).ToArray();
+        var apply = Assert.Single(patches, request => !IsDryRun(request));
+
+        Assert.Contains("Applied v1 ConfigMap demo/demo-config", result);
+        Assert.Contains("No Deployments to wait for.", result);
+        Assert.Equal(3, patches.Length);
+        Assert.Equal(2, dryRuns.Length);
+        Assert.Contains("fieldManager=infra-gate-mcp", apply.Query);
+        Assert.DoesNotContain("force=", apply.Query, StringComparison.OrdinalIgnoreCase);
+        Assert.All(dryRuns, request =>
+        {
+            Assert.Contains("dryRun=All", request.Query);
+            Assert.Contains("fieldManager=infra-gate-mcp", request.Query);
+            Assert.Contains("fieldValidation=Strict", request.Query);
+            Assert.DoesNotContain("force=", request.Query, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    [Fact]
+    public async Task ApplyApprovedPlanAsync_WhenPreApplyFieldOwnershipConflict_RefusesMutation()
+    {
+        int patchCount = 0;
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/api/v1/namespaces/demo/configmaps/demo-config" when request.Method == "PATCH" && ++patchCount == 2 =>
+                TestResponse.Json(StatusJson("Conflict", 409), statusCode: 409),
+            "/api/v1/namespaces/demo/configmaps/demo-config" when request.Method == "PATCH" =>
+                TestResponse.Json(ConfigMapJson("new")),
+            "/api/v1/namespaces/demo/configmaps/demo-config" when request.Method == "GET" =>
+                TestResponse.Json(ConfigMapJson("old")),
+            _ => StatusResponse(request, DeploymentJson())
+        });
+        var context = CreateManager(api);
+        var requestText = await context.Manager.RequestApplyManifestAsync(
+            DemoNamespace,
+            ConfigMapManifest,
+            CancellationToken.None);
+        var planId = await ApproveRequestPlanAsync(context, requestText);
+
+        var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
+        var audit = await File.ReadAllTextAsync(context.ApprovalStore.AuditPath, CancellationToken.None);
+
+        Assert.Contains("Apply refused by Kubernetes field ownership conflict.", result);
+        Assert.Contains("force apply can take ownership of fields from another manager", result);
+        Assert.DoesNotContain(api.Requests, request =>
+            request.Method == "PATCH" &&
+            request.Path == "/api/v1/namespaces/demo/configmaps/demo-config" &&
+            !IsDryRun(request));
+        Assert.Contains(ApprovalConventions.AuditEvents.DryRunFailed, audit);
+        Assert.Contains("field ownership conflict", audit);
+    }
+
+    [Fact]
+    public async Task ApplyApprovedPlanAsync_WhenFinalFieldOwnershipConflict_AuditsFailure()
+    {
+        int patchCount = 0;
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/api/v1/namespaces/demo/configmaps/demo-config" when request.Method == "PATCH" && ++patchCount == 3 =>
+                TestResponse.Json(StatusJson("Conflict", 409), statusCode: 409),
+            "/api/v1/namespaces/demo/configmaps/demo-config" when request.Method == "PATCH" =>
+                TestResponse.Json(ConfigMapJson("new")),
+            "/api/v1/namespaces/demo/configmaps/demo-config" when request.Method == "GET" =>
+                TestResponse.Json(ConfigMapJson("old")),
+            _ => StatusResponse(request, DeploymentJson())
+        });
+        var context = CreateManager(api);
+        var requestText = await context.Manager.RequestApplyManifestAsync(
+            DemoNamespace,
+            ConfigMapManifest,
+            CancellationToken.None);
+        var planId = await ApproveRequestPlanAsync(context, requestText);
+
+        var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
+        var audit = await File.ReadAllTextAsync(context.ApprovalStore.AuditPath, CancellationToken.None);
+
+        Assert.Contains("Apply refused by Kubernetes field ownership conflict.", result);
+        Assert.Contains("force apply can take ownership of fields from another manager", result);
+        Assert.Contains(ApprovalConventions.AuditEvents.ApplyFailed, audit);
+        Assert.Contains("field ownership conflict", audit);
+    }
+
     private static ManagerContext CreateManager(TestKubernetesApi? api = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));

@@ -48,6 +48,22 @@ internal static class K8sPolicyValidator
             return;
         }
 
+        ValidateHostSettings(podSpec, objRef, options, findings);
+        ValidateVolumes(podSpec, objRef, options, findings);
+
+        var allContainers = (podSpec.Containers ?? []).Concat(podSpec.InitContainers ?? []);
+        foreach (var container in allContainers)
+        {
+            ValidateContainer(container, objRef, options, findings);
+        }
+    }
+
+    private static void ValidateHostSettings(
+        V1PodSpec podSpec,
+        string objRef,
+        K8sPolicyOptions options,
+        List<K8sPolicyFinding> findings)
+    {
         if (options.DenyHostNetwork && podSpec.HostNetwork == true)
         {
             findings.Add(Deny(K8sConventions.PolicyCodes.DeploymentHostNamespace, objRef,
@@ -65,23 +81,26 @@ internal static class K8sPolicyValidator
             findings.Add(Deny(K8sConventions.PolicyCodes.DeploymentHostNamespace, objRef,
                 "hostIPC is not allowed."));
         }
+    }
 
-        if (options.DenyHostPathVolumes)
+    private static void ValidateVolumes(
+        V1PodSpec podSpec,
+        string objRef,
+        K8sPolicyOptions options,
+        List<K8sPolicyFinding> findings)
+    {
+        if (!options.DenyHostPathVolumes)
         {
-            foreach (var volume in podSpec.Volumes ?? [])
-            {
-                if (volume.HostPath is not null)
-                {
-                    findings.Add(Deny(K8sConventions.PolicyCodes.DeploymentHostPath, objRef,
-                        $"Volume '{volume.Name}' uses hostPath, which is not allowed."));
-                }
-            }
+            return;
         }
 
-        var allContainers = (podSpec.Containers ?? []).Concat(podSpec.InitContainers ?? []);
-        foreach (var container in allContainers)
+        foreach (var volume in podSpec.Volumes ?? [])
         {
-            ValidateContainer(container, objRef, options, findings);
+            if (volume.HostPath is not null)
+            {
+                findings.Add(Deny(K8sConventions.PolicyCodes.DeploymentHostPath, objRef,
+                    $"Volume '{volume.Name}' uses hostPath, which is not allowed."));
+            }
         }
     }
 
@@ -91,29 +110,55 @@ internal static class K8sPolicyValidator
         K8sPolicyOptions options,
         List<K8sPolicyFinding> findings)
     {
-        var sc = container.SecurityContext;
+        ValidatePrivilegedFlag(container, objRef, options, findings);
+        ValidateCapabilities(container, objRef, options, findings);
+        ValidateImageTag(container, objRef, options, findings);
+    }
 
-        if (options.DenyPrivilegedContainers && sc?.Privileged == true)
+    private static void ValidatePrivilegedFlag(
+        V1Container container,
+        string objRef,
+        K8sPolicyOptions options,
+        List<K8sPolicyFinding> findings)
+    {
+        if (options.DenyPrivilegedContainers && container.SecurityContext?.Privileged == true)
         {
             findings.Add(Deny(K8sConventions.PolicyCodes.DeploymentPrivilegedContainer, objRef,
                 $"Container '{container.Name}' is privileged, which is not allowed."));
         }
+    }
 
-        if (options.DenyAddedCapabilities && sc?.Capabilities?.Add?.Count > 0)
+    private static void ValidateCapabilities(
+        V1Container container,
+        string objRef,
+        K8sPolicyOptions options,
+        List<K8sPolicyFinding> findings)
+    {
+        var capabilities = container.SecurityContext?.Capabilities?.Add;
+        if (options.DenyAddedCapabilities && capabilities?.Count > 0)
         {
-            var caps = string.Join(", ", sc.Capabilities.Add);
+            var caps = string.Join(", ", capabilities);
             findings.Add(Deny(K8sConventions.PolicyCodes.DeploymentAddedCapabilities, objRef,
                 $"Container '{container.Name}' adds Linux capabilities [{caps}], which is not allowed."));
         }
+    }
 
-        if (options.DenyLatestImageTag)
+    private static void ValidateImageTag(
+        V1Container container,
+        string objRef,
+        K8sPolicyOptions options,
+        List<K8sPolicyFinding> findings)
+    {
+        if (!options.DenyLatestImageTag)
         {
-            var image = container.Image;
-            if (string.IsNullOrEmpty(image) || !image.Contains(':') || image.EndsWith(":latest", StringComparison.Ordinal))
-            {
-                findings.Add(Deny(K8sConventions.PolicyCodes.ImageLatestTag, objRef,
-                    $"Container '{container.Name}' uses image '{image}' which resolves to latest. Pin to a specific tag."));
-            }
+            return;
+        }
+
+        var image = container.Image;
+        if (string.IsNullOrEmpty(image) || !image.Contains(':') || image.EndsWith(":latest", StringComparison.Ordinal))
+        {
+            findings.Add(Deny(K8sConventions.PolicyCodes.ImageLatestTag, objRef,
+                $"Container '{container.Name}' uses image '{image}' which resolves to latest. Pin to a specific tag."));
         }
     }
 

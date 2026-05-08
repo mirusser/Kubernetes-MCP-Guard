@@ -52,6 +52,17 @@ internal static class K8sConventions
         public const string Succeeded = "succeeded";
     }
 
+    public static class PlanResponse
+    {
+        public const string PendingGatewayApproval = "pending_gateway_approval";
+        public const string PolicyPassed = "passed";
+        public const string PolicyNotApplicable = "not_applicable";
+        public const string PolicyPassedWithPrefix = "passed_with_";
+        public const string PolicyWarningSuffix = "_warning";
+        public const string PolicyWarningsSuffix = "_warnings";
+        public const string RiskMedium = "medium";
+    }
+
     public static class K8sApi
     {
         public const string DryRunAll = "All";

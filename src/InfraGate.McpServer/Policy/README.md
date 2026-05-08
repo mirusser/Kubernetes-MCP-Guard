@@ -42,7 +42,7 @@ RequestApplyManifestAsync
   -> K8sPolicyValidator.Validate               // policy check
   -> if IsDenied: return refusal text to model
   -> CreatePlan
-  -> CreateAndFormatPlanAsync                  // appends warnings to plan response if any
+  -> CreateAndFormatPlanAsync                  // returns compact policy summary; stores detailed findings in the plan
 ```
 
 ### Apply
@@ -63,7 +63,7 @@ ApplyManifestPlanAsync
 | Severity | Effect |
 |---|---|
 | `Deny` | Blocks plan creation; blocks apply. Model receives a refusal message listing all denied findings. |
-| `Warning` | Plan creation proceeds; warnings are appended to the plan response text returned to the model. Apply is not blocked by warnings. |
+| `Warning` | Plan creation proceeds. The model-visible response includes only a warning count summary, while detailed findings are stored in the pending plan and rendered in browser approval. Apply is not blocked by warnings. |
 
 ---
 

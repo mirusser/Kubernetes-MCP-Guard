@@ -26,7 +26,9 @@ public sealed class K8sManagerRequestTests
         Assert.Contains("apps/v1 Deployment demo/demo", result);
         Assert.Contains("v1 Service demo/demo", result);
         Assert.Contains("v1 ConfigMap demo/demo-config", result);
-        Assert.Contains("Dry-run: succeeded", result);
+        Assert.Contains("Policy: passed", result);
+        AssertCompactSuccessfulResponse(result);
+        Assert.DoesNotContain("hello: world", result);
         Assert.Contains("\"dryRun\":", pending);
         Assert.Equal(3, api.Requests.Count(request => request.Method == "PATCH"));
         Assert.All(api.Requests.Where(request => request.Method == "PATCH"), request =>
@@ -34,6 +36,7 @@ public sealed class K8sManagerRequestTests
             Assert.Contains("dryRun=All", request.Query);
             Assert.Contains("fieldManager=infra-gate-mcp", request.Query);
             Assert.Contains("fieldValidation=Strict", request.Query);
+            Assert.DoesNotContain("force=", request.Query, StringComparison.OrdinalIgnoreCase);
         });
     }
 
@@ -47,12 +50,34 @@ public sealed class K8sManagerRequestTests
         Assert.Contains("Namespace 'other' is not allowed", result);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task RequestApplyManifestAsync_WithBlankNamespace_ReturnsError(string blank)
+    {
+        var manager = CreateManager("demo");
+
+        var result = await manager.RequestApplyManifestAsync(blank, ValidManifest, CancellationToken.None);
+
+        Assert.Contains("Namespace is required", result);
+    }
+
     [Fact]
     public async Task RequestScaleDeploymentAsync_RejectsReplicaCountOutsideBounds()
     {
         var manager = CreateManager("demo");
 
         var result = await manager.RequestScaleDeploymentAsync("demo", "demo", 6, CancellationToken.None);
+
+        Assert.Contains("Replicas must be between 0 and 5", result);
+    }
+
+    [Fact]
+    public async Task RequestScaleDeploymentAsync_WithNegativeReplicas_ReturnsError()
+    {
+        var manager = CreateManager("demo");
+
+        var result = await manager.RequestScaleDeploymentAsync("demo", "demo", -1, CancellationToken.None);
 
         Assert.Contains("Replicas must be between 0 and 5", result);
     }
@@ -65,9 +90,10 @@ public sealed class K8sManagerRequestTests
 
         var result = await context.Manager.RequestScaleDeploymentAsync("demo", "demo", 4, CancellationToken.None);
 
-        Assert.Contains("Status: pending Gateway approval", result);
-        Assert.Contains("Dry-run: succeeded", result);
-        Assert.Contains("The Gateway will return a browser approval URL before applying it", result);
+        Assert.Contains("Status: pending_gateway_approval", result);
+        Assert.Contains("Next step: call apply_approved_plan with this PlanId.", result);
+        Assert.Contains("Browser approval will show the full server-rendered plan", result);
+        AssertCompactSuccessfulResponse(result);
         Assert.DoesNotContain("./scripts/approve-plan.sh", result);
         var dryRun = Assert.Single(api.Requests, request =>
             request.Method == "PATCH" &&
@@ -105,6 +131,25 @@ public sealed class K8sManagerRequestTests
     }
 
     [Fact]
+    public async Task RequestApplyManifestAsync_WhenFieldOwnershipConflict_DoesNotCreatePlan()
+    {
+        await using var api = new TestKubernetesApi(_ =>
+            TestResponse.Json(StatusJson("Conflict", 409), statusCode: 409));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestApplyManifestAsync("demo", ValidManifest, CancellationToken.None);
+        var audit = await File.ReadAllTextAsync(context.ApprovalStore.AuditPath, CancellationToken.None);
+
+        Assert.Contains("Apply refused by Kubernetes field ownership conflict.", result);
+        Assert.Contains("force apply can take ownership of fields from another manager", result);
+        Assert.Contains("409", result);
+        Assert.DoesNotContain("PlanId:", result);
+        Assert.Empty(Directory.EnumerateFiles(context.ApprovalStore.PendingDirectory));
+        Assert.Contains(ApprovalConventions.AuditEvents.DryRunFailed, audit);
+        Assert.Contains("field ownership conflict", audit);
+    }
+
+    [Fact]
     public async Task RequestDeleteManifestAsync_WhenDryRunDeleteFails_DoesNotCreatePlan()
     {
         await using var api = new TestKubernetesApi(_ =>
@@ -131,7 +176,7 @@ public sealed class K8sManagerRequestTests
             request.Path == "/api/v1/namespaces/demo/configmaps/demo-config");
         var options = JsonSerializer.Deserialize<V1DeleteOptions>(request.Body);
         var dryRun = Assert.Single(options?.DryRun ?? []);
-        Assert.Contains("Dry-run: succeeded", result);
+        AssertCompactSuccessfulResponse(result);
         Assert.Equal(K8sConventions.K8sApi.DryRunAll, dryRun);
     }
 
@@ -149,7 +194,89 @@ public sealed class K8sManagerRequestTests
 
         Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
         Assert.Contains("/data/hello", diff.ChangedPaths);
-        Assert.Contains("Diff: recorded for browser approval", result);
+        Assert.DoesNotContain("Diff:", result);
+    }
+
+    [Fact]
+    public async Task RequestApplyManifestAsync_WithPolicyWarning_ReturnsCompactWarningSummary()
+    {
+        await using var api = new TestKubernetesApi(request => request.Method == "PATCH"
+            ? TestResponse.Json(ConfigMapJson("new"))
+            : TestResponse.Json(ConfigMapJson("old")));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestApplyManifestAsync("demo", WarningConfigMapManifest, CancellationToken.None);
+        var plan = await ReadPendingPlanAsync(context, ParsePlanId(result));
+        var finding = Assert.Single(plan.PolicyFindings);
+
+        Assert.Contains("Policy: passed_with_1_warning", result);
+        AssertCompactSuccessfulResponse(result);
+        Assert.DoesNotContain("hunter2", result);
+        Assert.DoesNotContain("Key 'password' looks like a secret", result);
+        Assert.Equal(K8sConventions.PolicyCodes.ConfigMapSecretLikeKey, finding.Code);
+    }
+
+    [Fact]
+    public async Task RequestApplyManifestAsync_WithMultiplePolicyWarnings_ReturnsPluralWarningSummary()
+    {
+        await using var api = new TestKubernetesApi(request => request.Method == "PATCH"
+            ? TestResponse.Json(ConfigMapJson("new"))
+            : TestResponse.Json(ConfigMapJson("old")));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestApplyManifestAsync("demo", MultiWarningConfigMapManifest, CancellationToken.None);
+        var plan = await ReadPendingPlanAsync(context, ParsePlanId(result));
+
+        Assert.Contains("Policy: passed_with_2_warnings", result);
+        AssertCompactSuccessfulResponse(result);
+        Assert.Equal(2, plan.PolicyFindings.Length);
+        Assert.All(plan.PolicyFindings, f => Assert.Equal(K8sConventions.PolicyCodes.ConfigMapSecretLikeKey, f.Code));
+    }
+
+    [Theory]
+    [InlineData(K8sConventions.PlanOperations.Delete)]
+    [InlineData(K8sConventions.PlanOperations.Scale)]
+    [InlineData(K8sConventions.PlanOperations.Restart)]
+    [InlineData(K8sConventions.PlanOperations.SetImage)]
+    public async Task RequestMutationAsync_NonPolicyCheckedOperation_ReturnsPolicyNotApplicable(string operation)
+    {
+        await using var api = new TestKubernetesApi(request => operation switch
+        {
+            K8sConventions.PlanOperations.Delete when request.Method == "DELETE" =>
+                TestResponse.Json(StatusJson("Success", 200)),
+            K8sConventions.PlanOperations.Delete => TestResponse.Json(ConfigMapJson("old")),
+            K8sConventions.PlanOperations.Scale when request.Method == "PATCH" => TestResponse.Json(ScaleJson(3)),
+            K8sConventions.PlanOperations.Scale => TestResponse.Json(ScaleJson(1)),
+            K8sConventions.PlanOperations.Restart when request.Method == "PATCH" =>
+                TestResponse.Json(DeploymentJson("nginx:1.27-alpine", restartedAtUtc: "2026-05-07T00:00:00Z")),
+            K8sConventions.PlanOperations.Restart => TestResponse.Json(DeploymentJson("nginx:1.27-alpine")),
+            K8sConventions.PlanOperations.SetImage when request.Method == "PATCH" =>
+                TestResponse.Json(DeploymentJson("nginx:1.28-alpine")),
+            K8sConventions.PlanOperations.SetImage => TestResponse.Json(MinimalDeploymentJson),
+            _ => TestResponse.Json("{}")
+        });
+        var context = CreateContext("demo", api);
+
+        var result = operation switch
+        {
+            K8sConventions.PlanOperations.Delete =>
+                await context.Manager.RequestDeleteManifestAsync("demo", DeleteManifest, CancellationToken.None),
+            K8sConventions.PlanOperations.Scale =>
+                await context.Manager.RequestScaleDeploymentAsync("demo", "demo", 3, CancellationToken.None),
+            K8sConventions.PlanOperations.Restart =>
+                await context.Manager.RequestRestartDeploymentAsync("demo", "demo", CancellationToken.None),
+            K8sConventions.PlanOperations.SetImage =>
+                await context.Manager.RequestSetDeploymentImageAsync(
+                    "demo",
+                    "demo",
+                    "nginx",
+                    "nginx:1.28-alpine",
+                    CancellationToken.None),
+            _ => throw new InvalidOperationException($"Unknown operation '{operation}'.")
+        };
+
+        Assert.Contains("Policy: not_applicable", result);
+        AssertCompactSuccessfulResponse(result);
     }
 
     [Fact]
@@ -325,6 +452,21 @@ public sealed class K8sManagerRequestTests
                throw new InvalidOperationException("Pending plan could not be read.");
     }
 
+    private static void AssertCompactSuccessfulResponse(string result)
+    {
+        Assert.Contains("Status: pending_gateway_approval", result);
+        Assert.Contains("Risk: medium", result);
+        Assert.Contains("Next step: call apply_approved_plan with this PlanId.", result);
+        Assert.Contains("Browser approval will show the full server-rendered plan, policy findings, dry-run result, and diff.", result);
+        Assert.DoesNotContain("Pending file:", result);
+        Assert.DoesNotContain("Plan hash:", result);
+        Assert.DoesNotContain("Dry-run:", result);
+        Assert.DoesNotContain("Diff:", result);
+        Assert.DoesNotContain("Manifest:", result);
+        Assert.DoesNotContain("apiVersion:", result);
+        Assert.DoesNotContain("data:", result);
+    }
+
     private static string StatusJson(string reason, int code) =>
         $$"""
           {
@@ -453,6 +595,25 @@ public sealed class K8sManagerRequestTests
                                           data:
                                             hello: world
                                           """;
+
+    private const string WarningConfigMapManifest = """
+                                                    apiVersion: v1
+                                                    kind: ConfigMap
+                                                    metadata:
+                                                      name: demo-config
+                                                    data:
+                                                      password: hunter2
+                                                    """;
+
+    private const string MultiWarningConfigMapManifest = """
+                                                         apiVersion: v1
+                                                         kind: ConfigMap
+                                                         metadata:
+                                                           name: demo-config
+                                                         data:
+                                                           password: hunter2
+                                                           token: secrettoken123
+                                                         """;
 
     private const string MinimalDeploymentJson = """
                                                   {

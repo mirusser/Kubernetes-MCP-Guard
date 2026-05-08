@@ -7,6 +7,12 @@ namespace InfraGate.McpServer;
 
 public sealed partial class K8sManager
 {
+    private const string ServerSideApplyConflictMessage = """
+                                                          Apply refused by Kubernetes field ownership conflict.
+                                                          The plan was not forced because force apply can take ownership of fields from another manager.
+                                                          Re-request the plan after reconciling the live object, or use an explicitly approved force-apply flow if enabled.
+                                                          """;
+
     private string? ValidateNamespace(string namespaceName)
     {
         if (string.IsNullOrWhiteSpace(namespaceName))
@@ -96,6 +102,26 @@ public sealed partial class K8sManager
     {
         return ex is KubernetesException { Status.Code: 404 } ||
                ex is HttpOperationException { Response.StatusCode: HttpStatusCode.NotFound };
+    }
+
+    private static string FormatServerSideApplyException(string prefix, Exception ex)
+    {
+        var message = FormatApiException(prefix, ex);
+
+        return IsConflict(ex)
+            ? $"{ServerSideApplyConflictMessage}{Environment.NewLine}{message}"
+            : message;
+    }
+
+    private static bool IsConflict(Exception ex)
+    {
+        if (ex is KubernetesException { Status: not null } kube)
+        {
+            return kube.Status.Code == (int)HttpStatusCode.Conflict ||
+                   string.Equals(kube.Status.Reason, "Conflict", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return ex is HttpOperationException { Response.StatusCode: HttpStatusCode.Conflict };
     }
 
     private static string FormatApiException(string prefix, Exception ex)
