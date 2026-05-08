@@ -21,10 +21,13 @@ public sealed partial class PromptInjectionGuard
 
                 return $"{match.Groups[McpGatewayConventions.RegexGroups.Prefix].Value}{McpGatewayConventions.Redactions.InspectPendingPlan}";
             });
+        string withoutSensitiveMetadata = RedactSensitivePlanMetadataLines(withoutManifest, out bool metadataRedacted);
 
-        if (TryRedactJson(withoutManifest, findings, out var jsonText))
+        if (TryRedactJson(withoutSensitiveMetadata, findings, out var jsonText))
         {
-            var changed = manifestRedacted || !string.Equals(withoutManifest, jsonText, StringComparison.Ordinal);
+            var changed = manifestRedacted ||
+                metadataRedacted ||
+                !string.Equals(withoutSensitiveMetadata, jsonText, StringComparison.Ordinal);
 
             return new ResponseSanitizationResult(
                 changed ? jsonText : responseText,
@@ -32,8 +35,8 @@ public sealed partial class PromptInjectionGuard
                 manifestRedacted);
         }
 
-        var text = RedactSuspiciousLines(withoutManifest, findings, out var lineRedacted);
-        var response = manifestRedacted || lineRedacted ? text : responseText;
+        var text = RedactSuspiciousLines(withoutSensitiveMetadata, findings, out var lineRedacted);
+        var response = manifestRedacted || metadataRedacted || lineRedacted ? text : responseText;
 
         return new ResponseSanitizationResult(response, findings, manifestRedacted);
     }
@@ -135,9 +138,9 @@ public sealed partial class PromptInjectionGuard
         lineRedacted = false;
         var lines = LineSplitRegex().Split(text);
 
-        for (var i = 0; i < lines.Length; i++)
+        for (int i = 0; i < lines.Length; i++)
         {
-            var line = lines[i];
+            string line = lines[i];
             if (IsLineBreak(line) || IsOperationalLine(line))
             {
                 continue;
@@ -150,6 +153,26 @@ public sealed partial class PromptInjectionGuard
                 lines[i] = RedactedValue;
                 lineRedacted = true;
             }
+        }
+
+        return string.Concat(lines);
+    }
+
+    private static string RedactSensitivePlanMetadataLines(string text, out bool metadataRedacted)
+    {
+        metadataRedacted = false;
+        string[] lines = LineSplitRegex().Split(text);
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i];
+            if (IsLineBreak(line) || !SensitivePlanMetadataLineRegex().IsMatch(line))
+            {
+                continue;
+            }
+
+            lines[i] = McpGatewayConventions.Redactions.SensitivePlanMetadata;
+            metadataRedacted = true;
         }
 
         return string.Concat(lines);

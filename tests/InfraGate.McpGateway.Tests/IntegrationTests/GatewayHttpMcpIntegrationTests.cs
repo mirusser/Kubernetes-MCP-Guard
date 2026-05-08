@@ -224,10 +224,20 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             timeout.Token);
 
         Assert.Contains("PlanId:", result);
+        Assert.Contains("Status: pending_gateway_approval", result);
         Assert.Contains("Operation: apply", result);
         Assert.Contains($"v1 ConfigMap {NamespaceName}/smoke-config", result);
-        Assert.Contains("Dry-run: succeeded", result);
-        Assert.Contains("Diff: recorded for browser approval", result);
+        Assert.Contains("Policy: passed", result);
+        Assert.Contains("Risk: medium", result);
+        Assert.Contains("Next step: call apply_approved_plan with this PlanId.", result);
+        Assert.DoesNotContain("Pending file:", result);
+        Assert.DoesNotContain("Plan hash:", result);
+        Assert.DoesNotContain("Dry-run:", result);
+        Assert.DoesNotContain("Diff:", result);
+        Assert.DoesNotContain("Manifest:", result);
+        Assert.DoesNotContain("apiVersion:", result);
+        Assert.DoesNotContain("data:", result);
+        Assert.DoesNotContain("hello: world", result);
         var dryRun = Assert.Single(k8sApi.Requests, request => request.Method == "PATCH");
         Assert.Equal("PATCH", dryRun.Method);
         Assert.Contains("dryRun=All", dryRun.Query);
