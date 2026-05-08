@@ -50,12 +50,34 @@ public sealed class K8sManagerRequestTests
         Assert.Contains("Namespace 'other' is not allowed", result);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task RequestApplyManifestAsync_WithBlankNamespace_ReturnsError(string blank)
+    {
+        var manager = CreateManager("demo");
+
+        var result = await manager.RequestApplyManifestAsync(blank, ValidManifest, CancellationToken.None);
+
+        Assert.Contains("Namespace is required", result);
+    }
+
     [Fact]
     public async Task RequestScaleDeploymentAsync_RejectsReplicaCountOutsideBounds()
     {
         var manager = CreateManager("demo");
 
         var result = await manager.RequestScaleDeploymentAsync("demo", "demo", 6, CancellationToken.None);
+
+        Assert.Contains("Replicas must be between 0 and 5", result);
+    }
+
+    [Fact]
+    public async Task RequestScaleDeploymentAsync_WithNegativeReplicas_ReturnsError()
+    {
+        var manager = CreateManager("demo");
+
+        var result = await manager.RequestScaleDeploymentAsync("demo", "demo", -1, CancellationToken.None);
 
         Assert.Contains("Replicas must be between 0 and 5", result);
     }
@@ -192,6 +214,23 @@ public sealed class K8sManagerRequestTests
         Assert.DoesNotContain("hunter2", result);
         Assert.DoesNotContain("Key 'password' looks like a secret", result);
         Assert.Equal(K8sConventions.PolicyCodes.ConfigMapSecretLikeKey, finding.Code);
+    }
+
+    [Fact]
+    public async Task RequestApplyManifestAsync_WithMultiplePolicyWarnings_ReturnsPluralWarningSummary()
+    {
+        await using var api = new TestKubernetesApi(request => request.Method == "PATCH"
+            ? TestResponse.Json(ConfigMapJson("new"))
+            : TestResponse.Json(ConfigMapJson("old")));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestApplyManifestAsync("demo", MultiWarningConfigMapManifest, CancellationToken.None);
+        var plan = await ReadPendingPlanAsync(context, ParsePlanId(result));
+
+        Assert.Contains("Policy: passed_with_2_warnings", result);
+        AssertCompactSuccessfulResponse(result);
+        Assert.Equal(2, plan.PolicyFindings.Length);
+        Assert.All(plan.PolicyFindings, f => Assert.Equal(K8sConventions.PolicyCodes.ConfigMapSecretLikeKey, f.Code));
     }
 
     [Theory]
@@ -565,6 +604,16 @@ public sealed class K8sManagerRequestTests
                                                     data:
                                                       password: hunter2
                                                     """;
+
+    private const string MultiWarningConfigMapManifest = """
+                                                         apiVersion: v1
+                                                         kind: ConfigMap
+                                                         metadata:
+                                                           name: demo-config
+                                                         data:
+                                                           password: hunter2
+                                                           token: secrettoken123
+                                                         """;
 
     private const string MinimalDeploymentJson = """
                                                   {

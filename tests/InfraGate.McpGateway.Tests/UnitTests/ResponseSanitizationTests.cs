@@ -95,4 +95,34 @@ public sealed class ResponseSanitizationTests
         Assert.False(result.ManifestRedacted);
         Assert.Equal(text, result.Text);
     }
+
+    [Fact]
+    public void SanitizeResponse_MultipleSensitiveMetadataLines_RedactsEachLine()
+    {
+        var result = guard.SanitizeResponse("""
+                                            PlanId: 018fcb93-11f0-7f5f-b91a-6b8e8e5c1234
+                                            Pending file: /tmp/infra-gate/pending/018fcb93.json
+                                            Approval file: /tmp/infra-gate/approved/018fcb93.sha256
+                                            Plan hash: deadbeef01234567
+                                            Status: pending_gateway_approval
+                                            """);
+
+        Assert.DoesNotContain("Pending file:", result.Text);
+        Assert.DoesNotContain("Approval file:", result.Text);
+        Assert.DoesNotContain("Plan hash:", result.Text);
+        Assert.Equal(3, result.Text.Split(McpGatewayConventions.Redactions.SensitivePlanMetadata).Length - 1);
+        Assert.Contains("PlanId:", result.Text);
+        Assert.Contains("Status: pending_gateway_approval", result.Text);
+    }
+
+    [Fact]
+    public void SanitizeResponse_SensitiveLabelAppearsInlineNotAtLineStart_IsNotRedacted()
+    {
+        const string text = "The plan stores a Pending file: reference for audit purposes.";
+
+        var result = guard.SanitizeResponse(text);
+
+        Assert.DoesNotContain(McpGatewayConventions.Redactions.SensitivePlanMetadata, result.Text);
+        Assert.Contains("Pending file: reference", result.Text);
+    }
 }
