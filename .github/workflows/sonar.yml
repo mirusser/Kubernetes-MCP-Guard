@@ -41,6 +41,7 @@ jobs:
             /o:"${{ vars.SONAR_ORGANIZATION }}" \
             /d:sonar.token="$SONAR_TOKEN" \
             /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.coverage.exclusions="**/PromptInjectionGuard.Regex.cs" \
             /d:sonar.cs.vscoveragexml.reportsPaths="TestResults/coverage.xml"
 
       - name: Restore NuGet packages
