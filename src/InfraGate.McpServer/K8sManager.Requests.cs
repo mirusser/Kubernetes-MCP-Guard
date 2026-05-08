@@ -179,9 +179,6 @@ public sealed partial class K8sManager
         }
     }
 
-    private Task<string> CreateAndFormatPlanAsync(K8sPlan plan, CancellationToken cancellationToken) =>
-        CreateAndFormatPlanAsync(plan, policyResult: null, cancellationToken);
-
     private Task<string> CreateDryRunPlanAsync(
         K8sPlan plan,
         Task<DryRunResult> dryRunTask,

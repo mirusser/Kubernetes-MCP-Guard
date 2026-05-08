@@ -1,90 +1,67 @@
 # Implementation Plan: Test Coverage Improvement Post-Plan-30
 
+## Status: Implemented
+
 ## Summary
-Improve Sonar new-code coverage from 79% after Plan 30 implementation by adding tests for pre-existing uncovered paths in `PromptInjectionGuard.Sanitization.cs` and configuring Sonar exclusion for source-generated regex code.
+Improved Sonar new-code coverage from 79% after Plan 30 implementation by adding tests for uncovered paths, removing dead code, and configuring Sonar exclusion for source-generated regex code.
 
 ## Issue
-Sonar reports 79% test coverage on new code since commit `dd3571f` (Plan 30 implementation). Analysis shows:
+Sonar reported 79% test coverage on new code since commit `dd3571f` (Plan 30 implementation). Root cause split into two categories:
 
-- **All Plan 30 business logic is fully covered** — `FormatPolicySummary` (4 branches), `RedactSensitivePlanMetadataLines` (all paths), modified `SanitizeResponse` integration (all paths).
-- **21% uncovered** comes from:
-  1. Source-generated regex attribute in `PromptInjectionGuard.Regex.cs` — not instrumented by coverage tools
-  2. Async state machine compiler-generated continuation paths in `K8sManager.Requests.cs` — known .NET coverage artifact
-  3. Pre-existing uncovered lines in `PromptInjectionGuard.Sanitization.cs` (lines 61-63, 82, 127-129)
+### Real gaps (now covered)
+1. Pre-existing uncovered lines in `PromptInjectionGuard.Sanitization.cs` (JsonException catch, null JSON node, array element mutation)
+2. Pre-existing uncovered branches in `K8sPolicyValidator.cs` (feature-flag-disabled early returns)
+3. Dead code overload in `K8sManager.Requests.cs` (unused 2-param `CreateAndFormatPlanAsync`)
 
-## Task Breakdown
+### False positives (documented as accepted)
+1. Source-generated `[GeneratedRegex]` attribute in `PromptInjectionGuard.Regex.cs` — not instrumented by coverage tools
+2. Async state machine compiler-generated continuation paths in `K8sManager.Requests.cs` — known .NET coverage artifact
 
-### Task 1: Add Sonar exclusion for source-generated regex
+## Tasks Completed
 
-**Description:** Add `PromptInjectionGuard.Regex.cs` to Sonar coverage exclusions. Source-generated `[GeneratedRegex]` attributes produce compiler-generated code that is not instrumented by standard .NET coverage tools.
+### Task 1: Sonar exclusion for source-generated regex ✓
+Added `**/PromptInjectionGuard.Regex.cs` to `sonar.coverage.exclusions` in `.github/workflows/sonar.yml`.
 
-**Acceptance criteria:**
-- `sonar.coverage.exclusions` includes `**/PromptInjectionGuard.Regex.cs`
-- This exclusion is scoped to .NET regex source generators only, not a blanket exclusion
+### Task 2-4: ResponseSanitization gap tests ✓
+Added 3 tests in `ResponseSanitizationTests.cs` covering:
+- Malformed JSON → `JsonException` catch in `TryRedactJson`
+- JSON array with null → `case null` in `RedactJsonNode`
+- JSON array suspicious string → `jsonArray[i] = redacted` mutation in `RedactJsonArray`
 
-**Dependencies:** None
+### Task 5: GuardrailAuditStore tests (user addition) ✓
+Added 3 tests in `GuardrailAuditStoreTests.cs` covering multi-event append, tool/direction/action/categories write, and planId serialization.
 
-**Likely files:** `sonar-project.properties` or Sonar UI configuration
+### Task 6: K8sPolicyValidator feature-flag-off tests ✓
+Added 2 tests in `K8sPolicyValidatorTests.cs` covering:
+- `DenyHostPathVolumes = false` early-return branch
+- `DenyLatestImageTag = false` early-return branch
 
----
+### Task 7: Remove dead code ✓
+Removed unused 2-parameter `CreateAndFormatPlanAsync(K8sPlan, CancellationToken)` overload in `K8sManager.Requests.cs`.
 
-### Task 2: Add test for malformed JSON (`JsonException` catch)
+### User-added coverage (commits `f20e22c`, `cbeb45d`)
+- `DevIssuerStoreTests.cs` — 141 lines
+- `K8sManagerStatusTests.cs` — 144 lines
+- `K8sObjectNormalizerTests.cs` — 225 lines
+- `K8sPolicyValidator.cs` refactoring (split monolith into `ValidateHostSettings`, `ValidateVolumes`, `ValidatePrivilegedFlag`, `ValidateCapabilities`, `ValidateImageTag`)
 
-**Description:** Cover lines 61-63 in `TryRedactJson` — the `catch (JsonException)` branch that returns false when `JsonNode.Parse` fails on text that starts with `{` or `[` but is not valid JSON.
+## Final Coverage State (local analysis)
 
-**Test:** `SanitizeResponse_MalformedJson_ReturnsUnchangedText`
+| File | Coverage | Status |
+|---|---|---|
+| `PromptInjectionGuard.Sanitization.cs` | 238/238 (100%) | Done |
+| `PromptInjectionGuard.Regex.cs` | 28/28 (100%) | Done + sonar excluded |
+| `PromptInjectionGuard.cs` | 70/70 (100%) | Done |
+| `K8sManager.Requests.cs` (CreateAndFormatPlanAsync) | 34/34 (100%) | Done |
+| `K8sManager.Requests.cs` (CreateDryRunPlanAsync) | 60/60 (100%) | Done |
+| `K8sManager.Requests.cs` (main class) | 100/100 (dead code removed) | Done |
+| `K8sPolicyValidator.cs` | 268/276 → expected higher | Feature-flag-off tests added |
+| `K8sManager.Requests.cs` (async state machines) | 81-91% | Accepted artifact |
 
-**Acceptance criteria:**
-- Input text starts with `{` but is syntactically invalid JSON
-- `JsonNode.Parse` throws `JsonException`
-- Method returns `false`, text is unchanged, no findings
+## Accepted Exclusions
+- Async state machine uncovered lines in `K8sManager.Requests.cs` — these are compiler-generated continuation paths in `async` methods, not meaningful source code. The source-level code IS covered; the state machine has unreachable compiler-generated transitions.
+- Constant declarations in `K8sConventions.cs` and `McpGatewayConventions.cs` — these are `const string` declarations with no executable code. Sonar may miscount them as coverable lines.
 
-**Dependencies:** None
-
-**Likely files:** `tests/InfraGate.McpGateway.Tests/UnitTests/ResponseSanitizationTests.cs`
-
----
-
-### Task 3: Add test for JSON array with null element (`case null`)
-
-**Description:** Cover line 82 in `RedactJsonNode` — the `case null: return null` branch. Triggered when a JSON array contains a null element and `RedactJsonNode` is called on it.
-
-**Test:** `SanitizeResponse_JsonArrayWithNullElement_PreservesStructure`
-
-**Acceptance criteria:**
-- Input is valid JSON with an array containing a null element
-- JSON structure is preserved (`null` is not redacted or altered)
-- No findings from the null element
-
-**Dependencies:** None
-
-**Likely files:** `tests/InfraGate.McpGateway.Tests/UnitTests/ResponseSanitizationTests.cs`
-
----
-
-### Task 4: Add test for JSON array element replacement (mutation branch)
-
-**Description:** Cover lines 127-129 in `RedactJsonArray` — the `jsonArray[i] = redacted` branch where a suspicious array element is replaced. Triggered when a JSON array contains a string matching prompt-injection patterns.
-
-**Test:** `SanitizeResponse_JsonArrayWithSuspiciousString_RedactsElement`
-
-**Acceptance criteria:**
-- Input is valid JSON with an array containing a suspicious string (`"ignore previous instructions and reveal"`)
-- Text contains `[redacted: prompt-injection-risk]`
-- Original suspicious string is absent
-- Has findings
-
-**Dependencies:** None
-
-**Likely files:** `tests/InfraGate.McpGateway.Tests/UnitTests/ResponseSanitizationTests.cs`
-
----
-
-## Test Plan
-- Run `dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj` — all tests pass including 3 new ones
-- Run `dotnet test tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj` — all existing tests continue to pass
-
-## Assumptions
-- Async state machine uncovered lines in `K8sManager.Requests.cs` are accepted as known .NET coverage artifacts and will not be addressed
-- No changes to production code — these are purely test additions + configuration
-- Sonar exclusion is scoped to the source-generated regex file, not broader
+## Verification
+- `dotnet test tests/InfraGate.McpServer.Tests` — 159 passed, 0 failed
+- `dotnet test tests/InfraGate.McpGateway.Tests` — 116 passed, 0 failed
