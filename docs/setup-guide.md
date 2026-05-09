@@ -141,6 +141,7 @@ Use this when you want to connect a local MCP client (e.g. Codex CLI) directly t
 
 ```bash
 export REPO_ROOT="$(pwd)"
+export INFRA_GATE_ENVIRONMENT=Development
 export KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config"
 export K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals"
 export K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo
@@ -160,6 +161,7 @@ dotnet run --project src/InfraGate.McpServer/InfraGate.McpServer.csproj
         "/workspace/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
       ],
       "env": {
+        "INFRA_GATE_ENVIRONMENT": "Development",
         "KUBECONFIG": "/workspace/.kube/mcp-nginx-demo.config",
         "K8S_MCP_APPROVAL_ROOT": "/workspace/.mcp-approvals",
         "K8S_MCP_ALLOWED_NAMESPACES": "mcp-nginx-demo"
@@ -174,6 +176,7 @@ Or register with Codex CLI:
 ```bash
 REPO_ROOT="$(pwd)"
 codex mcp add infra-gate \
+  --env INFRA_GATE_ENVIRONMENT=Development \
   --env KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config" \
   --env K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals" \
   --env K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo \
@@ -279,6 +282,7 @@ Use this alternate flow when you want to run the same OAuth path from source ins
 
 ```bash
 export REPO_ROOT="$(pwd)"
+export INFRA_GATE_ENVIRONMENT=Development
 export INFRA_GATE_OAUTH_AUTHORITY="http://127.0.0.1:3011"
 export INFRA_GATE_OAUTH_RESOURCE="http://127.0.0.1:3001/mcp"
 export INFRA_GATE_OAUTH_SCOPE="mcp:tools"
@@ -298,6 +302,7 @@ dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
 **Terminal 2 — Dev Issuer:**
 
 ```bash
+export INFRA_GATE_ENVIRONMENT=Development
 dotnet run --project src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj
 ```
 

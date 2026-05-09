@@ -4,6 +4,8 @@
 
 The `DevIssuer` and setting `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` are for local development only. Do not use them in production environments.
 
+Set `INFRA_GATE_ENVIRONMENT=Production` for production deployments. In this mode the Gateway and downstream MCP server fail closed when development defaults are present, and `InfraGate.DevIssuer` refuses startup entirely.
+
 ## Gateway OIDC Contract
 
 To configure an external OIDC provider, the Gateway expects the following:
@@ -34,9 +36,18 @@ export INFRA_GATE_OAUTH_AUTHORITY="https://your-keycloak-domain/realms/your-real
 export INFRA_GATE_OAUTH_RESOURCE="https://gateway.example.com/mcp"
 export INFRA_GATE_OAUTH_SCOPE="mcp:tools"
 export INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=true
+export INFRA_GATE_ENVIRONMENT=Production
 export INFRA_GATE_APPROVAL_BASE_URL="https://gateway.example.com"
 export INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID="infra-gate-approval-ui"
 export INFRA_GATE_APPROVAL_OAUTH_CALLBACK_PATH="/approvals/oauth/callback"
+export INFRA_GATE_GUARD_AUDIT_ROOT="/data/guardrails"
+export K8S_MCP_APPROVAL_ROOT="/data/approvals"
+export K8S_MCP_ALLOWED_NAMESPACES="mcp-nginx-demo"
+
+# Kubernetes auth: choose exactly one.
+export KUBECONFIG="/run/kube/infra-gate.config"
+# or:
+# export K8S_MCP_USE_IN_CLUSTER=true
 
 # Keycloak-specific overrides:
 export INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT="${INFRA_GATE_OAUTH_AUTHORITY}/protocol/openid-connect/auth"
@@ -52,6 +63,9 @@ Before moving to production, ensure you have:
 - [ ] Strict redirect URIs configured in the OIDC provider.
 - [ ] A secure token lifetime policy.
 - [ ] Strictly scoped Kubernetes RBAC (the Gateway enforces namespace limits, but RBAC is still required).
+- [ ] Explicit Kubernetes auth configured with either `KUBECONFIG` or `K8S_MCP_USE_IN_CLUSTER=true`.
+- [ ] Explicit `K8S_MCP_ALLOWED_NAMESPACES`, `K8S_MCP_APPROVAL_ROOT`, and `INFRA_GATE_GUARD_AUDIT_ROOT`.
+- [ ] Durable approval and audit paths that are not temp paths, default dev paths, or group/other-writable.
 - [ ] No opaque manual bearer values in MCP client configuration.
 - [ ] Disabled `DevIssuer` completely.
 

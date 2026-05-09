@@ -107,6 +107,7 @@ The source-run gateway listens on `http://127.0.0.1:3001/mcp` by default, accept
 For local OAuth/Codex login without an external issuer, run the repo-local dev issuer in a separate terminal:
 
 ```bash
+export INFRA_GATE_ENVIRONMENT=Development
 dotnet run --project src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj
 ```
 
@@ -116,6 +117,7 @@ Then start the gateway with OAuth enabled:
 
 ```bash
 export REPO_ROOT="$(pwd)"
+export INFRA_GATE_ENVIRONMENT=Development
 export INFRA_GATE_OAUTH_AUTHORITY="http://127.0.0.1:3011"
 export INFRA_GATE_OAUTH_RESOURCE="http://127.0.0.1:3001/mcp"
 export INFRA_GATE_OAUTH_SCOPE="mcp:tools"
@@ -162,6 +164,7 @@ From the repo directory run:
 ```bash
 REPO_ROOT="$(pwd)"
 codex mcp add infra-gate \
+  --env INFRA_GATE_ENVIRONMENT=Development \
   --env KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config" \
   --env K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals" \
   --env K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo \
@@ -189,6 +192,7 @@ Use this shape for a local stdio MCP client:
         "/absolute/path/to/infra-gate/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
       ],
       "env": {
+        "INFRA_GATE_ENVIRONMENT": "Development",
         "KUBECONFIG": "/absolute/path/to/infra-gate/.kube/mcp-nginx-demo.config",
         "K8S_MCP_APPROVAL_ROOT": "/absolute/path/to/infra-gate/.mcp-approvals",
         "K8S_MCP_ALLOWED_NAMESPACES": "mcp-nginx-demo"

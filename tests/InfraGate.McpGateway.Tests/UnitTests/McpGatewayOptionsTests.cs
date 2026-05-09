@@ -1,5 +1,7 @@
+using InfraGate.Approvals;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpGateway.Tests.UnitTests;
 
@@ -11,6 +13,8 @@ public sealed class McpGatewayOptionsTests
     private const string GuardAuditRoot = "guardrails";
     private const string WorkingDirectory = "/repo";
     private const string ApprovalRoot = "approvals";
+    private const string GatewayResource = "https://gateway.example.com/mcp";
+    private const string ApprovalBaseUrl = "https://gateway.example.com";
 
     [Fact]
     public void FromEnvironment_UsesDownstreamAssembly_WhenSet()
@@ -34,6 +38,31 @@ public sealed class McpGatewayOptionsTests
         var options = McpGatewayOptions.FromEnvironment();
 
         Assert.Null(options.DownstreamAssembly);
+    }
+
+    [Fact]
+    public void FromEnvironment_UsesInfraGateEnvironmentOverStandardEnvironment()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
+            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
+            (RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment, RuntimeSafetyConventions.EnvironmentValues.Production));
+
+        var options = McpGatewayOptions.FromEnvironment();
+
+        Assert.Equal(RuntimeMode.Development, options.RuntimeMode);
+    }
+
+    [Fact]
+    public void FromEnvironment_WithUnsupportedInfraGateEnvironment_Throws()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
+            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, "Staging"));
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(McpGatewayOptions.FromEnvironment);
+
+        Assert.Contains(RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, exception.Message);
     }
 
     [Fact]
@@ -84,6 +113,89 @@ public sealed class McpGatewayOptionsTests
             transportOptions.Arguments);
     }
 
+    [Fact]
+    public void ValidateProductionSafety_WithValidExternalSettings_AllowsStartup()
+    {
+        using var environment = SetProductionEnvironment();
+
+        var options = McpGatewayOptions.FromEnvironment();
+        var exception = Record.Exception(options.ValidateProductionSafety);
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ProductionMode_WithHttpMetadata_RefusesStartup()
+    {
+        using var environment = SetProductionEnvironment(
+            (GatewayAuthConventions.EnvironmentVariables.OAuthRequireHttpsMetadata, "false"));
+
+        var options = McpGatewayOptions.FromEnvironment();
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(GatewayAuthConventions.EnvironmentVariables.OAuthRequireHttpsMetadata, exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithLocalhostOAuthResource_RefusesStartup()
+    {
+        using var environment = SetProductionEnvironment(
+            (GatewayAuthConventions.EnvironmentVariables.OAuthResource, "https://127.0.0.1:3001/mcp"));
+
+        var options = McpGatewayOptions.FromEnvironment();
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(GatewayAuthConventions.EnvironmentVariables.OAuthResource, exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithoutApprovalBaseUrl_RefusesStartup()
+    {
+        using var environment = SetProductionEnvironment(
+            (McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl, null));
+
+        var options = McpGatewayOptions.FromEnvironment();
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl, exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithHttpApprovalBaseUrl_RefusesStartup()
+    {
+        using var environment = SetProductionEnvironment(
+            (McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl, "http://gateway.example.com"));
+
+        var options = McpGatewayOptions.FromEnvironment();
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl, exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithTempApprovalRoot_RefusesStartup()
+    {
+        using var environment = SetProductionEnvironment(
+            (ApprovalConventions.EnvironmentVariables.ApprovalRoot, Path.Combine(Path.GetTempPath(), "infra-gate-approvals")));
+
+        var options = McpGatewayOptions.FromEnvironment();
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(ApprovalConventions.EnvironmentVariables.ApprovalRoot, exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithDefaultGuardAuditRoot_RefusesStartup()
+    {
+        using var environment = SetProductionEnvironment(
+            (McpGatewayConventions.EnvironmentVariables.GuardAuditRoot, null));
+
+        var options = McpGatewayOptions.FromEnvironment();
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(McpGatewayConventions.EnvironmentVariables.GuardAuditRoot, exception.Message);
+    }
+
     private static McpGatewayOptions CreateOptions(string? downstreamAssembly = null) =>
         new(
             new GatewayAuthOptions(OAuthAuthority),
@@ -94,6 +206,39 @@ public sealed class McpGatewayOptionsTests
             ApprovalBaseUrl: null,
             McpGatewayOptions.DefaultApprovalChallengeTtl,
             downstreamAssembly);
+
+    private static EnvironmentVariableScope SetProductionEnvironment(params (string Name, string? Value)[] overrides)
+    {
+        var variables = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            [RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment] =
+                RuntimeSafetyConventions.EnvironmentValues.Production,
+            [GatewayAuthConventions.EnvironmentVariables.OAuthAuthority] = OAuthAuthority,
+            [GatewayAuthConventions.EnvironmentVariables.OAuthMetadataAddress] = null,
+            [GatewayAuthConventions.EnvironmentVariables.OAuthResource] = GatewayResource,
+            [GatewayAuthConventions.EnvironmentVariables.OAuthScope] = GatewayAuthConventions.DefaultOAuthScope,
+            [GatewayAuthConventions.EnvironmentVariables.OAuthRequireHttpsMetadata] = "true",
+            [GatewayAuthConventions.EnvironmentVariables.ApprovalOAuthAuthorizationEndpoint] = OAuthAuthority + "/authorize",
+            [GatewayAuthConventions.EnvironmentVariables.ApprovalOAuthTokenEndpoint] = OAuthAuthority + "/token",
+            [McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl] = ApprovalBaseUrl,
+            [McpGatewayConventions.EnvironmentVariables.GuardAuditRoot] = ProductionPath("guardrails"),
+            [ApprovalConventions.EnvironmentVariables.ApprovalRoot] = ProductionPath("approvals")
+        };
+
+        foreach (var item in overrides)
+        {
+            variables[item.Name] = item.Value;
+        }
+
+        return EnvironmentVariableScope.Set(variables.Select(item => (item.Key, item.Value)).ToArray());
+    }
+
+    private static string ProductionPath(string directoryName)
+    {
+        string root = Path.GetPathRoot(Directory.GetCurrentDirectory()) ?? Path.DirectorySeparatorChar.ToString();
+
+        return Path.Combine(root, "var", "lib", "infra-gate-tests", directoryName);
+    }
 
     private sealed class EnvironmentVariableScope : IDisposable
     {

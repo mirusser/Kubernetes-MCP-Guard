@@ -1,26 +1,87 @@
 using InfraGate.Approvals;
+using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpServer;
 
-public sealed record K8sMcpOptions(IReadOnlySet<string> AllowedNamespaces, string ApprovalRoot)
+public sealed record K8sMcpOptions(
+    IReadOnlySet<string> AllowedNamespaces,
+    string ApprovalRoot,
+    RuntimeMode RuntimeMode = RuntimeMode.Development,
+    bool IsApprovalRootExplicit = true,
+    bool HasExplicitAllowedNamespaces = true,
+    string? KubeConfig = null,
+    bool IsInClusterConfigEnabled = false)
 {
     public const string DefaultNamespace = K8sConventions.DefaultNamespace;
+    private static readonly IReadOnlySet<string> DeniedApprovalRootNames =
+        new HashSet<string>([ApprovalConventions.Storage.DefaultRootDirectory], StringComparer.Ordinal);
+
+    public bool HasExplicitKubeConfig => !string.IsNullOrWhiteSpace(KubeConfig);
 
     public bool IsNamespaceAllowed(string namespaceName) =>
         AllowedNamespaces.Contains(namespaceName);
 
     public static K8sMcpOptions FromEnvironment()
     {
-        var approvalRoot = Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.ApprovalRoot);
-        if (string.IsNullOrWhiteSpace(approvalRoot))
+        RuntimeMode runtimeMode = RuntimeModeResolver.FromEnvironment();
+        string? approvalRootValue = Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.ApprovalRoot);
+        bool isApprovalRootExplicit = !string.IsNullOrWhiteSpace(approvalRootValue);
+        string approvalRoot = string.IsNullOrWhiteSpace(approvalRootValue)
+            ? Path.Combine(Directory.GetCurrentDirectory(), ApprovalConventions.Storage.DefaultRootDirectory)
+            : approvalRootValue;
+
+        string? allowedNamespacesValue =
+            Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.AllowedNamespaces);
+        bool hasExplicitAllowedNamespaces = !string.IsNullOrWhiteSpace(allowedNamespacesValue);
+        IReadOnlySet<string> allowedNamespaces = ParseAllowedNamespaces(allowedNamespacesValue);
+        string? kubeConfig = Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.KubeConfig);
+        bool isInClusterConfigEnabled = ParseBooleanEnvironmentVariable(
+            Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.UseInClusterConfig),
+            defaultValue: false);
+
+        return new K8sMcpOptions(
+            allowedNamespaces,
+            approvalRoot,
+            runtimeMode,
+            isApprovalRootExplicit,
+            hasExplicitAllowedNamespaces,
+            kubeConfig,
+            isInClusterConfigEnabled);
+    }
+
+    public void ValidateStartupSafety()
+    {
+        if (HasExplicitKubeConfig && IsInClusterConfigEnabled)
         {
-            approvalRoot = Path.Combine(Directory.GetCurrentDirectory(), ApprovalConventions.Storage.DefaultRootDirectory);
+            throw new InvalidOperationException(
+                $"{K8sConventions.EnvironmentVariables.KubeConfig} and " +
+                $"{K8sConventions.EnvironmentVariables.UseInClusterConfig}=true cannot both be configured.");
         }
 
-        var allowedNamespaces = ParseAllowedNamespaces(
-            Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.AllowedNamespaces));
+        if (RuntimeMode != RuntimeMode.Production)
+        {
+            return;
+        }
 
-        return new K8sMcpOptions(allowedNamespaces, approvalRoot);
+        if (!HasExplicitKubeConfig && !IsInClusterConfigEnabled)
+        {
+            throw new InvalidOperationException(
+                $"Production mode requires explicit Kubernetes auth: set " +
+                $"{K8sConventions.EnvironmentVariables.KubeConfig} or " +
+                $"{K8sConventions.EnvironmentVariables.UseInClusterConfig}=true.");
+        }
+
+        if (!HasExplicitAllowedNamespaces || AllowedNamespaces.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"{K8sConventions.EnvironmentVariables.AllowedNamespaces} must be explicitly configured in Production mode.");
+        }
+
+        ProductionSafetyValidator.RequirePersistentDirectory(
+            ApprovalRoot,
+            K8sConventions.EnvironmentVariables.ApprovalRoot,
+            IsApprovalRootExplicit,
+            DeniedApprovalRootNames);
     }
 
     public static IReadOnlySet<string> ParseAllowedNamespaces(string? value)
@@ -32,5 +93,12 @@ public sealed record K8sMcpOptions(IReadOnlySet<string> AllowedNamespaces, strin
         return namespaces
             .Where(namespaceName => !string.IsNullOrWhiteSpace(namespaceName))
             .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static bool ParseBooleanEnvironmentVariable(string? value, bool defaultValue)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? defaultValue
+            : bool.Parse(value);
     }
 }

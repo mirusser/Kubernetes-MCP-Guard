@@ -17,6 +17,7 @@ internal static class K8sConventions
     public static class EnvironmentVariables
     {
         public const string KubeConfig = "KUBECONFIG";
+        public const string UseInClusterConfig = "K8S_MCP_USE_IN_CLUSTER";
         public const string ApprovalRoot = ApprovalConventions.EnvironmentVariables.ApprovalRoot;
         public const string AllowedNamespaces = "K8S_MCP_ALLOWED_NAMESPACES";
     }
