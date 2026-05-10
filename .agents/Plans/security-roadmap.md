@@ -756,9 +756,9 @@ Do not return:
 ```text
 Pending file: ...
 Manifest:
-```yaml
-...
-```
+  [yaml]
+    ...
+
 ```
 
 ### 6.4 Approval UI can show more detail

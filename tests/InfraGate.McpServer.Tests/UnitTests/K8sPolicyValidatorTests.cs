@@ -550,6 +550,68 @@ public sealed class K8sPolicyValidatorTests
         Assert.Empty(result.Findings);
     }
 
+    [Fact]
+    public void Validate_HostPath_WhenCheckDisabled_IsAllowed()
+    {
+        var manifest = """
+                       apiVersion: apps/v1
+                       kind: Deployment
+                       metadata:
+                         name: hp
+                         namespace: demo
+                       spec:
+                         selector:
+                           matchLabels:
+                             app: hp
+                         template:
+                           metadata:
+                             labels:
+                               app: hp
+                           spec:
+                             containers:
+                               - name: app
+                                 image: nginx:1.27
+                             volumes:
+                               - name: host-vol
+                                 hostPath:
+                                   path: /etc
+                       """;
+        var options = new K8sPolicyOptions { DenyHostPathVolumes = false };
+        var parsed = K8sManifestParser.ParseSupported(manifest, "demo");
+        var result = K8sPolicyValidator.Validate(parsed.Objects, options);
+
+        Assert.DoesNotContain(result.Findings, f => f.Code == K8sConventions.PolicyCodes.DeploymentHostPath);
+    }
+
+    [Fact]
+    public void Validate_LatestImageTag_WhenCheckDisabled_IsAllowed()
+    {
+        var manifest = """
+                       apiVersion: apps/v1
+                       kind: Deployment
+                       metadata:
+                         name: latest
+                         namespace: demo
+                       spec:
+                         selector:
+                           matchLabels:
+                             app: latest
+                         template:
+                           metadata:
+                             labels:
+                               app: latest
+                           spec:
+                             containers:
+                               - name: app
+                                 image: nginx:latest
+                       """;
+        var options = new K8sPolicyOptions { DenyLatestImageTag = false };
+        var parsed = K8sManifestParser.ParseSupported(manifest, "demo");
+        var result = K8sPolicyValidator.Validate(parsed.Objects, options);
+
+        Assert.DoesNotContain(result.Findings, f => f.Code == K8sConventions.PolicyCodes.ImageLatestTag);
+    }
+
     private static K8sPolicyResult Validate(string manifest)
     {
         var parsed = K8sManifestParser.ParseSupported(manifest, "demo");

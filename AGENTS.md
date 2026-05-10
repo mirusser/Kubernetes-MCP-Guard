@@ -4,9 +4,11 @@
 
 Before implementing:
 - State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
+- If multiple interpretations exist, present them — don't pick silently.
 - If a simpler approach exists, say so. Push back when warranted.
 - If something is unclear, stop. Name what's confusing. Ask.
+
+Carve-out: for clearly-scoped bug reports with a reproduction, don't ask permission — diagnose, fix, and show the fix passing.
 
 ## 2. Simplicity First
 
@@ -16,9 +18,9 @@ Before implementing:
 - No abstractions for single-use code.
 - No "flexibility" or "configurability" that wasn't requested.
 - No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
+- If you wrote 200 lines and it could be 50, rewrite it.
 
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+Test: "Would a senior engineer say this is overcomplicated?" If yes, simplify. 
 
 ## 3. Surgical Changes
 
@@ -28,13 +30,13 @@ When editing existing code:
 - Don't "improve" adjacent code, comments, or formatting.
 - Don't refactor things that aren't broken.
 - Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
+- If you notice unrelated dead code, mention it — don't delete it.
 
 When your changes create orphans:
 - Remove imports/variables/functions that YOUR changes made unused.
 - Don't remove pre-existing dead code unless asked.
 
-The test: Every changed line should trace directly to the user's request.
+Test: every changed line should trace directly to the user's request.
 
 ## 4. Goal-Driven Execution
 
@@ -52,6 +54,35 @@ For multi-step tasks, state a brief plan:
 3. [Step] → verify: [check]
 ```
 
+## 5. Don't Claim Done Without Proof
+
+**"It should work" is not done. Show evidence.**
+
+Before marking a task complete:
+- Paste the test output, command output, or log line that proves it.
+- If you can't show it, you haven't done it — keep working.
+- Ask yourself: "Would a staff engineer approve this on PR review?"
+
+Anti-rationalization: don't say "I'll add tests later" — write them now or say out loud you're not going to.
+
+## 6. Learn From Corrections
+
+**Every correction is a rule waiting to be written.**
+
+When I correct you:
+- Append a one-line rule to [.agents/lessons.md](.agents/lessons.md).
+- Format: `[area] Don't X — do Y instead. (cause: <one phrase>)`
+- Read `.agents/lessons.md` at the start of every session, before planning.
+- If the same rule fires three times, promote it into the relevant SKILL.md.
+
+## 7. Keep Context Clean
+
+**Context is finite. Spend it on the task, not on "just in case".**
+
+- For research-heavy steps (reading large files, exploring unfamiliar code), use a subagent and return only the conclusion.
+- One task per subagent. Don't bundle.
+- Don't fetch files "just in case" — fetch on demand.
+
 ## Skills
 
 Reusable skill definitions live in [.agents/skills/](.agents/skills/). Load the relevant `SKILL.md` before starting work that matches its scope:
@@ -64,7 +95,9 @@ Reusable skill definitions live in [.agents/skills/](.agents/skills/). Load the 
 
 ## Solution Map
 
-Start with the root [README.md](README.md) for project intent and high-level architecture. Use [devs-readme.md](docs/devs-readme.md) for setup, local runs, tool contracts, and verification. For project-level context, use these guides:
+Start with [README.md](README.md) for intent and architecture. Use [devs-readme.md](docs/devs-readme.md) for setup, local runs, tool contracts, and verification.
+
+Load only the project README you need:
 
 - Runtime projects:
   - [InfraGate.McpServer](src/InfraGate.McpServer/README.md): stdio MCP server, Kubernetes validation, approval plans, and plan application.

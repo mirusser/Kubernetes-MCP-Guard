@@ -58,6 +58,8 @@ public sealed class GuardedToolRunnerTests
         var downstream = new FakeDownstream("""
                                             PlanId: 018fcb93-11f0-7f5f-b91a-6b8e8e5c1234
                                             Pending file: /tmp/pending/018fcb93-11f0-7f5f-b91a-6b8e8e5c1234.json
+                                            Approval file: /tmp/approved/018fcb93-11f0-7f5f-b91a-6b8e8e5c1234.sha256
+                                            Plan hash: 0123456789abcdef
                                             Manifest:
                                             ```yaml
                                             apiVersion: v1
@@ -81,6 +83,9 @@ public sealed class GuardedToolRunnerTests
         Assert.StartsWith("Guardrail warning:", text);
         Assert.Contains("PlanId:", text);
         Assert.Contains("inspect the pending plan file", text);
+        Assert.DoesNotContain("Pending file:", text);
+        Assert.DoesNotContain("Approval file:", text);
+        Assert.DoesNotContain("Plan hash:", text);
         Assert.DoesNotContain("kind: ConfigMap", text);
         Assert.Single(audit.Events);
         Assert.Equal("response", audit.Events[0].Direction);

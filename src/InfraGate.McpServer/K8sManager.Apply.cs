@@ -146,7 +146,15 @@ public sealed partial class K8sManager
         var messages = new List<string>();
         foreach (var obj in parsed.Objects)
         {
-            await ApplyObjectAsync(obj, cancellationToken);
+            try
+            {
+                await ApplyObjectAsync(obj, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return ApplyResult.Failed(FormatServerSideApplyException("API operation failed", ex));
+            }
+
             messages.Add($"Applied {obj.ApiVersion} {obj.Kind} {obj.Metadata.NamespaceProperty}/{obj.Metadata.Name}");
         }
 
@@ -367,7 +375,6 @@ public sealed partial class K8sManager
             deployment.Metadata.Name,
             deployment.Metadata.NamespaceProperty,
             fieldManager: FieldManager,
-            force: true,
             cancellationToken: cancellationToken);
 
     private Task ApplyServiceAsync(V1Service service, CancellationToken cancellationToken) =>
@@ -376,7 +383,6 @@ public sealed partial class K8sManager
             service.Metadata.Name,
             service.Metadata.NamespaceProperty,
             fieldManager: FieldManager,
-            force: true,
             cancellationToken: cancellationToken);
 
     private Task ApplyConfigMapAsync(V1ConfigMap configMap, CancellationToken cancellationToken) =>
@@ -385,7 +391,6 @@ public sealed partial class K8sManager
             configMap.Metadata.Name,
             configMap.Metadata.NamespaceProperty,
             fieldManager: FieldManager,
-            force: true,
             cancellationToken: cancellationToken);
 
     private async Task<string> DeleteObjectAsync(K8sObjectRef obj, CancellationToken cancellationToken)
