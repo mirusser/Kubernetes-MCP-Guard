@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="InfraGate.DevIssuer.Tests" />
+    <InternalsVisibleTo Include="InfraGate.McpGateway.KeycloakTests" />
     <InternalsVisibleTo Include="InfraGate.McpGateway.Tests" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.2.0" />
   </ItemGroup>

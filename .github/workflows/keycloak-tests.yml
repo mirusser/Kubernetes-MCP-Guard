@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
 
 permissions:
   contents: read
@@ -28,11 +28,11 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore dependencies
-        run: dotnet restore tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj
+        run: dotnet restore tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj
 
       - name: Build
-        run: dotnet build tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --configuration Release --no-restore
+        run: dotnet build tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj --configuration Release --no-restore
 
       - name: Run Keycloak integration tests
-        run: dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --configuration Release --no-build --filter "Category=Keycloak" --logger "console;verbosity=normal"
+        run: dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj --configuration Release --no-build --filter "Category=Keycloak" --logger "console;verbosity=normal"
         timeout-minutes: 10

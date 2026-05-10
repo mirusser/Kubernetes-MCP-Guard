@@ -13,13 +13,15 @@ using Testcontainers.Keycloak;
 #pragma warning disable ASPDEPR004
 #pragma warning disable ASPDEPR008
 
-namespace InfraGate.McpGateway.Tests.IntegrationTests;
+namespace InfraGate.McpGateway.KeycloakTests.IntegrationTests;
 
 [Trait("Category", "Keycloak")]
 public sealed class KeycloakIntegrationTests : IAsyncLifetime
 {
+    private const string KeycloakImage = "quay.io/keycloak/keycloak:26.2";
     private const string RealmName = "infra-gate";
-    private const string MpcClientId = "mcp-client";
+    private const string RealmJsonFileName = "infra-gate-realm.json";
+    private const string McpClientId = "mcp-client";
     private const string LimitedClientId = "mcp-client-limited";
     private const string DemoUsername = "demo";
     private const string DemoPassword = "demo";
@@ -31,13 +33,10 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        string realmJsonPath = Path.Combine(AppContext.BaseDirectory, "TestData", "infra-gate-realm.json");
+        string realmJsonPath = Path.Combine(AppContext.BaseDirectory, "TestData", RealmJsonFileName);
 
-        keycloakContainer = new KeycloakBuilder("quay.io/keycloak/keycloak:26.2")
-            .WithCommand("start-dev", "--import-realm")
-            .WithEnvironment("KEYCLOAK_ADMIN", "admin")
-            .WithEnvironment("KEYCLOAK_ADMIN_PASSWORD", "admin")
-            .WithResourceMapping(File.ReadAllBytes(realmJsonPath), "/opt/keycloak/data/import/infra-gate-realm.json")
+        keycloakContainer = new KeycloakBuilder(KeycloakImage)
+            .WithRealm(realmJsonPath)
             .Build();
 
         await keycloakContainer.StartAsync();
@@ -58,7 +57,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         using var server = CreateGatewayServer(authority: RealmAuthority());
         using var client = server.CreateClient();
 
-        string token = await AcquireTokenAsync(MpcClientId);
+        string token = await AcquireTokenAsync(McpClientId);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await client.GetAsync(McpGatewayConventions.McpPath);
@@ -75,7 +74,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         using var client = server.CreateClient();
 
         // Token has aud=http://127.0.0.1:3001/mcp; gateway expects differentResource.
-        string token = await AcquireTokenAsync(MpcClientId);
+        string token = await AcquireTokenAsync(McpClientId);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await client.GetAsync(McpGatewayConventions.McpPath);
@@ -90,7 +89,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         using var client = server.CreateClient();
 
         // mcp-client-limited has no mcp:tools in default scopes.
-        string token = await AcquireTokenAsync(LimitedClientId);
+        string token = await AcquireTokenAsync(LimitedClientId, requestedScope: null);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await client.GetAsync(McpGatewayConventions.McpPath);
@@ -104,16 +103,23 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
     private string TokenEndpoint() =>
         $"{keycloakBaseAddress.TrimEnd('/')}/realms/{RealmName}/protocol/openid-connect/token";
 
-    private async Task<string> AcquireTokenAsync(string clientId)
+    private async Task<string> AcquireTokenAsync(string clientId, string? requestedScope = Scope)
     {
         using var http = new HttpClient();
-        using var content = new FormUrlEncodedContent([
+        var formValues = new List<KeyValuePair<string, string>>
+        {
             new("grant_type", "password"),
             new("client_id", clientId),
             new("username", DemoUsername),
-            new("password", DemoPassword),
-            new("scope", Scope)
-        ]);
+            new("password", DemoPassword)
+        };
+
+        if (!string.IsNullOrWhiteSpace(requestedScope))
+        {
+            formValues.Add(new("scope", requestedScope));
+        }
+
+        using var content = new FormUrlEncodedContent(formValues);
 
         var response = await http.PostAsync(TokenEndpoint(), content);
         response.EnsureSuccessStatusCode();

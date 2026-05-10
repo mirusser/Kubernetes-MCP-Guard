@@ -51,7 +51,7 @@ jobs:
         run: dotnet build InfraGate.slnx --configuration Release --no-restore
 
       - name: Test with coverage
-        run: dotnet tool run dotnet-coverage collect "dotnet test InfraGate.slnx --configuration Release --no-build" -f xml -o TestResults/coverage.xml
+        run: dotnet tool run dotnet-coverage collect 'dotnet test InfraGate.slnx --configuration Release --no-build --filter "Category!=Keycloak"' -f xml -o TestResults/coverage.xml
 
       - name: End Sonar scan
         env:

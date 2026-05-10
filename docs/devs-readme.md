@@ -249,10 +249,10 @@ The approval file stores the SHA-256 hash of the pending plan, including recorde
 
 ```bash
 dotnet build InfraGate.slnx
-dotnet test InfraGate.slnx --no-build
-INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build
+dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak"
+INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak"
 INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build
-dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build --filter "Category=Keycloak"  # requires Docker
+dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj --no-build --filter "Category=Keycloak"  # requires Docker
 ./scripts/coverage.sh
 kubectl --kubeconfig .kube/mcp-nginx-demo.config -n mcp-nginx-demo get deployment,service,configmap,pods,replicasets -o wide
 ```
