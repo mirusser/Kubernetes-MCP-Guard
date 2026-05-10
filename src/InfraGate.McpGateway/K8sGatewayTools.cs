@@ -3,6 +3,7 @@ using ModelContextProtocol.Server;
 
 namespace InfraGate.McpGateway;
 
+// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 [McpServerToolType]
 public static class K8sGatewayTools
 {

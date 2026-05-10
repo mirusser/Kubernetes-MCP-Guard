@@ -36,7 +36,7 @@ public static class GatewayAuthentication
             .AddAuthentication(authenticationOptions =>
             {
                 authenticationOptions.DefaultAuthenticateScheme = GatewayAuthConventions.Schemes.PolicyScheme;
-                authenticationOptions.DefaultChallengeScheme = DefaultChallengeScheme(options);
+                authenticationOptions.DefaultChallengeScheme = DefaultChallengeScheme();
                 authenticationOptions.DefaultForbidScheme = GatewayAuthConventions.Schemes.PolicyScheme;
             })
             .AddPolicyScheme(
@@ -44,7 +44,7 @@ public static class GatewayAuthentication
                 displayName: null,
                 policyOptions =>
                 {
-                    policyOptions.ForwardDefaultSelector = context => ForwardedAuthenticationScheme(context, options);
+                    policyOptions.ForwardDefaultSelector = _ => ForwardedAuthenticationScheme();
                 });
     }
 
@@ -89,10 +89,10 @@ public static class GatewayAuthentication
             });
     }
 
-    private static string DefaultChallengeScheme(GatewayAuthOptions options) =>
+    private static string DefaultChallengeScheme() =>
         McpAuthenticationDefaults.AuthenticationScheme;
 
-    private static string ForwardedAuthenticationScheme(HttpContext context, GatewayAuthOptions options)
+    private static string ForwardedAuthenticationScheme()
         => JwtBearerDefaults.AuthenticationScheme;
 
     private static void ConfigureJwtBearerOptions(

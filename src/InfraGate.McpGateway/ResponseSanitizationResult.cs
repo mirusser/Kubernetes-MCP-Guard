@@ -7,6 +7,6 @@ public sealed record ResponseSanitizationResult(
 {
     public bool HasFindings => Findings.Count > 0;
 
-    public string[] Categories =>
-        Findings.Select(finding => finding.Category).Distinct(StringComparer.Ordinal).OrderBy(category => category).ToArray();
+    private string[]? categories;
+    public string[] Categories => categories ??= Findings.Select(f => f.Category).Distinct(StringComparer.Ordinal).OrderBy(c => c).ToArray();
 }

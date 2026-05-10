@@ -10,3 +10,4 @@ actions-runner/
 .mcp.json
 .idea/
 src/InfraGate.McpGateway/.mcp-guardrails/audit.jsonl
+.agents/Reports/sonarcloud-report.json

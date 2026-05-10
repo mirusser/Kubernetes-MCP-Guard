@@ -180,7 +180,7 @@ public sealed class GuardedToolRunnerTests
         Assert.Equal("demo-pod", downstream.Arguments["podName"]);
         Assert.Equal("web", downstream.Arguments["container"]);
         Assert.Equal(7, downstream.Arguments["tailLines"]);
-        Assert.Equal(true, downstream.Arguments["previous"]);
+        Assert.True((bool)downstream.Arguments["previous"]!);
     }
 
     [Fact]

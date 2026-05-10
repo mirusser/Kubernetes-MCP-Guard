@@ -7,12 +7,15 @@ using k8s.Autorest;
 
 namespace InfraGate.McpServer.Diff;
 
+// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 internal static class K8sDiffService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true
     };
+
+    private static readonly string[] DiffHeaderLines = ["--- live", "+++ proposed"];
 
     public static async Task<K8sPlanDiff[]> BuildDiffsAsync(
         IKubernetes client,
@@ -82,7 +85,7 @@ internal static class K8sDiffService
     private static string? ProposedJson(
         string operation,
         K8sObjectRef obj,
-        IReadOnlyDictionary<string, K8sPlanDryRunObject> dryRunByObject)
+        Dictionary<string, K8sPlanDryRunObject> dryRunByObject)
     {
         if (string.Equals(operation, K8sConventions.PlanOperations.Delete, StringComparison.Ordinal))
         {
@@ -358,7 +361,7 @@ internal static class K8sDiffService
         var proposedLines = YamlLines(proposedJson);
         var diffLines = BuildLineDiff(liveLines, proposedLines);
 
-        return string.Join(Environment.NewLine, new[] { "--- live", "+++ proposed" }.Concat(diffLines));
+        return string.Join(Environment.NewLine, DiffHeaderLines.Concat(diffLines));
     }
 
     private static string[] YamlLines(string? json)

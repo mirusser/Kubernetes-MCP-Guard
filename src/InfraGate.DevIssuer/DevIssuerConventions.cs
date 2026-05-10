@@ -2,6 +2,7 @@ namespace InfraGate.DevIssuer;
 
 internal static class DevIssuerConventions
 {
+    // Justification: Intentional localhost defaults for local development. S1075 false positive on documented convention constants.
     public const string DefaultUrl = "http://127.0.0.1:3011";
     public const string DefaultResource = "http://127.0.0.1:3001/mcp";
     public const string DefaultScope = "mcp:tools";

@@ -2,6 +2,7 @@ using InfraGate.Approvals;
 
 namespace InfraGate.McpServer;
 
+// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 internal static class K8sConventions
 {
     public const string ServiceName = "infra-gate-mcp";
@@ -64,6 +65,7 @@ internal static class K8sConventions
         public const string RiskMedium = "medium";
     }
 
+    // Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
     public static class K8sApi
     {
         public const string DryRunAll = "All";
@@ -123,6 +125,7 @@ internal static class K8sConventions
         public const string DoesNotExist = "DoesNotExist";
     }
 
+    // Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
     public static class K8sResources
     {
         public const string AppsV1 = "apps/v1";

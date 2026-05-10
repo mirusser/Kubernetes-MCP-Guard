@@ -2,7 +2,7 @@ namespace InfraGate.DevIssuer;
 
 internal static partial class DevIssuerApplication
 {
-    private static IDictionary<string, object?> CreateMetadata(HttpRequest request, DevIssuerOptions options)
+    private static Dictionary<string, object?> CreateMetadata(HttpRequest request, DevIssuerOptions options)
     {
         var endpointBase = GetEndpointBase(request, options);
 

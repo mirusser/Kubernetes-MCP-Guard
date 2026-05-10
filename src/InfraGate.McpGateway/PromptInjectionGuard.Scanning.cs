@@ -6,7 +6,7 @@ namespace InfraGate.McpGateway;
 
 public sealed partial class PromptInjectionGuard
 {
-    public GuardScanResult ScanArguments(IReadOnlyDictionary<string, object?> arguments)
+    public static GuardScanResult ScanArguments(IReadOnlyDictionary<string, object?> arguments)
     {
         var findings = new List<GuardrailFinding>();
         foreach (var (name, value) in arguments)

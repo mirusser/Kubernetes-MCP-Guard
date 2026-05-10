@@ -174,9 +174,9 @@ internal static class GatewayApprovalEndpoints
                """;
     }
 
-    private static string RenderPolicyFindings(IReadOnlyList<K8sPlanPolicyFinding> findings)
+    private static string RenderPolicyFindings(K8sPlanPolicyFinding[] findings)
     {
-        if (findings.Count == 0)
+        if (findings.Length == 0)
         {
             return "<p>None</p>";
         }
@@ -189,9 +189,9 @@ internal static class GatewayApprovalEndpoints
         return $"<ul>{items}</ul>";
     }
 
-    private static string RenderDiffs(IReadOnlyList<K8sPlanDiff> diffs)
+    private static string RenderDiffs(K8sPlanDiff[] diffs)
     {
-        if (diffs.Count == 0)
+        if (diffs.Length == 0)
         {
             return "<p class=\"error\">No diff was recorded for this plan.</p>";
         }
@@ -230,9 +230,9 @@ internal static class GatewayApprovalEndpoints
                """;
     }
 
-    private static string RenderPathList(IReadOnlyList<string> paths)
+    private static string RenderPathList(string[] paths)
     {
-        if (paths.Count == 0)
+        if (paths.Length == 0)
         {
             return "None";
         }

@@ -3,6 +3,7 @@ using k8s.Models;
 
 namespace InfraGate.McpServer.Policy;
 
+// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 internal static class K8sPolicyValidator
 {
     private static readonly string[] SecretLikeKeys =
@@ -94,13 +95,10 @@ internal static class K8sPolicyValidator
             return;
         }
 
-        foreach (var volume in podSpec.Volumes ?? [])
+        foreach (var volume in (podSpec.Volumes ?? []).Where(v => v.HostPath is not null))
         {
-            if (volume.HostPath is not null)
-            {
-                findings.Add(Deny(K8sConventions.PolicyCodes.DeploymentHostPath, objRef,
-                    $"Volume '{volume.Name}' uses hostPath, which is not allowed."));
-            }
+            findings.Add(Deny(K8sConventions.PolicyCodes.DeploymentHostPath, objRef,
+                $"Volume '{volume.Name}' uses hostPath, which is not allowed."));
         }
     }
 
@@ -196,27 +194,17 @@ internal static class K8sPolicyValidator
         }
 
         var objRef = ObjectRef(configMap);
-        foreach (var key in configMap.Data.Keys)
+        foreach (var key in configMap.Data.Keys.Where(IsSecretLikeKey))
         {
-            if (IsSecretLikeKey(key))
-            {
-                findings.Add(Warn(K8sConventions.PolicyCodes.ConfigMapSecretLikeKey, objRef,
-                    $"Key '{key}' looks like a secret. Use a Secret resource instead."));
-            }
+            findings.Add(Warn(K8sConventions.PolicyCodes.ConfigMapSecretLikeKey, objRef,
+                $"Key '{key}' looks like a secret. Use a Secret resource instead."));
         }
     }
 
     private static bool IsSecretLikeKey(string key)
     {
         var lower = key.ToLowerInvariant();
-        foreach (var pattern in SecretLikeKeys)
-        {
-            if (lower.Contains(pattern, StringComparison.Ordinal))
-            {
-                return true;
-            }
-        }
-        return false;
+        return SecretLikeKeys.Any(pattern => lower.Contains(pattern, StringComparison.Ordinal));
     }
 
     private static string ObjectRef(IKubernetesObject<V1ObjectMeta> obj) =>

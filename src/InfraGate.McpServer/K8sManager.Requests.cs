@@ -254,7 +254,7 @@ public sealed partial class K8sManager
                """;
     }
 
-    private K8sPlan CreatePlan(
+    private static K8sPlan CreatePlan(
         string operation,
         string namespaceName,
         string description,
@@ -269,8 +269,10 @@ public sealed partial class K8sManager
             DateTimeOffset.UtcNow,
             description,
             parameters,
-            objects,
-            manifest);
+            objects)
+        {
+            Manifest = manifest
+        };
     }
 
     private K8sPlan CreateSetDeploymentImagePlan(

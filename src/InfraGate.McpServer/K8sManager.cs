@@ -4,6 +4,7 @@ using k8s;
 
 namespace InfraGate.McpServer;
 
+// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 public sealed partial class K8sManager
 {
     private const int MaxReplicas = K8sConventions.MaxReplicas;
