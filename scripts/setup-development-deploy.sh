@@ -43,13 +43,27 @@ DOCKER_HOST_IP="$(docker_host_ip)"
 DOCKER_HOST_IP="${DOCKER_HOST_IP:-172.17.0.1}"
 KEYCLOAK_BIND_ADDRESS="${KEYCLOAK_BIND_ADDRESS:-0.0.0.0}"
 
-OAUTH_AUTHORITY="http://127.0.0.1:${KEYCLOAK_PORT}/realms/infra-gate"
-OAUTH_RESOURCE="http://127.0.0.1:${GATEWAY_PORT}/mcp"
-OAUTH_METADATA_ADDRESS="http://${DOCKER_HOST_IP}:${KEYCLOAK_PORT}/realms/infra-gate/.well-known/openid-configuration"
-TOKEN_ENDPOINT="http://${DOCKER_HOST_IP}:${KEYCLOAK_PORT}/realms/infra-gate/protocol/openid-connect/token"
-AUTH_ENDPOINT="http://127.0.0.1:${KEYCLOAK_PORT}/realms/infra-gate/protocol/openid-connect/auth"
-APPROVAL_BASE_URL="http://127.0.0.1:${GATEWAY_PORT}"
-KEYCLOAK_DISCOVERY_URL="http://127.0.0.1:${KEYCLOAK_PORT}/realms/infra-gate/.well-known/openid-configuration"
+# Clear-text HTTP is intentional for this local Debian development setup.
+# Production OIDC configuration must use HTTPS outside this script.
+LOCAL_HTTP_SCHEME="http"
+LOCAL_LOOPBACK_HOST="127.0.0.1"
+LOCAL_LISTEN_HOST="0.0.0.0"
+KEYCLOAK_REALM_PATH="/realms/infra-gate"
+KEYCLOAK_METADATA_PATH="/.well-known/openid-configuration"
+KEYCLOAK_OPENID_CONNECT_PATH="/protocol/openid-connect"
+GATEWAY_MCP_PATH="/mcp"
+
+KEYCLOAK_BASE_URL="${LOCAL_HTTP_SCHEME}://${LOCAL_LOOPBACK_HOST}:${KEYCLOAK_PORT}${KEYCLOAK_REALM_PATH}"
+KEYCLOAK_CONTAINER_BASE_URL="${LOCAL_HTTP_SCHEME}://${DOCKER_HOST_IP}:${KEYCLOAK_PORT}${KEYCLOAK_REALM_PATH}"
+GATEWAY_BASE_URL="${LOCAL_HTTP_SCHEME}://${LOCAL_LOOPBACK_HOST}:${GATEWAY_PORT}"
+ASPNETCORE_URLS_VALUE="${LOCAL_HTTP_SCHEME}://${LOCAL_LISTEN_HOST}:3001"
+OAUTH_AUTHORITY="$KEYCLOAK_BASE_URL"
+OAUTH_RESOURCE="${GATEWAY_BASE_URL}${GATEWAY_MCP_PATH}"
+OAUTH_METADATA_ADDRESS="${KEYCLOAK_CONTAINER_BASE_URL}${KEYCLOAK_METADATA_PATH}"
+TOKEN_ENDPOINT="${KEYCLOAK_CONTAINER_BASE_URL}${KEYCLOAK_OPENID_CONNECT_PATH}/token"
+AUTH_ENDPOINT="${KEYCLOAK_BASE_URL}${KEYCLOAK_OPENID_CONNECT_PATH}/auth"
+APPROVAL_BASE_URL="$GATEWAY_BASE_URL"
+KEYCLOAK_DISCOVERY_URL="${KEYCLOAK_BASE_URL}${KEYCLOAK_METADATA_PATH}"
 
 INFRA_GATE_GATEWAY_IMAGE="${INFRA_GATE_GATEWAY_IMAGE:-ghcr.io/mirusser/kubernetes-mcp-guard-gateway}"
 RUNNER_USER="${RUNNER_USER:-${SUDO_USER:-}}"
@@ -68,7 +82,7 @@ Usage: sudo $0
 Prepares the local machine for the deploy-development GitHub Actions job.
 
 Configures OAuth for a local Keycloak instance at
-http://127.0.0.1:${KEYCLOAK_PORT}/realms/infra-gate
+${OAUTH_AUTHORITY}
 
 Environment overrides:
   KEYCLOAK_PORT       Keycloak host port (default: ${KEYCLOAK_PORT})
@@ -173,7 +187,7 @@ INFRA_GATE_GUARD_AUDIT_HOST_PATH=${GUARDRAIL_DIR}
 
 # ── Gateway runtime values ────────────────────────────────────────────────────
 INFRA_GATE_ENVIRONMENT=Development
-ASPNETCORE_URLS=http://0.0.0.0:3001
+ASPNETCORE_URLS=${ASPNETCORE_URLS_VALUE}
 INFRA_GATE_DOWNSTREAM_ASSEMBLY=/app/server/InfraGate.McpServer.dll
 
 # ── OAuth (Keycloak) ──────────────────────────────────────────────────────────
@@ -297,4 +311,4 @@ echo "=== Next Steps =============================================="
 echo ""
 echo "1. Push to 'dev' to trigger the deploy-development workflow."
 echo ""
-echo "2. After deploy, the gateway listens on http://127.0.0.1:${GATEWAY_PORT}"
+echo "2. After deploy, the gateway listens on $GATEWAY_BASE_URL"

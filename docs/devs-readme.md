@@ -91,9 +91,9 @@ PRs and pushes to `main` build without pushing.
 The deployment triggers are separate:
 
 - Push to `dev`: pushes `:dev` images, then deploys `deploy/compose/development.yaml` on the `development` environment's self-hosted GitHub Actions runner. Run `sudo ./scripts/setup-development-deploy.sh` once to prepare the machine, start local Keycloak, and verify host/container reachability; the optional GitHub Environment variable `DEPLOY_PATH` overrides the workflow default `/opt/infra-gate`.
-- Push a `v*` tag: pushes release images including the raw tag (for example `:v1.0.0`), then deploys `deploy/compose/production.yaml` to the GitHub `production` environment over SSH.
+- Push a `v*` tag: pushes release images including the raw tag (for example `:v1.0.0`). The Docker workflow does not deploy production for now.
 
-The development deployment defaults to a local Keycloak OIDC provider at `http://127.0.0.1:3010/realms/infra-gate`; the production deployment uses a real OIDC provider. `InfraGate.DevIssuer` remains local/demo only through the `deploy/mode-c` Compose files.
+The development deployment defaults to a local Keycloak OIDC provider at `http://127.0.0.1:3010/realms/infra-gate`; any production deployment should use a real OIDC provider. `InfraGate.DevIssuer` remains local/demo only through the `deploy/mode-c` Compose files.
 
 Trigger a push:
 
@@ -104,7 +104,7 @@ git tag v1.0.0 && git push origin v1.0.0
 Or trigger manually from Actions → Docker workflow → Run workflow → check `push_images`.
 
 Required repository variables and secrets are listed in the [configuration reference](configuration.md).
-Runtime configuration is kept in `/etc/infra-gate/development.env` (created locally by `scripts/setup-development-deploy.sh`) or `/etc/infra-gate/production.env` (provisioned on the remote host). GitHub Actions copies only the Compose file and never writes kubeconfigs or OIDC runtime settings.
+Development runtime configuration is kept in `/etc/infra-gate/development.env` and created locally by `scripts/setup-development-deploy.sh`. GitHub Actions copies only the development Compose file and never writes kubeconfigs or OIDC runtime settings.
 
 Images built: `kubernetes-mcp-guard-devissuer`, `kubernetes-mcp-guard-gateway`.
 
