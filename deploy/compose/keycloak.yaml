@@ -6,7 +6,7 @@ services:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
     ports:
-      - "127.0.0.1:${KEYCLOAK_PORT:-3010}:8080"
+      - "${KEYCLOAK_BIND_ADDRESS:-127.0.0.1}:${KEYCLOAK_PORT:-3010}:8080"
     volumes:
       - ../keycloak:/opt/keycloak/data/import:ro
     healthcheck:

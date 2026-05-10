@@ -134,7 +134,7 @@ See [`src/InfraGate.DevIssuer/README.md`](../src/InfraGate.DevIssuer/README.md).
 
 ### 5.2 `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false`
 
-`INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` disables the HTTPS requirement for OIDC discovery metadata. It is acceptable only when the gateway points at the localhost DevIssuer during development.
+`INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` disables the HTTPS requirement for OIDC discovery metadata. It is acceptable only when the gateway points at a local HTTP issuer during development, such as DevIssuer or the local Keycloak demo.
 
 See [`src/InfraGate.McpGateway.Auth/README.md`](../src/InfraGate.McpGateway.Auth/README.md).
 

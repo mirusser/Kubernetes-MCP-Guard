@@ -120,77 +120,45 @@ jobs:
 
   deploy-development:
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     needs:
       - docker
     environment: development
+    permissions:
+      contents: read
+      packages: read
     env:
       DEPLOY_COMPOSE_FILE: deploy/compose/development.yaml
       DEPLOY_ENV_FILE: /etc/infra-gate/development.env
       DEPLOY_IMAGE_TAG: dev
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/infra-gate' }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
 
-      - name: Validate deploy configuration
-        env:
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
-          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          test -n "$DEPLOY_HOST" || { echo "vars.DEPLOY_HOST is required."; exit 1; }
-          test -n "$DEPLOY_USER" || { echo "vars.DEPLOY_USER is required."; exit 1; }
-          test -n "$DEPLOY_PORT" || { echo "vars.DEPLOY_PORT is required."; exit 1; }
-          test -n "$DEPLOY_PATH" || { echo "vars.DEPLOY_PATH is required."; exit 1; }
-          test -n "$DEPLOY_SSH_KEY" || { echo "secrets.DEPLOY_SSH_KEY is required."; exit 1; }
-          test -n "$DEPLOY_KNOWN_HOSTS" || { echo "secrets.DEPLOY_KNOWN_HOSTS is required."; exit 1; }
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configure SSH
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Prepare deploy directory
+        run: mkdir -p "$DEPLOY_PATH"
 
       - name: Copy compose file
-        env:
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
-          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
-        run: |
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
-          scp -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -P "$DEPLOY_PORT" "$DEPLOY_COMPOSE_FILE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/compose.yaml"
+        run: cp "$DEPLOY_COMPOSE_FILE" "$DEPLOY_PATH/compose.yaml"
 
       - name: Deploy development
-        env:
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
-          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-            bash -s -- "$DEPLOY_PATH" "$DEPLOY_ENV_FILE" "$DEPLOY_IMAGE_TAG" <<'EOF'
-          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          test -f "$DEPLOY_ENV_FILE" || { echo "Runtime env file not found: $DEPLOY_ENV_FILE" >&2; exit 1; }
 
-          deploy_path="$1"
-          env_file="$2"
-          image_tag="$3"
+          TAG="$DEPLOY_IMAGE_TAG" docker compose --env-file "$DEPLOY_ENV_FILE" -f compose.yaml pull
+          TAG="$DEPLOY_IMAGE_TAG" docker compose --env-file "$DEPLOY_ENV_FILE" -f compose.yaml up -d --remove-orphans
 
-          cd "$deploy_path"
-          test -f "$env_file" || { echo "Runtime env file not found: $env_file" >&2; exit 1; }
-
-          TAG="$image_tag" docker compose --env-file "$env_file" -f compose.yaml pull
-          TAG="$image_tag" docker compose --env-file "$env_file" -f compose.yaml up -d --remove-orphans
-
-          bind_port="$(sed -n 's/^INFRA_GATE_BIND_PORT=//p' "$env_file" | tail -n 1)"
+          bind_port="$(sed -n 's/^INFRA_GATE_BIND_PORT=//p' "$DEPLOY_ENV_FILE" | tail -n 1)"
           bind_port="${bind_port:-3001}"
           headers="$(mktemp)"
           body="$(mktemp)"
@@ -213,14 +181,13 @@ jobs:
             if [ "$elapsed" -ge 60 ]; then
               echo "Gateway did not return the expected OAuth 401 challenge." >&2
               echo "Last HTTP status: ${http_status:-none}" >&2
-              docker compose --env-file "$env_file" -f compose.yaml logs --tail=50 >&2 || true
+              docker compose --env-file "$DEPLOY_ENV_FILE" -f compose.yaml logs --tail=50 >&2 || true
               exit 1
             fi
 
             sleep 2
             elapsed=$((elapsed + 2))
           done
-          EOF
 
   deploy-production:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')

@@ -137,7 +137,7 @@ flowchart TB
 
 ## 📦 Container Images
 
-Images are automatically built and scanned by the Docker workflow. Release tags publish versioned images, and the `dev` branch publishes moving `:dev` images for the remote development deployment.
+Images are automatically built and scanned by the Docker workflow. Release tags publish versioned images, and the `dev` branch publishes moving `:dev` images for the self-hosted development deployment.
 
 | Registry | Gateway (Core) | Dev Issuer (Auth) |
 | --- | --- | --- |
@@ -264,7 +264,7 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 | .NET | .NET 10 |
 | Kubernetes | minikube / local cluster initially |
 | MCP transport | HTTP MCP endpoint at `/mcp` |
-| OIDC | DevIssuer (dev), Keycloak documented; Entra ID later |
+| OIDC | DevIssuer (local demo), Keycloak (development deploy), Entra ID later |
 | Container registries | GHCR, Docker Hub |
 | Platforms | linux/amd64 initially |
 

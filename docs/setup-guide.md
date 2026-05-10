@@ -235,7 +235,7 @@ The Compose path is OAuth-only. It uses `INFRA_GATE_OAUTH_METADATA_ADDRESS` inte
 Tradeoff: keeping `InfraGate.McpServer` as a private stdio subprocess makes setup simpler and keeps the HTTP attack surface small. The downside is that the gateway image bundles the server binary, the gateway and server share a container boundary, and the server cannot be scaled or restarted independently.
 
 > [!IMPORTANT]
-> Set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` only for localhost dev with DevIssuer. Never in production.
+> Set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` only for local development HTTP issuers, such as this DevIssuer path or the Keycloak demo. Never in production.
 
 #### Mode B — Run from published images
 
@@ -410,6 +410,6 @@ The canonical environment variable, CI/CD, and release configuration reference i
 | `error NETSDK1045: target framework 'net10.0' not installed` | Wrong SDK version | Install .NET 10 preview/RC SDK |
 | RBAC `can-i` returns `no` for allowed operations | Token expired or RBAC not applied | Re-run `./scripts/create-demo-kubeconfig.sh --compose` |
 | Gateway returns `401 Unauthorized` | No `Authorization` header, invalid JWT, or no auth env vars set | Set OAuth vars and re-run MCP login |
-| `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA` error | Trying to reach HTTP issuer with HTTPS check | Set to `false` for localhost DevIssuer only |
+| `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA` error | Trying to reach HTTP issuer with HTTPS check | Set to `false` only for local development issuers such as DevIssuer or the Keycloak demo |
 | `apply_approved_plan` refuses with hash mismatch | Plan changed after approval | Re-request the plan and re-approve |
 | DevIssuer registrations lost on restart | By design — all state is in-memory | Re-register the client (Codex does this automatically) |
