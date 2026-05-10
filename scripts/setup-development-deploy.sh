@@ -33,6 +33,12 @@ docker_host_ip() {
     | head -n1
 }
 
+dump_keycloak_logs() {
+  KEYCLOAK_BIND_ADDRESS="$KEYCLOAK_BIND_ADDRESS" \
+  KEYCLOAK_PORT="$KEYCLOAK_PORT" \
+  docker compose -f "$KEYCLOAK_COMPOSE_FILE" logs --tail=50 keycloak >&2 || true
+}
+
 DOCKER_HOST_IP="$(docker_host_ip)"
 DOCKER_HOST_IP="${DOCKER_HOST_IP:-172.17.0.1}"
 KEYCLOAK_BIND_ADDRESS="${KEYCLOAK_BIND_ADDRESS:-0.0.0.0}"
@@ -236,9 +242,7 @@ while true; do
 
   if [[ "$elapsed" -ge 120 ]]; then
     echo "ERROR: Keycloak did not become ready within 120 seconds." >&2
-    KEYCLOAK_BIND_ADDRESS="$KEYCLOAK_BIND_ADDRESS" \
-    KEYCLOAK_PORT="$KEYCLOAK_PORT" \
-    docker compose -f "$KEYCLOAK_COMPOSE_FILE" logs --tail=50 keycloak >&2 || true
+    dump_keycloak_logs
     exit 1
   fi
 
@@ -246,6 +250,24 @@ while true; do
   elapsed=$((elapsed + 2))
 done
 echo "Keycloak is ready."
+
+echo "Verifying Keycloak discovery from Docker containers at $OAUTH_METADATA_ADDRESS ..."
+elapsed=0
+while true; do
+  if docker run --rm alpine/curl -fsS "$OAUTH_METADATA_ADDRESS" >/dev/null 2>&1; then
+    break
+  fi
+
+  if [[ "$elapsed" -ge 60 ]]; then
+    echo "ERROR: Keycloak is not reachable from Docker containers at $OAUTH_METADATA_ADDRESS." >&2
+    dump_keycloak_logs
+    exit 1
+  fi
+
+  sleep 2
+  elapsed=$((elapsed + 2))
+done
+echo "Keycloak is reachable from Docker containers."
 
 # ── summary ───────────────────────────────────────────────────────────────────
 
@@ -273,9 +295,6 @@ echo "No secrets are required (the job uses \${{ secrets.GITHUB_TOKEN }})."
 echo ""
 echo "=== Next Steps =============================================="
 echo ""
-echo "1. Verify Keycloak is reachable from the container network:"
-echo "     docker run --rm alpine/curl -s http://${DOCKER_HOST_IP}:${KEYCLOAK_PORT}/realms/infra-gate/.well-known/openid-configuration"
+echo "1. Push to 'dev' to trigger the deploy-development workflow."
 echo ""
-echo "2. Push to 'dev' to trigger the deploy-development workflow."
-echo ""
-echo "3. After deploy, the gateway listens on http://127.0.0.1:${GATEWAY_PORT}"
+echo "2. After deploy, the gateway listens on http://127.0.0.1:${GATEWAY_PORT}"

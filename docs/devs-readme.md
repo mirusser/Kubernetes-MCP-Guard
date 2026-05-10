@@ -90,7 +90,7 @@ PRs and pushes to `main` build without pushing.
 
 The deployment triggers are separate:
 
-- Push to `dev`: pushes `:dev` images, then deploys `deploy/compose/development.yaml` on the `development` environment's self-hosted GitHub Actions runner. Run `sudo ./scripts/setup-development-deploy.sh` once to prepare the machine and start local Keycloak; the optional GitHub Environment variable `DEPLOY_PATH` overrides the workflow default `/opt/infra-gate`.
+- Push to `dev`: pushes `:dev` images, then deploys `deploy/compose/development.yaml` on the `development` environment's self-hosted GitHub Actions runner. Run `sudo ./scripts/setup-development-deploy.sh` once to prepare the machine, start local Keycloak, and verify host/container reachability; the optional GitHub Environment variable `DEPLOY_PATH` overrides the workflow default `/opt/infra-gate`.
 - Push a `v*` tag: pushes release images including the raw tag (for example `:v1.0.0`), then deploys `deploy/compose/production.yaml` to the GitHub `production` environment over SSH.
 
 The development deployment defaults to a local Keycloak OIDC provider at `http://127.0.0.1:3010/realms/infra-gate`; the production deployment uses a real OIDC provider. `InfraGate.DevIssuer` remains local/demo only through the `deploy/mode-c` Compose files.

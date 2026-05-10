@@ -388,7 +388,7 @@ The canonical environment variable, CI/CD, and release configuration reference i
 │   ├── InfraGate.McpGateway.Tests/
 │   └── InfraGate.DevIssuer.Tests/
 ├── deploy/
-│   ├── compose/                          # Remote Docker host deployments
+│   ├── compose/                          # Docker Compose deployments and Keycloak demo
 │   ├── docker/                           # Runtime Dockerfiles
 │   ├── minikube/rbac.yaml                # Namespace + ServiceAccount + Role + RoleBinding
 │   └── mode-c/compose.yaml               # Containerized OAuth setup

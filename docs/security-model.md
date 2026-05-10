@@ -140,7 +140,7 @@ See [`src/InfraGate.McpGateway.Auth/README.md`](../src/InfraGate.McpGateway.Auth
 
 ### 5.3 Static Bearer Tokens
 
-Static bearer token authentication is not a supported gateway mode. Opaque bearer values such as `change-me` are rejected by JWT validation before signature or scope checks. Use DevIssuer for local OAuth testing or a production OIDC provider for shared environments.
+Static bearer token authentication is not a supported gateway mode. Opaque bearer values such as `change-me` are rejected by JWT validation before signature or scope checks. Use DevIssuer or the local Keycloak demo for local OAuth testing, or a production OIDC provider for shared environments.
 
 See [`src/InfraGate.McpGateway.Auth/README.md`](../src/InfraGate.McpGateway.Auth/README.md) and [docs/mcp-clients-quirks.md](mcp-clients-quirks.md).
 
