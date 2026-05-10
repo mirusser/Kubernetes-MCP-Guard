@@ -14,7 +14,7 @@ The `sonarcloud-report.json` file must be downloaded manually from the GitHub Ac
 2. Scroll to the **Artifacts** section and download `sonarcloud-report`.
 3. Extract the JSON file and provide it as context (drag into the conversation or paste the path).
 
-The report is generated only on `push` and `workflow_dispatch` events — PR runs do not produce it.
+The report is generated on every workflow run — push, pull request, and `workflow_dispatch`.
 
 ## Workflow
 

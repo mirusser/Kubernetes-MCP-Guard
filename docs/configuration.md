@@ -81,7 +81,7 @@ Defaults below come from the current source code and workflows. Paths shown as `
 
 ### SonarCloud Report Artifact
 
-On `push` and `workflow_dispatch` events (not PRs), `sonar.yml` fetches the full analysis results from the SonarCloud Web API after the scan completes and uploads a `sonarcloud-report` artifact retained for 7 days. Download it from the **Artifacts** section of the GitHub Actions run page.
+After every `sonar.yml` run (push, pull request, and `workflow_dispatch`), `sonar.yml` fetches the full analysis results from the SonarCloud Web API after the scan completes and uploads a `sonarcloud-report` artifact retained for 7 days. Download it from the **Artifacts** section of the GitHub Actions run page.
 
 The artifact contains a single `sonarcloud-report.json` file with five top-level keys:
 
