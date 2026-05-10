@@ -9,6 +9,8 @@
 - [ ] Integration tests, if relevant:
   - `INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build`
   - `INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build`
+- [ ] Keycloak OIDC tests, if auth/scope/audience logic changed (requires Docker):
+  - `dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build --filter "Category=Keycloak"`
 - [ ] Docs-only checks, if relevant: `git diff --check`
 - [ ] Not run; reason:
 

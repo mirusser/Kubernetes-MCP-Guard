@@ -11,12 +11,14 @@
 - `GuardrailAuditStoreTests.cs`: JSONL audit output without credential leakage.
 - `GatewayApprovalServiceTests.cs`: approval URL creation, same-subject enforcement, dry-run data requirements, hash-drift rejection, denial, and single-use challenge behavior.
 - `GatewayHttpMcpIntegrationTests.cs`: real HTTP MCP transport wiring with OAuth auth, fake-downstream forwarding, guardrail audit capture, response redaction, downstream stdio startup smoke coverage, dry-run rendering, out-of-band approval forwarding, and an opt-in live gateway-to-Kubernetes flow.
+- `KeycloakIntegrationTests.cs`: real OIDC discovery, JWKS validation, and token endpoint acquisition against a Testcontainers Keycloak container. Exercises valid-token access, wrong-audience rejection, and missing-scope rejection through the full JWT bearer authentication path. Requires Docker.
 - `McpGatewayOptionsTests.cs`: downstream assembly defaults and subprocess arguments.
 
 ## Running Tests
 
 - Gateway suite: `dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj`
 - Live gateway integration: `INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj`
+- Keycloak integration (requires Docker): `dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --filter "Category=Keycloak"`
 - Full solution: `dotnet test InfraGate.slnx`
 
-Most tests run against in-memory or fake dependencies. The default suite also starts the real downstream stdio server for a cluster-free request-plan smoke test; only `INFRA_GATE_RUN_GATEWAY_INTEGRATION=1` requires a live Kubernetes demo namespace.
+Most tests run against in-memory or fake dependencies. The default suite also starts the real downstream stdio server for a cluster-free request-plan smoke test; only `INFRA_GATE_RUN_GATEWAY_INTEGRATION=1` requires a live Kubernetes demo namespace. Keycloak tests are excluded from default runs via `[Trait("Category", "Keycloak")]` and require Docker for Testcontainers.

@@ -252,6 +252,7 @@ dotnet build InfraGate.slnx
 dotnet test InfraGate.slnx --no-build
 INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build
 INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build
+dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build --filter "Category=Keycloak"  # requires Docker
 ./scripts/coverage.sh
 kubectl --kubeconfig .kube/mcp-nginx-demo.config -n mcp-nginx-demo get deployment,service,configmap,pods,replicasets -o wide
 ```

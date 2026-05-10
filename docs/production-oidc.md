@@ -62,6 +62,54 @@ TAG=v1.0.0 docker compose --env-file /etc/infra-gate/production.env -f deploy/co
 
 The production Compose path does not start `InfraGate.DevIssuer`. TLS may terminate at a host reverse proxy, but the public OAuth/resource/approval URLs in the env file must remain HTTPS and non-loopback.
 
+## Local Keycloak Demo
+
+`deploy/compose/keycloak.yaml` starts a pre-configured Keycloak instance alongside the gateway. Use this to exercise the full OIDC flow locally without needing a remote identity provider.
+
+```bash
+docker compose -f deploy/compose/keycloak.yaml up --build
+```
+
+Keycloak takes ~30 seconds to start. The gateway waits for it via a health check.
+
+| Endpoint | URL |
+|---|---|
+| Keycloak admin console | `http://127.0.0.1:3010` (admin / admin) |
+| MCP gateway | `http://127.0.0.1:3001` |
+| Realm discovery | `http://127.0.0.1:3010/realms/infra-gate/.well-known/openid-configuration` |
+
+**Pre-configured realm** (`deploy/keycloak/infra-gate-realm.json`):
+
+| Item | Value |
+|---|---|
+| Realm | `infra-gate` |
+| MCP client | `mcp-client` (public, direct access grants on) |
+| Approval UI client | `infra-gate-approval-ui` (public, PKCE) |
+| Demo user | `demo` / `demo` |
+| Scope | `mcp:tools` with audience mapper for `http://127.0.0.1:3001/mcp` |
+
+**Acquire a token:**
+
+```bash
+curl -s -X POST \
+  http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token \
+  -d "grant_type=password&client_id=mcp-client&username=demo&password=demo&scope=mcp:tools" \
+  | jq -r .access_token
+```
+
+**Call the MCP gateway:**
+
+```bash
+TOKEN=$(curl -s -X POST \
+  http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token \
+  -d "grant_type=password&client_id=mcp-client&username=demo&password=demo&scope=mcp:tools" \
+  | jq -r .access_token)
+
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3001/mcp
+```
+
+The demo Compose runs in `Development` mode because Keycloak's `start-dev` uses HTTP. For a production-like TLS setup, replace `keycloak.yaml` with your real Keycloak and update the env vars to `INFRA_GATE_ENVIRONMENT=Production` with HTTPS URLs.
+
 ## Production Checklist
 
 Before moving to production, ensure you have:

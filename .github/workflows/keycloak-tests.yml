@@ -1,0 +1,38 @@
+name: Keycloak Integration Tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keycloak-tests
+  cancel-in-progress: false
+
+jobs:
+  keycloak-integration:
+    name: Keycloak Integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7  # v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj
+
+      - name: Build
+        run: dotnet build tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --configuration Release --no-restore
+
+      - name: Run Keycloak integration tests
+        run: dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --configuration Release --no-build --filter "Category=Keycloak" --logger "console;verbosity=normal"
+        timeout-minutes: 10
