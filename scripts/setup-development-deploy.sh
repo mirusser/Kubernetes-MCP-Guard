@@ -67,6 +67,8 @@ KEYCLOAK_DISCOVERY_URL="${KEYCLOAK_BASE_URL}${KEYCLOAK_METADATA_PATH}"
 
 INFRA_GATE_GATEWAY_IMAGE="${INFRA_GATE_GATEWAY_IMAGE:-ghcr.io/mirusser/kubernetes-mcp-guard-gateway}"
 RUNNER_USER="${RUNNER_USER:-${SUDO_USER:-}}"
+GATEWAY_APP_UID="1654"
+GATEWAY_APP_UGID="${GATEWAY_APP_UID}:${GATEWAY_APP_UID}"
 
 DEPLOY_PATH="${DEPLOY_PATH:-/opt/infra-gate}"
 ENV_FILE="/etc/infra-gate/development.env"
@@ -167,10 +169,10 @@ if [[ -n "$RUNNER_USER" ]]; then
   chown "$RUNNER_USER:" "$DEPLOY_PATH"
 fi
 
-# Demo-only bind mounts: the container's non-root .NET app user (UID 1654)
-# needs to write approval/guardrail files even when the host user owns
-# these directories. Use world-writable + sticky bit, like /tmp.
-chmod 1777 "$APPROVAL_DIR" "$GUARDRAIL_DIR"
+# Bind mounts are writable only by the non-root .NET app user used by the
+# gateway image. Approval and guardrail data is mutable security state.
+chown -R "$GATEWAY_APP_UGID" "$APPROVAL_DIR" "$GUARDRAIL_DIR"
+chmod -R u+rwX,go-rwx "$APPROVAL_DIR" "$GUARDRAIL_DIR"
 
 # ── runtime env file ──────────────────────────────────────────────────────────
 
@@ -232,7 +234,7 @@ KUBECONFIG_SRC="$REPO_ROOT/.kube/mcp-nginx-demo.config"
 if [[ -f "$KUBECONFIG_SRC" ]]; then
   cp "$KUBECONFIG_SRC" "$KUBECONFIG_FILE"
   chmod 600 "$KUBECONFIG_FILE"
-  chown 1654:1654 "$KUBECONFIG_FILE"
+  chown "$GATEWAY_APP_UGID" "$KUBECONFIG_FILE"
   echo "Copied $KUBECONFIG_SRC to $KUBECONFIG_FILE"
 else
   echo "WARNING: kubeconfig not found at $KUBECONFIG_SRC." >&2

@@ -11,6 +11,8 @@ SERVICE_ACCOUNT="infra-gate-mcp"
 OUT="${ROOT}/.kube/mcp-nginx-demo.config"
 COMPOSE_OUT="${ROOT}/.kube/mcp-nginx-demo.compose.config"
 COMPOSE_MODE=false
+GATEWAY_APP_UID="1654"
+GATEWAY_APP_UGID="${GATEWAY_APP_UID}:${GATEWAY_APP_UID}"
 
 usage() {
   cat <<EOF
@@ -97,6 +99,42 @@ server_host() {
   printf '%s' "${host_port%%:*}"
 }
 
+prepare_compose_persistence_dirs() {
+  local approval_dir="${ROOT}/.mcp-approvals"
+  local guardrail_dir="${ROOT}/.mcp-guardrails"
+
+  mkdir -p "${approval_dir}" "${guardrail_dir}"
+  chmod -R u+rwX,go-rwx "${approval_dir}" "${guardrail_dir}"
+
+  if command -v setfacl >/dev/null 2>&1 &&
+    setfacl -R -m "u:${GATEWAY_APP_UID}:rwx" "${approval_dir}" "${guardrail_dir}" &&
+    find "${approval_dir}" "${guardrail_dir}" -type d -exec setfacl -m "d:u:${GATEWAY_APP_UID}:rwx" {} +; then
+    return
+  fi
+
+  if chown -R "${GATEWAY_APP_UGID}" "${approval_dir}" "${guardrail_dir}" 2>/dev/null; then
+    chmod -R u+rwX,go-rwx "${approval_dir}" "${guardrail_dir}"
+    return
+  fi
+
+  if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    sudo chown -R "${GATEWAY_APP_UGID}" "${approval_dir}" "${guardrail_dir}"
+    sudo chmod -R u+rwX,go-rwx "${approval_dir}" "${guardrail_dir}"
+    return
+  fi
+
+  cat >&2 <<EOF
+Could not grant the gateway container UID ${GATEWAY_APP_UID} write access to:
+  ${approval_dir}
+  ${guardrail_dir}
+
+Install setfacl, run this script with sudo, or run:
+  sudo chown -R ${GATEWAY_APP_UGID} "${approval_dir}" "${guardrail_dir}"
+  sudo chmod -R u+rwX,go-rwx "${approval_dir}" "${guardrail_dir}"
+EOF
+  exit 1
+}
+
 ensure_cluster_ready() {
   local context
   local server
@@ -139,12 +177,7 @@ if [[ "${COMPOSE_MODE}" == "true" ]]; then
   fi
 
   write_kubeconfig "${COMPOSE_OUT}" "${COMPOSE_SERVER}" "${TLS_SERVER_NAME}"
-  mkdir -p "${ROOT}/.mcp-approvals" "${ROOT}/.mcp-guardrails"
-  # Demo-only bind mounts: the container's non-root .NET app user (UID 1654)
-  # needs to write approval/guardrail files even when the host user owns
-  # these directories. Use world-writable + sticky bit, like /tmp, so unrelated
-  # local users cannot delete/rename files they do not own.
-  chmod 1777 "${ROOT}/.mcp-approvals" "${ROOT}/.mcp-guardrails"
+  prepare_compose_persistence_dirs
 fi
 
 echo "${OUT}"

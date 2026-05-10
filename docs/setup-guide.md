@@ -95,7 +95,9 @@ cd /workspace
 
 **Output:** `.kube/mcp-nginx-demo.config` and `.kube/mcp-nginx-demo.compose.config`
 
-Use `./scripts/create-demo-kubeconfig.sh` without `--compose` when you only need the source-based stdio or gateway flows.
+Use `./scripts/create-demo-kubeconfig.sh` without `--compose` when you only need the source-based stdio or gateway flows. 
+
+Both source integration test suites use `.kube/mcp-nginx-demo.config`, so refresh it before live test runs if the previous token may be stale.
 
 **Verify RBAC:**
 
@@ -347,6 +349,9 @@ dotnet build InfraGate.slnx
 # Unit tests (no cluster needed)
 dotnet test InfraGate.slnx --no-build
 
+# Refresh demo RBAC and the 24h source kubeconfig before live integration tests
+./scripts/create-demo-kubeconfig.sh
+
 # Integration tests (requires minikube + RBAC from Step 1)
 INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build
 
@@ -409,6 +414,7 @@ The canonical environment variable, CI/CD, and release configuration reference i
 | `dotnet: command not found` | .NET 10 SDK not installed | Install SDK, ensure `~/.dotnet` is on `$PATH` |
 | `error NETSDK1045: target framework 'net10.0' not installed` | Wrong SDK version | Install .NET 10 preview/RC SDK |
 | RBAC `can-i` returns `no` for allowed operations | Token expired or RBAC not applied | Re-run `./scripts/create-demo-kubeconfig.sh --compose` |
+| Kubernetes API returns `Unauthorized` during integration tests | Stale or expired demo kubeconfig token | Re-run `./scripts/create-demo-kubeconfig.sh` for source tests, or `./scripts/create-demo-kubeconfig.sh --compose` for Compose flows |
 | Gateway returns `401 Unauthorized` | No `Authorization` header, invalid JWT, or no auth env vars set | Set OAuth vars and re-run MCP login |
 | `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA` error | Trying to reach HTTP issuer with HTTPS check | Set to `false` only for local development issuers such as DevIssuer or the Keycloak demo |
 | `apply_approved_plan` refuses with hash mismatch | Plan changed after approval | Re-request the plan and re-approve |
