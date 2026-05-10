@@ -216,7 +216,7 @@ public sealed class K8sToolsTests
     private static K8sManager CreateManager(TestKubernetesApi? api = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
-        var options = new K8sMcpOptions(
+        var options = new K8SMcpOptions(
             new HashSet<string>(StringComparer.Ordinal) { DemoNamespace },
             root);
         var client = api is null
@@ -228,7 +228,7 @@ public sealed class K8sToolsTests
     private static (K8sManager Manager, ApprovalStore Store) CreateManagerContext(TestKubernetesApi api)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
-        var options = new K8sMcpOptions(
+        var options = new K8SMcpOptions(
             new HashSet<string>(StringComparer.Ordinal) { DemoNamespace },
             root);
         var store = new ApprovalStore(new ApprovalStoreOptions(root));

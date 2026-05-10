@@ -41,8 +41,8 @@ jobs:
             /o:"${{ vars.SONAR_ORGANIZATION }}" \
             /d:sonar.token="$SONAR_TOKEN" \
             /d:sonar.host.url="https://sonarcloud.io" \
-            /d:sonar.coverage.exclusions="**/PromptInjectionGuard.Regex.cs" \
-            /d:sonar.cs.vscoveragexml.reportsPaths="TestResults/coverage.xml"
+            /d:sonar.coverage.exclusions="**/Program.cs,**/PromptInjectionGuard.Regex.cs" \
+            /d:sonar.cs.opencover.reportsPaths="TestResults/coverage/**/coverage.opencover.xml"
 
       - name: Restore NuGet packages
         run: dotnet restore InfraGate.slnx
@@ -51,7 +51,10 @@ jobs:
         run: dotnet build InfraGate.slnx --configuration Release --no-restore
 
       - name: Test with coverage
-        run: dotnet tool run dotnet-coverage collect "dotnet test InfraGate.slnx --configuration Release --no-build" -f xml -o TestResults/coverage.xml
+        run: dotnet test InfraGate.slnx --configuration Release --no-build --filter "Category!=Keycloak" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory TestResults/coverage -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+      - name: Verify coverage report
+        run: find TestResults/coverage -name coverage.opencover.xml | grep .
 
       - name: End Sonar scan
         env:

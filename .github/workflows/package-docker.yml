@@ -21,15 +21,17 @@ on:
 
 permissions:
   contents: read
-  packages: write
-  security-events: write
 
 jobs:
   docker:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
     env:
       DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || 'local' }}
-      PUSH_IMAGES: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.push_images) }}
+      PUSH_IMAGES: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v'))) || (github.event_name == 'workflow_dispatch' && inputs.push_images) }}
 
     strategy:
       fail-fast: false
@@ -76,6 +78,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=pr
+            type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
@@ -93,7 +96,7 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           push: ${{ env.PUSH_IMAGES == 'true' }}
-          load: true
+          load: ${{ env.PUSH_IMAGES != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
@@ -114,3 +117,211 @@ jobs:
         with:
           sarif_file: trivy-${{ matrix.image }}.sarif
           category: trivy-${{ matrix.image }}
+
+  deploy-development:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    needs:
+      - docker
+    environment: development
+    env:
+      DEPLOY_COMPOSE_FILE: deploy/compose/development.yaml
+      DEPLOY_ENV_FILE: /etc/infra-gate/development.env
+      DEPLOY_IMAGE_TAG: dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - name: Validate deploy configuration
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          test -n "$DEPLOY_HOST" || { echo "vars.DEPLOY_HOST is required."; exit 1; }
+          test -n "$DEPLOY_USER" || { echo "vars.DEPLOY_USER is required."; exit 1; }
+          test -n "$DEPLOY_PORT" || { echo "vars.DEPLOY_PORT is required."; exit 1; }
+          test -n "$DEPLOY_PATH" || { echo "vars.DEPLOY_PATH is required."; exit 1; }
+          test -n "$DEPLOY_SSH_KEY" || { echo "secrets.DEPLOY_SSH_KEY is required."; exit 1; }
+          test -n "$DEPLOY_KNOWN_HOSTS" || { echo "secrets.DEPLOY_KNOWN_HOSTS is required."; exit 1; }
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Copy compose file
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
+          scp -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -P "$DEPLOY_PORT" "$DEPLOY_COMPOSE_FILE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/compose.yaml"
+
+      - name: Deploy development
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            bash -s -- "$DEPLOY_PATH" "$DEPLOY_ENV_FILE" "$DEPLOY_IMAGE_TAG" <<'EOF'
+          set -euo pipefail
+
+          deploy_path="$1"
+          env_file="$2"
+          image_tag="$3"
+
+          cd "$deploy_path"
+          test -f "$env_file" || { echo "Runtime env file not found: $env_file" >&2; exit 1; }
+
+          TAG="$image_tag" docker compose --env-file "$env_file" -f compose.yaml pull
+          TAG="$image_tag" docker compose --env-file "$env_file" -f compose.yaml up -d --remove-orphans
+
+          bind_port="$(sed -n 's/^INFRA_GATE_BIND_PORT=//p' "$env_file" | tail -n 1)"
+          bind_port="${bind_port:-3001}"
+          headers="$(mktemp)"
+          body="$(mktemp)"
+          trap 'rm -f "$headers" "$body"' EXIT
+
+          elapsed=0
+          while true; do
+            : > "$headers"
+            : > "$body"
+            http_status="$(curl -sS -D "$headers" -o "$body" -w "%{http_code}" \
+              -X POST "http://127.0.0.1:${bind_port}/mcp" \
+              -H "Content-Type: application/json" \
+              -d '{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"deploy-check","version":"0"}}}' \
+              2>/dev/null || true)"
+
+            if [ "$http_status" = "401" ] && grep -qi '^www-authenticate:.*resource_metadata' "$headers"; then
+              break
+            fi
+
+            if [ "$elapsed" -ge 60 ]; then
+              echo "Gateway did not return the expected OAuth 401 challenge." >&2
+              echo "Last HTTP status: ${http_status:-none}" >&2
+              docker compose --env-file "$env_file" -f compose.yaml logs --tail=50 >&2 || true
+              exit 1
+            fi
+
+            sleep 2
+            elapsed=$((elapsed + 2))
+          done
+          EOF
+
+  deploy-production:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs:
+      - docker
+    environment: production
+    env:
+      DEPLOY_COMPOSE_FILE: deploy/compose/production.yaml
+      DEPLOY_ENV_FILE: /etc/infra-gate/production.env
+      DEPLOY_IMAGE_TAG: ${{ github.ref_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - name: Validate deploy configuration
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          test -n "$DEPLOY_HOST" || { echo "vars.DEPLOY_HOST is required."; exit 1; }
+          test -n "$DEPLOY_USER" || { echo "vars.DEPLOY_USER is required."; exit 1; }
+          test -n "$DEPLOY_PORT" || { echo "vars.DEPLOY_PORT is required."; exit 1; }
+          test -n "$DEPLOY_PATH" || { echo "vars.DEPLOY_PATH is required."; exit 1; }
+          test -n "$DEPLOY_SSH_KEY" || { echo "secrets.DEPLOY_SSH_KEY is required."; exit 1; }
+          test -n "$DEPLOY_KNOWN_HOSTS" || { echo "secrets.DEPLOY_KNOWN_HOSTS is required."; exit 1; }
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Copy compose file
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_PATH'"
+          scp -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -P "$DEPLOY_PORT" "$DEPLOY_COMPOSE_FILE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/compose.yaml"
+
+      - name: Deploy production
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            bash -s -- "$DEPLOY_PATH" "$DEPLOY_ENV_FILE" "$DEPLOY_IMAGE_TAG" <<'EOF'
+          set -euo pipefail
+
+          deploy_path="$1"
+          env_file="$2"
+          image_tag="$3"
+
+          cd "$deploy_path"
+          test -f "$env_file" || { echo "Runtime env file not found: $env_file" >&2; exit 1; }
+
+          TAG="$image_tag" docker compose --env-file "$env_file" -f compose.yaml pull
+          TAG="$image_tag" docker compose --env-file "$env_file" -f compose.yaml up -d --remove-orphans
+
+          bind_port="$(sed -n 's/^INFRA_GATE_BIND_PORT=//p' "$env_file" | tail -n 1)"
+          bind_port="${bind_port:-3001}"
+          headers="$(mktemp)"
+          body="$(mktemp)"
+          trap 'rm -f "$headers" "$body"' EXIT
+
+          elapsed=0
+          while true; do
+            : > "$headers"
+            : > "$body"
+            http_status="$(curl -sS -D "$headers" -o "$body" -w "%{http_code}" \
+              -X POST "http://127.0.0.1:${bind_port}/mcp" \
+              -H "Content-Type: application/json" \
+              -d '{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"deploy-check","version":"0"}}}' \
+              2>/dev/null || true)"
+
+            if [ "$http_status" = "401" ] && grep -qi '^www-authenticate:.*resource_metadata' "$headers"; then
+              break
+            fi
+
+            if [ "$elapsed" -ge 60 ]; then
+              echo "Gateway did not return the expected OAuth 401 challenge." >&2
+              echo "Last HTTP status: ${http_status:-none}" >&2
+              docker compose --env-file "$env_file" -f compose.yaml logs --tail=50 >&2 || true
+              exit 1
+            fi
+
+            sleep 2
+            elapsed=$((elapsed + 2))
+          done
+          EOF

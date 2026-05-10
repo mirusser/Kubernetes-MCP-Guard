@@ -7,6 +7,7 @@ services:
   devissuer:
     image: ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:${TAG:-latest}
     environment:
+      INFRA_GATE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://0.0.0.0:3011
       INFRA_GATE_DEV_ISSUER_ISSUER: http://127.0.0.1:3011
       INFRA_GATE_DEV_ISSUER_INTERNAL_ENDPOINT_BASE: http://devissuer:3011
@@ -22,6 +23,7 @@ services:
     depends_on:
       - devissuer
     environment:
+      INFRA_GATE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://0.0.0.0:3001
       INFRA_GATE_OAUTH_AUTHORITY: http://127.0.0.1:3011
       INFRA_GATE_OAUTH_METADATA_ADDRESS: http://devissuer:3011/.well-known/openid-configuration

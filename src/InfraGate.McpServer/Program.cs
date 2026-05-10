@@ -13,18 +13,14 @@ builder.Logging.AddConsole(options =>
     options.LogToStandardErrorThreshold = LogLevel.Trace;
 });
 
-var options = K8sMcpOptions.FromEnvironment();
+var options = K8SMcpOptions.FromEnvironment();
+options.ValidateProductionSafety();
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
 builder.Services.AddSingleton<ApprovalStore>();
 builder.Services.AddSingleton<IKubernetes>(_ =>
 {
-    var kubeconfig = Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.KubeConfig);
-    var config = string.IsNullOrWhiteSpace(kubeconfig)
-        ? KubernetesClientConfiguration.BuildDefaultConfig()
-        : KubernetesClientConfiguration.BuildConfigFromConfigFile(kubeconfig);
-
-    config.UserAgent = K8sConventions.ServiceName;
+    var config = new KubernetesConfigProvider(options).Create();
 
     return new Kubernetes(config);
 });

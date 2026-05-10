@@ -85,8 +85,15 @@ docker compose -f deploy/mode-c/compose.yaml up --build
 
 ### Docker image publishing
 
-Images are pushed to Docker Hub and GitHub Container Registry (GHCR) on version tags or manual dispatch.
+Images are pushed to Docker Hub and GitHub Container Registry (GHCR) on the `dev` branch, version tags, or manual dispatch.
 PRs and pushes to `main` build without pushing.
+
+The deployment triggers are separate:
+
+- Push to `dev`: pushes `:dev` images, then deploys `deploy/compose/development.yaml` to the GitHub `development` environment over SSH.
+- Push a `v*` tag: pushes release images including the raw tag (for example `:v1.0.0`), then deploys `deploy/compose/production.yaml` to the GitHub `production` environment over SSH.
+
+Both remote Docker deployments are gateway-only and use a real OIDC provider. `InfraGate.DevIssuer` remains local/demo only through the `deploy/mode-c` Compose files.
 
 Trigger a push:
 
@@ -97,6 +104,7 @@ git tag v1.0.0 && git push origin v1.0.0
 Or trigger manually from Actions → Docker workflow → Run workflow → check `push_images`.
 
 Required repository variables and secrets are listed in the [configuration reference](configuration.md).
+Remote hosts keep runtime configuration in `/etc/infra-gate/development.env` or `/etc/infra-gate/production.env`; GitHub Actions copies only the Compose file and never writes kubeconfigs or OIDC runtime settings.
 
 Images built: `kubernetes-mcp-guard-devissuer`, `kubernetes-mcp-guard-gateway`.
 
@@ -107,6 +115,7 @@ The source-run gateway listens on `http://127.0.0.1:3001/mcp` by default, accept
 For local OAuth/Codex login without an external issuer, run the repo-local dev issuer in a separate terminal:
 
 ```bash
+export INFRA_GATE_ENVIRONMENT=Development
 dotnet run --project src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj
 ```
 
@@ -116,6 +125,7 @@ Then start the gateway with OAuth enabled:
 
 ```bash
 export REPO_ROOT="$(pwd)"
+export INFRA_GATE_ENVIRONMENT=Development
 export INFRA_GATE_OAUTH_AUTHORITY="http://127.0.0.1:3011"
 export INFRA_GATE_OAUTH_RESOURCE="http://127.0.0.1:3001/mcp"
 export INFRA_GATE_OAUTH_SCOPE="mcp:tools"
@@ -162,6 +172,7 @@ From the repo directory run:
 ```bash
 REPO_ROOT="$(pwd)"
 codex mcp add infra-gate \
+  --env INFRA_GATE_ENVIRONMENT=Development \
   --env KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config" \
   --env K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals" \
   --env K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo \
@@ -189,6 +200,7 @@ Use this shape for a local stdio MCP client:
         "/absolute/path/to/infra-gate/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
       ],
       "env": {
+        "INFRA_GATE_ENVIRONMENT": "Development",
         "KUBECONFIG": "/absolute/path/to/infra-gate/.kube/mcp-nginx-demo.config",
         "K8S_MCP_APPROVAL_ROOT": "/absolute/path/to/infra-gate/.mcp-approvals",
         "K8S_MCP_ALLOWED_NAMESPACES": "mcp-nginx-demo"
@@ -237,9 +249,10 @@ The approval file stores the SHA-256 hash of the pending plan, including recorde
 
 ```bash
 dotnet build InfraGate.slnx
-dotnet test InfraGate.slnx --no-build
-INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build
+dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak"
+INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak"
 INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build
+dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj --no-build --filter "Category=Keycloak"  # requires Docker
 ./scripts/coverage.sh
 kubectl --kubeconfig .kube/mcp-nginx-demo.config -n mcp-nginx-demo get deployment,service,configmap,pods,replicasets -o wide
 ```

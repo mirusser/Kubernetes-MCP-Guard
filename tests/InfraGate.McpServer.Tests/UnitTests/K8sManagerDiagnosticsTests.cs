@@ -242,7 +242,7 @@ public sealed class K8sManagerDiagnosticsTests
     private static ManagerContext CreateManager(TestKubernetesApi? api = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
-        var options = new K8sMcpOptions(
+        var options = new K8SMcpOptions(
             new HashSet<string>(StringComparer.Ordinal) { "demo" },
             root);
         var client = api is null

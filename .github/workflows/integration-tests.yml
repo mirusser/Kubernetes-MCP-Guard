@@ -58,4 +58,4 @@ jobs:
       - name: Run gateway integration tests
         env:
           KUBECONFIG: ${{ github.workspace }}/.kube/mcp-nginx-demo.config
-        run: INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --configuration Release --no-build
+        run: INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --configuration Release --no-build --filter "Category!=Keycloak"

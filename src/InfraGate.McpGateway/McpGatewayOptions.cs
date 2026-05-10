@@ -1,6 +1,7 @@
 using System.Globalization;
 using InfraGate.Approvals;
 using InfraGate.McpGateway.Auth;
+using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpGateway;
 
@@ -12,32 +13,44 @@ public sealed record McpGatewayOptions(
     string ApprovalRoot,
     string? ApprovalBaseUrl,
     TimeSpan ApprovalChallengeTtl,
-    string? DownstreamAssembly = null)
+    string? DownstreamAssembly = null,
+    RuntimeMode RuntimeMode = RuntimeMode.Development,
+    bool IsGuardAuditRootExplicit = true,
+    bool IsApprovalRootExplicit = true)
 {
     public const string DefaultUrl = McpGatewayConventions.DefaultUrl;
     public static readonly TimeSpan DefaultApprovalChallengeTtl = TimeSpan.FromMinutes(15);
+    private static readonly IReadOnlySet<string> DeniedApprovalRootNames =
+        new HashSet<string>([ApprovalConventions.Storage.DefaultRootDirectory], StringComparer.Ordinal);
+    private static readonly IReadOnlySet<string> DeniedGuardAuditRootNames =
+        new HashSet<string>([McpGatewayConventions.Paths.DefaultGuardAuditRootDirectory], StringComparer.Ordinal);
 
     public static McpGatewayOptions FromEnvironment()
     {
         var auth = GatewayAuthOptions.FromEnvironment();
-        var workingDirectory = Directory.GetCurrentDirectory();
-        var downstreamProject =
+        RuntimeMode runtimeMode = RuntimeModeResolver.FromEnvironment();
+        string workingDirectory = Directory.GetCurrentDirectory();
+        string downstreamProject =
             Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.DownstreamProject) ??
             Path.Combine(
                 workingDirectory,
                 McpGatewayConventions.Paths.SourceDirectory,
                 McpGatewayConventions.Paths.DefaultDownstreamProjectDirectory,
                 McpGatewayConventions.Paths.DefaultDownstreamProjectFileName);
-        var downstreamAssembly =
+        string? downstreamAssembly =
             Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.DownstreamAssembly);
-        var auditRoot =
-            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.GuardAuditRoot) ??
+        string? auditRootValue =
+            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.GuardAuditRoot);
+        bool isGuardAuditRootExplicit = !string.IsNullOrWhiteSpace(auditRootValue);
+        string auditRoot = auditRootValue ??
             Path.Combine(workingDirectory, McpGatewayConventions.Paths.DefaultGuardAuditRootDirectory);
-        var approvalRoot =
-            Environment.GetEnvironmentVariable(ApprovalConventions.EnvironmentVariables.ApprovalRoot) ??
+        string? approvalRootValue =
+            Environment.GetEnvironmentVariable(ApprovalConventions.EnvironmentVariables.ApprovalRoot);
+        bool isApprovalRootExplicit = !string.IsNullOrWhiteSpace(approvalRootValue);
+        string approvalRoot = approvalRootValue ??
             Path.Combine(workingDirectory, ApprovalConventions.Storage.DefaultRootDirectory);
-        var approvalBaseUrl = Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl);
-        var approvalChallengeTtl = ParseTimeSpanSeconds(
+        string? approvalBaseUrl = Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl);
+        TimeSpan approvalChallengeTtl = ParseTimeSpanSeconds(
             Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.ApprovalChallengeTtlSeconds),
             DefaultApprovalChallengeTtl);
 
@@ -49,7 +62,58 @@ public sealed record McpGatewayOptions(
             approvalRoot,
             approvalBaseUrl,
             approvalChallengeTtl,
-            downstreamAssembly);
+            downstreamAssembly,
+            runtimeMode,
+            isGuardAuditRootExplicit,
+            isApprovalRootExplicit);
+    }
+
+    public void ValidateProductionSafety()
+    {
+        if (RuntimeMode != RuntimeMode.Production)
+        {
+            return;
+        }
+
+        if (!Auth.OAuthRequireHttpsMetadata)
+        {
+            throw new InvalidOperationException(
+                $"{GatewayAuthConventions.EnvironmentVariables.OAuthRequireHttpsMetadata} must be true in Production mode.");
+        }
+
+        ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
+            Auth.OAuthAuthority,
+            GatewayAuthConventions.EnvironmentVariables.OAuthAuthority);
+        if (!string.IsNullOrWhiteSpace(Auth.OAuthMetadataAddress))
+        {
+            ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
+                Auth.OAuthMetadataAddress,
+                GatewayAuthConventions.EnvironmentVariables.OAuthMetadataAddress);
+        }
+
+        ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
+            Auth.OAuthResource,
+            GatewayAuthConventions.EnvironmentVariables.OAuthResource);
+        ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
+            Auth.ApprovalAuthorizationEndpoint,
+            GatewayAuthConventions.EnvironmentVariables.ApprovalOAuthAuthorizationEndpoint);
+        ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
+            Auth.ApprovalTokenEndpoint,
+            GatewayAuthConventions.EnvironmentVariables.ApprovalOAuthTokenEndpoint);
+        ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
+            ApprovalBaseUrl,
+            McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl);
+
+        ProductionSafetyValidator.RequirePersistentDirectory(
+            ApprovalRoot,
+            ApprovalConventions.EnvironmentVariables.ApprovalRoot,
+            IsApprovalRootExplicit,
+            DeniedApprovalRootNames);
+        ProductionSafetyValidator.RequirePersistentDirectory(
+            GuardAuditRoot,
+            McpGatewayConventions.EnvironmentVariables.GuardAuditRoot,
+            IsGuardAuditRootExplicit,
+            DeniedGuardAuditRootNames);
     }
 
     private static TimeSpan ParseTimeSpanSeconds(string? value, TimeSpan defaultValue)

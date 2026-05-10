@@ -1,6 +1,7 @@
 using InfraGate.DevIssuer;
 
 var options = DevIssuerOptions.FromEnvironment();
+options.ValidateProductionSafety();
 var builder = WebApplication.CreateBuilder(args);
 
 if (string.IsNullOrWhiteSpace(builder.Configuration[DevIssuerConventions.ConfigurationKeys.Urls]) &&
