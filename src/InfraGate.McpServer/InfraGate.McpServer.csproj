@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\InfraGate.Approvals\InfraGate.Approvals.csproj" />
+    <ProjectReference Include="..\InfraGate.RuntimeSafety\InfraGate.RuntimeSafety.csproj" />
   </ItemGroup>
 
   <ItemGroup>

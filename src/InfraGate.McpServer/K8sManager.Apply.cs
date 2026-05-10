@@ -369,7 +369,7 @@ public sealed partial class K8sManager
         return true;
     }
 
-    private Task ApplyDeploymentAsync(V1Deployment deployment, CancellationToken cancellationToken) =>
+    private Task<V1Deployment> ApplyDeploymentAsync(V1Deployment deployment, CancellationToken cancellationToken) =>
         client.AppsV1.PatchNamespacedDeploymentAsync(
             new V1Patch(deployment, V1Patch.PatchType.ApplyPatch),
             deployment.Metadata.Name,
@@ -377,7 +377,7 @@ public sealed partial class K8sManager
             fieldManager: FieldManager,
             cancellationToken: cancellationToken);
 
-    private Task ApplyServiceAsync(V1Service service, CancellationToken cancellationToken) =>
+    private Task<V1Service> ApplyServiceAsync(V1Service service, CancellationToken cancellationToken) =>
         client.CoreV1.PatchNamespacedServiceAsync(
             new V1Patch(service, V1Patch.PatchType.ApplyPatch),
             service.Metadata.Name,
@@ -385,7 +385,7 @@ public sealed partial class K8sManager
             fieldManager: FieldManager,
             cancellationToken: cancellationToken);
 
-    private Task ApplyConfigMapAsync(V1ConfigMap configMap, CancellationToken cancellationToken) =>
+    private Task<V1ConfigMap> ApplyConfigMapAsync(V1ConfigMap configMap, CancellationToken cancellationToken) =>
         client.CoreV1.PatchNamespacedConfigMapAsync(
             new V1Patch(configMap, V1Patch.PatchType.ApplyPatch),
             configMap.Metadata.Name,

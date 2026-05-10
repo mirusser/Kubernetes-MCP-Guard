@@ -137,14 +137,14 @@ flowchart TB
 
 ## 📦 Container Images
 
-Images are automatically built, scanned, and published to multiple registries for every release.
+Images are automatically built and scanned by the Docker workflow. Release tags publish versioned images, and the `dev` branch publishes moving `:dev` images for the self-hosted development deployment.
 
 | Registry | Gateway (Core) | Dev Issuer (Auth) |
 | --- | --- | --- |
 | GitHub (GHCR) | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>` | `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
 | Docker Hub | `mirusser/kubernetes-mcp-guard-gateway:<tag>` | `mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
 
-**Versioning:** Use specific tags (e.g., `:v0.1.0`) for production stability. The `:latest` tag tracks the most recent stable release.
+**Versioning:** Use specific tags (e.g., `:v0.1.0`) for production stability. The `:dev` tag tracks the development branch, and the `:latest` tag tracks the most recent stable release.
 
 Example pull:
 ``` bash
@@ -264,7 +264,7 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 | .NET | .NET 10 |
 | Kubernetes | minikube / local cluster initially |
 | MCP transport | HTTP MCP endpoint at `/mcp` |
-| OIDC | DevIssuer (dev), Keycloak documented; Entra ID later |
+| OIDC | DevIssuer (local demo), Keycloak (development deploy), Entra ID later |
 | Container registries | GHCR, Docker Hub |
 | Platforms | linux/amd64 initially |
 

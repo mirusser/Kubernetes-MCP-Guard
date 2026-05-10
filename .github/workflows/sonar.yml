@@ -41,8 +41,8 @@ jobs:
             /o:"${{ vars.SONAR_ORGANIZATION }}" \
             /d:sonar.token="$SONAR_TOKEN" \
             /d:sonar.host.url="https://sonarcloud.io" \
-            /d:sonar.coverage.exclusions="**/PromptInjectionGuard.Regex.cs" \
-            /d:sonar.cs.vscoveragexml.reportsPaths="TestResults/coverage.xml"
+            /d:sonar.coverage.exclusions="**/Program.cs,**/PromptInjectionGuard.Regex.cs" \
+            /d:sonar.cs.opencover.reportsPaths="TestResults/coverage/**/coverage.opencover.xml"
 
       - name: Restore NuGet packages
         run: dotnet restore InfraGate.slnx
@@ -51,9 +51,89 @@ jobs:
         run: dotnet build InfraGate.slnx --configuration Release --no-restore
 
       - name: Test with coverage
-        run: dotnet tool run dotnet-coverage collect "dotnet test InfraGate.slnx --configuration Release --no-build" -f xml -o TestResults/coverage.xml
+        run: dotnet test InfraGate.slnx --configuration Release --no-build --filter "Category!=Keycloak" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory TestResults/coverage -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+      - name: Verify coverage report
+        run: find TestResults/coverage -name coverage.opencover.xml | grep .
 
       - name: End Sonar scan
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: dotnet tool run dotnet-sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+
+      - name: Export SonarCloud report
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+        run: |
+          AUTH="$SONAR_TOKEN:"
+          BASE="https://sonarcloud.io/api"
+          METRICS="bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,sqale_rating,reliability_rating,security_rating,security_review_rating,maintainability_rating,ncloc,complexity,cognitive_complexity"
+
+          page=1
+          all_issues='[]'
+          while true; do
+            resp=$(curl -sf -u "$AUTH" \
+              "$BASE/issues/search?componentKeys=$SONAR_PROJECT_KEY&ps=500&p=$page&statuses=OPEN,CONFIRMED&additionalFields=rules") || {
+              echo "::warning::SonarCloud issues fetch failed (page $page)" >&2
+              break
+            }
+            chunk=$(echo "$resp" | jq '.issues // []')
+            all_issues=$(jq -n --argjson a "$all_issues" --argjson b "$chunk" '$a + $b')
+            total=$(echo "$resp" | jq '.paging.total // 0')
+            [ $((page * 500)) -ge "$total" ] && break
+            page=$((page + 1))
+          done
+
+          qg=$(curl -sf -u "$AUTH" \
+            "$BASE/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY") || {
+            echo "::warning::SonarCloud quality gate fetch failed" >&2; qg='{}'
+          }
+
+          measures=$(curl -sf -u "$AUTH" \
+            "$BASE/measures/component?component=$SONAR_PROJECT_KEY&metricKeys=$METRICS") || {
+            echo "::warning::SonarCloud measures fetch failed" >&2; measures='{}'
+          }
+
+          page=1
+          all_hotspots='[]'
+          while true; do
+            resp=$(curl -sf -u "$AUTH" \
+              "$BASE/hotspots/search?projectKey=$SONAR_PROJECT_KEY&ps=500&p=$page") || {
+              echo "::warning::SonarCloud hotspots fetch failed (page $page)" >&2
+              break
+            }
+            chunk=$(echo "$resp" | jq '.hotspots // []')
+            all_hotspots=$(jq -n --argjson a "$all_hotspots" --argjson b "$chunk" '$a + $b')
+            total=$(echo "$resp" | jq '.paging.total // 0')
+            [ $((page * 500)) -ge "$total" ] && break
+            page=$((page + 1))
+          done
+
+          jq -n \
+            --arg project "$SONAR_PROJECT_KEY" \
+            --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg branch "${GITHUB_REF_NAME}" \
+            --argjson qualityGate "$qg" \
+            --argjson measures "$measures" \
+            --argjson issues "$all_issues" \
+            --argjson hotspots "$all_hotspots" \
+            '{
+              metadata: {
+                generatedAt: $generatedAt,
+                projectKey: $project,
+                sonarcloudUrl: ("https://sonarcloud.io/project/overview?id=" + $project),
+                branch: $branch
+              },
+              qualityGate: $qualityGate,
+              measures: $measures,
+              issues: $issues,
+              hotspots: $hotspots
+            }' > sonarcloud-report.json
+
+      - name: Upload SonarCloud report artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v4
+        with:
+          name: sonarcloud-report
+          path: sonarcloud-report.json
+          retention-days: 7

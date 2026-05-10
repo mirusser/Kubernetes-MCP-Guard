@@ -380,10 +380,11 @@ public sealed class GatewayApprovalServiceTests
                 ["name"] = "demo",
                 ["replicas"] = "2"
             },
-            objects,
-            Manifest: null,
-            DryRun: includeDryRun ? CreateDryRun(objects) : null,
-            Diffs: includeDiff ? CreateDiffs(objects) : []);
+            objects)
+        {
+            DryRun = includeDryRun ? CreateDryRun(objects) : null,
+            Diffs = includeDiff ? CreateDiffs(objects) : []
+        };
         await store.CreatePlanAsync(plan, CancellationToken.None);
 
         return plan;

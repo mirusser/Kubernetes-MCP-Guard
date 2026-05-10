@@ -1,0 +1,33 @@
+# deploy/compose/development.yaml
+# Local development deployment. Uses Keycloak OIDC; DevIssuer is local/demo only.
+
+name: infra-gate-development
+
+services:
+  mcp-gateway:
+    image: ${INFRA_GATE_GATEWAY_IMAGE:-ghcr.io/mirusser/kubernetes-mcp-guard-gateway}:${TAG:-dev}
+    restart: unless-stopped
+    environment:
+      INFRA_GATE_ENVIRONMENT: ${INFRA_GATE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: ${ASPNETCORE_URLS:-http://0.0.0.0:3001}
+      INFRA_GATE_DOWNSTREAM_ASSEMBLY: ${INFRA_GATE_DOWNSTREAM_ASSEMBLY:-/app/server/InfraGate.McpServer.dll}
+      INFRA_GATE_OAUTH_AUTHORITY: ${INFRA_GATE_OAUTH_AUTHORITY:-http://127.0.0.1:${KEYCLOAK_PORT:-3010}/realms/infra-gate}
+      INFRA_GATE_OAUTH_METADATA_ADDRESS: ${INFRA_GATE_OAUTH_METADATA_ADDRESS:-http://172.17.0.1:${KEYCLOAK_PORT:-3010}/realms/infra-gate/.well-known/openid-configuration}
+      INFRA_GATE_OAUTH_RESOURCE: ${INFRA_GATE_OAUTH_RESOURCE:-http://127.0.0.1:${INFRA_GATE_BIND_PORT:-3001}/mcp}
+      INFRA_GATE_OAUTH_SCOPE: ${INFRA_GATE_OAUTH_SCOPE:-mcp:tools}
+      INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA: ${INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA:-false}
+      INFRA_GATE_APPROVAL_BASE_URL: ${INFRA_GATE_APPROVAL_BASE_URL:-http://127.0.0.1:${INFRA_GATE_BIND_PORT:-3001}}
+      INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID: ${INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID:-infra-gate-approval-ui}
+      INFRA_GATE_APPROVAL_OAUTH_CALLBACK_PATH: ${INFRA_GATE_APPROVAL_OAUTH_CALLBACK_PATH:-/approvals/oauth/callback}
+      INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT: ${INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT:-http://127.0.0.1:${KEYCLOAK_PORT:-3010}/realms/infra-gate/protocol/openid-connect/auth}
+      INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT: ${INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT:-http://172.17.0.1:${KEYCLOAK_PORT:-3010}/realms/infra-gate/protocol/openid-connect/token}
+      INFRA_GATE_GUARD_AUDIT_ROOT: ${INFRA_GATE_GUARD_AUDIT_ROOT:-/data/guardrails}
+      KUBECONFIG: ${KUBECONFIG:-/run/kube/infra-gate.config}
+      K8S_MCP_APPROVAL_ROOT: ${K8S_MCP_APPROVAL_ROOT:-/data/approvals}
+      K8S_MCP_ALLOWED_NAMESPACES: ${K8S_MCP_ALLOWED_NAMESPACES:-mcp-nginx-demo}
+    volumes:
+      - ${INFRA_GATE_KUBECONFIG_HOST_PATH:-/etc/infra-gate/development.kubeconfig}:/run/kube/infra-gate.config:ro
+      - ${INFRA_GATE_APPROVAL_HOST_PATH:-/var/lib/infra-gate/development/approvals}:/data/approvals
+      - ${INFRA_GATE_GUARD_AUDIT_HOST_PATH:-/var/lib/infra-gate/development/guardrails}:/data/guardrails
+    ports:
+      - "${INFRA_GATE_BIND_ADDRESS:-127.0.0.1}:${INFRA_GATE_BIND_PORT:-3001}:3001"

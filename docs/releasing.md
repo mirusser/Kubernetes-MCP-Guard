@@ -6,17 +6,19 @@ This file owns the release process for Kubernetes MCP Guard. Releases are marked
 
 1. Confirm unit tests pass on `main`.
 2. Confirm integration tests pass (self-hosted runner, both `INFRA_GATE_RUN_INTEGRATION` and `INFRA_GATE_RUN_GATEWAY_INTEGRATION`).
-3. Confirm `package-docker.yml` succeeds for the release tag.
-4. Confirm Docker Hub images are pushed (`mirusser/kubernetes-mcp-guard-gateway`, `mirusser/kubernetes-mcp-guard-devissuer`).
-5. Confirm GHCR images are pushed (`ghcr.io/mirusser/kubernetes-mcp-guard-gateway`, `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer`).
-6. Confirm GHCR packages are set to **public** if public pulls are intended; confirm Docker Hub repositories are public if intended.
-7. Confirm the GitHub Packages page links back to the GitHub repository and has a description.
-8. Confirm release notes include exact image names and tags.
-9. Confirm `CHANGELOG.md` has a release-ready entry for the version.
-10. Mark the GitHub release as **pre-release** while the project is experimental.
-11. Verify quickstart commands (compose, README) reference the released tag.
-12. Verify no secrets, tokens, or live credentials are present in docs, logs, sample manifests, or example env files.
-13. Run the published-image smoke test from Epic 2 against the release tag before announcing.
+3. Confirm the Keycloak integration tests pass on `main` via the `keycloak-tests.yml` CI workflow (requires Docker on `ubuntu-latest`).
+4. Confirm `package-docker.yml` succeeds for the release tag.
+5. Confirm Docker Hub images are pushed (`mirusser/kubernetes-mcp-guard-gateway`, `mirusser/kubernetes-mcp-guard-devissuer`).
+6. Confirm GHCR images are pushed (`ghcr.io/mirusser/kubernetes-mcp-guard-gateway`, `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer`).
+7. Confirm the production Docker deploy job completed, or intentionally skip it if the `production` GitHub Environment is not configured.
+8. Confirm GHCR packages are set to **public** if public pulls are intended; confirm Docker Hub repositories are public if intended.
+9. Confirm the GitHub Packages page links back to the GitHub repository and has a description.
+10. Confirm release notes include exact image names and tags.
+11. Confirm `CHANGELOG.md` has a release-ready entry for the version.
+12. Mark the GitHub release as **pre-release** while the project is experimental.
+13. Verify quickstart commands (compose, README) reference the released tag.
+14. Verify no secrets, tokens, or live credentials are present in docs, logs, sample manifests, or example env files.
+15. Run the published-image smoke test from Epic 2 against the release tag before announcing.
 
 ## Release Notes Template
 

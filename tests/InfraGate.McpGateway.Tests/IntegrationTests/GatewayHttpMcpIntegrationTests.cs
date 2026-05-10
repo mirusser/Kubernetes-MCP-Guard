@@ -29,6 +29,8 @@ namespace InfraGate.McpGateway.Tests.IntegrationTests;
 
 public sealed partial class GatewayHttpMcpIntegrationTests
 {
+    private static readonly JsonSerializerOptions JsonWebIndented = new(JsonSerializerDefaults.Web) { WriteIndented = true };
+
     private const string Issuer = "https://issuer.example.com";
     private const string Resource = "http://127.0.0.1:3001/mcp";
     private const string Scope = "mcp:tools";
@@ -770,7 +772,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             : string.Empty;
     }
 
-    private static SecurityKey SigningKey() =>
+    private static SymmetricSecurityKey SigningKey() =>
         new SymmetricSecurityKey("0123456789abcdef0123456789abcdef"u8.ToArray())
         {
             KeyId = "test-key"
@@ -917,7 +919,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
     private static bool IsDryRun(CapturedRequest request) =>
         request.Query.Contains("dryRun=All", StringComparison.Ordinal);
 
-    private static IReadOnlyDictionary<string, string[]> DryRunWarningHeaders() =>
+    private static Dictionary<string, string[]> DryRunWarningHeaders() =>
         new Dictionary<string, string[]>
         {
             ["Warning"] = ["299 - admission warning"]
@@ -1044,7 +1046,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             DecidedAtUtc: DateTimeOffset.UtcNow);
         var challengesDir = Path.Combine(approvalRoot, ApprovalConventions.Storage.ChallengesDirectory);
         Directory.CreateDirectory(challengesDir);
-        var challengeJson = JsonSerializer.Serialize(challenge, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true });
+        var challengeJson = JsonSerializer.Serialize(challenge, JsonWebIndented);
         await File.WriteAllTextAsync(Path.Combine(challengesDir, $"{challengeId}{ApprovalConventions.Storage.JsonExtension}"), challengeJson);
 
         return planId;

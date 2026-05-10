@@ -34,4 +34,4 @@ jobs:
         run: dotnet build InfraGate.slnx --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test InfraGate.slnx --configuration Release --no-build
+        run: dotnet test InfraGate.slnx --configuration Release --no-build --filter "Category!=Keycloak"

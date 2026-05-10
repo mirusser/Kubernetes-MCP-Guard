@@ -39,7 +39,7 @@ public sealed partial class GuardedToolRunner
         CancellationToken cancellationToken)
     {
         var auditIdentity = GetAuditIdentity();
-        var requestScan = guard.ScanArguments(arguments);
+        var requestScan = PromptInjectionGuard.ScanArguments(arguments);
         if (requestScan.HasFindings)
         {
             await auditStore.WriteAsync(
@@ -55,7 +55,7 @@ public sealed partial class GuardedToolRunner
         }
 
         var downstreamText = await downstream.CallToolAsync(toolName, arguments, cancellationToken);
-        var response = guard.SanitizeResponse(downstreamText);
+        var response = PromptInjectionGuard.SanitizeResponse(downstreamText);
         if (response.HasFindings || response.ManifestRedacted)
         {
             await auditStore.WriteAsync(

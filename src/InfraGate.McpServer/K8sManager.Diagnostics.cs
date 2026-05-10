@@ -231,7 +231,7 @@ public sealed partial class K8sManager
         ports = ServicePortSummaries(service.Spec)
     };
 
-    private static IReadOnlySet<RelatedObjectRef> RelatedRefs(
+    private static HashSet<RelatedObjectRef> RelatedRefs(
         RelatedObjectRef first,
         IEnumerable<RelatedObjectRef>? second = null,
         IEnumerable<RelatedObjectRef>? third = null)

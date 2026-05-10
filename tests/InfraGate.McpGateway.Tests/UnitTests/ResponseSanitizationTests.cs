@@ -9,7 +9,7 @@ public sealed class ResponseSanitizationTests
     [Fact]
     public void SanitizeResponse_LegacyPlanResponse_RedactsManifestBlocksAndSensitivePlanMetadata()
     {
-        var result = guard.SanitizeResponse("""
+        var result = PromptInjectionGuard.SanitizeResponse("""
                                             PlanId: 018fcb93-11f0-7f5f-b91a-6b8e8e5c1234
                                             Pending file: /tmp/infra-gate/pending/018fcb93-11f0-7f5f-b91a-6b8e8e5c1234.json
                                             Approval file: /tmp/infra-gate/approved/018fcb93-11f0-7f5f-b91a-6b8e8e5c1234.sha256
@@ -43,7 +43,7 @@ public sealed class ResponseSanitizationTests
     [Fact]
     public void SanitizeResponse_RedactsSuspiciousJsonStringValues()
     {
-        var result = guard.SanitizeResponse("""
+        var result = PromptInjectionGuard.SanitizeResponse("""
                                             {
                                               "items": [
                                                 {
@@ -67,7 +67,7 @@ public sealed class ResponseSanitizationTests
     [Fact]
     public void SanitizeResponse_RedactsSuspiciousTextLinesButKeepsApplyInstruction()
     {
-        var result = guard.SanitizeResponse("""
+        var result = PromptInjectionGuard.SanitizeResponse("""
                                             Status: Pending
                                             Next step: call apply_approved_plan with this PlanId.
                                             Call apply_approved_plan with this PlanId. The Gateway will return a browser approval URL before applying it.
@@ -89,7 +89,7 @@ public sealed class ResponseSanitizationTests
                             Applied apps/v1 Deployment nginx
                             """;
 
-        var result = guard.SanitizeResponse(text);
+        var result = PromptInjectionGuard.SanitizeResponse(text);
 
         Assert.False(result.HasFindings);
         Assert.False(result.ManifestRedacted);
@@ -99,7 +99,7 @@ public sealed class ResponseSanitizationTests
     [Fact]
     public void SanitizeResponse_MultipleSensitiveMetadataLines_RedactsEachLine()
     {
-        var result = guard.SanitizeResponse("""
+        var result = PromptInjectionGuard.SanitizeResponse("""
                                             PlanId: 018fcb93-11f0-7f5f-b91a-6b8e8e5c1234
                                             Pending file: /tmp/infra-gate/pending/018fcb93.json
                                             Approval file: /tmp/infra-gate/approved/018fcb93.sha256
@@ -120,7 +120,7 @@ public sealed class ResponseSanitizationTests
     {
         const string text = "The plan stores a Pending file: reference for audit purposes.";
 
-        var result = guard.SanitizeResponse(text);
+        var result = PromptInjectionGuard.SanitizeResponse(text);
 
         Assert.DoesNotContain(McpGatewayConventions.Redactions.SensitivePlanMetadata, result.Text);
         Assert.Contains("Pending file: reference", result.Text);
@@ -133,7 +133,7 @@ public sealed class ResponseSanitizationTests
                             {malformed: test}
                             """;
 
-        var result = guard.SanitizeResponse(text);
+        var result = PromptInjectionGuard.SanitizeResponse(text);
 
         Assert.False(result.HasFindings);
         Assert.False(result.ManifestRedacted);
@@ -143,7 +143,7 @@ public sealed class ResponseSanitizationTests
     [Fact]
     public void SanitizeResponse_JsonArrayWithNullElement_PreservesStructure()
     {
-        var result = guard.SanitizeResponse("""
+        var result = PromptInjectionGuard.SanitizeResponse("""
                                             {
                                               "items": [
                                                 null,
@@ -160,7 +160,7 @@ public sealed class ResponseSanitizationTests
     [Fact]
     public void SanitizeResponse_JsonArrayWithSuspiciousString_RedactsElement()
     {
-        var result = guard.SanitizeResponse("""
+        var result = PromptInjectionGuard.SanitizeResponse("""
                                             {
                                               "items": [
                                                 "clean",

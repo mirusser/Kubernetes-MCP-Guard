@@ -8,6 +8,7 @@ namespace InfraGate.McpServer;
 
 public sealed partial class K8sManager
 {
+    private const string DryRunFailedMessage = "Server-side dry-run failed";
     private async Task<DryRunResult> DryRunApplyManifestAsync(
         IReadOnlyList<IKubernetesObject<V1ObjectMeta>> objects,
         CancellationToken cancellationToken)
@@ -28,7 +29,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return DryRunResult.Failed(FormatServerSideApplyException("Server-side dry-run failed", ex));
+            return DryRunResult.Failed(FormatServerSideApplyException(DryRunFailedMessage, ex));
         }
     }
 
@@ -52,7 +53,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return DryRunResult.Failed(FormatApiException("Server-side dry-run failed", ex));
+            return DryRunResult.Failed(FormatApiException(DryRunFailedMessage, ex));
         }
     }
 
@@ -81,7 +82,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return DryRunResult.Failed(FormatApiException("Server-side dry-run failed", ex));
+            return DryRunResult.Failed(FormatApiException(DryRunFailedMessage, ex));
         }
     }
 
@@ -110,7 +111,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return DryRunResult.Failed(FormatApiException("Server-side dry-run failed", ex));
+            return DryRunResult.Failed(FormatApiException(DryRunFailedMessage, ex));
         }
     }
 
@@ -140,7 +141,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return DryRunResult.Failed(FormatApiException("Server-side dry-run failed", ex));
+            return DryRunResult.Failed(FormatApiException(DryRunFailedMessage, ex));
         }
     }
 

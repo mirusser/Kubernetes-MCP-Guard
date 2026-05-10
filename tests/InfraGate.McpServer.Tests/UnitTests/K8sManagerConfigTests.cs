@@ -78,7 +78,7 @@ public sealed class K8sManagerConfigTests
     private static K8sManager CreateManager(params string[] namespaces)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
-        var options = new K8sMcpOptions(
+        var options = new K8SMcpOptions(
             new HashSet<string>(namespaces, StringComparer.Ordinal),
             root);
 

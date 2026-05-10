@@ -1,55 +1,47 @@
-using System.Text.Json.Serialization;
-
 namespace InfraGate.Approvals;
 
+// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 public sealed record K8sPlan
 {
-    [JsonConstructor]
+    public K8sPlan() { }
+
     public K8sPlan(
-        string Id,
-        string Operation,
-        string Namespace,
-        DateTimeOffset CreatedAtUtc,
-        string Description,
-        Dictionary<string, string> Parameters,
-        K8sObjectRef[] Objects,
-        string? Manifest,
-        K8sPlanDryRun? DryRun = null,
-        K8sPlanDiff[]? Diffs = null,
-        K8sPlanPolicyFinding[]? PolicyFindings = null)
+        string id,
+        string operation,
+        string namespaceName,
+        DateTimeOffset createdAtUtc,
+        string description,
+        Dictionary<string, string> parameters,
+        K8sObjectRef[] objects)
     {
-        this.Id = Id;
-        this.Operation = Operation;
-        this.Namespace = Namespace;
-        this.CreatedAtUtc = CreatedAtUtc;
-        this.Description = Description;
-        this.Parameters = Parameters;
-        this.Objects = Objects;
-        this.Manifest = Manifest;
-        this.DryRun = DryRun;
-        this.Diffs = Diffs ?? [];
-        this.PolicyFindings = PolicyFindings ?? [];
+        Id = id;
+        Operation = operation;
+        Namespace = namespaceName;
+        CreatedAtUtc = createdAtUtc;
+        Description = description;
+        Parameters = parameters;
+        Objects = objects;
     }
 
-    public string Id { get; init; }
+    public string Id { get; init; } = string.Empty;
 
-    public string Operation { get; init; }
+    public string Operation { get; init; } = string.Empty;
 
-    public string Namespace { get; init; }
+    public string Namespace { get; init; } = string.Empty;
 
     public DateTimeOffset CreatedAtUtc { get; init; }
 
-    public string Description { get; init; }
+    public string Description { get; init; } = string.Empty;
 
-    public Dictionary<string, string> Parameters { get; init; }
+    public Dictionary<string, string> Parameters { get; init; } = [];
 
-    public K8sObjectRef[] Objects { get; init; }
+    public K8sObjectRef[] Objects { get; init; } = [];
 
     public string? Manifest { get; init; }
 
     public K8sPlanDryRun? DryRun { get; init; }
 
-    public K8sPlanDiff[] Diffs { get; init; }
+    public K8sPlanDiff[] Diffs { get; init; } = [];
 
-    public K8sPlanPolicyFinding[] PolicyFindings { get; init; }
+    public K8sPlanPolicyFinding[] PolicyFindings { get; init; } = [];
 }

@@ -103,7 +103,7 @@ public sealed class ApprovalStoreTests
         new(
             ApprovalStore.NewPlanId(),
             "scale",
-            K8sMcpOptions.DefaultNamespace,
+            K8SMcpOptions.DefaultNamespace,
             DateTimeOffset.UtcNow,
             "Scale deployment.",
             new Dictionary<string, string>
@@ -111,6 +111,5 @@ public sealed class ApprovalStoreTests
                 ["name"] = "mcp-api-demo",
                 ["replicas"] = "1"
             },
-            [new K8sObjectRef("apps/v1", "Deployment", K8sMcpOptions.DefaultNamespace, "mcp-api-demo")],
-            Manifest: null);
+            [new K8sObjectRef("apps/v1", "Deployment", K8SMcpOptions.DefaultNamespace, "mcp-api-demo")]);
 }

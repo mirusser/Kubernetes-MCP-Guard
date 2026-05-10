@@ -12,6 +12,8 @@ namespace InfraGate.McpServer.Tests.IntegrationTests;
 
 public sealed partial class McpServerIntegrationTests
 {
+    private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
+
     [Fact]
     public async Task McpServer_CanApplyApprovedK8sPlans_WhenIntegrationEnabled()
     {
@@ -23,7 +25,7 @@ public sealed partial class McpServerIntegrationTests
         var repoRoot = FindRepoRoot();
         var serverProject = Path.Combine(repoRoot, "src", "InfraGate.McpServer", "InfraGate.McpServer.csproj");
         var approvalRoot = Path.Combine(Path.GetTempPath(), "infra-gate-mcp", Guid.NewGuid().ToString("N"));
-        const string namespaceName = K8sMcpOptions.DefaultNamespace;
+        const string namespaceName = K8SMcpOptions.DefaultNamespace;
         var kubeconfig = Environment.GetEnvironmentVariable("KUBECONFIG");
         if (string.IsNullOrWhiteSpace(kubeconfig))
         {
@@ -326,7 +328,7 @@ public sealed partial class McpServerIntegrationTests
 
         var pendingPath = Path.Combine(approvalRoot, "pending", $"{planId}.json");
         var json = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
-        var plan = JsonSerializer.Deserialize<K8sPlan>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var plan = JsonSerializer.Deserialize<K8sPlan>(json, JsonWeb);
 
         Assert.NotNull(plan);
         Assert.NotEmpty(plan.Diffs);

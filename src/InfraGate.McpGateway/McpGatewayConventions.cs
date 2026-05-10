@@ -2,6 +2,7 @@ namespace InfraGate.McpGateway;
 
 internal static class McpGatewayConventions
 {
+    // Justification: Intentional localhost default for local development. S1075 false positive on documented convention constant.
     public const string DefaultUrl = "http://127.0.0.1:3001";
     public const string McpPath = "/mcp";
     public const int DefaultEventLimit = 50;

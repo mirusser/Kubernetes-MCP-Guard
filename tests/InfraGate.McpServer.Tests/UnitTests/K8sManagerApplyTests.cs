@@ -137,10 +137,12 @@ public sealed class K8sManagerApplyTests
             {
                 [PlanParameterObjectCount] = "1"
             },
-            [serviceRef],
-            MismatchedApplyManifest,
-            CreateDryRun(serviceRef),
-            [CreateDiff(serviceRef, ServiceJson("planned-service"), ServiceJson("planned-service"))]);
+            [serviceRef])
+        {
+            Manifest = MismatchedApplyManifest,
+            DryRun = CreateDryRun(serviceRef),
+            Diffs = [CreateDiff(serviceRef, ServiceJson("planned-service"), ServiceJson("planned-service"))]
+        };
         await context.ApprovalStore.CreatePlanAsync(plan, CancellationToken.None);
         await ApprovePlanAsync(context, plan.Id);
 
@@ -164,8 +166,7 @@ public sealed class K8sManagerApplyTests
                 [K8sConventions.PlanParameters.Name] = "demo",
                 [K8sConventions.PlanParameters.Replicas] = "2"
             },
-            [K8sConventions.K8sResources.DeploymentRef(DemoNamespace, "demo")],
-            Manifest: null);
+            [K8sConventions.K8sResources.DeploymentRef(DemoNamespace, "demo")]);
         await context.ApprovalStore.CreatePlanAsync(plan, CancellationToken.None);
         await ApprovePlanAsync(context, plan.Id);
 
@@ -189,9 +190,10 @@ public sealed class K8sManagerApplyTests
                 [K8sConventions.PlanParameters.Name] = "demo",
                 [K8sConventions.PlanParameters.Replicas] = "2"
             },
-            [K8sConventions.K8sResources.DeploymentRef(DemoNamespace, "demo")],
-            Manifest: null,
-            DryRun: CreateDryRun(K8sConventions.K8sResources.DeploymentRef(DemoNamespace, "demo")));
+            [K8sConventions.K8sResources.DeploymentRef(DemoNamespace, "demo")])
+        {
+            DryRun = CreateDryRun(K8sConventions.K8sResources.DeploymentRef(DemoNamespace, "demo"))
+        };
         await context.ApprovalStore.CreatePlanAsync(plan, CancellationToken.None);
         await ApprovePlanAsync(context, plan.Id);
 
@@ -245,10 +247,12 @@ public sealed class K8sManagerApplyTests
             DateTimeOffset.UtcNow,
             "Apply tampered manifest.",
             new Dictionary<string, string> { [PlanParameterObjectCount] = "1" },
-            [deploymentRef],
-            PrivilegedDeploymentManifest,
-            CreateDryRun(deploymentRef),
-            [CreateDiff(deploymentRef, DeploymentJson(), DeploymentJson())]);
+            [deploymentRef])
+        {
+            Manifest = PrivilegedDeploymentManifest,
+            DryRun = CreateDryRun(deploymentRef),
+            Diffs = [CreateDiff(deploymentRef, DeploymentJson(), DeploymentJson())]
+        };
         await context.ApprovalStore.CreatePlanAsync(plan, CancellationToken.None);
         await ApprovePlanAsync(context, plan.Id);
 
@@ -474,7 +478,7 @@ public sealed class K8sManagerApplyTests
     private static ManagerContext CreateManager(TestKubernetesApi? api = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
-        var options = new K8sMcpOptions(
+        var options = new K8SMcpOptions(
             new HashSet<string>(StringComparer.Ordinal) { DemoNamespace },
             root);
         var approvalStore = new ApprovalStore(new ApprovalStoreOptions(root));

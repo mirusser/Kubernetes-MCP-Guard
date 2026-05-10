@@ -5,7 +5,7 @@ namespace InfraGate.McpGateway;
 
 public sealed partial class PromptInjectionGuard
 {
-    public ResponseSanitizationResult SanitizeResponse(string responseText)
+    public static ResponseSanitizationResult SanitizeResponse(string responseText)
     {
         var findings = new List<GuardrailFinding>();
         var manifestRedacted = false;

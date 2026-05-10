@@ -21,15 +21,17 @@ on:
 
 permissions:
   contents: read
-  packages: write
-  security-events: write
 
 jobs:
   docker:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
     env:
       DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || 'local' }}
-      PUSH_IMAGES: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.push_images) }}
+      PUSH_IMAGES: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v'))) || (github.event_name == 'workflow_dispatch' && inputs.push_images) }}
 
     strategy:
       fail-fast: false
@@ -76,6 +78,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=pr
+            type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
@@ -93,7 +96,7 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           push: ${{ env.PUSH_IMAGES == 'true' }}
-          load: true
+          load: ${{ env.PUSH_IMAGES != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
@@ -114,3 +117,74 @@ jobs:
         with:
           sarif_file: trivy-${{ matrix.image }}.sarif
           category: trivy-${{ matrix.image }}
+
+  deploy-development:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: [self-hosted, linux]
+    needs:
+      - docker
+    environment: development
+    permissions:
+      contents: read
+      packages: read
+    env:
+      DEPLOY_COMPOSE_FILE: deploy/compose/development.yaml
+      DEPLOY_ENV_FILE: /etc/infra-gate/development.env
+      DEPLOY_IMAGE_TAG: dev
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/infra-gate' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare deploy directory
+        run: mkdir -p "$DEPLOY_PATH"
+
+      - name: Copy compose file
+        run: cp "$DEPLOY_COMPOSE_FILE" "$DEPLOY_PATH/compose.yaml"
+
+      - name: Deploy development
+        run: |
+          cd "$DEPLOY_PATH"
+          test -f "$DEPLOY_ENV_FILE" || { echo "Runtime env file not found: $DEPLOY_ENV_FILE" >&2; exit 1; }
+
+          TAG="$DEPLOY_IMAGE_TAG" docker compose --env-file "$DEPLOY_ENV_FILE" -f compose.yaml pull
+          TAG="$DEPLOY_IMAGE_TAG" docker compose --env-file "$DEPLOY_ENV_FILE" -f compose.yaml up -d --remove-orphans
+
+          bind_port="$(sed -n 's/^INFRA_GATE_BIND_PORT=//p' "$DEPLOY_ENV_FILE" | tail -n 1)"
+          bind_port="${bind_port:-3001}"
+          headers="$(mktemp)"
+          body="$(mktemp)"
+          trap 'rm -f "$headers" "$body"' EXIT
+
+          elapsed=0
+          while true; do
+            : > "$headers"
+            : > "$body"
+            http_status="$(curl -sS -D "$headers" -o "$body" -w "%{http_code}" \
+              -X POST "http://127.0.0.1:${bind_port}/mcp" \
+              -H "Content-Type: application/json" \
+              -d '{"jsonrpc":"2.0","method":"initialize","id":1,"params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"deploy-check","version":"0"}}}' \
+              2>/dev/null || true)"
+
+            if [ "$http_status" = "401" ] && grep -qi '^www-authenticate:.*resource_metadata' "$headers"; then
+              break
+            fi
+
+            if [ "$elapsed" -ge 60 ]; then
+              echo "Gateway did not return the expected OAuth 401 challenge." >&2
+              echo "Last HTTP status: ${http_status:-none}" >&2
+              docker compose --env-file "$DEPLOY_ENV_FILE" -f compose.yaml logs --tail=50 >&2 || true
+              exit 1
+            fi
+
+            sleep 2
+            elapsed=$((elapsed + 2))
+          done

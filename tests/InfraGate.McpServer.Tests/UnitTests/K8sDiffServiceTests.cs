@@ -149,9 +149,10 @@ public sealed class K8sDiffServiceTests
             DateTimeOffset.UtcNow,
             "Apply ConfigMap.",
             [],
-            [ConfigMapRef],
-            Manifest: null,
-            Diffs: []);
+            [ConfigMapRef])
+        {
+            Diffs = []
+        };
 
         var drift = await K8sDiffService.FindDriftAsync(client, plan, CancellationToken.None);
 
