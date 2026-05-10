@@ -85,8 +85,15 @@ docker compose -f deploy/mode-c/compose.yaml up --build
 
 ### Docker image publishing
 
-Images are pushed to Docker Hub and GitHub Container Registry (GHCR) on version tags or manual dispatch.
+Images are pushed to Docker Hub and GitHub Container Registry (GHCR) on the `dev` branch, version tags, or manual dispatch.
 PRs and pushes to `main` build without pushing.
+
+The deployment triggers are separate:
+
+- Push to `dev`: pushes `:dev` images, then deploys `deploy/compose/development.yaml` to the GitHub `development` environment over SSH.
+- Push a `v*` tag: pushes release images including the raw tag (for example `:v1.0.0`), then deploys `deploy/compose/production.yaml` to the GitHub `production` environment over SSH.
+
+Both remote Docker deployments are gateway-only and use a real OIDC provider. `InfraGate.DevIssuer` remains local/demo only through the `deploy/mode-c` Compose files.
 
 Trigger a push:
 
@@ -97,6 +104,7 @@ git tag v1.0.0 && git push origin v1.0.0
 Or trigger manually from Actions → Docker workflow → Run workflow → check `push_images`.
 
 Required repository variables and secrets are listed in the [configuration reference](configuration.md).
+Remote hosts keep runtime configuration in `/etc/infra-gate/development.env` or `/etc/infra-gate/production.env`; GitHub Actions copies only the Compose file and never writes kubeconfigs or OIDC runtime settings.
 
 Images built: `kubernetes-mcp-guard-devissuer`, `kubernetes-mcp-guard-gateway`.
 

@@ -49,7 +49,7 @@ public sealed record K8sMcpOptions(
             isInClusterConfigEnabled);
     }
 
-    public void ValidateStartupSafety()
+    public void ValidateProductionSafety()
     {
         if (HasExplicitKubeConfig && IsInClusterConfigEnabled)
         {
@@ -97,8 +97,17 @@ public sealed record K8sMcpOptions(
 
     private static bool ParseBooleanEnvironmentVariable(string? value, bool defaultValue)
     {
-        return string.IsNullOrWhiteSpace(value)
-            ? defaultValue
-            : bool.Parse(value);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return defaultValue;
+        }
+
+        if (!bool.TryParse(value, out bool result))
+        {
+            throw new InvalidOperationException(
+                $"{K8sConventions.EnvironmentVariables.UseInClusterConfig} must be 'true' or 'false'; value '{value}' is not supported.");
+        }
+
+        return result;
     }
 }

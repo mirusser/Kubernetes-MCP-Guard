@@ -14,7 +14,7 @@ builder.Logging.AddConsole(options =>
 });
 
 var options = K8sMcpOptions.FromEnvironment();
-options.ValidateStartupSafety();
+options.ValidateProductionSafety();
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
 builder.Services.AddSingleton<ApprovalStore>();

@@ -16,7 +16,7 @@ internal sealed class KubernetesConfigProvider(K8sMcpOptions options)
         Func<KubernetesClientConfiguration> inClusterFactory,
         Func<KubernetesClientConfiguration> defaultFactory)
     {
-        options.ValidateStartupSafety();
+        options.ValidateProductionSafety();
 
         KubernetesClientConfiguration config;
         if (options.HasExplicitKubeConfig)

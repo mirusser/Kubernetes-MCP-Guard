@@ -24,7 +24,8 @@ Implement strict Production mode with no bypass flags, enforced by `InfraGate.Mc
 - Call validation in `Program.cs` immediately after options load.
 
 3. MCP server Kubernetes config provider
-- Replace direct `BuildDefaultConfig()` fallback in `Program.cs` with `KubernetesConfigProvider`.
+- Replace direct `BuildDefaultConfig()` fallback in `Program.c
+s` with `KubernetesConfigProvider`.
 - Auth selection order: explicit `KUBECONFIG`, else `K8S_MCP_USE_IN_CLUSTER=true`, else Development-only `BuildDefaultConfig()`, else throw.
 - In Production, require explicit `K8S_MCP_ALLOWED_NAMESPACES` and explicit persistent `K8S_MCP_APPROVAL_ROOT`.
 - Preserve current Development defaults: default namespace, default approval root, and Kubernetes client default discovery.

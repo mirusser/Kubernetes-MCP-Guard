@@ -54,6 +54,14 @@ export INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT="${INFRA_GATE_OAUTH_AUTH
 export INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT="${INFRA_GATE_OAUTH_AUTHORITY}/protocol/openid-connect/token"
 ```
 
+For Docker host deployments, put the production values in `/etc/infra-gate/production.env` and run the gateway-only Compose file with the release tag:
+
+```bash
+TAG=v1.0.0 docker compose --env-file /etc/infra-gate/production.env -f deploy/compose/production.yaml up -d
+```
+
+The production Compose path does not start `InfraGate.DevIssuer`. TLS may terminate at a host reverse proxy, but the public OAuth/resource/approval URLs in the env file must remain HTTPS and non-loopback.
+
 ## Production Checklist
 
 Before moving to production, ensure you have:
@@ -66,6 +74,7 @@ Before moving to production, ensure you have:
 - [ ] Explicit Kubernetes auth configured with either `KUBECONFIG` or `K8S_MCP_USE_IN_CLUSTER=true`.
 - [ ] Explicit `K8S_MCP_ALLOWED_NAMESPACES`, `K8S_MCP_APPROVAL_ROOT`, and `INFRA_GATE_GUARD_AUDIT_ROOT`.
 - [ ] Durable approval and audit paths that are not temp paths, default dev paths, or group/other-writable.
+- [ ] Host Docker env file provisioned at `/etc/infra-gate/production.env` when using the remote Compose deployment.
 - [ ] No opaque manual bearer values in MCP client configuration.
 - [ ] Disabled `DevIssuer` completely.
 

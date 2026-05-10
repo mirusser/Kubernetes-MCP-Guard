@@ -375,8 +375,10 @@ The canonical environment variable, CI/CD, and release configuration reference i
 
 ```
 /workspace
-├── InfraGate.slnx                        # Solution file (all 7 projects)
+├── InfraGate.slnx                        # Solution file
 ├── src/
+│   ├── InfraGate.Approvals/              # Shared approval storage/challenge contracts
+│   ├── InfraGate.RuntimeSafety/          # Runtime mode and production safety checks
 │   ├── InfraGate.McpServer/              # Stdio MCP server (Kubernetes tools)
 │   ├── InfraGate.McpGateway/             # HTTP gateway (guardrails, downstream client)
 │   ├── InfraGate.McpGateway.Auth/        # Auth library (OAuth JWT + browser approval cookie)
@@ -386,6 +388,7 @@ The canonical environment variable, CI/CD, and release configuration reference i
 │   ├── InfraGate.McpGateway.Tests/
 │   └── InfraGate.DevIssuer.Tests/
 ├── deploy/
+│   ├── compose/                          # Remote Docker host deployments
 │   ├── docker/                           # Runtime Dockerfiles
 │   ├── minikube/rbac.yaml                # Namespace + ServiceAccount + Role + RoleBinding
 │   └── mode-c/compose.yaml               # Containerized OAuth setup
