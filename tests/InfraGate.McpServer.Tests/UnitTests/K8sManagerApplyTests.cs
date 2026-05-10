@@ -474,7 +474,7 @@ public sealed class K8sManagerApplyTests
     private static ManagerContext CreateManager(TestKubernetesApi? api = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
-        var options = new K8sMcpOptions(
+        var options = new K8SMcpOptions(
             new HashSet<string>(StringComparer.Ordinal) { DemoNamespace },
             root);
         var approvalStore = new ApprovalStore(new ApprovalStoreOptions(root));

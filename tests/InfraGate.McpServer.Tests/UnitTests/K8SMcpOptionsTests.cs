@@ -3,9 +3,22 @@ using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
 
-public sealed class K8sMcpOptionsTests
+public sealed class K8SMcpOptionsTests
 {
     private const string DefaultApprovalRootDirectory = ".mcp-approvals";
+
+    [Fact]
+    public void Constructor_UsesOptionalDefaults_WhenFlagsOmitted()
+    {
+        var options = new K8SMcpOptions(
+            new HashSet<string>(["demo"], StringComparer.Ordinal),
+            ProductionPath("approvals"));
+
+        Assert.True(options.IsApprovalRootExplicit);
+        Assert.True(options.HasExplicitAllowedNamespaces);
+        Assert.False(options.HasExplicitKubeConfig);
+        Assert.False(options.IsInClusterConfigEnabled);
+    }
 
     [Fact]
     public void FromEnvironment_UsesDefaultApprovalRootAndNamespace_WhenUnset()
@@ -14,12 +27,12 @@ public sealed class K8sMcpOptionsTests
             (K8sConventions.EnvironmentVariables.ApprovalRoot, null),
             (K8sConventions.EnvironmentVariables.AllowedNamespaces, null));
 
-        var options = K8sMcpOptions.FromEnvironment();
+        var options = K8SMcpOptions.FromEnvironment();
 
         Assert.Equal(
             Path.Combine(Directory.GetCurrentDirectory(), DefaultApprovalRootDirectory),
             options.ApprovalRoot);
-        Assert.Equal([K8sMcpOptions.DefaultNamespace], options.AllowedNamespaces);
+        Assert.Equal([K8SMcpOptions.DefaultNamespace], options.AllowedNamespaces);
     }
 
     [Fact]
@@ -29,7 +42,7 @@ public sealed class K8sMcpOptionsTests
             (K8sConventions.EnvironmentVariables.ApprovalRoot, "/tmp/infra-gate-approvals"),
             (K8sConventions.EnvironmentVariables.AllowedNamespaces, null));
 
-        var options = K8sMcpOptions.FromEnvironment();
+        var options = K8SMcpOptions.FromEnvironment();
 
         Assert.Equal("/tmp/infra-gate-approvals", options.ApprovalRoot);
     }
@@ -41,24 +54,53 @@ public sealed class K8sMcpOptionsTests
             (K8sConventions.EnvironmentVariables.ApprovalRoot, null),
             (K8sConventions.EnvironmentVariables.AllowedNamespaces, "alpha, beta ,,gamma"));
 
-        var options = K8sMcpOptions.FromEnvironment();
+        var options = K8SMcpOptions.FromEnvironment();
 
         Assert.Equal(["alpha", "beta", "gamma"], options.AllowedNamespaces.Order(StringComparer.Ordinal));
     }
 
     [Fact]
+    public void FromEnvironment_ParsesInClusterConfigFlag_WhenSet()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
+            (K8sConventions.EnvironmentVariables.ApprovalRoot, null),
+            (K8sConventions.EnvironmentVariables.AllowedNamespaces, null),
+            (K8sConventions.EnvironmentVariables.KubeConfig, null),
+            (K8sConventions.EnvironmentVariables.UseInClusterConfig, "true"));
+
+        var options = K8SMcpOptions.FromEnvironment();
+
+        Assert.True(options.IsInClusterConfigEnabled);
+        Assert.False(options.HasExplicitKubeConfig);
+    }
+
+    [Fact]
+    public void FromEnvironment_WithInvalidInClusterConfigFlag_Throws()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
+            (K8sConventions.EnvironmentVariables.UseInClusterConfig, "maybe"));
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(K8SMcpOptions.FromEnvironment);
+
+        Assert.Contains(K8sConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
+        Assert.Contains("maybe", exception.Message);
+    }
+
+    [Fact]
     public void ParseAllowedNamespaces_UsesDefault_WhenUnset()
     {
-        var namespaces = K8sMcpOptions.ParseAllowedNamespaces(null);
+        var namespaces = K8SMcpOptions.ParseAllowedNamespaces(null);
 
-        Assert.Contains(K8sMcpOptions.DefaultNamespace, namespaces);
+        Assert.Contains(K8SMcpOptions.DefaultNamespace, namespaces);
         Assert.Single(namespaces);
     }
 
     [Fact]
     public void ParseAllowedNamespaces_TrimsCommaSeparatedValues()
     {
-        var namespaces = K8sMcpOptions.ParseAllowedNamespaces("alpha, beta ,,gamma");
+        var namespaces = K8SMcpOptions.ParseAllowedNamespaces("alpha, beta ,,gamma");
 
         Assert.Equal(["alpha", "beta", "gamma"], namespaces.Order(StringComparer.Ordinal));
     }
@@ -70,7 +112,7 @@ public sealed class K8sMcpOptionsTests
             (K8sConventions.EnvironmentVariables.KubeConfig, null),
             (K8sConventions.EnvironmentVariables.UseInClusterConfig, null));
 
-        var options = K8sMcpOptions.FromEnvironment();
+        var options = K8SMcpOptions.FromEnvironment();
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
         Assert.Contains(K8sConventions.EnvironmentVariables.KubeConfig, exception.Message);
@@ -83,10 +125,21 @@ public sealed class K8sMcpOptionsTests
         using var environment = SetProductionEnvironment(
             (K8sConventions.EnvironmentVariables.AllowedNamespaces, null));
 
-        var options = K8sMcpOptions.FromEnvironment();
+        var options = K8SMcpOptions.FromEnvironment();
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
         Assert.Contains(K8sConventions.EnvironmentVariables.AllowedNamespaces, exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithValidProductionSettings_AllowsStartup()
+    {
+        using var environment = SetProductionEnvironment();
+
+        var options = K8SMcpOptions.FromEnvironment();
+        Exception? exception = Record.Exception(options.ValidateProductionSafety);
+
+        Assert.Null(exception);
     }
 
     [Fact]
@@ -99,7 +152,7 @@ public sealed class K8sMcpOptionsTests
             (K8sConventions.EnvironmentVariables.KubeConfig, null),
             (K8sConventions.EnvironmentVariables.UseInClusterConfig, null));
 
-        var options = K8sMcpOptions.FromEnvironment();
+        var options = K8SMcpOptions.FromEnvironment();
         Exception? exception = Record.Exception(options.ValidateProductionSafety);
 
         Assert.Null(exception);

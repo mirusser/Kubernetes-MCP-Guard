@@ -3,7 +3,7 @@ using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpServer;
 
-public sealed record K8sMcpOptions(
+public sealed record K8SMcpOptions(
     IReadOnlySet<string> AllowedNamespaces,
     string ApprovalRoot,
     RuntimeMode RuntimeMode = RuntimeMode.Development,
@@ -21,7 +21,7 @@ public sealed record K8sMcpOptions(
     public bool IsNamespaceAllowed(string namespaceName) =>
         AllowedNamespaces.Contains(namespaceName);
 
-    public static K8sMcpOptions FromEnvironment()
+    public static K8SMcpOptions FromEnvironment()
     {
         RuntimeMode runtimeMode = RuntimeModeResolver.FromEnvironment();
         string? approvalRootValue = Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.ApprovalRoot);
@@ -39,7 +39,7 @@ public sealed record K8sMcpOptions(
             Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.UseInClusterConfig),
             defaultValue: false);
 
-        return new K8sMcpOptions(
+        return new K8SMcpOptions(
             allowedNamespaces,
             approvalRoot,
             runtimeMode,

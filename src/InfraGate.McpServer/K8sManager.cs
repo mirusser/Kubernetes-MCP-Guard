@@ -15,11 +15,11 @@ public sealed partial class K8sManager
         WriteIndented = true
     };
 
-    private readonly K8sMcpOptions options;
+    private readonly K8SMcpOptions options;
     private readonly ApprovalStore approvalStore;
     private readonly IKubernetes client;
 
-    public K8sManager(K8sMcpOptions options, ApprovalStore approvalStore, IKubernetes client)
+    public K8sManager(K8SMcpOptions options, ApprovalStore approvalStore, IKubernetes client)
     {
         this.options = options;
         this.approvalStore = approvalStore;

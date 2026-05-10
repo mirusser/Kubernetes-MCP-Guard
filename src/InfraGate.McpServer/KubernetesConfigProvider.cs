@@ -3,7 +3,7 @@ using k8s;
 
 namespace InfraGate.McpServer;
 
-internal sealed class KubernetesConfigProvider(K8sMcpOptions options)
+internal sealed class KubernetesConfigProvider(K8SMcpOptions options)
 {
     public KubernetesClientConfiguration Create() =>
         Create(
@@ -35,6 +35,8 @@ internal sealed class KubernetesConfigProvider(K8sMcpOptions options)
         }
         else
         {
+            // ValidateProductionSafety rejects this today; keep this local guard so a future runtime mode cannot
+            // silently fall back to developer kubeconfig discovery without explicit Kubernetes auth.
             throw new InvalidOperationException(
                 $"Production mode requires explicit Kubernetes auth: set " +
                 $"{K8sConventions.EnvironmentVariables.KubeConfig} or " +

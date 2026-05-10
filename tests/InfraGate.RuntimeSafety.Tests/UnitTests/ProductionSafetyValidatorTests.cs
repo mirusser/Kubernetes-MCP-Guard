@@ -102,6 +102,22 @@ public sealed class ProductionSafetyValidatorTests
     }
 
     [Fact]
+    public void RequirePersistentDirectory_WithInvalidPath_Throws()
+    {
+        string root = Path.GetPathRoot(Directory.GetCurrentDirectory()) ?? Path.DirectorySeparatorChar.ToString();
+        string invalidPath = root.TrimEnd(Path.DirectorySeparatorChar) +
+                             Path.DirectorySeparatorChar +
+                             "infra-gate\0invalid";
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => ProductionSafetyValidator.RequirePersistentDirectory(
+                invalidPath, SettingName, isExplicit: true, new HashSet<string>()));
+
+        Assert.Contains("valid path", exception.Message);
+        Assert.IsType<ArgumentException>(exception.InnerException);
+    }
+
+    [Fact]
     public void RequirePersistentDirectory_WithTempPath_Throws()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), "infra-gate-test");

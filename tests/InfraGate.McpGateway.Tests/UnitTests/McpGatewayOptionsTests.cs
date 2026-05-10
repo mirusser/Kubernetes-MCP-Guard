@@ -114,6 +114,16 @@ public sealed class McpGatewayOptionsTests
     }
 
     [Fact]
+    public void ValidateProductionSafety_WithDevelopmentMode_AllowsLocalSettings()
+    {
+        var options = CreateOptions();
+
+        Exception? exception = Record.Exception(options.ValidateProductionSafety);
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
     public void ValidateProductionSafety_WithValidExternalSettings_AllowsStartup()
     {
         using var environment = SetProductionEnvironment();
@@ -134,6 +144,18 @@ public sealed class McpGatewayOptionsTests
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
         Assert.Contains(GatewayAuthConventions.EnvironmentVariables.OAuthRequireHttpsMetadata, exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithHttpMetadataAddress_RefusesStartup()
+    {
+        using var environment = SetProductionEnvironment(
+            (GatewayAuthConventions.EnvironmentVariables.OAuthMetadataAddress, "http://issuer.example.com/.well-known/openid-configuration"));
+
+        var options = McpGatewayOptions.FromEnvironment();
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(GatewayAuthConventions.EnvironmentVariables.OAuthMetadataAddress, exception.Message);
     }
 
     [Fact]

@@ -7,6 +7,46 @@ namespace InfraGate.McpServer.Tests.UnitTests;
 public sealed class KubernetesConfigProviderTests
 {
     [Fact]
+    public void Create_WithDefaultFactories_UsesConfiguredKubeConfig()
+    {
+        string kubeConfigPath = Path.Combine(
+            Path.GetTempPath(),
+            $"infra-gate-kubeconfig-{Guid.NewGuid():N}.yaml");
+        File.WriteAllText(kubeConfigPath, """
+                                          apiVersion: v1
+                                          kind: Config
+                                          clusters:
+                                            - name: test
+                                              cluster:
+                                                server: https://kubeconfig.example.com
+                                          contexts:
+                                            - name: test
+                                              context:
+                                                cluster: test
+                                                user: test
+                                          current-context: test
+                                          users:
+                                            - name: test
+                                              user:
+                                                token: test-token
+                                          """);
+
+        try
+        {
+            var provider = new KubernetesConfigProvider(CreateOptions(kubeConfig: kubeConfigPath));
+
+            var config = provider.Create();
+
+            Assert.StartsWith("https://kubeconfig.example.com", config.Host, StringComparison.Ordinal);
+            Assert.Equal(K8sConventions.ServiceName, config.UserAgent);
+        }
+        finally
+        {
+            File.Delete(kubeConfigPath);
+        }
+    }
+
+    [Fact]
     public void Create_UsesKubeConfigFactory_WhenKubeConfigSet()
     {
         string kubeConfig = ProductionPath("kubeconfig");
@@ -86,7 +126,21 @@ public sealed class KubernetesConfigProviderTests
         Assert.Contains(K8sConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
     }
 
-    private static K8sMcpOptions CreateOptions(
+    [Fact]
+    public void Create_WithUnknownRuntimeModeAndNoAuth_Throws()
+    {
+        var provider = new KubernetesConfigProvider(CreateOptions(runtimeMode: (RuntimeMode)999));
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => provider.Create(
+            _ => throw new InvalidOperationException("Kubeconfig should not be used."),
+            () => throw new InvalidOperationException("In-cluster config should not be used."),
+            () => throw new InvalidOperationException("Default config should not be used.")));
+
+        Assert.Contains(K8sConventions.EnvironmentVariables.KubeConfig, exception.Message);
+        Assert.Contains(K8sConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
+    }
+
+    private static K8SMcpOptions CreateOptions(
         RuntimeMode runtimeMode = RuntimeMode.Development,
         string? kubeConfig = null,
         bool isInClusterConfigEnabled = false) =>

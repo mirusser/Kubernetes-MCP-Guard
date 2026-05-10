@@ -13,7 +13,7 @@ builder.Logging.AddConsole(options =>
     options.LogToStandardErrorThreshold = LogLevel.Trace;
 });
 
-var options = K8sMcpOptions.FromEnvironment();
+var options = K8SMcpOptions.FromEnvironment();
 options.ValidateProductionSafety();
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));

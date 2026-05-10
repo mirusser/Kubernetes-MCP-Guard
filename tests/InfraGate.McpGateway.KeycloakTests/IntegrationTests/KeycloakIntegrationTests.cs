@@ -129,7 +129,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                ?? throw new InvalidOperationException("Token response did not contain access_token.");
     }
 
-    private TestServer CreateGatewayServer(
+    private static TestServer CreateGatewayServer(
         string authority,
         string oauthResource = Resource)
     {

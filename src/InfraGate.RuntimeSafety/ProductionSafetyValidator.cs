@@ -34,6 +34,16 @@ public static class ProductionSafetyValidator
         bool isExplicit,
         IReadOnlySet<string> deniedDirectoryNames)
     {
+        RequireExplicitPersistentPath(path, settingName, isExplicit);
+        string fullPath = GetValidatedFullPath(path, settingName);
+
+        RequireNonTempDirectory(fullPath, settingName);
+        RequireNonDefaultDirectoryName(fullPath, settingName, deniedDirectoryNames);
+        RequireSecureExistingDirectory(fullPath, settingName);
+    }
+
+    private static void RequireExplicitPersistentPath(string path, string settingName, bool isExplicit)
+    {
         if (!isExplicit)
         {
             throw new InvalidOperationException($"{settingName} must be explicitly configured in Production mode.");
@@ -48,11 +58,13 @@ public static class ProductionSafetyValidator
         {
             throw new InvalidOperationException($"{settingName} must be an absolute path in Production mode.");
         }
+    }
 
-        string fullPath;
+    private static string GetValidatedFullPath(string path, string settingName)
+    {
         try
         {
-            fullPath = Path.GetFullPath(path);
+            return Path.GetFullPath(path);
         }
         catch (ArgumentException ex)
         {
@@ -62,26 +74,40 @@ public static class ProductionSafetyValidator
         {
             throw new InvalidOperationException($"{settingName} must be a valid path in Production mode.", ex);
         }
+    }
 
+    private static void RequireNonTempDirectory(string fullPath, string settingName)
+    {
         if (IsUnderPath(fullPath, Path.GetTempPath()))
         {
             throw new InvalidOperationException($"{settingName} must not be under the temp directory in Production mode.");
         }
+    }
 
+    private static void RequireNonDefaultDirectoryName(
+        string fullPath,
+        string settingName,
+        IReadOnlySet<string> deniedDirectoryNames)
+    {
         string leafDirectory = new DirectoryInfo(fullPath).Name;
         if (deniedDirectoryNames.Contains(leafDirectory))
         {
             throw new InvalidOperationException($"{settingName} must not use the default development directory in Production mode.");
         }
+    }
 
-        if (!OperatingSystem.IsWindows() && Directory.Exists(fullPath))
+    private static void RequireSecureExistingDirectory(string fullPath, string settingName)
+    {
+        if (OperatingSystem.IsWindows() || !Directory.Exists(fullPath))
         {
-            UnixFileMode mode = File.GetUnixFileMode(fullPath);
-            if ((mode & GroupOrOtherWrite) != 0)
-            {
-                throw new InvalidOperationException(
-                    $"{settingName} must not be group- or other-writable in Production mode.");
-            }
+            return;
+        }
+
+        UnixFileMode mode = File.GetUnixFileMode(fullPath);
+        if ((mode & GroupOrOtherWrite) != 0)
+        {
+            throw new InvalidOperationException(
+                $"{settingName} must not be group- or other-writable in Production mode.");
         }
     }
 
