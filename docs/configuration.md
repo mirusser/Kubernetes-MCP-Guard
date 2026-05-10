@@ -78,6 +78,22 @@ Defaults below come from the current source code and workflows. Paths shown as `
 | `SONAR_TOKEN` | GitHub Actions secret | Required for Sonar workflow | None | `sqp_...` | SonarCloud token used by `sonar.yml`. | Store as `secrets.SONAR_TOKEN`. |
 | `SONAR_PROJECT_KEY` | GitHub Actions variable | Required for Sonar workflow | None | `mirusser_Kubernetes-MCP-Guard` | SonarCloud project key passed to the scanner. | Store as `vars.SONAR_PROJECT_KEY`. |
 | `SONAR_ORGANIZATION` | GitHub Actions variable | Required for Sonar workflow | None | `mirusser` | SonarCloud organization passed to the scanner. | Store as `vars.SONAR_ORGANIZATION`. |
+
+### SonarCloud Report Artifact
+
+On `push` and `workflow_dispatch` events (not PRs), `sonar.yml` fetches the full analysis results from the SonarCloud Web API after the scan completes and uploads a `sonarcloud-report` artifact retained for 7 days. Download it from the **Artifacts** section of the GitHub Actions run page.
+
+The artifact contains a single `sonarcloud-report.json` file with five top-level keys:
+
+| Key | Contents |
+| --- | --- |
+| `metadata` | `generatedAt` (ISO-8601), `projectKey`, `sonarcloudUrl`, `branch` |
+| `qualityGate` | Full `/api/qualitygates/project_status` response including per-condition results |
+| `measures` | Full `/api/measures/component` response with values for bugs, vulnerabilities, code smells, coverage, duplication, ratings, complexity, and NCLOC |
+| `issues` | All open/confirmed issues with `rule`, `severity`, `type`, `component` (file path), `line`, `message`, `effort`, and full `ruleDescription.descriptionSections` (root/compliant/remediation content) |
+| `hotspots` | All security hotspots with `securityCategory`, `vulnerabilityProbability`, `component`, `line`, and `message` |
+
+To process this report and produce a structured remediation plan, use the `.agents/skills/sonarcloud-remediation/SKILL.md` agent skill. It chains through `repo-onboarding`, `code-standards`, `planning-and-task-breakdown`, `writing-tests`, and `verify-readme-docs` to produce ordered, convention-compliant fix tasks.
 | `push_images` | Docker workflow dispatch input | No | `false` | `true` | Manual workflow input that requests image publishing. | Use only for intentional publishing; release tags publish automatically. |
 | `PUSH_IMAGES` | Docker workflow environment | Derived | `true` on `dev`, `v*` tag pushes, or manual `push_images=true`; otherwise `false` | `true` | Internal `package-docker.yml` flag controlling registry login and image push. | Do not set directly outside the workflow unless testing the workflow logic. |
 | `INFRA_GATE_RUN_INTEGRATION` | Test environment | No | Unset, live server integration test returns early | `1` | Enables live Kubernetes integration coverage for `InfraGate.McpServer.Tests`. | Run only against a disposable/demo namespace with least-privilege kubeconfig. |
