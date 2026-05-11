@@ -13,5 +13,6 @@
     <Project Path="tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj" />
     <Project Path="tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj" />
     <Project Path="tests/InfraGate.RuntimeSafety.Tests/InfraGate.RuntimeSafety.Tests.csproj" />
+    <Project Path="tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj" />
   </Folder>
 </Solution>
