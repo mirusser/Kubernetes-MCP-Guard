@@ -2,13 +2,13 @@
 
 ## Context
 
-Why there are two distinct concepts — a plan and an approval challenge — when both relate to the same mutation. This memo answers that by grounding the explanation in the actual types and code paths in the repo (per the [repo-onboarding skill](.agents/skills/repo-onboarding/SKILL.md)).
+Why there are two distinct concepts — a plan and an approval challenge — when both relate to the same mutation. This memo answers that by grounding the explanation in the actual types and code paths in the repo (per the [repo-onboarding skill](../.agents/skills/repo-onboarding/SKILL.md)).
 
 ---
 
 ## The two records, side by side
 
-[K8sPlan](src/InfraGate.Approvals/K8sPlan.cs) — the **mutation request**:
+[K8sPlan](../src/InfraGate.Approvals/K8sPlan.cs) — the **mutation request**:
 
 ```text
 Id                string         (e.g. 20260511172300-000e8c5c)
@@ -24,7 +24,7 @@ Diffs             K8sPlanDiff[]
 PolicyFindings    K8sPlanPolicyFinding[]
 ```
 
-[ApprovalChallenge](src/InfraGate.Approvals/ApprovalChallenge.cs) — the **approval ticket**:
+[ApprovalChallenge](../src/InfraGate.Approvals/ApprovalChallenge.cs) — the **approval ticket**:
 
 ```text
 Id                            string         (challenge id ≠ plan id)
@@ -39,7 +39,7 @@ ApproverSubject               string?        (OAuth sub of the human who clicked
 DecidedAtUtc                  DateTimeOffset?
 ```
 
-They live in different stores on disk ([ApprovalConventions.Storage](src/InfraGate.Approvals/ApprovalConventions.cs#L10-L20)):
+They live in different stores on disk ([ApprovalConventions.Storage](../src/InfraGate.Approvals/ApprovalConventions.cs#L10-L20)):
 
 ```text
 <approval-root>/
@@ -68,19 +68,19 @@ Five concrete reasons, each visible in the code:
 ### 1. Different lifetimes
 
 - A plan lives from creation (request_*) through `applied/` (or denial/cleanup). Days, potentially.
-- A challenge has a hard 15-minute TTL by default ([`McpGatewayOptions.DefaultApprovalChallengeTtl`](src/InfraGate.McpGateway/McpGatewayOptions.cs#L22)) and is single-use. If it expires, the plan is still valid — you just need a new challenge.
+- A challenge has a hard 15-minute TTL by default ([`McpGatewayOptions.DefaultApprovalChallengeTtl`](../src/InfraGate.McpGateway/McpGatewayOptions.cs#L22)) and is single-use. If it expires, the plan is still valid — you just need a new challenge.
 
 If they were one record, the TTL on the challenge side would either over-constrain the plan or under-constrain the approval window.
 
 ### 2. One plan → many challenge attempts
 
-If a user lets a challenge expire or denies it, [`EnsureApprovedOrCreateChallengeAsync`](src/InfraGate.McpGateway/GatewayApprovalService.cs) creates a **fresh** challenge for the same `planId`. The plan never changes; only a new ticket is minted. This is exactly the OAuth pattern — one resource, many short-lived tokens trying to act on it.
+If a user lets a challenge expire or denies it, [`EnsureApprovedOrCreateChallengeAsync`](../src/InfraGate.McpGateway/GatewayApprovalService.cs) creates a **fresh** challenge for the same `planId`. The plan never changes; only a new ticket is minted. This is exactly the OAuth pattern — one resource, many short-lived tokens trying to act on it.
 
 ### 3. Two different security questions
 
-The plan answers: *"Is this change valid and policy-compliant?"* — driven by [`K8sPolicyValidator`](src/InfraGate.McpServer/Policy/K8sPolicyValidator.cs), the dry-run, and the manifest parser. None of that involves a user.
+The plan answers: *"Is this change valid and policy-compliant?"* — driven by [`K8sPolicyValidator`](../src/InfraGate.McpServer/Policy/K8sPolicyValidator.cs), the dry-run, and the manifest parser. None of that involves a user.
 
-The challenge answers: *"Did the right human, while still authorized, click Approve?"* — driven by [`GatewayApprovalService.ApproveChallengeAsync`](src/InfraGate.McpGateway/GatewayApprovalService.cs) checking:
+The challenge answers: *"Did the right human, while still authorized, click Approve?"* — driven by [`GatewayApprovalService.ApproveChallengeAsync`](../src/InfraGate.McpGateway/GatewayApprovalService.cs) checking:
 - The approver's `sub` claim equals `RequesterSubject` (same-subject mode).
 - `ExpiresAtUtc` is still in the future.
 - The challenge's `Status` is still `pending`.
@@ -90,13 +90,13 @@ Splitting the records makes it impossible for one concern to silently mutate the
 
 ### 4. Hash binding, decoupled from approval mechanics
 
-When a challenge is created, it snapshots the current `PlanHash`. If the pending plan file changes between challenge creation and the approve click, the hash comparison at [GatewayApprovalService.cs:281](src/InfraGate.McpGateway/GatewayApprovalService.cs#L281) detects it and refuses approval ("The pending plan changed after this approval URL was created."). This is the safety property proved by [`PlanHashMismatchTests`](tests/InfraGate.Safety.E2E.Tests/Workflows/PlanHashMismatchTests.cs) and [`ApproveChallengeAsync_PlanHashDrift_Rejects`](tests/InfraGate.McpGateway.Tests/UnitTests/GatewayApprovalServiceTests.cs).
+When a challenge is created, it snapshots the current `PlanHash`. If the pending plan file changes between challenge creation and the approve click, the hash comparison in [GatewayApprovalService.cs](../src/InfraGate.McpGateway/GatewayApprovalService.cs) detects it and refuses approval ("The pending plan changed after this approval URL was created."). This is the safety property proved by [`ModifiedPendingPlanTests`](../tests/InfraGate.Safety.E2E.Tests/Workflows/ModifiedPendingPlanTests.cs) and [`ApproveChallengeAsync_PlanHashDrift_Rejects`](../tests/InfraGate.McpGateway.Tests/UnitTests/GatewayApprovalServiceTests.cs).
 
 If the plan and challenge were one record, there would be no "before" snapshot to compare against.
 
 ### 5. Forward-compatibility for multi-approver flows
 
-The roadmap ([.agents/Plans/security-roadmap.md §13](.agents/Plans/security-roadmap.md)) calls for two-person rule, approver groups, and break-glass modes — all of which mean *multiple* challenges per plan, possibly with different approvers and different policies. Keeping challenge as a separate record means adding those modes is an additive change to one type, not a schema refactor of the plan.
+The roadmap ([.agents/Plans/security-roadmap.md §13](../.agents/Plans/security-roadmap.md)) calls for two-person rule, approver groups, and break-glass modes — all of which mean *multiple* challenges per plan, possibly with different approvers and different policies. Keeping challenge as a separate record means adding those modes is an additive change to one type, not a schema refactor of the plan.
 
 ---
 

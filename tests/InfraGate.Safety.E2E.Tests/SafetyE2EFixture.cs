@@ -1,15 +1,22 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Json;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.RuntimeSafety;
+using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
 using Testcontainers.Keycloak;
 
 #pragma warning disable ASPDEPR004
@@ -43,6 +50,7 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
     private ApprovalStore? approvalStore;
     private ApprovalChallengeStore? challengeStore;
     private string keycloakBaseAddress = string.Empty;
+    private string approvalOAuthSubject = DemoUsername;
 
     public SafetyE2EFixture()
     {
@@ -149,6 +157,44 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
         return client;
     }
 
+    public HttpClient CreateApprovalBrowser()
+    {
+        if (gatewayServer is null)
+        {
+            throw new InvalidOperationException("Fixture is not initialised.");
+        }
+
+        return new HttpClient(gatewayServer.CreateHandler())
+        {
+            BaseAddress = gatewayServer.BaseAddress
+        };
+    }
+
+    public async Task<SafetyHttpMcpClient> CreateHttpMcpClientAsync(CancellationToken cancellationToken = default)
+    {
+        var token = await AcquireTokenAsync(
+            scope: $"openid {GatewayAuthConventions.DefaultOAuthScope}",
+            cancellationToken: cancellationToken);
+        var httpClient = CreateGatewayHttpClient();
+        var transport = new HttpClientTransport(
+            new HttpClientTransportOptions
+            {
+                Endpoint = new Uri(httpClient.BaseAddress!, McpGatewayConventions.McpPath),
+                Name = "infra-gate-safety-e2e",
+                TransportMode = HttpTransportMode.StreamableHttp,
+                AdditionalHeaders = new Dictionary<string, string>
+                {
+                    ["Authorization"] = $"Bearer {token}"
+                }
+            },
+            httpClient,
+            NullLoggerFactory.Instance,
+            ownsHttpClient: true);
+
+        var client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken);
+        return new SafetyHttpMcpClient(client, ReadJwtSubject(token));
+    }
+
     public async Task<string> AcquireTokenAsync(
         string username = DemoUsername,
         string password = DemoPassword,
@@ -183,14 +229,96 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
         gatewayServer?.Services.GetRequiredService<GatewayApprovalService>()
         ?? throw new InvalidOperationException("Fixture is not initialised.");
 
+    public async Task<HttpClient> CreateAuthenticatedApprovalBrowserAsync(
+        string challengeId,
+        string subject,
+        CancellationToken cancellationToken = default)
+    {
+        approvalOAuthSubject = subject;
+        var browser = CreateApprovalBrowser();
+
+        var pageRedirect = await browser.GetAsync($"/approvals/{challengeId}", cancellationToken);
+        var loginPath = pageRedirect.Headers.Location?.ToString() ??
+                        throw new InvalidOperationException("Approval page did not redirect to login.");
+        var loginRedirect = await browser.GetAsync(loginPath, cancellationToken);
+        var correlationCookie = CookieHeader(loginRedirect);
+        var authorizationUri = loginRedirect.Headers.Location ??
+                               throw new InvalidOperationException("Login did not redirect to OAuth authorization.");
+        var state = QueryHelpers.ParseQuery(authorizationUri.Query)["state"].ToString();
+        if (string.IsNullOrWhiteSpace(state))
+        {
+            throw new InvalidOperationException("OAuth authorization redirect did not contain state.");
+        }
+
+        using var callbackRequest = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"{GatewayAuthConventions.Approvals.DefaultCallbackPath}?code=test-code&state={Uri.EscapeDataString(state)}");
+        callbackRequest.Headers.Add("Cookie", correlationCookie);
+
+        var callback = await browser.SendAsync(callbackRequest, cancellationToken);
+        AddResponseCookies(browser, callback);
+
+        return browser;
+    }
+
+    public async Task<string> ApproveChallengeInBrowserAsync(
+        string challengeId,
+        string subject,
+        CancellationToken cancellationToken = default)
+    {
+        using var browser = await CreateAuthenticatedApprovalBrowserAsync(challengeId, subject, cancellationToken);
+        var page = await browser.GetAsync($"/approvals/{challengeId}", cancellationToken);
+        page.EnsureSuccessStatusCode();
+        var pageText = await page.Content.ReadAsStringAsync(cancellationToken);
+        AddResponseCookies(browser, page);
+
+        return await PostApprovalAsync(
+            browser,
+            challengeId,
+            ParseAntiforgeryToken(pageText),
+            cancellationToken);
+    }
+
+    public static async Task<string> PostApprovalAsync(
+        HttpClient browser,
+        string challengeId,
+        string requestVerificationToken,
+        CancellationToken cancellationToken = default)
+    {
+        var approvalResponse = await browser.PostAsync(
+            $"/approvals/{challengeId}/approve",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                [McpGatewayConventions.Approvals.RequestVerificationToken] = requestVerificationToken
+            }),
+            cancellationToken);
+        approvalResponse.EnsureSuccessStatusCode();
+
+        return await approvalResponse.Content.ReadAsStringAsync(cancellationToken);
+    }
+
+    public static void AddResponseCookies(HttpClient client, HttpResponseMessage response)
+    {
+        var cookies = CookieHeader(response);
+        if (!string.IsNullOrWhiteSpace(cookies))
+        {
+            var existingCookies = client.DefaultRequestHeaders.TryGetValues("Cookie", out var values)
+                ? string.Join("; ", values)
+                : string.Empty;
+            var combinedCookies = string.Join(
+                "; ",
+                new[] { existingCookies, cookies }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+            client.DefaultRequestHeaders.Remove("Cookie");
+            client.DefaultRequestHeaders.Add("Cookie", combinedCookies);
+        }
+    }
+
     // Deliberate test shortcut: this method injects a ClaimsPrincipal directly into
     // IHttpContextAccessor rather than acquiring a real JWT from Keycloak and routing
-    // through the gateway's HTTP + JWT-bearer pipeline. It exists so a single fixture
-    // can simulate two distinct authenticated subjects without:
-    //   - adding a second user to deploy/keycloak/infra-gate-realm.json (which is
-    //     shared with InfraGate.McpGateway.KeycloakTests), and
-    //   - implementing antiforgery cookie + form-token scraping needed to POST the
-    //     gateway's browser approval endpoints under MapGatewayApprovalEndpoints.
+    // through the gateway's HTTP + JWT-bearer pipeline. Endpoint tests should prefer
+    // CreateHttpMcpClientAsync and CreateAuthenticatedApprovalBrowserAsync; this
+    // helper remains for focused service-level probes.
     //
     // Why this is acceptable: GatewayApprovalService.ApproveChallengeAsync resolves
     // the authenticated subject from IHttpContextAccessor exactly the same way
@@ -202,10 +330,8 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
     // with real Keycloak JWTs, so the project as a whole still proves "real OAuth
     // path" — just not for the wrong-user assertion specifically.
     //
-    // If a follow-up wants stricter end-to-end coverage for bullet #6, replace this
-    // with: (a) a second user in infra-gate-realm.json, (b) AcquireTokenAsync calls
-    // for each user, and (c) a helper that GETs /approvals/{id}, captures the
-    // antiforgery cookie + hidden __RequestVerificationToken, then POSTs /approve.
+    // If a follow-up wants stricter real-OIDC coverage for approval decisions, add a
+    // second user to infra-gate-realm.json and use that user for browser OAuth too.
     public void SetAuthenticatedSubject(string subject)
     {
         var accessor = gatewayServer?.Services.GetRequiredService<IHttpContextAccessor>()
@@ -231,6 +357,32 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
         text.Split(Environment.NewLine)
             .Single(line => line.StartsWith("PlanId:", StringComparison.Ordinal))
             ["PlanId: ".Length..];
+
+    public static string ParseChallengeId(string text) =>
+        text.Split(Environment.NewLine)
+            .Single(line => line.StartsWith("Approval URL:", StringComparison.Ordinal))
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Last();
+
+    public static string ParseAntiforgeryToken(string html)
+    {
+        const string marker = "name=\"__RequestVerificationToken\" value=\"";
+
+        var valueStart = html.IndexOf(marker, StringComparison.Ordinal);
+        if (valueStart < 0)
+        {
+            throw new InvalidOperationException("Approval page did not contain an antiforgery token.");
+        }
+
+        valueStart += marker.Length;
+        var valueEnd = html.IndexOf('"', valueStart);
+        if (valueEnd < valueStart)
+        {
+            throw new InvalidOperationException("Approval page contained a malformed antiforgery token.");
+        }
+
+        return WebUtility.HtmlDecode(html[valueStart..valueEnd]);
+    }
 
     public async Task<IReadOnlyList<JsonElement>> ReadAuditEventsAsync(CancellationToken cancellationToken = default)
     {
@@ -302,6 +454,10 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
                 services.AddHttpContextAccessor();
                 services.AddAntiforgery();
                 services.AddGatewayAuthentication(options.Auth);
+                services.PostConfigure<OAuthOptions>(GatewayAuthConventions.Schemes.ApprovalOAuth, oauthOptions =>
+                {
+                    oauthOptions.Backchannel = new HttpClient(new FakeApprovalOAuthBackchannel(() => approvalOAuthSubject));
+                });
                 services
                     .AddMcpServer()
                     .WithHttpTransport()
@@ -346,5 +502,111 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
         }
 
         throw new InvalidOperationException("Could not locate repository root (.git directory not found).");
+    }
+
+    private static string CookieHeader(HttpResponseMessage response)
+    {
+        return response.Headers.TryGetValues("Set-Cookie", out var values)
+            ? string.Join("; ", values.Select(value => value.Split(';', 2)[0]))
+            : string.Empty;
+    }
+
+    private static string ReadJwtSubject(string token)
+    {
+        var parts = token.Split('.');
+        if (parts.Length < 2)
+        {
+            throw new InvalidOperationException("JWT did not contain a payload.");
+        }
+
+        using var document = JsonDocument.Parse(DecodeBase64Url(parts[1]));
+        foreach (var claimName in new[]
+                 {
+                     GatewayAuthConventions.Claims.Subject,
+                     GatewayAuthConventions.Claims.ClientId
+                 })
+        {
+            if (document.RootElement.TryGetProperty(claimName, out var claim) &&
+                !string.IsNullOrWhiteSpace(claim.GetString()))
+            {
+                return claim.GetString()!;
+            }
+        }
+
+        var claimNames = string.Join(", ", document.RootElement.EnumerateObject().Select(property => property.Name));
+        throw new InvalidOperationException($"JWT did not contain a usable subject. Claims: {claimNames}");
+    }
+
+    private static string CreateApprovalJwt(string subject)
+    {
+        var header = EncodeBase64Url(Encoding.UTF8.GetBytes("""{"alg":"none","typ":"JWT"}"""));
+        var payload = EncodeBase64Url(JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, object>
+        {
+            [GatewayAuthConventions.Claims.Subject] = subject,
+            [GatewayAuthConventions.Claims.PreferredUsername] = subject,
+            [GatewayAuthConventions.Claims.Scope] = GatewayAuthConventions.DefaultOAuthScope
+        }));
+
+        return $"{header}.{payload}.";
+    }
+
+    private static string EncodeBase64Url(byte[] bytes) =>
+        Convert.ToBase64String(bytes)
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+
+    private static byte[] DecodeBase64Url(string value)
+    {
+        var padded = value
+            .Replace('-', '+')
+            .Replace('_', '/');
+        padded += (padded.Length % 4) switch
+        {
+            0 => string.Empty,
+            2 => "==",
+            3 => "=",
+            _ => throw new InvalidOperationException("JWT payload was not valid base64url.")
+        };
+
+        return Convert.FromBase64String(padded);
+    }
+
+    public sealed class SafetyHttpMcpClient(McpClient client, string subject) : IAsyncDisposable
+    {
+        public string Subject { get; } = subject;
+
+        public async Task<string> CallToolAsync(
+            string toolName,
+            IReadOnlyDictionary<string, object?> arguments,
+            CancellationToken cancellationToken = default)
+        {
+            var result = await client.CallToolAsync(toolName, arguments, cancellationToken: cancellationToken);
+
+            return string.Join(
+                Environment.NewLine,
+                result.Content.OfType<TextContentBlock>().Select(content => content.Text));
+        }
+
+        public ValueTask DisposeAsync() => client.DisposeAsync();
+    }
+
+    private sealed class FakeApprovalOAuthBackchannel(Func<string> subjectProvider) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var json = JsonSerializer.Serialize(new
+            {
+                access_token = CreateApprovalJwt(subjectProvider()),
+                token_type = "Bearer"
+            });
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            });
+        }
     }
 }

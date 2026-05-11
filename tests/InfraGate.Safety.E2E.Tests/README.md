@@ -1,34 +1,37 @@
 # InfraGate.Safety.E2E.Tests
 
-End-to-end tests that prove the seven safety properties listed in [`.agents/Plans/minimum-for-demo.md`](../../.agents/Plans/minimum-for-demo.md) §6 ("Tests proving the safety model"). Each test exercises the production code path: real OAuth (Keycloak in a container via Testcontainers), real gateway HTTP host (`Microsoft.AspNetCore.TestHost`), real `InfraGate.McpServer` subprocess spawned by the gateway's `DownstreamMcpClient`, and a real Kubernetes API via the developer-provided kubeconfig.
+End-to-end and focused live tests for the seven safety properties listed in [`.agents/Plans/minimum-for-demo.md`](../../.agents/Plans/minimum-for-demo.md) §6 ("Tests proving the safety model"). The suite exercises production components: real Keycloak JWTs for MCP calls, a real gateway HTTP host (`Microsoft.AspNetCore.TestHost`), the gateway's browser approval endpoints with antiforgery, a real `InfraGate.McpServer` subprocess spawned by `DownstreamMcpClient`, and a real Kubernetes API via the developer-provided kubeconfig.
+
+Not every workflow is a full vertical browser flow. Some tests intentionally stay at the gateway-service or downstream-server layer to force clock/hash/principal edge cases without brittle setup. Browser approval identity is simulated at the OAuth callback/backchannel boundary; the tests do not scrape the real Keycloak login form.
 
 These tests do **not** run in the default repo test pass. They are gated behind an environment variable and require Docker plus a running Kubernetes cluster.
 
 ## What it covers
 
-| File | Demo bullet | What it proves |
-|---|---|---|
-| [`Workflows/SmokeTests.cs`](Workflows/SmokeTests.cs) | (fixture sanity) | Gateway `/mcp` returns 401 without a bearer; not-401/403 with a valid Keycloak-issued JWT. |
-| [`Workflows/PlanHashMismatchTests.cs`](Workflows/PlanHashMismatchTests.cs) | 1 | After approval, mutating the pending plan file is detected at apply time and refused. |
-| [`Workflows/ExpiredApprovalTests.cs`](Workflows/ExpiredApprovalTests.cs) | 2 | A challenge whose `ExpiresAtUtc` is in the past is refused at approve time. |
-| [`Workflows/AlreadyAppliedPlanTests.cs`](Workflows/AlreadyAppliedPlanTests.cs) | 3 | Applying a plan twice succeeds the first time and is refused the second. |
-| [`Workflows/DangerousManifestTests.cs`](Workflows/DangerousManifestTests.cs) | 4 | A manifest with `securityContext.privileged: true` is rejected by the policy validator at request time and never produces a pending plan. |
-| [`Workflows/ModifiedPendingPlanTests.cs`](Workflows/ModifiedPendingPlanTests.cs) | 5 | Mutating the pending plan after the request but before approval is detected at approve time. |
-| [`Workflows/WrongUserApprovalTests.cs`](Workflows/WrongUserApprovalTests.cs) | 6 | A challenge created by user A cannot be approved by user B (same-subject enforcement). |
-| [`Workflows/DryRunFailureTests.cs`](Workflows/DryRunFailureTests.cs) | 7 | A strict-validation dry-run failure at request time blocks plan creation; a pre-apply dry-run failure at apply time blocks the mutation. |
+| File | Demo bullet | Path | What it proves |
+|---|---|---|---|
+| [`Workflows/SmokeTests.cs`](Workflows/SmokeTests.cs) | (fixture sanity) | HTTP gateway auth | Gateway `/mcp` returns 401 without a bearer; not-401/403 with a valid Keycloak-issued JWT. |
+| [`Workflows/FullApprovalFlowTests.cs`](Workflows/FullApprovalFlowTests.cs) | full intended flow | HTTP MCP + approval browser + Kubernetes | Requesting a restart through `/mcp`, approving through the browser endpoint, and applying through `/mcp` mutates Kubernetes only after approval and writes approval/applied audit evidence. |
+| [`Workflows/PlanHashMismatchTests.cs`](Workflows/PlanHashMismatchTests.cs) | 1 | HTTP MCP + approval browser + file tamper | After browser approval, mutating the pending plan file prevents the stale approval from being used and forces a fresh approval challenge. |
+| [`Workflows/ExpiredApprovalTests.cs`](Workflows/ExpiredApprovalTests.cs) | 2 | Focused gateway service | A challenge whose `ExpiresAtUtc` is forced into the past is refused at approve time and does not write an approved hash. |
+| [`Workflows/AlreadyAppliedPlanTests.cs`](Workflows/AlreadyAppliedPlanTests.cs) | 3 | HTTP MCP + approval browser + Kubernetes | Applying a plan twice succeeds the first time and is refused the second through the gateway surface. |
+| [`Workflows/DangerousManifestTests.cs`](Workflows/DangerousManifestTests.cs) | 4 | HTTP MCP request path | A manifest with `securityContext.privileged: true` is rejected by the policy validator at request time and never produces a pending plan. |
+| [`Workflows/ModifiedPendingPlanTests.cs`](Workflows/ModifiedPendingPlanTests.cs) | 5 | Focused gateway service + file tamper | Mutating the pending plan after the challenge is created but before approval is detected at approve time. |
+| [`Workflows/WrongUserApprovalTests.cs`](Workflows/WrongUserApprovalTests.cs) | 6 | Approval browser endpoint plus service probe | A challenge created by user A cannot be approved by user B; the endpoint test exercises antiforgery and cookie identity, and the service test keeps direct same-subject coverage. |
+| [`Workflows/DryRunFailureTests.cs`](Workflows/DryRunFailureTests.cs) | 7 | HTTP MCP request/apply paths | A strict-validation dry-run failure at request time blocks plan creation; a pre-apply dry-run failure after browser approval blocks the mutation. |
 
-Each `Workflows/*Tests.cs` file is one workflow class with one or two `[Fact]`s, decorated with `[Trait("Category", "SafetyE2E")]` and `[Collection(SafetyE2ECollection.Name)]`. The shared fixture (`SafetyE2EFixture`) boots Keycloak once per assembly and lazily spawns the McpServer subprocess on the first tool call.
+Each `Workflows/*Tests.cs` file is one workflow class with one or two `[Fact]`s, decorated with `[Trait("Category", "SafetyE2E")]` and `[Collection(SafetyE2ECollection.Name)]`. The shared fixture (`SafetyE2EFixture`) boots Keycloak once per assembly, creates HTTP MCP clients with real Keycloak JWTs, drives approval cookies through a test OAuth backchannel, and lazily spawns the McpServer subprocess on the first downstream tool call.
 
 ## Prerequisites
 
-You need **all four** of the following before any test will run:
+You need **all four** of the following before any test will exercise the live safety flow:
 
 1. **.NET 10 SDK** — required to build and run the test project. Verify with `dotnet --version` (must report 10.x).
 2. **Docker** — required because the fixture starts a Keycloak container via Testcontainers. The Docker daemon must be running and your user must have permission to reach it (on Linux, that usually means being in the `docker` group). Verify with `docker info` returning without error.
 3. **A Kubernetes cluster reachable through a kubeconfig** — required because the McpServer subprocess uses `KubernetesClient` to perform real `dryRun=All` calls and (in some tests) real mutations. Minikube, kind, k3d, Docker Desktop Kubernetes, and Rancher Desktop all work; a remote cluster also works if your kubeconfig points to it.
-4. **The `INFRA_GATE_RUN_SAFETY_E2E=1` environment variable** — without it, every test in this project early-returns (it is not a runtime error, the suite simply reports 0 executed tests because each method opens with `if (!fixture.IsEnabled) return;`).
+4. **The `INFRA_GATE_RUN_SAFETY_E2E=1` environment variable** — without it, every test in this project early-returns successfully before touching Docker, Keycloak, the gateway, or Kubernetes.
 
-> If any of the above is missing the suite will either skip silently (env var unset) or fail in the fixture's `InitializeAsync` (Docker unavailable, kubeconfig unreachable).
+> If any of the above is missing the suite will either pass without exercising the live flow (env var unset) or fail in the fixture's `InitializeAsync` (Docker unavailable, kubeconfig unreachable).
 
 ## Step-by-step setup
 
@@ -123,7 +126,7 @@ The fixture reads `KUBECONFIG` first and falls back to `.kube/mcp-nginx-demo.con
 
 ### Step 5 — Deploy the demo Deployment the tests target
 
-Most workflow tests (`PlanHashMismatchTests`, `ExpiredApprovalTests`, `AlreadyAppliedPlanTests`, `ModifiedPendingPlanTests`, `WrongUserApprovalTests`, and one of the `DryRunFailureTests`) call `request_restart_deployment` with `name=nginx-demo`. That Deployment must exist in the namespace before tests run, otherwise the request-time `dryRun=All` will return 404 from the Kubernetes API and plan creation will fail before any safety property is exercised.
+Most workflow tests (`FullApprovalFlowTests`, `PlanHashMismatchTests`, `ExpiredApprovalTests`, `AlreadyAppliedPlanTests`, `ModifiedPendingPlanTests`, `WrongUserApprovalTests`, and one of the `DryRunFailureTests`) call `request_restart_deployment` with `name=nginx-demo`. That Deployment must exist in the namespace before tests run, otherwise the request-time `dryRun=All` will return 404 from the Kubernetes API and plan creation will fail before any safety property is exercised.
 
 Apply the repo's existing demo manifest:
 
@@ -170,10 +173,10 @@ The first run takes longer than subsequent runs because:
 - Testcontainers pulls the Keycloak image (`quay.io/keycloak/keycloak:26.2`) on first use.
 - The gateway's `DownstreamMcpClient` does a `dotnet run --project src/InfraGate.McpServer/InfraGate.McpServer.csproj` on the first tool call, which restores and compiles the McpServer if not already compiled.
 
-Expected output ends with a green summary similar to:
+Expected output ends with a green summary. The current suite has 12 discovered tests:
 
 ```
-Passed!  - Failed:     0, Passed:    N, Skipped:     0, Total:    N, Duration: …
+Passed!  - Failed:     0, Passed:    12, Skipped:     0, Total:    12, Duration: …
 ```
 
 ### Step 8 (optional) — Confirm the default test pass is unaffected
@@ -182,7 +185,7 @@ Passed!  - Failed:     0, Passed:    N, Skipped:     0, Total:    N, Duration: �
 dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak&Category!=SafetyE2E"
 ```
 
-These tests should pass as they do without `INFRA_GATE_RUN_SAFETY_E2E` set.
+These tests should pass as they do without `INFRA_GATE_RUN_SAFETY_E2E` set. For this project specifically, the methods are still discovered and reported as passed; they are not reported as "0 tests executed."
 
 ## Configuration knobs
 
@@ -195,9 +198,13 @@ These tests should pass as they do without `INFRA_GATE_RUN_SAFETY_E2E` set.
 
 ## Troubleshooting
 
-### "No tests matched the given filter" / 0 tests executed
+### Tests pass almost instantly without touching Docker or Kubernetes
 
-You forgot `INFRA_GATE_RUN_SAFETY_E2E=1`. Set it and re-run.
+You forgot `INFRA_GATE_RUN_SAFETY_E2E=1`. The test methods are still discovered, but they early-return successfully before initializing the live fixture. The current output reports `Passed: 12`, not `0 tests`. Set the variable and re-run.
+
+### Approval flow refuses with "requires an authenticated OAuth subject"
+
+The MCP bearer token reached `/mcp`, but it did not contain a requester identity claim. The gateway approval flow requires `sub` or `client_id` so it can bind the browser approval to the same subject. The repo's [`deploy/keycloak/infra-gate-realm.json`](../../deploy/keycloak/infra-gate-realm.json) includes an `mcp-gateway-subject` mapper for the `mcp:tools` client scope; if you use a custom realm, add an equivalent access-token claim.
 
 ### Fixture init fails with `DockerApiException` / cannot reach Docker daemon
 

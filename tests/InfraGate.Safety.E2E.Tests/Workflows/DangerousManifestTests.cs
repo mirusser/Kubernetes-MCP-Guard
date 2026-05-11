@@ -42,14 +42,14 @@ public sealed class DangerousManifestTests(SafetyE2EFixture fixture)
             ? Directory.GetFiles(pendingDirectory).Length
             : 0;
 
-        var response = await fixture.DownstreamClient.CallToolAsync(
+        await using var client = await fixture.CreateHttpMcpClientAsync();
+        var response = await client.CallToolAsync(
             McpGatewayConventions.ToolNames.RequestApplyManifest,
             new Dictionary<string, object?>
             {
                 [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
                 [McpGatewayConventions.ToolArguments.Manifest] = manifest
-            },
-            CancellationToken.None);
+            });
 
         var pendingAfter = Directory.Exists(pendingDirectory)
             ? Directory.GetFiles(pendingDirectory).Length
