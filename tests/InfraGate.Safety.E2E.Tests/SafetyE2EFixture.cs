@@ -353,6 +353,42 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
         accessor.HttpContext = null;
     }
 
+    public void SetAuthenticatedFromJwt(string token)
+    {
+        var subject = ReadJwtSubject(token);
+        var accessor = gatewayServer?.Services.GetRequiredService<IHttpContextAccessor>()
+            ?? throw new InvalidOperationException("Fixture is not initialised.");
+
+        var claims = new List<Claim>
+        {
+            new(GatewayAuthConventions.Claims.Subject, subject)
+        };
+
+        var parts = token.Split('.');
+        if (parts.Length >= 2)
+        {
+            using var document = JsonDocument.Parse(DecodeBase64Url(parts[1]));
+            foreach (var claimName in new[]
+                     {
+                         GatewayAuthConventions.Claims.Scope,
+                         GatewayAuthConventions.Claims.ClientId,
+                         GatewayAuthConventions.Claims.PreferredUsername
+                     })
+            {
+                if (document.RootElement.TryGetProperty(claimName, out var claimValue) &&
+                    !string.IsNullOrWhiteSpace(claimValue.GetString()))
+                {
+                    claims.Add(new Claim(claimName, claimValue.GetString()!));
+                }
+            }
+        }
+
+        accessor.HttpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(claims, "oauth-jwt"))
+        };
+    }
+
     public static string ParsePlanId(string text) =>
         text.Split(Environment.NewLine)
             .Single(line => line.StartsWith("PlanId:", StringComparison.Ordinal))

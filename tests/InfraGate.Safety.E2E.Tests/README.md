@@ -35,13 +35,18 @@ The suite mixes two testing tiers so every safety property has at least one auth
 
 ### Guardrail: base64-encoded payload detection
 
-The `PromptInjectionGuard` now decodes strings that appear to be valid base64 (> 20 chars, base64 charset) and scans the decoded UTF-8 content against the same regex patterns used for plaintext. This catches prompt injections embedded in Kubernetes Secret `data` values (which are base64-encoded at the API level) and other encoded payloads. Decoding failures and non-printable binary data are silently skipped. Coverage lives in the gateway unit tests (`ResponseSanitizationTests`).
+The `PromptInjectionGuard` now decodes strings that appear to be valid base64 (> 20 chars, base64 charset) and scans the decoded UTF-8 content against the same regex patterns used for plaintext. This catches prompt injections embedded in Kubernetes Secret `data` values (which are base64-encoded at the API level), as well as embedded base64 substrings within mixed-content fields like annotations, log lines, and labels (e.g. `Note: aWdub3JlIHByZXZpb3Vz...`). Decoding failures and non-printable binary data are silently skipped. Coverage lives in the gateway unit tests (`ResponseSanitizationTests`).
 
 ### Approval OAuth simulation boundary
 
 The tests do **not** scrape the real Keycloak browser login form. For browser approval operations the fixture uses a `FakeApprovalOAuthBackchannel` that returns a test JWT for any configured subject, simulating the OAuth authorization-code → token exchange. The real Keycloak callback/cookie flow is exercised indirectly (the browser approval page renders real dry-run/diff evidence), but identity is injected at the OAuth backchannel boundary, not through manual HTML form interaction.
 
 This is an intentional test-boundary choice documented in the [implementation plan](../../.agents/Plans/strengthen-safety-e2e-security-flow-plan.md). Real Keycloak JWTs remain for MCP bearer-token coverage. If a follow-up wants stricter real-OIDC coverage for approval decisions, the path is: add a second user to `deploy/keycloak/infra-gate-realm.json` and use that user for browser OAuth throughout.
+
+### Known limitations
+
+- **Browser approval token validation**: The `FakeApprovalOAuthBackchannel` returns unsigned JWTs for browser approval sessions. The wrong-user browser test (`ApproveChallengeBrowser_BrowserSessionAsDifferentSubject_IsRefused`) proves subject-comparison logic but does not exercise real Keycloak JWT signature validation in the browser path. A separate service-level test (`ApproveChallenge_RealJwtAsDemo2_ApprovalIdentityDerivedFromRealKeycloakToken_IsRefused`) closes this for the `GatewayApprovalService` code path by injecting a `ClaimsPrincipal` derived from a real Keycloak-issued JWT. Full browser-OAuth backchannel replacement is deferred to a future hardening phase. Real Keycloak JWT validation for MCP endpoints is covered by `SmokeTests`.
+- **RBAC matrix test uses direct server subprocess**: `RbacMatrixTests` spawns a second McpServer subprocess with a read-only SA kubeconfig, bypassing the gateway. This is sufficient because the architecture uses a static SA for the gateway-to-server connection — there is no dynamic identity forwarding to test at the gateway layer. If dynamic SAs are added in the future, a gateway-path RBAC test should be added.
 
 ## Prerequisites
 

@@ -150,30 +150,83 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
             {
                 [McpGatewayConventions.ToolArguments.PlanId] = planId
             });
-        var challengeId = SafetyE2EFixture.ParseChallengeId(approvalRequired);
+        var originalChallengeId = SafetyE2EFixture.ParseChallengeId(approvalRequired);
 
-        using var browser = await fixture.CreateAuthenticatedApprovalBrowserAsync(challengeId, otherSubject);
-        var page = await browser.GetAsync($"/approvals/{challengeId}");
-        page.EnsureSuccessStatusCode();
-        var pageText = await page.Content.ReadAsStringAsync();
-        SafetyE2EFixture.AddResponseCookies(browser, page);
+        var pendingHash = await ApprovalStore.ComputeSha256Async(
+            fixture.ApprovalStore.GetPendingPath(planId),
+            CancellationToken.None);
+        var tokenChallenge = await fixture.ChallengeStore.CreateAsync(
+            planId,
+            pendingHash,
+            otherSubject,
+            requesterAuthenticationType: "test",
+            ttl: TimeSpan.FromMinutes(5),
+            cancellationToken: CancellationToken.None);
+        using var browser = await fixture.CreateAuthenticatedApprovalBrowserAsync(tokenChallenge.Id, otherSubject);
+        var tokenPage = await browser.GetAsync($"/approvals/{tokenChallenge.Id}");
+        tokenPage.EnsureSuccessStatusCode();
+        var tokenPageText = await tokenPage.Content.ReadAsStringAsync();
+        SafetyE2EFixture.AddResponseCookies(browser, tokenPage);
 
         var result = await SafetyE2EFixture.PostApprovalAsync(
             browser,
-            challengeId,
-            SafetyE2EFixture.ParseAntiforgeryToken(pageText));
-        var challenge = await fixture.ChallengeStore.GetAsync(challengeId, CancellationToken.None);
+            originalChallengeId,
+            SafetyE2EFixture.ParseAntiforgeryToken(tokenPageText));
+        var originalChallenge = await fixture.ChallengeStore.GetAsync(originalChallengeId, CancellationToken.None);
 
         Assert.Contains("Approval Failed", result, StringComparison.Ordinal);
         Assert.Contains("same authenticated subject", result, StringComparison.OrdinalIgnoreCase);
         Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
-        Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
+        Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, originalChallenge?.Status);
 
         var auditEvents = await fixture.ReadAuditEventsAsync();
         Assert.Contains(auditEvents, evt =>
             evt.GetProperty("eventName").GetString() == ApprovalConventions.AuditEvents.ApprovalChallengeRejected &&
             evt.GetProperty("payload").TryGetProperty("id", out var challengeIdProp) &&
-            challengeIdProp.GetString() == challengeId);
+            challengeIdProp.GetString() == originalChallengeId);
+    }
+
+    [Fact]
+    public async Task ApproveChallenge_RealJwtAsDemo2_ApprovalIdentityDerivedFromRealKeycloakToken_IsRefused()
+    {
+        if (!fixture.IsEnabled)
+        {
+            return;
+        }
+
+        await using var client = await fixture.CreateHttpMcpClientAsync();
+        var requestText = await client.CallToolAsync(
+            McpGatewayConventions.ToolNames.RequestRestartDeployment,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+            });
+        var planId = SafetyE2EFixture.ParsePlanId(requestText);
+        var approvalRequired = await client.CallToolAsync(
+            McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.PlanId] = planId
+            });
+        var challengeId = SafetyE2EFixture.ParseChallengeId(approvalRequired);
+
+        var demo2Token = await fixture.AcquireTokenAsync("demo2", "demo2");
+        fixture.SetAuthenticatedFromJwt(demo2Token);
+        try
+        {
+            var result = await fixture.GetApprovalService().ApproveChallengeAsync(challengeId, CancellationToken.None);
+            var challenge = await fixture.ChallengeStore.GetAsync(challengeId, CancellationToken.None);
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("same authenticated subject", result.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+            Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
+        }
+        finally
+        {
+            fixture.ClearAuthenticatedSubject();
+        }
     }
 
     private static string ExtractChallengeId(string message) =>
