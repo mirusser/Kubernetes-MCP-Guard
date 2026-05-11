@@ -115,6 +115,18 @@ flowchart TB
 <sub><em>Even if the AI agent is compromised, it cannot self-approve. The approval must come from your browser session a channel the AI has no control over.</em></sub>
 <sub><em>Simplified architectural graph. Full version [here](docs/architecture.md)</em></sub>
 
+#### The Three Security Gates
+
+Every mutation passes through three independent checkpoints. Each one can block execution regardless of whether the others passed:
+
+| Phase | What happens | What can block it |
+|---|---|---|
+| **① Plan** | AI calls `request_*`; server runs a server-side dry-run and policy checks; computes a SHA-256 hash of the pending plan and stores it | Dry-run failure, policy violation (privileged containers, hostPath, dangerous caps, …) |
+| **② Approve** | Human opens the approval URL; browser renders the plan from the server-side file — not the AI's description; human clicks Approve | Challenge expired (15 min TTL), approver identity doesn't match requester, or the plan file was modified after the hash was captured |
+| **③ Execute** | AI calls `apply_approved_plan`; server re-checks the hash, re-runs the dry-run, checks live-state drift | Hash mismatch (payload was swapped), no approval on file, plan already applied, second dry-run failure, or live state drifted since approval |
+
+The hash from Phase ① is the integrity seal that links all three phases. If the plan is modified between Phase ① and the human's click in Phase ②, the hash comparison fails and approval is refused. If the plan is modified after approval but before Phase ③, execution is refused. There is no path from Phase ① to Phase ③ that skips the hash check.
+
 ### 🛠️ Technical & Architectural Highlights
 
 - **AI Integration & Safety:** Deep implementation of Model Context Protocol (MCP), handling tool contracts, out-of-band approval workflows, and mitigating prompt-injection risks within model-visible data.
