@@ -49,7 +49,7 @@ The AI calls `apply_approved_plan(planId)`. The gateway:
 - Creates an **ApprovalChallenge** record with a SHA-256 hash of the pending plan file and a 15-minute TTL
 - Returns an **approval URL** to the AI client
 
-The human opens the URL in a **separate browser session** authenticated via its own OAuth flow (completely independent of the AI client's session). The browser renders the exact plan: diff, dry-run result, policy findings. The human clicks Approve.
+The gateway enforces that the human must open the URL in a browser session authenticated via its own out-of-band OAuth flow (completely independent of the AI client's session). The browser renders the exact plan: diff, dry-run result, policy findings. The human clicks Approve.
 
 #### 3. Cryptographic Execution Gate
 
@@ -88,7 +88,7 @@ These properties are not just documented — they are **machine-verified by E2E 
 | Full happy path: browser approval → audit trail | `FullApprovalFlowTests.RestartDeployment_ApprovedThroughBrowser_AppliesExactPlanAndAudits` |
 | RBAC: read-only SA cannot apply | `RbacMatrixTests` |
 
-All tests run opt-in via `INFRA_GATE_RUN_SAFETY_E2E=1`. The test infrastructure uses real Keycloak tokens — no mocked auth.
+All tests run opt-in via `INFRA_GATE_RUN_SAFETY_E2E=1` and are wired into our GitHub Actions CI pipeline (`safety-e2e.yml`), executing against an ephemeral KinD cluster using real Keycloak tokens — no mocked auth.
 
 Branch with tests: https://github.com/mirusser/Kubernetes-MCP-Guard/tree/feature/safety-tests
 
@@ -110,10 +110,10 @@ This doesn't require adoption of my implementation. It requires agreement on the
 ### The Ask
 
 1. Is the TOCTOU concern recognized by the team? Have you considered it in your roadmap?
-2. Would you be open to a Discussion thread on formalizing a `propose → approve → execute` tool naming convention?
+2. Would you be open to collaborating on this thread to formalize a `propose → challenge → execute` tool contract for this repository or as an MCP standard for mutations?
 3. If yes, I'm happy to draft a more formal spec document for review.
 
-For reference, the architecture rationale is documented in [docs/why-separated-plan-from-challenge.md](https://github.com/mirusser/Kubernetes-MCP-Guard/blob/main/docs/why-separated-plan-from-challenge.md) in my repo.
+For reference, the architecture rationale is documented in [docs/why-separated-plan-from-challenge.md](https://github.com/mirusser/Kubernetes-MCP-Guard/blob/feature/safety-tests/docs/why-separated-plan-from-challenge.md) in my repo.
 
 Thanks for the great work on this project.
 — @mirusser
