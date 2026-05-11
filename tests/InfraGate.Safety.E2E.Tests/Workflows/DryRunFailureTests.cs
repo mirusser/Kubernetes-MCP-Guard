@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using InfraGate.McpGateway;
 
 namespace InfraGate.Safety.E2E.Tests.Workflows;
@@ -14,23 +16,25 @@ public sealed class DryRunFailureTests(SafetyE2EFixture fixture)
             return;
         }
 
-        // Strict field validation rejects unknown fields under spec, causing dry-run to fail.
+        // A negative replica count passes the McpServer's typed YAML parser (the field
+        // is a known int32) but is rejected by the Kubernetes API server during
+        // dryRun=All admission validation. Unknown fields cannot be used here because
+        // the typed parser rejects them locally before dry-run is reached.
         var manifest = $$"""
                        apiVersion: apps/v1
                        kind: Deployment
                        metadata:
-                         name: safety-e2e-bogus-field
+                         name: safety-e2e-negative-replicas
                          namespace: {{fixture.Namespace}}
                        spec:
-                         replicas: 1
-                         bogusUnknownField: "this should fail strict validation"
+                         replicas: -1
                          selector:
                            matchLabels:
-                             app: safety-e2e-bogus-field
+                             app: safety-e2e-negative-replicas
                          template:
                            metadata:
                              labels:
-                               app: safety-e2e-bogus-field
+                               app: safety-e2e-negative-replicas
                            spec:
                              containers:
                              - name: app
@@ -81,16 +85,25 @@ public sealed class DryRunFailureTests(SafetyE2EFixture fixture)
             CancellationToken.None);
         var planId = SafetyE2EFixture.ParsePlanId(requestText);
         var pendingPath = fixture.ApprovalStore.GetPendingPath(planId);
-        var hash = await ApprovalStore.ComputeSha256Async(pendingPath, CancellationToken.None);
-        await File.WriteAllTextAsync(fixture.ApprovalStore.GetApprovedPath(planId), hash, CancellationToken.None);
 
-        // Replace the planned target name with one that no longer exists in the cluster — pre-apply dry-run will fail.
+        // Rewrite the planned target name to a deployment that does not exist in the
+        // cluster, then recompute the hash and overwrite the approved sha256 so the
+        // hash check still passes at apply time. Result: GetApprovedPlanAsync succeeds,
+        // drift check sees the original Objects[] (still unchanged in the cluster), and
+        // the pre-apply dry-run patches a non-existent target -> 404 -> dry-run fails.
+        // String-based replace is too brittle because ApprovalStore writes pending plans
+        // with WriteIndented = true (key/value separated by ": ", not ":").
         var pendingJson = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
-        var tamperedJson = pendingJson.Replace(
-            "\"name\":\"nginx\"",
-            "\"name\":\"deployment-that-does-not-exist\"",
-            StringComparison.Ordinal);
-        await File.WriteAllTextAsync(pendingPath, tamperedJson, CancellationToken.None);
+        var root = JsonNode.Parse(pendingJson)
+            ?? throw new InvalidOperationException("Pending plan JSON was empty.");
+        root["parameters"]!["name"] = "deployment-that-does-not-exist";
+        var rewritten = root.ToJsonString(new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            WriteIndented = true
+        });
+        await File.WriteAllTextAsync(pendingPath, rewritten, CancellationToken.None);
+        var newHash = await ApprovalStore.ComputeSha256Async(pendingPath, CancellationToken.None);
+        await File.WriteAllTextAsync(fixture.ApprovalStore.GetApprovedPath(planId), newHash, CancellationToken.None);
 
         var applyText = await fixture.DownstreamClient.CallToolAsync(
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
@@ -100,10 +113,12 @@ public sealed class DryRunFailureTests(SafetyE2EFixture fixture)
             },
             CancellationToken.None);
 
-        Assert.StartsWith("Refused:", applyText, StringComparison.Ordinal);
+        Assert.Contains("dry-run", applyText, StringComparison.OrdinalIgnoreCase);
 
         var auditEvents = await fixture.ReadAuditEventsAsync();
         Assert.Contains(auditEvents, evt =>
-            evt.GetProperty("eventName").GetString() == ApprovalConventions.AuditEvents.ApplyDenied);
+            evt.GetProperty("eventName").GetString() == ApprovalConventions.AuditEvents.DryRunFailed &&
+            evt.GetProperty("payload").TryGetProperty("planId", out var planIdProp) &&
+            planIdProp.GetString() == planId);
     }
 }

@@ -240,16 +240,21 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
             return [];
         }
 
-        var lines = await File.ReadAllLinesAsync(path, cancellationToken);
-        var events = new List<JsonElement>(lines.Length);
-        foreach (var line in lines)
+        // ApprovalStore.WriteAuditAsync serialises with WriteIndented = true, so each
+        // audit record spans multiple physical lines. A line-by-line JSON parse would
+        // fail on the first '{'. Utf8JsonReader with AllowMultipleValues iterates the
+        // sequence of top-level objects regardless of formatting.
+        var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
+        var events = new List<JsonElement>();
+        var reader = new Utf8JsonReader(bytes, new JsonReaderOptions { AllowMultipleValues = true });
+        while (reader.Read())
         {
-            if (string.IsNullOrWhiteSpace(line))
+            if (reader.TokenType != JsonTokenType.StartObject)
             {
                 continue;
             }
 
-            using var doc = JsonDocument.Parse(line);
+            using var doc = JsonDocument.ParseValue(ref reader);
             events.Add(doc.RootElement.Clone());
         }
 

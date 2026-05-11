@@ -93,10 +93,22 @@ This creates `.kube/mcp-nginx-demo.config` and applies [`deploy/minikube/rbac.ya
 - A `ServiceAccount` with namespace-scoped `Role` and `RoleBinding`
 - The verbs the McpServer needs (get/list/patch/delete on Deployments, Services, ConfigMaps, Pods, ReplicaSets, Events, Pod logs)
 
-Confirm the kubeconfig works:
+Confirm the kubeconfig works. **Do not use `kubectl get all`** — it queries resource types (`replicationcontrollers`, `daemonsets`, `statefulsets`, `hpa`, `cronjobs`, `jobs`) the namespace-scoped ServiceAccount intentionally cannot list, and prints scary `Forbidden` errors that look like setup failures but are correct behaviour. Use this targeted form (matches [docs/devs-readme.md:257](../../docs/devs-readme.md#L257)):
 
 ```bash
-kubectl --kubeconfig .kube/mcp-nginx-demo.config -n mcp-nginx-demo get all
+kubectl --kubeconfig .kube/mcp-nginx-demo.config -n mcp-nginx-demo \
+  get deployment,service,configmap,pods,replicasets -o wide
+```
+
+Expect `No resources found in mcp-nginx-demo namespace.` at this point — the namespace exists and is reachable, but no workloads are deployed yet (that's Step 5).
+
+You can also sanity-check the RBAC envelope with `auth can-i`:
+
+```bash
+kubectl --kubeconfig .kube/mcp-nginx-demo.config auth can-i create deployments -n mcp-nginx-demo
+# expect: yes
+kubectl --kubeconfig .kube/mcp-nginx-demo.config auth can-i create namespaces
+# expect: no  (the SA is intentionally namespace-scoped)
 ```
 
 > **Token expiry:** the generated token is valid for 24 hours. If the suite starts failing with `401 Unauthorized` from the Kubernetes API, re-run `./scripts/create-demo-kubeconfig.sh`.
@@ -125,6 +137,10 @@ Verify:
 
 ```bash
 kubectl --kubeconfig .kube/mcp-nginx-demo.config -n mcp-nginx-demo get deployment nginx-demo
+```
+
+You should see:
+```
 # NAME         READY   UP-TO-DATE   AVAILABLE   AGE
 # nginx-demo   0/2     2            0           …
 ```
