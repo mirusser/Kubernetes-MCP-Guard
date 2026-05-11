@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.AuditPayloads;
 
 namespace InfraGate.McpGateway;
 
@@ -70,15 +71,16 @@ public sealed class GatewayApprovalService
             requester.AuthenticationType,
             options.ApprovalChallengeTtl,
             cancellationToken);
-        await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApprovalChallengeCreated, new
-        {
-            challenge.Id,
-            challenge.PlanId,
-            challenge.PlanHash,
-            challenge.RequesterSubject,
-            challenge.RequesterAuthenticationType,
-            challenge.ExpiresAtUtc
-        }, cancellationToken);
+        await approvalStore.WriteAuditAsync(
+            ApprovalConventions.AuditEvents.ApprovalChallengeCreated,
+            new ApprovalChallengeCreatedPayload(
+                challenge.Id,
+                challenge.PlanId,
+                challenge.PlanHash,
+                challenge.RequesterSubject,
+                challenge.RequesterAuthenticationType,
+                challenge.ExpiresAtUtc),
+            cancellationToken);
 
         return ApprovalGateResult.RequiresApproval(FormatApprovalRequiredMessage(pending.Plan, pending.Hash, challenge));
     }
@@ -148,15 +150,16 @@ public sealed class GatewayApprovalService
             DecidedAtUtc = decidedAt
         };
         await challengeStore.SaveAsync(updated, cancellationToken);
-        await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApprovalChallengeApproved, new
-        {
-            updated.Id,
-            updated.PlanId,
-            updated.PlanHash,
-            updated.RequesterSubject,
-            updated.ApproverSubject,
-            decidedAt
-        }, cancellationToken);
+        await approvalStore.WriteAuditAsync(
+            ApprovalConventions.AuditEvents.ApprovalChallengeApproved,
+            new ApprovalChallengeApprovedPayload(
+                updated.Id,
+                updated.PlanId,
+                updated.PlanHash,
+                updated.RequesterSubject,
+                updated.ApproverSubject,
+                decidedAt),
+            cancellationToken);
 
         return new ApprovalDecisionResult(
             true,
@@ -203,15 +206,16 @@ public sealed class GatewayApprovalService
             DecidedAtUtc = decidedAt
         };
         await challengeStore.SaveAsync(denied, cancellationToken);
-        await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApprovalChallengeDenied, new
-        {
-            denied.Id,
-            denied.PlanId,
-            denied.PlanHash,
-            denied.RequesterSubject,
-            denied.ApproverSubject,
-            decidedAt
-        }, cancellationToken);
+        await approvalStore.WriteAuditAsync(
+            ApprovalConventions.AuditEvents.ApprovalChallengeDenied,
+            new ApprovalChallengeDeniedPayload(
+                denied.Id,
+                denied.PlanId,
+                denied.PlanHash,
+                denied.RequesterSubject,
+                denied.ApproverSubject,
+                decidedAt),
+            cancellationToken);
 
         return new ApprovalDecisionResult(true, $"Plan '{denied.PlanId}' was denied.");
     }
@@ -235,14 +239,15 @@ public sealed class GatewayApprovalService
         {
             var expired = challenge with { Status = ApprovalConventions.ChallengeStatuses.Expired };
             await challengeStore.SaveAsync(expired, cancellationToken);
-            await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApprovalChallengeExpired, new
-            {
-                expired.Id,
-                expired.PlanId,
-                expired.PlanHash,
-                expired.RequesterSubject,
-                expired.ExpiresAtUtc
-            }, cancellationToken);
+            await approvalStore.WriteAuditAsync(
+                ApprovalConventions.AuditEvents.ApprovalChallengeExpired,
+                new ApprovalChallengeExpiredPayload(
+                    expired.Id,
+                    expired.PlanId,
+                    expired.PlanHash,
+                    expired.RequesterSubject,
+                    expired.ExpiresAtUtc),
+                cancellationToken);
 
             return ChallengeValidation.Invalid("Approval challenge expired. Ask the MCP client to request a new approval URL.", expired);
         }
@@ -320,15 +325,16 @@ public sealed class GatewayApprovalService
         string? approverSubject,
         string reason,
         CancellationToken cancellationToken) =>
-        approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApprovalChallengeRejected, new
-        {
-            challenge.Id,
-            challenge.PlanId,
-            challenge.PlanHash,
-            challenge.RequesterSubject,
-            approverSubject,
-            reason
-        }, cancellationToken);
+        approvalStore.WriteAuditAsync(
+            ApprovalConventions.AuditEvents.ApprovalChallengeRejected,
+            new ApprovalChallengeRejectedPayload(
+                challenge.Id,
+                challenge.PlanId,
+                challenge.PlanHash,
+                challenge.RequesterSubject,
+                approverSubject,
+                reason),
+            cancellationToken);
 
     private string FormatApprovalRequiredMessage(K8sPlan plan, string hash, ApprovalChallenge challenge)
     {

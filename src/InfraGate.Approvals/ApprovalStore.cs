@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using InfraGate.Approvals.AuditPayloads;
 
 namespace InfraGate.Approvals;
 
@@ -45,13 +46,10 @@ public sealed class ApprovalStore
         await File.WriteAllTextAsync(pendingPath, json, cancellationToken);
 
         var hash = await ComputeSha256Async(pendingPath, cancellationToken);
-        await WriteAuditAsync(ApprovalConventions.AuditEvents.PlanRequested, new
-        {
-            plan.Id,
-            plan.Operation,
-            plan.Namespace,
-            hash
-        }, cancellationToken);
+        await WriteAuditAsync(
+            ApprovalConventions.AuditEvents.PlanRequested,
+            new PlanRequestedPayload(plan.Id, plan.Operation, plan.Namespace, hash),
+            cancellationToken);
 
         return new ApprovalPlanResult(plan, pendingPath, GetApprovedPath(plan.Id), hash);
     }
@@ -86,12 +84,10 @@ public sealed class ApprovalStore
 
         if (!FixedTimeStringComparer.Equals(actualHash, approvedHash))
         {
-            await WriteAuditAsync(ApprovalConventions.AuditEvents.ApprovalHashMismatch, new
-            {
-                planId,
-                approvedHash,
-                actualHash
-            }, cancellationToken);
+            await WriteAuditAsync(
+                ApprovalConventions.AuditEvents.ApprovalHashMismatch,
+                new ApprovalHashMismatchPayload(planId, approvedHash, actualHash),
+                cancellationToken);
 
             return ApprovedPlanResult.Denied($"Plan '{planId}' changed after approval; refusing to apply it.");
         }
@@ -160,26 +156,20 @@ public sealed class ApprovalStore
 
         if (!FixedTimeStringComparer.Equals(expectedHash, pending.Hash))
         {
-            await WriteAuditAsync(ApprovalConventions.AuditEvents.ApprovalHashMismatch, new
-            {
-                planId,
-                approvedHash = expectedHash,
-                actualHash = pending.Hash
-            }, cancellationToken);
+            await WriteAuditAsync(
+                ApprovalConventions.AuditEvents.ApprovalHashMismatch,
+                new ApprovalHashMismatchPayload(planId, expectedHash, pending.Hash),
+                cancellationToken);
 
             return ApprovedPlanResult.Denied($"Plan '{planId}' changed during approval; refusing to apply it.");
         }
 
         EnsureDirectories();
         await File.WriteAllTextAsync(pending.ApprovedPath, pending.Hash, cancellationToken);
-        await WriteAuditAsync(ApprovalConventions.AuditEvents.PlanApproved, new
-        {
-            planId,
-            hash = pending.Hash,
-            source,
-            approverSubject,
-            challengeId
-        }, cancellationToken);
+        await WriteAuditAsync(
+            ApprovalConventions.AuditEvents.PlanApproved,
+            new PlanApprovedPayload(planId, pending.Hash, source, approverSubject, challengeId),
+            cancellationToken);
 
         return ApprovedPlanResult.Approved(pending.Plan, pending.Hash);
     }
@@ -199,13 +189,10 @@ public sealed class ApprovalStore
         }, jsonOptions);
 
         await File.WriteAllTextAsync(appliedPath, json, cancellationToken);
-        await WriteAuditAsync(ApprovalConventions.AuditEvents.PlanApplied, new
-        {
-            plan.Id,
-            plan.Operation,
-            plan.Namespace,
-            hash
-        }, cancellationToken);
+        await WriteAuditAsync(
+            ApprovalConventions.AuditEvents.PlanApplied,
+            new PlanAppliedPayload(plan.Id, plan.Operation, plan.Namespace, hash),
+            cancellationToken);
     }
 
     public Task WriteAuditAsync(string eventName, object payload, CancellationToken cancellationToken)
