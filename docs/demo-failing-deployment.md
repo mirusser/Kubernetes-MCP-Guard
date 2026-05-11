@@ -102,7 +102,7 @@ Two JSONL streams record the demo. Both live under volumes mounted by `deploy/mo
 Records the plan lifecycle: `plan_requested`, `plan_approved`, `plan_applied` (and on a tampered plan, `approval_hash_mismatch` + `apply_denied`). One entry shape:
 
 ```json
-{"timestampUtc":"2026-05-03T12:34:56.789Z","eventName":"plan_applied","payload":{"id":"20260503-a1b2c3d4","operation":"setImage","namespace":"mcp-nginx-demo","hash":"sha256:…"}}
+{"timestampUtc":"2026-05-03T12:34:56.789Z","eventName":"plan_applied","payload":{"planId":"20260503-a1b2c3d4","operation":"setImage","namespace":"mcp-nginx-demo","hash":"sha256:…"}}
 ```
 
 ### Gateway-side (`.mcp-guardrails/audit.jsonl`)

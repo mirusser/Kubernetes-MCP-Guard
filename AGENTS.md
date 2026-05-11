@@ -103,6 +103,7 @@ Load only the project README you need:
   - [InfraGate.McpServer](src/InfraGate.McpServer/README.md): stdio MCP server, Kubernetes validation, approval plans, and plan application.
   - [InfraGate.McpGateway](src/InfraGate.McpGateway/README.md): HTTP MCP gateway, downstream stdio client, guardrails, sanitization, and audit logging.
   - [InfraGate.McpGateway.Auth](src/InfraGate.McpGateway.Auth/README.md): OAuth JWT auth, MCP protected-resource metadata, and audit identity resolution.
+  - [InfraGate.Approvals](src/InfraGate.Approvals/README.md): shared approval storage, challenge lifecycle, audit event conventions, and typed audit payloads.
   - [InfraGate.DevIssuer](src/InfraGate.DevIssuer/README.md): localhost-only OAuth/OIDC-style issuer for development and Codex login testing.
 - Test projects:
   - [InfraGate.McpServer.Tests](tests/InfraGate.McpServer.Tests/README.md): server unit tests and opt-in Kubernetes integration coverage.
