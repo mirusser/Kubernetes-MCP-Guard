@@ -20,13 +20,13 @@ I've been building a production-ready gateway for AI-assisted Kubernetes operati
 
 ### The Problem: Consent Fatigue and TOCTOU in Simple Approval Flows
 
-Current approaches to human approval for AI mutations fall into one of two failure modes:
+Current approaches to human approval for AI mutations fall into one of three patterns, each with its own gap:
 
 1. **Boolean prompts** ("Do you want me to restart nginx-prod? yes/no") — the human approves based on a *description* the AI wrote, not the actual payload. A compromised or prompt-injected AI can describe one thing and send another. This is a textbook **Time-of-Check to Time-of-Use (TOCTOU)** vulnerability.
 
-2. **UI takeover** (AWS Nova Act) — works well for browser automation, but when the AI is talking to a structured API, the human still gets a text summary and the underlying JSON payload can be swapped in memory between approval and execution.
+2. **UI takeover** (AWS Nova Act) — designed for browser UI automation. When applied to structured API mutations, the approved payload may not be cryptographically bound between the human's approval click and the actual API call. A useful contrast, but not a mutation approval protocol.
 
-3. **Stateful workflow engines** (Oracle Integration Cloud HITL, BPEL) — solve TOCTOU but require adopting a monolithic proprietary platform. Not an option for teams running open-source Kubernetes tooling.
+3. **Stateful workflow engines** (Oracle Integration Cloud HITL, BPEL) — can address TOCTOU when designed with immutable plan storage and hash binding, but require adopting a monolithic proprietary platform. Not an option for teams running open-source Kubernetes tooling.
 
 The existing `--read-only` flags and RBAC in `kubernetes-mcp-server` are excellent safeguards, but they don't solve the case where the AI legitimately has write access and a human has approved a specific operation — and then the payload drifts.
 
@@ -88,18 +88,20 @@ These properties are not just documented — they are **machine-verified by E2E 
 | Full happy path: browser approval → audit trail | `FullApprovalFlowTests.RestartDeployment_ApprovedThroughBrowser_AppliesExactPlanAndAudits` |
 | RBAC: read-only SA cannot apply | `RbacMatrixTests` |
 
-All tests run opt-in via `INFRA_GATE_RUN_SAFETY_E2E=1` and are wired into our GitHub Actions CI pipeline (`safety-e2e.yml`), executing against an ephemeral KinD cluster using real Keycloak tokens — no mocked auth.
+The `feature/safety-tests` branch includes SafetyE2E coverage for hash mismatch, modified pending plans, expired approvals, wrong-user approvals, already-applied plans, dangerous manifests, dry-run failure, and RBAC boundaries. The suite exercises real gateway/MCP/Kubernetes paths and uses real Keycloak JWTs for MCP bearer authentication. Browser approval OAuth is simulated at the callback/backchannel boundary in tests, with separate service-level coverage for real-JWT wrong-user rejection. A GitHub Actions workflow (`safety-e2e.yml`) runs the suite against an ephemeral KinD cluster on demand.
 
 Branch with tests: https://github.com/mirusser/Kubernetes-MCP-Guard/tree/feature/safety-tests
 
-### Why This Should Be a Standard
+### Why This Needs a Portable Standard
 
-Your repository is becoming the foundational reference for Kubernetes MCP. If MCP infrastructure servers adopt different, incompatible approval patterns:
-- MCP clients won't know whether to expect a boolean `needs_approval` flag, a URL, or a hash
+MCP already has useful primitives: tool annotations (`readOnlyHint`, `destructiveHint`), human-in-the-loop guidance, and in current draft work, elicitation/URL mode for out-of-band sensitive interactions. Those are good foundations. What MCP does not currently standardize is a portable **mutation-approval profile**: a `planId`, immutable digest, approval challenge, same-user identity binding, TTL, single-use semantics, drift check, and execute-after-approval flow. Servers must implement all of these themselves today.
+
+Your repository is becoming the foundational reference for Kubernetes MCP. Without a shared profile, infrastructure MCP servers will diverge:
+- MCP clients won't know whether to expect a boolean `needs_approval` flag, a URL, a hash, or nothing
 - Security auditors will have no shared language for verifying HITL compliance
-- The TOCTOU attack surface will remain open across the ecosystem
+- Teams will rely on ad-hoc prompts or untrusted `destructiveHint` annotations for real cluster mutations
 
-I'm proposing that we define a minimal standard for **structured mutation approval** in MCP infrastructure servers:
+I'm proposing an optional MCP mutation-approval profile that defines a minimal contract for **structured mutation approval**:
 
 1. A `plan` phase that returns a plan ID and hash, not a mutation
 2. A `challenge` phase that creates a time-bounded, identity-bound approval ticket
