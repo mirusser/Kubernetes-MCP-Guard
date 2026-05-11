@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace InfraGate.McpGateway;
@@ -18,6 +19,108 @@ public sealed partial class PromptInjectionGuard
                 findings.Add(new GuardrailFinding(location, category));
             }
         }
+
+        if (!TryScanBase64Payloads(text, location, findings))
+        {
+            TryScanEmbeddedBase64Payloads(text, location, findings);
+        }
+    }
+
+    private static bool TryScanBase64Payloads(string text, string location, List<GuardrailFinding> findings)
+    {
+        if (text.Length < 20)
+        {
+            return false;
+        }
+
+        var hasInvalidChar = false;
+        foreach (char c in text)
+        {
+            if (c is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or (>= '0' and <= '9') or '+' or '/' or '=')
+            {
+                continue;
+            }
+
+            hasInvalidChar = true;
+            break;
+        }
+
+        if (hasInvalidChar)
+        {
+            return false;
+        }
+
+        byte[] decoded;
+        try
+        {
+            decoded = Convert.FromBase64String(text);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+
+        return ScanDecodedBase64(decoded, location, findings);
+    }
+
+    private static void TryScanEmbeddedBase64Payloads(string text, string location, List<GuardrailFinding> findings)
+    {
+        var matches = EmbeddedBase64Regex().Matches(text);
+        foreach (Match match in matches)
+        {
+            byte[] decoded;
+            try
+            {
+                decoded = Convert.FromBase64String(match.Value);
+            }
+            catch (FormatException)
+            {
+                // The regex matches substrings that look like base64 but may not be
+                // decodable (e.g., wrong padding, invalid character sequence). Skip
+                // this match and try the next one — the guardrail must never crash on
+                // malformed input.
+                continue;
+            }
+
+            ScanDecodedBase64(decoded, location, findings);
+        }
+    }
+
+    private static bool ScanDecodedBase64(byte[] decoded, string location, List<GuardrailFinding> findings)
+    {
+        string decodedText;
+        try
+        {
+            decodedText = Encoding.UTF8.GetString(decoded);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+
+        var printable = 0;
+        foreach (char c in decodedText)
+        {
+            if (!char.IsControl(c) || c == '\n' || c == '\r' || c == '\t')
+            {
+                printable++;
+            }
+        }
+
+        if (printable < decodedText.Length * 0.7)
+        {
+            return false;
+        }
+
+        foreach (var (category, pattern) in Patterns)
+        {
+            if (pattern.IsMatch(decodedText))
+            {
+                findings.Add(new GuardrailFinding(location, category));
+            }
+        }
+
+        return true;
     }
 
     private static bool IsOperationalLine(string line) =>
@@ -47,4 +150,9 @@ public sealed partial class PromptInjectionGuard
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
         matchTimeoutMilliseconds: McpGatewayConventions.RegexTimeoutMilliseconds)]
     private static partial Regex SensitivePlanMetadataLineRegex();
+
+    [GeneratedRegex(@"[A-Za-z0-9+/]{20,}={0,2}",
+        RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: 500)]
+    private static partial Regex EmbeddedBase64Regex();
 }

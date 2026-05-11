@@ -17,8 +17,9 @@ These tests do **not** run in the default repo test pass. They are gated behind 
 | [`Workflows/AlreadyAppliedPlanTests.cs`](Workflows/AlreadyAppliedPlanTests.cs) | 3 | HTTP MCP + approval browser + Kubernetes | Applying a plan twice succeeds the first time and is refused the second through the gateway surface. |
 | [`Workflows/DangerousManifestTests.cs`](Workflows/DangerousManifestTests.cs) | 4 | HTTP MCP request path | A manifest with `securityContext.privileged: true` is rejected by the policy validator at request time and never produces a pending plan. |
 | [`Workflows/ModifiedPendingPlanTests.cs`](Workflows/ModifiedPendingPlanTests.cs) | 5 | Focused gateway service + file tamper | Mutating the pending plan after the challenge is created but before approval is detected at approve time. |
-| [`Workflows/WrongUserApprovalTests.cs`](Workflows/WrongUserApprovalTests.cs) | 6 | Approval browser endpoint plus service probe | A challenge created by user A cannot be approved by user B; the endpoint test exercises antiforgery and cookie identity, and the service test keeps direct same-subject coverage. |
+| [`Workflows/WrongUserApprovalTests.cs`](Workflows/WrongUserApprovalTests.cs) | 6 | Approval browser endpoint plus service probe | A challenge created by user A cannot be approved by user B; the endpoint test exercises antiforgery and cookie identity, the browser-session test simulates a second Keycloak user (demo2) with a real JWT, and the service test keeps direct same-subject coverage. |
 | [`Workflows/DryRunFailureTests.cs`](Workflows/DryRunFailureTests.cs) | 7 | HTTP MCP request/apply paths | A strict-validation dry-run failure at request time blocks plan creation; a pre-apply dry-run failure after browser approval blocks the mutation. |
+| [`Workflows/RbacMatrixTests.cs`](Workflows/RbacMatrixTests.cs) | RBAC | Direct server subprocess with read-only SA | A read-only `ServiceAccount` (no create/patch/delete verbs) cannot complete `apply_approved_plan` — the Kubernetes API returns 403 Forbidden, proving the gateway inherits its RBAC boundary from the kubeconfig. |
 
 Each `Workflows/*Tests.cs` file is one workflow class with one or two `[Fact]`s, decorated with `[Trait("Category", "SafetyE2E")]` and `[Collection(SafetyE2ECollection.Name)]`. The shared fixture (`SafetyE2EFixture`) boots Keycloak once per assembly, creates HTTP MCP clients with real Keycloak JWTs, drives approval cookies through a test OAuth backchannel, and lazily spawns the McpServer subprocess on the first downstream tool call.
 
@@ -30,12 +31,22 @@ The suite mixes two testing tiers so every safety property has at least one auth
 |---|---|---|---|
 | **Full HTTP/browser/Kubernetes** | Real Keycloak JWTs at `/mcp` → gateway tool facade → approval challenge creation → browser approval page with antiforgery → browser POST → MCP apply → real Kubernetes mutation/refusal | `SmokeTests`, `FullApprovalFlowTests`, `PlanHashMismatchTests`, `AlreadyAppliedPlanTests`, `DangerousManifestTests`, `WrongUserApprovalTests` (endpoint), `DryRunFailureTests` | Real Keycloak-issued bearer tokens for MCP calls; simulated OAuth callback/cookie identity for browser approval endpoints. Covers the complete vertical stack. |
 | **Focused service-level** | `GatewayApprovalService` directly, bypassing HTTP and JWT middleware | `ExpiredApprovalTests`, `ModifiedPendingPlanTests`, `WrongUserApprovalTests` (service-level) | Injects `ClaimsPrincipal` via `SetAuthenticatedSubject()` into `IHttpContextAccessor` to force clock/hash/principal edge cases without brittle per-test setup. The `ApproveChallengeAsync` code path under test is identical whether the principal came through JwtBearer middleware or was set directly. |
+| **Direct server subprocess** | Real McpServer with an alternate kubeconfig, bypassing the gateway | `RbacMatrixTests` | Spawns its own McpServer subprocess with a read-only `ServiceAccount` kubeconfig generated at test time. Proves that the server inherits the SA's RBAC boundary from the kubeconfig without gateway interference. |
+
+### Guardrail: base64-encoded payload detection
+
+The `PromptInjectionGuard` now decodes strings that appear to be valid base64 (> 20 chars, base64 charset) and scans the decoded UTF-8 content against the same regex patterns used for plaintext. This catches prompt injections embedded in Kubernetes Secret `data` values (which are base64-encoded at the API level), as well as embedded base64 substrings within mixed-content fields like annotations, log lines, and labels (e.g. `Note: aWdub3JlIHByZXZpb3Vz...`). Decoding failures and non-printable binary data are silently skipped. Coverage lives in the gateway unit tests (`ResponseSanitizationTests`).
 
 ### Approval OAuth simulation boundary
 
 The tests do **not** scrape the real Keycloak browser login form. For browser approval operations the fixture uses a `FakeApprovalOAuthBackchannel` that returns a test JWT for any configured subject, simulating the OAuth authorization-code → token exchange. The real Keycloak callback/cookie flow is exercised indirectly (the browser approval page renders real dry-run/diff evidence), but identity is injected at the OAuth backchannel boundary, not through manual HTML form interaction.
 
 This is an intentional test-boundary choice documented in the [implementation plan](../../.agents/Plans/strengthen-safety-e2e-security-flow-plan.md). Real Keycloak JWTs remain for MCP bearer-token coverage. If a follow-up wants stricter real-OIDC coverage for approval decisions, the path is: add a second user to `deploy/keycloak/infra-gate-realm.json` and use that user for browser OAuth throughout.
+
+### Known limitations
+
+- **Browser approval token validation**: The `FakeApprovalOAuthBackchannel` returns unsigned JWTs for browser approval sessions. The wrong-user browser test (`ApproveChallengeBrowser_BrowserSessionAsDifferentSubject_IsRefused`) proves subject-comparison logic but does not exercise real Keycloak JWT signature validation in the browser path. A separate service-level test (`ApproveChallenge_RealJwtAsDemo2_ApprovalIdentityDerivedFromRealKeycloakToken_IsRefused`) closes this for the `GatewayApprovalService` code path by injecting a `ClaimsPrincipal` derived from a real Keycloak-issued JWT. Full browser-OAuth backchannel replacement is deferred to a future hardening phase. Real Keycloak JWT validation for MCP endpoints is covered by `SmokeTests`.
+- **RBAC matrix test uses direct server subprocess**: `RbacMatrixTests` spawns a second McpServer subprocess with a read-only SA kubeconfig, bypassing the gateway. This is sufficient because the architecture uses a static SA for the gateway-to-server connection — there is no dynamic identity forwarding to test at the gateway layer. If dynamic SAs are added in the future, a gateway-path RBAC test should be added.
 
 ## Prerequisites
 
@@ -188,10 +199,10 @@ The first run takes longer than subsequent runs because:
 - Testcontainers pulls the Keycloak image (`quay.io/keycloak/keycloak:26.2`) on first use.
 - The gateway's `DownstreamMcpClient` does a `dotnet run --project src/InfraGate.McpServer/InfraGate.McpServer.csproj` on the first tool call, which restores and compiles the McpServer if not already compiled.
 
-Expected output ends with a green summary. The current suite has 12 discovered tests:
+Expected output ends with a green summary. The current suite has 14 discovered tests:
 
 ```
-Passed!  - Failed:     0, Passed:    12, Skipped:     0, Total:    12, Duration: …
+Passed!  - Failed:     0, Passed:    14, Skipped:     0, Total:    14, Duration: …
 ```
 
 ### Step 8 (optional) — Confirm the default test pass is unaffected
@@ -215,7 +226,7 @@ These tests should pass as they do without `INFRA_GATE_RUN_SAFETY_E2E` set. For 
 
 ### Tests pass almost instantly without touching Docker or Kubernetes
 
-You forgot `INFRA_GATE_RUN_SAFETY_E2E=1`. The test methods are still discovered, but they early-return successfully before initializing the live fixture. The current output reports `Passed: 12`, not `0 tests`. Set the variable and re-run.
+You forgot `INFRA_GATE_RUN_SAFETY_E2E=1`. The test methods are still discovered, but they early-return successfully before initializing the live fixture. The current output reports `Passed: 14`, not `0 tests`. Set the variable and re-run.
 
 ### Approval flow refuses with "requires an authenticated OAuth subject"
 
@@ -273,10 +284,13 @@ INFRA_GATE_RUN_SAFETY_E2E=1 \
 
 ## CI considerations
 
-Don't run these in the default CI test job. They require Docker-in-Docker (for Testcontainers) and a Kubernetes cluster, both of which are nontrivial to provide in shared runners. If you do wire them up, the recommended shape is:
+A KinD-based CI workflow lives at [`.github/workflows/safety-e2e.yml`](../../.github/workflows/safety-e2e.yml). It runs on `workflow_dispatch` only, creates an ephemeral KinD cluster, applies demo RBAC and the failing Deployment, and runs the full Safety E2E suite. The cluster is torn down on job completion.
 
-- A separate workflow gated on a label or on `workflow_dispatch`.
-- A self-hosted runner with Docker available and a kind cluster pre-created in a setup step.
+Do **not** run these in the default CI test job. If you add automatic triggers (PR labels, scheduled runs), the recommended guard conditions are:
+
+- A self-hosted runner with Docker available, or `ubuntu-latest` with `helm/kind-action`.
 - Apply [`deploy/minikube/rbac.yaml`](../../deploy/minikube/rbac.yaml) and [`examples/failing-deployment/deployment.yaml`](../../examples/failing-deployment/deployment.yaml) before the test step.
 - Set `INFRA_GATE_RUN_SAFETY_E2E=1` and `KUBECONFIG` on the test step.
 - Cache the Keycloak image to keep first-run latency reasonable.
+
+The `RbacMatrixTests` additionally requires `kubectl` on the runner to generate a read-only `ServiceAccount` token at test time.

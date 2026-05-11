@@ -93,6 +93,37 @@ public sealed class ApprovalStoreTests
         Assert.False(File.Exists(created.ApprovedPath));
     }
 
+    [Fact]
+    public async Task GetApprovedPlanAsync_DeniesAlreadyAppliedPlan()
+    {
+        var store = CreateStore();
+        var plan = CreatePlan();
+        var created = await store.CreatePlanAsync(plan, CancellationToken.None);
+        await File.WriteAllTextAsync(created.ApprovedPath, created.Hash, CancellationToken.None);
+        await store.MarkAppliedAsync(created.Plan, created.Hash, CancellationToken.None);
+
+        var approved = await store.GetApprovedPlanAsync(created.Plan.Id, CancellationToken.None);
+
+        Assert.False(approved.IsApproved);
+        Assert.Contains("already applied", approved.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(store.GetAppliedPath(created.Plan.Id)));
+    }
+
+    [Fact]
+    public async Task GetPendingPlanAsync_DeniesAlreadyAppliedPlan()
+    {
+        var store = CreateStore();
+        var plan = CreatePlan();
+        var created = await store.CreatePlanAsync(plan, CancellationToken.None);
+        await File.WriteAllTextAsync(created.ApprovedPath, created.Hash, CancellationToken.None);
+        await store.MarkAppliedAsync(created.Plan, created.Hash, CancellationToken.None);
+
+        var pending = await store.GetPendingPlanAsync(created.Plan.Id, CancellationToken.None);
+
+        Assert.False(pending.IsPending);
+        Assert.Contains("already applied", pending.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ApprovalStore CreateStore()
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
