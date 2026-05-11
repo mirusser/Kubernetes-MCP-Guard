@@ -22,6 +22,21 @@ These tests do **not** run in the default repo test pass. They are gated behind 
 
 Each `Workflows/*Tests.cs` file is one workflow class with one or two `[Fact]`s, decorated with `[Trait("Category", "SafetyE2E")]` and `[Collection(SafetyE2ECollection.Name)]`. The shared fixture (`SafetyE2EFixture`) boots Keycloak once per assembly, creates HTTP MCP clients with real Keycloak JWTs, drives approval cookies through a test OAuth backchannel, and lazily spawns the McpServer subprocess on the first downstream tool call.
 
+## Test architecture
+
+The suite mixes two testing tiers so every safety property has at least one authentic gateway-path proof:
+
+| Tier | What it exercises | Tests using it | Description |
+|---|---|---|---|
+| **Full HTTP/browser/Kubernetes** | Real Keycloak JWTs at `/mcp` → gateway tool facade → approval challenge creation → browser approval page with antiforgery → browser POST → MCP apply → real Kubernetes mutation/refusal | `SmokeTests`, `FullApprovalFlowTests`, `PlanHashMismatchTests`, `AlreadyAppliedPlanTests`, `DangerousManifestTests`, `WrongUserApprovalTests` (endpoint), `DryRunFailureTests` | Real Keycloak-issued bearer tokens for MCP calls; simulated OAuth callback/cookie identity for browser approval endpoints. Covers the complete vertical stack. |
+| **Focused service-level** | `GatewayApprovalService` directly, bypassing HTTP and JWT middleware | `ExpiredApprovalTests`, `ModifiedPendingPlanTests`, `WrongUserApprovalTests` (service-level) | Injects `ClaimsPrincipal` via `SetAuthenticatedSubject()` into `IHttpContextAccessor` to force clock/hash/principal edge cases without brittle per-test setup. The `ApproveChallengeAsync` code path under test is identical whether the principal came through JwtBearer middleware or was set directly. |
+
+### Approval OAuth simulation boundary
+
+The tests do **not** scrape the real Keycloak browser login form. For browser approval operations the fixture uses a `FakeApprovalOAuthBackchannel` that returns a test JWT for any configured subject, simulating the OAuth authorization-code → token exchange. The real Keycloak callback/cookie flow is exercised indirectly (the browser approval page renders real dry-run/diff evidence), but identity is injected at the OAuth backchannel boundary, not through manual HTML form interaction.
+
+This is an intentional test-boundary choice documented in the [implementation plan](../../.agents/Plans/strengthen-safety-e2e-security-flow-plan.md). Real Keycloak JWTs remain for MCP bearer-token coverage. If a follow-up wants stricter real-OIDC coverage for approval decisions, the path is: add a second user to `deploy/keycloak/infra-gate-realm.json` and use that user for browser OAuth throughout.
+
 ## Prerequisites
 
 You need **all four** of the following before any test will exercise the live safety flow:
