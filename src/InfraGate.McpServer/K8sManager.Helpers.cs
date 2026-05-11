@@ -1,5 +1,6 @@
 using System.Net;
 using InfraGate.Approvals;
+using InfraGate.Approvals.AuditPayloads;
 using k8s;
 using k8s.Autorest;
 
@@ -69,28 +70,30 @@ public sealed partial class K8sManager
         K8sPlan plan,
         string message,
         CancellationToken cancellationToken) =>
-        approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.DryRunFailed, new
-        {
-            phase,
-            planId = plan.Id,
-            plan.Operation,
-            plan.Namespace,
-            objects = plan.Objects.Select(FormatObjectRef).ToArray(),
-            message
-        }, cancellationToken);
+        approvalStore.WriteAuditAsync(
+            ApprovalConventions.AuditEvents.DryRunFailed,
+            new DryRunFailedPayload(
+                phase,
+                plan.Id,
+                plan.Operation,
+                plan.Namespace,
+                plan.Objects.Select(FormatObjectRef).ToArray(),
+                message),
+            cancellationToken);
 
     private Task WriteDiffFailedAuditAsync(
         K8sPlan plan,
         string message,
         CancellationToken cancellationToken) =>
-        approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.DiffFailed, new
-        {
-            planId = plan.Id,
-            plan.Operation,
-            plan.Namespace,
-            objects = plan.Objects.Select(FormatObjectRef).ToArray(),
-            message
-        }, cancellationToken);
+        approvalStore.WriteAuditAsync(
+            ApprovalConventions.AuditEvents.DiffFailed,
+            new DiffFailedPayload(
+                plan.Id,
+                plan.Operation,
+                plan.Namespace,
+                plan.Objects.Select(FormatObjectRef).ToArray(),
+                message),
+            cancellationToken);
 
     private static string FormatRequestDryRunRefusal(string message) =>
         $"Server-side dry-run failed; no approval plan was created.{Environment.NewLine}{message}";

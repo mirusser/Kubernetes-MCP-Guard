@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.AuditPayloads;
 using InfraGate.McpServer.Diff;
 using InfraGate.McpServer.Policy;
 using k8s;
@@ -13,11 +14,10 @@ public sealed partial class K8sManager
         var approved = await approvalStore.GetApprovedPlanAsync(planId, cancellationToken);
         if (!approved.IsApproved || approved.Plan is null || approved.Hash is null)
         {
-            await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApplyDenied, new
-            {
-                planId,
-                approved.Message
-            }, cancellationToken);
+            await approvalStore.WriteAuditAsync(
+                ApprovalConventions.AuditEvents.ApplyDenied,
+                new ApplyDeniedPayload(planId, approved.Message),
+                cancellationToken);
 
             return $"Refused: {approved.Message}";
         }
@@ -25,12 +25,10 @@ public sealed partial class K8sManager
         var applyResult = await ApplyPlanAsync(approved.Plan, cancellationToken);
         if (!applyResult.Succeeded)
         {
-            await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApplyFailed, new
-            {
-                approved.Plan.Id,
-                approved.Plan.Operation,
-                applyResult.Message
-            }, cancellationToken);
+            await approvalStore.WriteAuditAsync(
+                ApprovalConventions.AuditEvents.ApplyFailed,
+                new ApplyFailedPayload(approved.Plan.Id, approved.Plan.Operation, applyResult.Message),
+                cancellationToken);
 
             return applyResult.Message;
         }
@@ -97,13 +95,10 @@ public sealed partial class K8sManager
             return null;
         }
 
-        await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApplyDriftDetected, new
-        {
-            plan.Id,
-            plan.Operation,
-            plan.Namespace,
-            message = drift
-        }, cancellationToken);
+        await approvalStore.WriteAuditAsync(
+            ApprovalConventions.AuditEvents.ApplyDriftDetected,
+            new ApplyDriftDetectedPayload(plan.Id, plan.Operation, plan.Namespace, drift),
+            cancellationToken);
 
         return ApplyResult.Failed($"Live Kubernetes state changed after approval; refusing to mutate Kubernetes.{Environment.NewLine}{drift}");
     }

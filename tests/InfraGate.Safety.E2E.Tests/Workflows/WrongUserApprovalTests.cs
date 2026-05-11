@@ -1,0 +1,134 @@
+using InfraGate.McpGateway;
+
+namespace InfraGate.Safety.E2E.Tests.Workflows;
+
+// Proves demo bullet #6 from .agents/Plans/minimum-for-demo.md: a challenge created
+// by user A cannot be approved by user B (same-subject enforcement in
+// GatewayApprovalService.ApproveChallengeAsync). The endpoint test exercises the
+// browser approval POST with antiforgery and a simulated approval OAuth subject;
+// the service-level test remains as a narrower defense-in-depth probe.
+[Trait("Category", "SafetyE2E")]
+[Collection(SafetyE2ECollection.Name)]
+public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
+{
+    [Fact]
+    public async Task ApproveChallengeEndpoint_ByDifferentSubject_IsRefused()
+    {
+        if (!fixture.IsEnabled)
+        {
+            return;
+        }
+
+        const string otherSubject = "safety-e2e-other";
+
+        await using var client = await fixture.CreateHttpMcpClientAsync();
+        var requestText = await client.CallToolAsync(
+            McpGatewayConventions.ToolNames.RequestRestartDeployment,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+            });
+        var planId = SafetyE2EFixture.ParsePlanId(requestText);
+        var approvalRequired = await client.CallToolAsync(
+            McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.PlanId] = planId
+            });
+        var originalChallengeId = SafetyE2EFixture.ParseChallengeId(approvalRequired);
+
+        var pendingHash = await ApprovalStore.ComputeSha256Async(
+            fixture.ApprovalStore.GetPendingPath(planId),
+            CancellationToken.None);
+        var tokenChallenge = await fixture.ChallengeStore.CreateAsync(
+            planId,
+            pendingHash,
+            otherSubject,
+            requesterAuthenticationType: "test",
+            ttl: TimeSpan.FromMinutes(5),
+            cancellationToken: CancellationToken.None);
+        using var browser = await fixture.CreateAuthenticatedApprovalBrowserAsync(tokenChallenge.Id, otherSubject);
+        var tokenPage = await browser.GetAsync($"/approvals/{tokenChallenge.Id}");
+        tokenPage.EnsureSuccessStatusCode();
+        var tokenPageText = await tokenPage.Content.ReadAsStringAsync();
+        SafetyE2EFixture.AddResponseCookies(browser, tokenPage);
+
+        var result = await SafetyE2EFixture.PostApprovalAsync(
+            browser,
+            originalChallengeId,
+            SafetyE2EFixture.ParseAntiforgeryToken(tokenPageText));
+        var originalChallenge = await fixture.ChallengeStore.GetAsync(originalChallengeId, CancellationToken.None);
+
+        Assert.Contains("Approval Failed", result, StringComparison.Ordinal);
+        Assert.Contains("same authenticated subject", result, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+        Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, originalChallenge?.Status);
+
+        var auditEvents = await fixture.ReadAuditEventsAsync();
+        Assert.Contains(auditEvents, evt =>
+            evt.GetProperty("eventName").GetString() == ApprovalConventions.AuditEvents.ApprovalChallengeRejected &&
+            evt.GetProperty("payload").TryGetProperty("id", out var challengeIdProp) &&
+            challengeIdProp.GetString() == originalChallengeId &&
+            evt.GetProperty("payload").TryGetProperty("approverSubject", out var approverSubjectProp) &&
+            approverSubjectProp.GetString() == otherSubject);
+    }
+
+    [Fact]
+    public async Task ApproveChallenge_ByDifferentSubject_IsRefused()
+    {
+        if (!fixture.IsEnabled)
+        {
+            return;
+        }
+
+        const string requesterSubject = "safety-e2e-requester";
+        const string otherSubject = "safety-e2e-other";
+
+        fixture.SetAuthenticatedSubject(requesterSubject);
+        string challengeId;
+        string planId;
+        try
+        {
+            var requestText = await fixture.DownstreamClient.CallToolAsync(
+                McpGatewayConventions.ToolNames.RequestRestartDeployment,
+                new Dictionary<string, object?>
+                {
+                    [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
+                    [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+                },
+                CancellationToken.None);
+            planId = SafetyE2EFixture.ParsePlanId(requestText);
+            var firstResult = await fixture.GetApprovalService().EnsureApprovedOrCreateChallengeAsync(planId, CancellationToken.None);
+            Assert.False(firstResult.IsApproved);
+            challengeId = ExtractChallengeId(firstResult.Message);
+        }
+        finally
+        {
+            fixture.ClearAuthenticatedSubject();
+        }
+
+        fixture.SetAuthenticatedSubject(otherSubject);
+        try
+        {
+            var result = await fixture.GetApprovalService().ApproveChallengeAsync(challengeId, CancellationToken.None);
+            var challenge = await fixture.ChallengeStore.GetAsync(challengeId, CancellationToken.None);
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("same authenticated subject", result.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+            Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
+        }
+        finally
+        {
+            fixture.ClearAuthenticatedSubject();
+        }
+    }
+
+    private static string ExtractChallengeId(string message) =>
+        message
+            .Split(Environment.NewLine)
+            .Single(line => line.StartsWith("Approval URL:", StringComparison.Ordinal))
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Last();
+}

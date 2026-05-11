@@ -11,6 +11,7 @@
 - `K8sManagerObservabilityTests.cs`: bounded Events, Pod logs, focused resource summaries, and sensitive-resource rejection.
 - `K8sManagerDiagnosticsTests.cs`: bounded Deployment, Pod, and Service diagnostics without extra RBAC assumptions.
 - `K8sManagerRequestTests.cs`: request-plan formatting, namespace validation, replica bounds, request-time dry-run, approval guidance, and unapproved apply refusal.
+- `AuditPayloadsTests.cs`: serialisation shape for every approval-audit payload record — locks field names, ordering, and PlanId-vs-Id conventions.
 - `K8sManagerSetImageTests.cs`: Deployment image update planning, stale-plan refusal, and patch shape.
 - `K8SMcpOptionsTests.cs`: allowed namespace parsing defaults and comma-separated values.
 - `K8sToolsTests.cs`: MCP tool delegation and argument forwarding to K8sManager.
