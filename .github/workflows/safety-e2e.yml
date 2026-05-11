@@ -1,0 +1,54 @@
+name: Safety E2E Tests
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safety-e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7  # v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Create KinD cluster
+        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863d1c  # v1.12.0
+        with:
+          wait: 120s
+          kubectl_version: v1.32.0
+
+      - name: Verify cluster
+        run: |
+          kubectl cluster-info
+          kubectl wait --for=condition=Ready node --all --timeout=120s
+
+      - name: Apply demo RBAC and Deployment
+        run: |
+          kubectl apply --validate=false -f deploy/minikube/rbac.yaml
+          kubectl wait --for=condition=Ready pod -l app=nginx-demo -n mcp-nginx-demo --timeout=120s || true
+          kubectl apply -f examples/failing-deployment/deployment.yaml
+
+      - name: Create service-account kubeconfig
+        run: ./scripts/create-demo-kubeconfig.sh
+
+      - name: Restore and build
+        run: |
+          dotnet restore InfraGate.slnx
+          dotnet build InfraGate.slnx --configuration Release --no-restore
+
+      - name: Run Safety E2E tests
+        env:
+          INFRA_GATE_RUN_SAFETY_E2E: "1"
+          KUBECONFIG: ${{ github.workspace }}/.kube/mcp-nginx-demo.config
+        run: |
+          dotnet test tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj \
+            --configuration Release --no-build \
+            --filter "Category=SafetyE2E"

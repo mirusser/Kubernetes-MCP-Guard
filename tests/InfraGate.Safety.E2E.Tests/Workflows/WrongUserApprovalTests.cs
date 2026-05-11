@@ -125,6 +125,57 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
         }
     }
 
+    [Fact]
+    public async Task ApproveChallengeBrowser_BrowserSessionAsDifferentSubject_IsRefused()
+    {
+        if (!fixture.IsEnabled)
+        {
+            return;
+        }
+
+        const string otherSubject = "demo2";
+
+        await using var client = await fixture.CreateHttpMcpClientAsync();
+        var requestText = await client.CallToolAsync(
+            McpGatewayConventions.ToolNames.RequestRestartDeployment,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+            });
+        var planId = SafetyE2EFixture.ParsePlanId(requestText);
+        var approvalRequired = await client.CallToolAsync(
+            McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.PlanId] = planId
+            });
+        var challengeId = SafetyE2EFixture.ParseChallengeId(approvalRequired);
+
+        using var browser = await fixture.CreateAuthenticatedApprovalBrowserAsync(challengeId, otherSubject);
+        var page = await browser.GetAsync($"/approvals/{challengeId}");
+        page.EnsureSuccessStatusCode();
+        var pageText = await page.Content.ReadAsStringAsync();
+        SafetyE2EFixture.AddResponseCookies(browser, page);
+
+        var result = await SafetyE2EFixture.PostApprovalAsync(
+            browser,
+            challengeId,
+            SafetyE2EFixture.ParseAntiforgeryToken(pageText));
+        var challenge = await fixture.ChallengeStore.GetAsync(challengeId, CancellationToken.None);
+
+        Assert.Contains("Approval Failed", result, StringComparison.Ordinal);
+        Assert.Contains("same authenticated subject", result, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+        Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
+
+        var auditEvents = await fixture.ReadAuditEventsAsync();
+        Assert.Contains(auditEvents, evt =>
+            evt.GetProperty("eventName").GetString() == ApprovalConventions.AuditEvents.ApprovalChallengeRejected &&
+            evt.GetProperty("payload").TryGetProperty("id", out var challengeIdProp) &&
+            challengeIdProp.GetString() == challengeId);
+    }
+
     private static string ExtractChallengeId(string message) =>
         message
             .Split(Environment.NewLine)

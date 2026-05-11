@@ -134,6 +134,22 @@
           "temporary": false
         }
       ]
+    },
+    {
+      "username": "demo2",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "demo2@example.com",
+      "firstName": "Demo",
+      "lastName": "User Two",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo2",
+          "temporary": false
+        }
+      ]
+    }
     }
   ]
 }
