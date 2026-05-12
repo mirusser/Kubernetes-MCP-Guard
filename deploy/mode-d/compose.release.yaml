@@ -1,3 +1,10 @@
+# deploy/mode-d/compose.release.yaml
+# Keycloak + MCP Gateway — published gateway image from GHCR.
+# Override the release tag with: TAG=vX.Y.Z docker compose -f deploy/mode-d/compose.release.yaml up
+# Docker Hub alternate for the gateway image: mirusser/kubernetes-mcp-guard-gateway:${TAG}
+# Keycloak is always pulled from quay.io/keycloak/keycloak (no GHCR equivalent).
+# Prerequisites: ./scripts/create-demo-kubeconfig.sh --compose
+
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.2
@@ -17,10 +24,7 @@ services:
       start_period: 10s
 
   mcp-gateway:
-    image: kubernetes-mcp-guard-gateway
-    build:
-      context: ../..
-      dockerfile: deploy/docker/mcp-gateway.Dockerfile
+    image: ghcr.io/mirusser/kubernetes-mcp-guard-gateway:${TAG:-latest}
     depends_on:
       keycloak:
         condition: service_healthy
@@ -38,16 +42,12 @@ services:
       INFRA_GATE_APPROVAL_BASE_URL: http://127.0.0.1:${GATEWAY_PORT:-3001}
       INFRA_GATE_DOWNSTREAM_ASSEMBLY: /app/server/InfraGate.McpServer.dll
       INFRA_GATE_GUARD_AUDIT_ROOT: /data/guardrails
-      KUBECONFIG: ${KUBECONFIG:-/run/kube/mcp-nginx-demo.compose.config}
+      KUBECONFIG: /run/kube/mcp-nginx-demo.compose.config
       K8S_MCP_APPROVAL_ROOT: /data/approvals
       K8S_MCP_ALLOWED_NAMESPACES: mcp-nginx-demo
     volumes:
       - ../../.kube/mcp-nginx-demo.compose.config:/run/kube/mcp-nginx-demo.compose.config:ro
-      - mcp-gateway-approvals:/data/approvals
-      - mcp-gateway-guardrails:/data/guardrails
+      - ../../.mcp-approvals:/data/approvals
+      - ../../.mcp-guardrails:/data/guardrails
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-3001}:3001"
-
-volumes:
-  mcp-gateway-approvals:
-  mcp-gateway-guardrails:

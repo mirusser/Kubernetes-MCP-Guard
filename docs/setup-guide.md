@@ -312,6 +312,83 @@ Listens on `http://127.0.0.1:3011`. Provides OAuth discovery, PKCE authorization
 
 ---
 
+### Mode D — Keycloak + Gateway (Full OAuth, No Ephemeral Issuer)
+
+Use this when you want a production-closer OAuth setup with persistent user accounts and a real PKCE login flow. Keycloak replaces DevIssuer: users and client registrations survive container restarts. The realm is auto-imported from `deploy/keycloak/infra-gate-realm.json` on first start.
+
+```bash
+./scripts/create-demo-kubeconfig.sh --compose
+docker compose -f deploy/mode-d/compose.yaml up --build
+```
+
+Keycloak starts first and takes ~30s to pass its health check before the gateway comes up. No manual step is needed — the `depends_on: condition: service_healthy` gate handles the ordering.
+
+**Endpoints:**
+
+- Gateway: `http://127.0.0.1:3001/mcp`
+- Keycloak: `http://127.0.0.1:3010` (admin UI at `/admin`, realm at `/realms/infra-gate`)
+
+**Pre-seeded demo accounts** (from the imported realm):
+
+| Username | Password |
+|---|---|
+| `demo` | `demo` |
+| `demo2` | `demo2` |
+
+**Codex CLI config** (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.infra-gate]
+url = "http://127.0.0.1:3001/mcp"
+oauth_resource = "http://127.0.0.1:3001/mcp"
+scopes = ["mcp:tools"]
+```
+
+```bash
+codex mcp login infra-gate
+```
+
+**Claude Code config** (`.mcp.json` in repo root — same as Mode B):
+
+```json
+{
+  "mcpServers": {
+    "infra-gate": {
+      "type": "http",
+      "url": "http://127.0.0.1:3001/mcp",
+      "oauth": {
+        "scopes": ["mcp:tools"]
+      }
+    }
+  }
+}
+```
+
+Then run `/mcp` inside Claude Code to trigger the OAuth login flow against Keycloak.
+
+#### Mode D — Run from published images
+
+```bash
+./scripts/create-demo-kubeconfig.sh --compose
+TAG=vX.Y.Z docker compose -f deploy/mode-d/compose.release.yaml up
+```
+
+Keycloak is always pulled from `quay.io/keycloak/keycloak:26.2`; the gateway image is pulled from GHCR. Replace `vX.Y.Z` with the release tag from <https://github.com/mirusser/Kubernetes-MCP-Guard/releases>.
+
+**Docker Hub alternate for the gateway image** (substitute into `compose.release.yaml` if preferred):
+
+```text
+ghcr.io/mirusser/kubernetes-mcp-guard-gateway:${TAG} → mirusser/kubernetes-mcp-guard-gateway:${TAG}
+```
+
+> [!IMPORTANT]
+> The Keycloak realm bakes the gateway audience (`http://127.0.0.1:3001/mcp`) at import time. If you change `GATEWAY_PORT`, you must also update `deploy/keycloak/infra-gate-realm.json` and re-import the realm.
+
+> [!IMPORTANT]
+> Set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` only for local development HTTP issuers such as this Keycloak demo. Never in production.
+
+---
+
 ## Available MCP Tools
 
 Once running, the server exposes these tools:
@@ -358,6 +435,12 @@ INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build
 # HTTP gateway integration tests (requires minikube + RBAC from Step 1)
 INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build
 
+# Keycloak integration tests (requires Docker)
+dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj --no-build
+
+# Safety E2E tests (requires Docker + minikube + RBAC from Step 1)
+INFRA_GATE_RUN_SAFETY_E2E=1 dotnet test tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj --no-build
+
 # Compose config validation
 docker compose -f deploy/mode-c/compose.yaml config
 
@@ -391,12 +474,19 @@ The canonical environment variable, CI/CD, and release configuration reference i
 ├── tests/
 │   ├── InfraGate.McpServer.Tests/
 │   ├── InfraGate.McpGateway.Tests/
+│   ├── InfraGate.McpGateway.KeycloakTests/
+│   ├── InfraGate.Safety.E2E.Tests/
+│   ├── InfraGate.RuntimeSafety.Tests/
 │   └── InfraGate.DevIssuer.Tests/
 ├── deploy/
 │   ├── compose/                          # Docker Compose deployments and Keycloak demo
 │   ├── docker/                           # Runtime Dockerfiles
+│   ├── keycloak/                         # Keycloak realm config (infra-gate-realm.json)
 │   ├── minikube/rbac.yaml                # Namespace + ServiceAccount + Role + RoleBinding
-│   └── mode-c/compose.yaml               # Containerized OAuth setup
+│   ├── mode-c/compose.yaml               # DevIssuer + Gateway (local build)
+│   ├── mode-c/compose.release.yaml       # DevIssuer + Gateway (published images)
+│   ├── mode-d/compose.yaml               # Keycloak + Gateway (local build)
+│   └── mode-d/compose.release.yaml       # Keycloak + Gateway (published images)
 ├── scripts/
 │   ├── create-demo-kubeconfig.sh         # Bootstrap RBAC & generate kubeconfig
 │   └── approve-plan.sh                   # Manual dev-only hash approval helper

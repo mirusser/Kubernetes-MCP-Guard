@@ -1,3 +1,10 @@
+# deploy/mode-d/compose.yaml
+# Keycloak + MCP Gateway — local build.
+# Keycloak is auto-configured from deploy/keycloak/infra-gate-realm.json.
+# Prerequisites: ./scripts/create-demo-kubeconfig.sh --compose
+# Run: docker compose -f deploy/mode-d/compose.yaml up --build
+# Docker Hub alternate for the gateway image: mirusser/kubernetes-mcp-guard-gateway
+
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.2
@@ -38,16 +45,12 @@ services:
       INFRA_GATE_APPROVAL_BASE_URL: http://127.0.0.1:${GATEWAY_PORT:-3001}
       INFRA_GATE_DOWNSTREAM_ASSEMBLY: /app/server/InfraGate.McpServer.dll
       INFRA_GATE_GUARD_AUDIT_ROOT: /data/guardrails
-      KUBECONFIG: ${KUBECONFIG:-/run/kube/mcp-nginx-demo.compose.config}
+      KUBECONFIG: /run/kube/mcp-nginx-demo.compose.config
       K8S_MCP_APPROVAL_ROOT: /data/approvals
       K8S_MCP_ALLOWED_NAMESPACES: mcp-nginx-demo
     volumes:
       - ../../.kube/mcp-nginx-demo.compose.config:/run/kube/mcp-nginx-demo.compose.config:ro
-      - mcp-gateway-approvals:/data/approvals
-      - mcp-gateway-guardrails:/data/guardrails
+      - ../../.mcp-approvals:/data/approvals
+      - ../../.mcp-guardrails:/data/guardrails
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-3001}:3001"
-
-volumes:
-  mcp-gateway-approvals:
-  mcp-gateway-guardrails:
