@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using InfraGate.Approvals;
 using InfraGate.McpServer;
@@ -130,7 +131,7 @@ public sealed class K8sManagerStatusTests
                 SkipTlsVerify = true
             });
 
-        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client!);
+        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client!, NullLogger<K8sManager>.Instance);
     }
 
     private static string EmptyList(string kind) =>

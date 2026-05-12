@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using InfraGate.Approvals;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
@@ -68,7 +69,7 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void CreateTransportOptions_UsesProjectRunArguments_WhenAssemblyUnset()
     {
-        var client = new DownstreamMcpClient(CreateOptions());
+        var client = new DownstreamMcpClient(CreateOptions(), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -86,7 +87,7 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void CreateTransportOptions_UsesAssemblyArgument_WhenAssemblySet()
     {
-        var client = new DownstreamMcpClient(CreateOptions(DownstreamAssembly));
+        var client = new DownstreamMcpClient(CreateOptions(DownstreamAssembly), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -100,7 +101,7 @@ public sealed class McpGatewayOptionsTests
     [InlineData("  ")]
     public void CreateTransportOptions_FallsBackToProject_WhenAssemblyIsEmptyOrWhitespace(string assembly)
     {
-        var client = new DownstreamMcpClient(CreateOptions(assembly));
+        var client = new DownstreamMcpClient(CreateOptions(assembly), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using InfraGate.Approvals;
 using InfraGate.McpServer;
@@ -82,7 +83,7 @@ public sealed class K8sManagerConfigTests
             new HashSet<string>(namespaces, StringComparer.Ordinal),
             root);
 
-        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client: null!);
+        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client: null!, NullLogger<K8sManager>.Instance);
     }
 
     private static bool IsValidJson(string value)

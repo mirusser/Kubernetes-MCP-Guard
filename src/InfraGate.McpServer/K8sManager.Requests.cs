@@ -3,6 +3,7 @@ using InfraGate.McpServer.Diff;
 using InfraGate.McpServer.Policy;
 using k8s;
 using k8s.Models;
+using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpServer;
 
@@ -194,11 +195,22 @@ public sealed partial class K8sManager
         var dryRun = await dryRunTask;
         if (!dryRun.Succeeded || dryRun.DryRun is null)
         {
-            await WriteDryRunFailedAuditAsync(
-                K8sConventions.DryRunPhases.Request,
-                plan,
-                dryRun.Message,
-                cancellationToken);
+            // Audit write must not mask the dry-run error — catch separately so we
+            // always return the human-readable refusal even if the store is unavailable.
+            try
+            {
+                await WriteDryRunFailedAuditAsync(
+                    K8sConventions.DryRunPhases.Request,
+                    plan,
+                    dryRun.Message,
+                    cancellationToken);
+            }
+            catch (Exception auditEx) when (auditEx is not OperationCanceledException)
+            {
+                logger.LogError(auditEx,
+                    "Failed to write dry-run audit for plan {PlanId}; approval store may be unavailable",
+                    plan.Id);
+            }
 
             return FormatRequestDryRunRefusal(dryRun.Message);
         }
@@ -235,7 +247,19 @@ public sealed partial class K8sManager
         K8sPolicyResult? policyResult,
         CancellationToken cancellationToken)
     {
-        var result = await approvalStore.CreatePlanAsync(plan, cancellationToken);
+        ApprovalPlanResult result;
+        try
+        {
+            result = await approvalStore.CreatePlanAsync(plan, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex,
+                "Failed to persist approval plan {PlanId} to store; check that the approval root directory is writable by the container",
+                plan.Id);
+            return $"Failed to create approval plan: {ex.Message}";
+        }
+
         var objects = string.Join(
             Environment.NewLine,
             result.Plan.Objects.Select(obj => $"  - {obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}"));

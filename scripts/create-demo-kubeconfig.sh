@@ -12,6 +12,10 @@ SA_NAME_FLAG=false
 COMPOSE_MODE=false
 OUT="${ROOT}/.kube/mcp-nginx-demo.config"
 COMPOSE_OUT="${ROOT}/.kube/mcp-nginx-demo.compose.config"
+# UID/GID the gateway container runs as (aspnet:10.0-noble-chiseled APP_UID).
+# Must match scripts/setup-development-deploy.sh and the Dockerfile's USER directive.
+GATEWAY_APP_UID="1654"
+GATEWAY_APP_UGID="${GATEWAY_APP_UID}:${GATEWAY_APP_UID}"
 
 usage() {
   cat <<EOF
@@ -117,6 +121,20 @@ server_host() {
   printf '%s' "${host_port%%:*}"
 }
 
+grant_container_read() {
+  local target="$1"
+
+  if command -v setfacl >/dev/null 2>&1 &&
+    setfacl -m "u:${GATEWAY_APP_UID}:r" "${target}" 2>/dev/null; then
+    return
+  fi
+
+  # Fallback for systems without ACL support. The token is short-lived (24h)
+  # and the file is gitignored, so a world-readable kubeconfig is acceptable
+  # for local development.
+  chmod 644 "${target}"
+}
+
 prepare_compose_persistence_dirs() {
   local approval_dir="${ROOT}/.mcp-approvals"
   local guardrail_dir="${ROOT}/.mcp-guardrails"
@@ -195,6 +213,7 @@ if [[ "${COMPOSE_MODE}" == "true" ]]; then
   fi
 
   write_kubeconfig "${COMPOSE_OUT}" "${COMPOSE_SERVER}" "${TLS_SERVER_NAME}"
+  grant_container_read "${COMPOSE_OUT}"
   prepare_compose_persistence_dirs
 fi
 

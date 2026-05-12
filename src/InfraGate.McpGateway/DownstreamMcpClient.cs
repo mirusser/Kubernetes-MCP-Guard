@@ -1,13 +1,23 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 
 namespace InfraGate.McpGateway;
 
-public sealed class DownstreamMcpClient(McpGatewayOptions options) : IDownstreamMcpClient, IAsyncDisposable
+public sealed class DownstreamMcpClient : IDownstreamMcpClient, IAsyncDisposable
 {
+    private readonly McpGatewayOptions options;
+    private readonly ILogger<DownstreamMcpClient> logger;
     private readonly SemaphoreSlim clientLock = new(1, 1);
     private readonly SemaphoreSlim callLock = new(1, 1);
     private McpClient? client;
+
+    public DownstreamMcpClient(McpGatewayOptions options, ILogger<DownstreamMcpClient> logger)
+    {
+        this.options = options;
+        this.logger = logger;
+    }
 
     public async Task<string> CallToolAsync(
         string toolName,
@@ -20,9 +30,16 @@ public sealed class DownstreamMcpClient(McpGatewayOptions options) : IDownstream
         {
             var result = await mcpClient.CallToolAsync(toolName, arguments, cancellationToken: cancellationToken);
 
-            return string.Join(
+            var text = string.Join(
                 Environment.NewLine,
                 result.Content.OfType<TextContentBlock>().Select(content => content.Text));
+
+            if (result.IsError == true)
+            {
+                logger.LogError("Downstream tool '{ToolName}' returned IsError=true: {Text}", toolName, text);
+            }
+
+            return text;
         }
         finally
         {

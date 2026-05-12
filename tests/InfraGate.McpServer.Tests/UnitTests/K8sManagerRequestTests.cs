@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using InfraGate.Approvals;
 using InfraGate.McpServer;
@@ -418,7 +419,7 @@ public sealed class K8sManagerRequestTests
             new HashSet<string>(StringComparer.Ordinal) { namespaceName },
             root);
 
-        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client: null!);
+        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client: null!, NullLogger<K8sManager>.Instance);
     }
 
     private static ManagerContext CreateContext(string namespaceName, TestKubernetesApi api)
@@ -434,7 +435,7 @@ public sealed class K8sManagerRequestTests
             SkipTlsVerify = true
         });
 
-        return new ManagerContext(new K8sManager(options, approvalStore, client), approvalStore);
+        return new ManagerContext(new K8sManager(options, approvalStore, client, NullLogger<K8sManager>.Instance), approvalStore);
     }
 
     private static string ParsePlanId(string text) =>
