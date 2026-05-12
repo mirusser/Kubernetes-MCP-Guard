@@ -15,6 +15,9 @@ public sealed partial class K8sManager
         int limit,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation("GetEvents called: Namespace={Namespace}, LabelSelector={LabelSelector}, FieldSelector={FieldSelector}, Limit={Limit}",
+            namespaceName, labelSelector, fieldSelector, limit);
+
         var validation = ValidateNamespace(namespaceName) ??
             ValidateBoundedCount(limit, K8sConventions.MaxEventLimit, "Limit");
         if (validation is not null)
@@ -42,6 +45,11 @@ public sealed partial class K8sManager
                 limit,
                 events = events.Items.Select(EventSummary)
             }, JsonOptions);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogError(ex, "Event read timed out for namespace {Namespace}", namespaceName);
+            return FormatApiException("Event read timed out", ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -94,6 +102,11 @@ public sealed partial class K8sManager
                 log
             }, JsonOptions);
         }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogError(ex, "Pod log read timed out for {Namespace}/{PodName}", namespaceName, podName);
+            return FormatApiException("Pod log read timed out", ex);
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Pod log read failed for {Namespace}/{PodName}", namespaceName, podName);
@@ -119,6 +132,11 @@ public sealed partial class K8sManager
         {
             var normalizedKind = kind.Trim();
             return await ReadResourceSummaryAsync(namespaceName, normalizedKind, name, cancellationToken);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogError(ex, "Resource read timed out for {Namespace}/{Kind}/{Name}", namespaceName, kind, name);
+            return FormatApiException("Resource read timed out", ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

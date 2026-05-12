@@ -8,6 +8,8 @@ public sealed partial class K8sManager
 {
     public async Task<string> GetStatusAsync(string namespaceName, string? labelSelector, CancellationToken cancellationToken)
     {
+        logger.LogInformation("GetStatus called: Namespace={Namespace}, LabelSelector={LabelSelector}", namespaceName, labelSelector);
+
         var validation = ValidateNamespace(namespaceName);
         if (validation is not null)
         {
@@ -38,6 +40,15 @@ public sealed partial class K8sManager
                 namespaceName,
                 labelSelector: labelSelector,
                 cancellationToken: cancellationToken);
+
+            logger.LogInformation(
+                "GetStatus result: Namespace={Namespace}, Deployments={DeploymentCount}, Services={ServiceCount}, ConfigMaps={ConfigMapCount}, Pods={PodCount}, ReplicaSets={ReplicaSetCount}",
+                namespaceName,
+                deployments.Items.Count,
+                services.Items.Count,
+                configMaps.Items.Count,
+                pods.Items.Count,
+                replicaSets.Items.Count);
 
             return JsonSerializer.Serialize(new
             {
@@ -96,6 +107,11 @@ public sealed partial class K8sManager
                     }
                 })
             }, JsonOptions);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogError(ex, "Status read timed out for namespace {Namespace}", namespaceName);
+            return FormatApiException("Status read timed out", ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

@@ -10,7 +10,8 @@ public sealed record K8SMcpOptions(
     bool IsApprovalRootExplicit = true,
     bool HasExplicitAllowedNamespaces = true,
     string? KubeConfig = null,
-    bool IsInClusterConfigEnabled = false)
+    bool IsInClusterConfigEnabled = false,
+    string? LogPath = null)
 {
     public const string DefaultNamespace = K8sConventions.DefaultNamespace;
     private static readonly IReadOnlySet<string> DeniedApprovalRootNames =
@@ -38,6 +39,7 @@ public sealed record K8SMcpOptions(
         bool isInClusterConfigEnabled = ParseBooleanEnvironmentVariable(
             Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.UseInClusterConfig),
             defaultValue: false);
+        string? logPath = Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.LogPath);
 
         return new K8SMcpOptions(
             allowedNamespaces,
@@ -46,7 +48,8 @@ public sealed record K8SMcpOptions(
             isApprovalRootExplicit,
             hasExplicitAllowedNamespaces,
             kubeConfig,
-            isInClusterConfigEnabled);
+            isInClusterConfigEnabled,
+            logPath);
     }
 
     public void ValidateProductionSafety()

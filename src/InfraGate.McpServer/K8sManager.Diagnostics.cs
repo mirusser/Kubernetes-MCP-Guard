@@ -66,6 +66,11 @@ public sealed partial class K8sManager
                 events
             }, JsonOptions);
         }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogError(ex, "Deployment diagnostics timed out for {Namespace}/{Name}", namespaceName, name);
+            return FormatApiException("Deployment diagnostics timed out", ex);
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Deployment diagnostics failed for {Namespace}/{Name}", namespaceName, name);
@@ -104,6 +109,11 @@ public sealed partial class K8sManager
                 pod = PodDiagnosticSummary(pod),
                 events
             }, JsonOptions);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogError(ex, "Pod diagnostics timed out for {Namespace}/{PodName}", namespaceName, podName);
+            return FormatApiException("Pod diagnostics timed out", ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -158,6 +168,11 @@ public sealed partial class K8sManager
                 pods = pods.Select(PodDiagnosticSummary),
                 events
             }, JsonOptions);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogError(ex, "Service diagnostics timed out for {Namespace}/{Name}", namespaceName, name);
+            return FormatApiException("Service diagnostics timed out", ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

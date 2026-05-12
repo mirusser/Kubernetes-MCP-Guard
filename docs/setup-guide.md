@@ -323,6 +323,31 @@ docker compose -f deploy/mode-d/compose.yaml up --build
 
 Keycloak starts first and takes ~30s to pass its health check before the gateway comes up. No manual step is needed — the `depends_on: condition: service_healthy` gate handles the ordering.
 
+#### Network topology
+
+Mode D intentionally keeps Keycloak and minikube on **separate Docker networks** to better simulate a production environment where the identity provider and the Kubernetes API server are in distinct network segments:
+
+```
+┌─────────────────────────────────────┐   ┌──────────────────────┐
+│  compose-internal (mode-d_default)  │   │  minikube (external) │
+│                                     │   │                      │
+│  keycloak ─────────────────────────►│   │                      │
+│                          mcp-gateway├───►  K8s API :8443       │
+└─────────────────────────────────────┘   └──────────────────────┘
+```
+
+- **`keycloak`** is attached to the compose-internal network only — it has no route to the cluster.
+- **`mcp-gateway`** bridges both networks: it reaches Keycloak via Docker service-name DNS (`http://keycloak:8080`) and the Kubernetes API via the `minikube` bridge (`https://192.168.49.2:8443`).
+
+The `minikube` Docker network is created automatically by `minikube start --driver=docker`. Verify it exists before starting the stack:
+
+```bash
+docker network ls | grep minikube
+# minikube   bridge   local
+```
+
+If the network is missing (e.g. minikube was started with a different driver), all MCP tool calls that hit the K8s API will time out inside the container. See the [Troubleshooting](#troubleshooting) table for the fix.
+
 **Endpoints:**
 
 - Gateway: `http://127.0.0.1:3001/mcp`
@@ -514,3 +539,4 @@ The canonical environment variable, CI/CD, and release configuration reference i
 | Keycloak Mode D exits at startup with `ExecutionExceptionHandler` and `At least one of hosts verification or client URIs validation must be enabled` | Both `host-sending-registration-request-must-match` and `client-uris-must-match` set to `false` in the realm's trusted-hosts policy | Keep `client-uris-must-match: ["true"]` so DCR redirect URIs are restricted to trusted hosts |
 | Keycloak Mode D login fails with `Invalid scopes: openid profile email mcp:tools offline_access` | `--import-realm` only creates client scopes listed in the JSON's `clientScopes` array — built-in scopes like `profile`/`email`/`roles` are not auto-added | The realm JSON now defines the standard built-in scopes explicitly; if you've customised it, ensure every scope referenced by a client or by `defaultDefaultClientScopes` is also defined in `clientScopes` |
 | Keycloak Mode D login fails with `Offline tokens not allowed for the user or client` | The user has no `offline_access` realm role, but Claude / Codex request `offline_access` to receive refresh tokens | Realm JSON now defines `offline_access`, the `default-roles-infra-gate` composite, and assigns it to demo users — re-import the realm if you removed those |
+| Mode D: every MCP tool call that touches the K8s API times out (~100 s) with `TaskCanceledException` in gateway logs | The `mcp-gateway` container cannot route to the `minikube` Docker bridge network — either minikube was started with a non-Docker driver, or the `minikube` Docker network does not exist | Run `docker network ls \| grep minikube`. If missing, restart minikube with `minikube start --driver=docker`, then re-run `./scripts/create-demo-kubeconfig.sh --compose` and restart the stack. If the network exists but connectivity is lost (e.g. after a host reboot), restarting the stack is sufficient because Compose re-attaches `mcp-gateway` to both networks on start. |

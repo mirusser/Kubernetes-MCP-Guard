@@ -102,12 +102,28 @@ public sealed class DownstreamMcpClient : IDownstreamMcpClient, IAsyncDisposable
             ]
             : [options.DownstreamAssembly];
 
+        var environmentVariables = new Dictionary<string, string?>();
+        foreach (string? key in Environment.GetEnvironmentVariables().Keys)
+        {
+            if (key is null)
+            {
+                continue;
+            }
+
+            string? value = Environment.GetEnvironmentVariable(key);
+            if (value is not null)
+            {
+                environmentVariables[key] = value;
+            }
+        }
+
         return new StdioClientTransportOptions
         {
             Name = McpGatewayConventions.DownstreamProcess.Name,
             Command = McpGatewayConventions.DownstreamProcess.Command,
             Arguments = arguments,
             WorkingDirectory = options.WorkingDirectory,
+            EnvironmentVariables = environmentVariables,
             ShutdownTimeout = TimeSpan.FromSeconds(10)
         };
     }
