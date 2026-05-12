@@ -7,6 +7,36 @@
   "duplicateEmailsAllowed": false,
   "accessTokenLifespan": 300,
   "ssoSessionMaxLifespan": 36000,
+  "roles": {
+    "realm": [
+      {
+        "name": "offline_access",
+        "description": "${role_offline-access}",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "uma_authorization",
+        "description": "${role_uma_authorization}",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "default-roles-infra-gate",
+        "description": "${role_default-roles}",
+        "composite": true,
+        "composites": {
+          "realm": ["offline_access", "uma_authorization"]
+        },
+        "clientRole": false
+      }
+    ]
+  },
+  "defaultRole": {
+    "name": "default-roles-infra-gate",
+    "composite": true,
+    "clientRole": false
+  },
   "components": {
     "org.keycloak.services.clientregistration.policy.ClientRegistrationPolicy": [
       {
@@ -353,7 +383,8 @@
           "value": "demo",
           "temporary": false
         }
-      ]
+      ],
+      "realmRoles": ["default-roles-infra-gate"]
     },
     {
       "username": "demo2",
@@ -368,7 +399,8 @@
           "value": "demo2",
           "temporary": false
         }
-      ]
+      ],
+      "realmRoles": ["default-roles-infra-gate"]
     }
   ]
 }
