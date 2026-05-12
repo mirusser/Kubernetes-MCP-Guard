@@ -67,7 +67,7 @@ public sealed partial class GuardedToolRunner
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Downstream call to '{ToolName}' threw an exception", toolName);
-            throw;
+            return $"Tool call failed: {ex.GetType().Name}: {ex.Message}";
         }
         var response = PromptInjectionGuard.SanitizeResponse(downstreamText);
         if (response.HasFindings || response.ManifestRedacted)

@@ -11,6 +11,7 @@ public sealed partial class K8sManager
 {
     public async Task<string> RequestApplyManifestAsync(string namespaceName, string manifest, CancellationToken cancellationToken)
     {
+        logger.LogInformation("Requesting apply plan in {Namespace} (manifest length: {ManifestLength})", namespaceName, manifest.Length);
         var validation = ValidateNamespace(namespaceName);
         if (validation is not null)
         {
@@ -53,6 +54,7 @@ public sealed partial class K8sManager
 
     public async Task<string> RequestDeleteManifestAsync(string namespaceName, string manifest, CancellationToken cancellationToken)
     {
+        logger.LogInformation("Requesting delete plan in {Namespace} (manifest length: {ManifestLength})", namespaceName, manifest.Length);
         var validation = ValidateNamespace(namespaceName);
         if (validation is not null)
         {
@@ -88,6 +90,7 @@ public sealed partial class K8sManager
 
     public async Task<string> RequestScaleDeploymentAsync(string namespaceName, string name, int replicas, CancellationToken cancellationToken)
     {
+        logger.LogInformation("Requesting scale plan for Deployment {Namespace}/{Name} to {Replicas} replicas", namespaceName, name, replicas);
         var validation = ValidateNamespace(namespaceName) ?? ValidateName(name) ?? ValidateReplicas(replicas);
         if (validation is not null)
         {
@@ -114,6 +117,7 @@ public sealed partial class K8sManager
 
     public async Task<string> RequestRestartDeploymentAsync(string namespaceName, string name, CancellationToken cancellationToken)
     {
+        logger.LogInformation("Requesting restart plan for Deployment {Namespace}/{Name}", namespaceName, name);
         var validation = ValidateNamespace(namespaceName) ?? ValidateName(name);
         if (validation is not null)
         {
@@ -146,6 +150,7 @@ public sealed partial class K8sManager
         string image,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation("Requesting set-image plan for Deployment {Namespace}/{Name} container {Container} to {Image}", namespaceName, name, container, image);
         var validation = ValidateNamespace(namespaceName) ??
             ValidateName(name) ??
             ValidateRequiredText(container, "Container name") ??
@@ -176,6 +181,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            logger.LogWarning(ex, "Deployment image plan failed for {Namespace}/{Name} container {Container}", namespaceName, name, container);
             return FormatApiException("Deployment image plan failed", ex);
         }
     }
@@ -195,6 +201,9 @@ public sealed partial class K8sManager
         var dryRun = await dryRunTask;
         if (!dryRun.Succeeded || dryRun.DryRun is null)
         {
+            logger.LogWarning("Server-side dry-run failed for plan {PlanId} ({Operation} in {Namespace}): {Message}",
+                plan.Id, plan.Operation, plan.Namespace, dryRun.Message);
+
             // Audit write must not mask the dry-run error — catch separately so we
             // always return the human-readable refusal even if the store is unavailable.
             try
@@ -233,13 +242,17 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            logger.LogError(ex, "Diff generation failed for plan {PlanId} targeting namespace {Namespace}", plan.Id, plan.Namespace);
             var message = FormatApiException("Diff generation failed", ex);
             await WriteDiffFailedAuditAsync(plan, message, cancellationToken);
 
             return $"Diff generation failed; no approval plan was created.{Environment.NewLine}{message}";
         }
 
-        return await CreateAndFormatPlanAsync(planWithDryRun with { Diffs = diffs }, policyResult, cancellationToken);
+        var formatted = await CreateAndFormatPlanAsync(planWithDryRun with { Diffs = diffs }, policyResult, cancellationToken);
+        logger.LogInformation("Approval plan {PlanId} created ({Operation} in {Namespace}, {ObjectCount} object(s))",
+            planWithDryRun.Id, planWithDryRun.Operation, planWithDryRun.Namespace, planWithDryRun.Objects.Length);
+        return formatted;
     }
 
     private async Task<string> CreateAndFormatPlanAsync(

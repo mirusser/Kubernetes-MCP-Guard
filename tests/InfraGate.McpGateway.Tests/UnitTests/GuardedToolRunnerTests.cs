@@ -281,8 +281,60 @@ public sealed class GuardedToolRunnerTests
         Assert.Equal("nginx:1.28-alpine", downstream.Arguments["image"]);
     }
 
-    private sealed class FakeDownstream(string response) : IDownstreamMcpClient
+    [Fact]
+    public async Task CallAsync_WhenDownstreamThrows_ReturnsErrorTextWithExceptionMessage()
     {
+        var downstream = new FakeDownstream(new InvalidOperationException("kubeconfig not found"));
+        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
+
+        var text = await runner.CallAsync(
+            "get_k8s_status",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo"
+            },
+            CancellationToken.None);
+
+        Assert.StartsWith("Tool call failed:", text);
+        Assert.Contains("InvalidOperationException", text);
+        Assert.Contains("kubeconfig not found", text);
+    }
+
+    [Fact]
+    public async Task CallAsync_WhenDownstreamReturnsIsError_TextIsPassedThrough()
+    {
+        var errorText = "Status read failed: Kubernetes API returned 500 InternalError: something went wrong";
+        var downstream = new FakeDownstream(errorText);
+        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
+
+        var text = await runner.CallAsync(
+            "get_k8s_status",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo"
+            },
+            CancellationToken.None);
+
+        Assert.Equal(errorText, text);
+        Assert.DoesNotContain("Guardrail warning:", text);
+        Assert.DoesNotContain("Tool call failed:", text);
+    }
+
+    private sealed class FakeDownstream : IDownstreamMcpClient
+    {
+        private readonly string? response;
+        private readonly Exception? error;
+
+        public FakeDownstream(string response)
+        {
+            this.response = response;
+        }
+
+        public FakeDownstream(Exception error)
+        {
+            this.error = error;
+        }
+
         public string? ToolName { get; private set; }
 
         public IReadOnlyDictionary<string, object?> Arguments { get; private set; } =
@@ -296,7 +348,12 @@ public sealed class GuardedToolRunnerTests
             ToolName = toolName;
             Arguments = arguments;
 
-            return Task.FromResult(response);
+            if (error is not null)
+            {
+                throw error;
+            }
+
+            return Task.FromResult(response!);
         }
     }
 

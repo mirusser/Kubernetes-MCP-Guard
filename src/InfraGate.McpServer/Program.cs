@@ -31,4 +31,13 @@ builder.Services
     .WithStdioServerTransport()
     .WithToolsFromAssembly();
 
-await builder.Build().RunAsync();
+var app = builder.Build();
+
+var appLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("InfraGate.McpServer");
+var k8sOptions = app.Services.GetRequiredService<K8SMcpOptions>();
+appLogger.LogInformation(
+    "InfraGate MCP Server started. KubeConfig={KubeConfig}, AllowedNamespaces={AllowedNamespaces}",
+    k8sOptions.KubeConfig ?? "(default)",
+    string.Join(",", k8sOptions.AllowedNamespaces.Order(StringComparer.Ordinal)));
+
+await app.RunAsync();

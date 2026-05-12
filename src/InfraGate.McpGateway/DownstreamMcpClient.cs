@@ -36,7 +36,11 @@ public sealed class DownstreamMcpClient : IDownstreamMcpClient, IAsyncDisposable
 
             if (result.IsError == true)
             {
-                logger.LogError("Downstream tool '{ToolName}' returned IsError=true: {Text}", toolName, text);
+                logger.LogError("Downstream tool '{ToolName}' returned IsError=true. Namespace={Namespace}, Args={ArgKeys}: {Text}",
+                    toolName,
+                    GetArgument(arguments, McpGatewayConventions.ToolArguments.Namespace),
+                    string.Join(",", arguments.Keys),
+                    text);
             }
 
             return text;
@@ -57,6 +61,9 @@ public sealed class DownstreamMcpClient : IDownstreamMcpClient, IAsyncDisposable
         clientLock.Dispose();
         callLock.Dispose();
     }
+
+    private static string? GetArgument(IReadOnlyDictionary<string, object?> arguments, string key) =>
+        arguments.TryGetValue(key, out var value) ? value?.ToString() : null;
 
     private async Task<McpClient> GetClientAsync(CancellationToken cancellationToken)
     {

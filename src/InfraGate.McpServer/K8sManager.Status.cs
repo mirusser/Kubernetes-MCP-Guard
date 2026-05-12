@@ -1,5 +1,6 @@
 using System.Text.Json;
 using k8s;
+using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpServer;
 
@@ -98,6 +99,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            logger.LogError(ex, "Status read failed for namespace {Namespace}", namespaceName);
             return FormatApiException("Status read failed", ex);
         }
     }

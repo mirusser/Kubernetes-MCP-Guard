@@ -1,6 +1,7 @@
 using System.Text.Json;
 using k8s;
 using k8s.Models;
+using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpServer;
 
@@ -67,6 +68,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            logger.LogError(ex, "Deployment diagnostics failed for {Namespace}/{Name}", namespaceName, name);
             return FormatApiException("Deployment diagnostics failed", ex);
         }
     }
@@ -105,6 +107,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            logger.LogError(ex, "Pod diagnostics failed for {Namespace}/{PodName}", namespaceName, podName);
             return FormatApiException("Pod diagnostics failed", ex);
         }
     }
@@ -158,6 +161,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            logger.LogError(ex, "Service diagnostics failed for {Namespace}/{Name}", namespaceName, name);
             return FormatApiException("Service diagnostics failed", ex);
         }
     }

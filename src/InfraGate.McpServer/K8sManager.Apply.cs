@@ -4,6 +4,7 @@ using InfraGate.McpServer.Diff;
 using InfraGate.McpServer.Policy;
 using k8s;
 using k8s.Models;
+using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpServer;
 
@@ -76,6 +77,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            logger.LogError(ex, "API operation failed for plan {PlanId} ({Operation} in {Namespace})", plan.Id, plan.Operation, plan.Namespace);
             return ApplyResult.Failed(FormatApiException("API operation failed", ex));
         }
     }
@@ -147,6 +149,8 @@ public sealed partial class K8sManager
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                logger.LogError(ex, "API operation failed for {ApiVersion} {Kind} {Namespace}/{Name} during plan {PlanId}",
+                    obj.ApiVersion, obj.Kind, obj.Metadata.NamespaceProperty, obj.Metadata.Name, plan.Id);
                 return ApplyResult.Failed(FormatServerSideApplyException("API operation failed", ex));
             }
 

@@ -117,6 +117,19 @@ public sealed class K8sManagerStatusTests
         Assert.Equal(3, replicas.GetProperty("updated").GetInt32());
     }
 
+    [Fact]
+    public async Task GetStatusAsync_WhenKubernetesApiReturns500_ReturnsFormattedError()
+    {
+        await using var api = new TestKubernetesApi(_ =>
+            TestResponse.Json(StatusJson("InternalError", 500), statusCode: 500));
+        var manager = CreateManager(api);
+
+        var result = await manager.GetStatusAsync("demo", null, CancellationToken.None);
+
+        Assert.Contains("Status read failed", result);
+        Assert.Contains("500", result);
+    }
+
     private static K8sManager CreateManager(TestKubernetesApi? api = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
@@ -133,6 +146,18 @@ public sealed class K8sManagerStatusTests
 
         return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client!, NullLogger<K8sManager>.Instance);
     }
+
+    private static string StatusJson(string reason, int code) =>
+        $$"""
+          {
+            "apiVersion": "v1",
+            "kind": "Status",
+            "status": "{{reason}}",
+            "reason": "{{reason}}",
+            "message": "{{reason}}",
+            "code": {{code}}
+          }
+          """;
 
     private static string EmptyList(string kind) =>
         $$"""

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using k8s;
 using k8s.Models;
+using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpServer;
 
@@ -44,6 +45,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            logger.LogError(ex, "Event read failed for namespace {Namespace}", namespaceName);
             return FormatApiException("Event read failed", ex);
         }
     }
@@ -94,6 +96,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            logger.LogError(ex, "Pod log read failed for {Namespace}/{PodName}", namespaceName, podName);
             return FormatApiException("Pod log read failed", ex);
         }
     }
@@ -119,6 +122,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            logger.LogError(ex, "Resource read failed for {Namespace}/{Kind}/{Name}", namespaceName, kind, name);
             return FormatApiException("Resource read failed", ex);
         }
     }
