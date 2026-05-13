@@ -29,6 +29,17 @@ Kubernetes-MCP-Guard is a .NET 10 gateway for the Model Context Protocol (MCP). 
 
 ---
 
+## Demo
+
+[![Demo video](assets/demo-preview.png)](assets/demo.mp4)
+
+
+<video controls width="100%">
+  <source src="assets/demo.mp4" type="video/mp4">
+</video>
+
+---
+
 ## 🗺️ System Architecture
 
 The following diagram shows the two trust channels: the AI-facing MCP path and the browser-based HITL approval path. The MCP client can request and retry a plan, but approval is handled by the Gateway UI through a separate human browser session.
