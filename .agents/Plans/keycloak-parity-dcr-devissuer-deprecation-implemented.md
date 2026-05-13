@@ -44,6 +44,10 @@ Implemented clients:
 ### 3. Gateway Token Requirements
 
 - Kept Keycloak audience binding through the `mcp:tools` audience mapper.
+- Added real `mcp-client` authorization-code + PKCE coverage:
+  - requests a Keycloak authorization code with `resource=http://127.0.0.1:3001/mcp`,
+  - exchanges the code with the correct verifier and proves the JWT is accepted by the gateway,
+  - exchanges a second code with the wrong verifier and verifies Keycloak returns `invalid_grant`.
 - Added tests asserting Keycloak-issued tokens include:
   - `aud=http://127.0.0.1:3001/mcp`,
   - `scope=mcp:tools`,
@@ -82,6 +86,8 @@ Implemented clients:
 - The real browser approval test does not scrape Keycloak's login HTML form.
 - Instead, it exercises the gateway's real approval OAuth redirect/callback/cookie path and uses a real Keycloak-issued JWT returned through a controlled backchannel.
 - Reason: Keycloak login-form scraping is high-maintenance and brittle; the implemented path covers gateway behavior and real token shape without depending on Keycloak theme/form details.
+- The `mcp-client` auth-code + PKCE test first tries the Keycloak admin impersonation endpoint, but Keycloak `26.6.1` did not establish a reusable browser SSO session from bearer-token impersonation in this Testcontainer path.
+- To keep the auth-code + PKCE coverage real, the test helper falls back to a small local-container login form POST with explicit cookie propagation.
 
 ## Verification Evidence
 
@@ -106,7 +112,7 @@ dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.Keyclo
 Result:
 
 ```text
-Passed: 9, Failed: 0
+Passed: 11, Failed: 0
 ```
 
 ```bash

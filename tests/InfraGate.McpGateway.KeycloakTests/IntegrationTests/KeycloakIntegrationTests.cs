@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using InfraGate.Approvals;
@@ -24,13 +25,31 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
 {
     private const string KeycloakImage = "quay.io/keycloak/keycloak:26.6.1";
     private const string RealmName = "infra-gate";
+    private const string MasterRealmName = "master";
     private const string RealmJsonFileName = "infra-gate-realm.json";
+    private const string AdminClientId = "admin-cli";
+    private const string AdminUsername = "admin";
+    private const string AdminPassword = "admin";
+    private const string McpClientId = "mcp-client";
     private const string SmokeClientId = "mcp-smoke-client";
     private const string LimitedClientId = "mcp-client-limited";
     private const string DemoUsername = "demo";
     private const string DemoPassword = "demo";
+    private const string AuthCodeRedirectUri = "http://127.0.0.1:9876/callback";
+    private const string AuthCodeState = "mcp-client-pkce-state";
+    private const string AuthCodeVerifier = "mcp-client-auth-code-pkce-verifier-with-enough-entropy-1234567890";
+    private const string WrongAuthCodeVerifier = "wrong-auth-code-pkce-verifier-with-enough-entropy-1234567890";
     private const string Resource = GatewayAuthConventions.DefaultOAuthResource;
     private const string Scope = GatewayAuthConventions.DefaultOAuthScope;
+    private const string OpenIdScope = "openid profile email " + Scope;
+    private const string S256CodeChallengeMethod = "S256";
+    private const string AuthorizationCodeGrantType = "authorization_code";
+    private const string PasswordGrantType = "password";
+    private const string CodeResponseType = "code";
+    private const string InvalidGrantOAuthError = "invalid_grant";
+    private const string LoginFormId = "kc-form-login";
+    private const string LoginActionAttribute = "action=\"";
+    private const int MaxRedirects = 8;
 
     private KeycloakContainer? keycloakContainer;
     private string keycloakBaseAddress = string.Empty;
@@ -40,6 +59,8 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         string realmJsonPath = Path.Combine(AppContext.BaseDirectory, "TestData", RealmJsonFileName);
 
         keycloakContainer = new KeycloakBuilder(KeycloakImage)
+            .WithUsername(AdminUsername)
+            .WithPassword(AdminPassword)
             .WithRealm(realmJsonPath)
             .Build();
 
@@ -208,14 +229,68 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         Assert.Equal(DemoUsername, approvedChallenge?.ApproverSubject);
     }
 
+    [Fact]
+    public async Task McpClientAuthorizationCodePkceFlow_ValidVerifier_ReturnsGatewayAcceptedToken()
+    {
+        using var browser = await CreateAuthenticatedKeycloakBrowserAsync();
+        string code = await RequestAuthorizationCodeAsync(browser, AuthCodeVerifier);
+        using var tokenResponse = await ExchangeAuthorizationCodeAsync(code, AuthCodeVerifier);
+        tokenResponse.EnsureSuccessStatusCode();
+        using var tokenDocument = await JsonDocument.ParseAsync(await tokenResponse.Content.ReadAsStreamAsync());
+        JsonElement tokenRoot = tokenDocument.RootElement;
+        string accessToken = tokenRoot.GetProperty(KeycloakJson.AccessToken).GetString()
+                             ?? throw new InvalidOperationException("Token response did not contain access_token.");
+        using var jwtDocument = DecodeJwtPayload(accessToken);
+        JsonElement jwtRoot = jwtDocument.RootElement;
+        Assert.Contains(Resource, GetAudiences(jwtRoot));
+        Assert.Contains(Scope, jwtRoot.GetProperty(KeycloakJson.Scope).GetString()!.Split(' '));
+        Assert.Equal(DemoUsername, jwtRoot.GetProperty(GatewayAuthConventions.Claims.Subject).GetString());
+
+        using var server = CreateGatewayServer(authority: RealmAuthority());
+        using var client = server.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            GatewayAuthConventions.AuthorizationScheme,
+            accessToken);
+
+        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+
+        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task McpClientAuthorizationCodePkceFlow_WrongVerifier_RejectsTokenExchange()
+    {
+        using var browser = await CreateAuthenticatedKeycloakBrowserAsync();
+        string code = await RequestAuthorizationCodeAsync(browser, AuthCodeVerifier);
+
+        using var response = await ExchangeAuthorizationCodeAsync(code, WrongAuthCodeVerifier);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var errorDocument = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        Assert.Equal(InvalidGrantOAuthError, errorDocument.RootElement.GetProperty(KeycloakJson.Error).GetString());
+    }
+
     private string RealmAuthority() =>
         $"{keycloakBaseAddress.TrimEnd('/')}/realms/{RealmName}";
+
+    private string MasterTokenEndpoint() =>
+        $"{keycloakBaseAddress.TrimEnd('/')}/realms/{MasterRealmName}/protocol/openid-connect/token";
 
     private string TokenEndpoint() =>
         $"{keycloakBaseAddress.TrimEnd('/')}/realms/{RealmName}/protocol/openid-connect/token";
 
+    private string AuthorizationEndpoint() =>
+        $"{keycloakBaseAddress.TrimEnd('/')}/realms/{RealmName}/protocol/openid-connect/auth";
+
     private string RegistrationEndpoint() =>
         $"{RealmAuthority()}/clients-registrations/openid-connect";
+
+    private string AdminUsersEndpoint() =>
+        $"{keycloakBaseAddress.TrimEnd('/')}/admin/realms/{RealmName}/users";
+
+    private string AdminUserImpersonationEndpoint(string userId) =>
+        $"{AdminUsersEndpoint()}/{Uri.EscapeDataString(userId)}/impersonation";
 
     private async Task<JsonDocument> GetDiscoveryDocumentAsync(HttpClient http)
     {
@@ -248,15 +323,15 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         using var http = new HttpClient();
         var formValues = new List<KeyValuePair<string, string>>
         {
-            new("grant_type", "password"),
-            new("client_id", clientId),
-            new("username", DemoUsername),
-            new("password", DemoPassword)
+            new(KeycloakParameters.GrantType, PasswordGrantType),
+            new(KeycloakParameters.ClientId, clientId),
+            new(KeycloakParameters.Username, DemoUsername),
+            new(KeycloakParameters.Password, DemoPassword)
         };
 
         if (!string.IsNullOrWhiteSpace(requestedScope))
         {
-            formValues.Add(new("scope", requestedScope));
+            formValues.Add(new(KeycloakParameters.Scope, requestedScope));
         }
 
         using var content = new FormUrlEncodedContent(formValues);
@@ -265,8 +340,325 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         response.EnsureSuccessStatusCode();
 
         var json = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
-        return json.GetProperty("access_token").GetString()
+        return json.GetProperty(KeycloakJson.AccessToken).GetString()
                ?? throw new InvalidOperationException("Token response did not contain access_token.");
+    }
+
+    private async Task<HttpClient> CreateAuthenticatedKeycloakBrowserAsync(CancellationToken cancellationToken = default)
+    {
+        var handler = new HttpClientHandler
+        {
+            AllowAutoRedirect = false,
+            UseCookies = false
+        };
+        var browser = new HttpClient(handler)
+        {
+            BaseAddress = new Uri(keycloakBaseAddress)
+        };
+
+        string adminToken = await AcquireAdminTokenAsync(cancellationToken);
+        string userId = await FindUserIdAsync(adminToken, DemoUsername, cancellationToken);
+        using var impersonationRequest = new HttpRequestMessage(
+            HttpMethod.Post,
+            AdminUserImpersonationEndpoint(userId));
+        impersonationRequest.Headers.Authorization = new AuthenticationHeaderValue(
+            GatewayAuthConventions.AuthorizationScheme,
+            adminToken);
+        using var impersonation = await browser.SendAsync(impersonationRequest, cancellationToken);
+        AddResponseCookies(browser, impersonation);
+        impersonation.EnsureSuccessStatusCode();
+        await FollowImpersonationRedirectAsync(browser, impersonation, cancellationToken);
+
+        return browser;
+    }
+
+    private async Task<string> AcquireAdminTokenAsync(CancellationToken cancellationToken)
+    {
+        using var http = new HttpClient();
+        using var content = new FormUrlEncodedContent(
+        [
+            new(KeycloakParameters.GrantType, PasswordGrantType),
+            new(KeycloakParameters.ClientId, AdminClientId),
+            new(KeycloakParameters.Username, AdminUsername),
+            new(KeycloakParameters.Password, AdminPassword)
+        ]);
+        var response = await http.PostAsync(MasterTokenEndpoint(), content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = await JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync(cancellationToken),
+            cancellationToken: cancellationToken);
+
+        return document.RootElement.GetProperty(KeycloakJson.AccessToken).GetString()
+               ?? throw new InvalidOperationException("Admin token response did not contain access_token.");
+    }
+
+    private async Task<string> FindUserIdAsync(string adminToken, string username, CancellationToken cancellationToken)
+    {
+        using var http = new HttpClient();
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            GatewayAuthConventions.AuthorizationScheme,
+            adminToken);
+        string usersUri = QueryHelpers.AddQueryString(
+            AdminUsersEndpoint(),
+            new Dictionary<string, string?>
+            {
+                [KeycloakParameters.Username] = username,
+                [KeycloakParameters.Exact] = bool.TrueString.ToLowerInvariant()
+            });
+        var response = await http.GetAsync(usersUri, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var document = await JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync(cancellationToken),
+            cancellationToken: cancellationToken);
+        var users = document.RootElement.EnumerateArray().ToArray();
+        if (users.Length == 0)
+        {
+            throw new InvalidOperationException($"Keycloak user '{username}' was not found.");
+        }
+
+        return users[0].GetProperty(KeycloakJson.Id).GetString()
+               ?? throw new InvalidOperationException($"Keycloak user '{username}' did not contain id.");
+    }
+
+    private async Task FollowImpersonationRedirectAsync(
+        HttpClient browser,
+        HttpResponseMessage impersonation,
+        CancellationToken cancellationToken)
+    {
+        var redirect = await TryReadImpersonationRedirectAsync(impersonation, cancellationToken);
+        if (redirect is null)
+        {
+            return;
+        }
+
+        var redirectUri = redirect.IsAbsoluteUri
+            ? redirect
+            : new Uri(browser.BaseAddress!, redirect);
+        for (int i = 0; i < MaxRedirects; i++)
+        {
+            using var response = await browser.GetAsync(redirectUri, cancellationToken);
+            AddResponseCookies(browser, response);
+            if (!IsRedirect(response.StatusCode) || response.Headers.Location is null)
+            {
+                return;
+            }
+
+            redirectUri = response.Headers.Location.IsAbsoluteUri
+                ? response.Headers.Location
+                : new Uri(redirectUri, response.Headers.Location);
+        }
+
+        throw new InvalidOperationException("Keycloak impersonation redirect chain did not terminate.");
+    }
+
+    private static async Task<Uri?> TryReadImpersonationRedirectAsync(
+        HttpResponseMessage impersonation,
+        CancellationToken cancellationToken)
+    {
+        if (impersonation.Headers.Location is not null)
+        {
+            return impersonation.Headers.Location;
+        }
+
+        string json = await impersonation.Content.ReadAsStringAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind is JsonValueKind.Object &&
+            document.RootElement.TryGetProperty(KeycloakJson.Redirect, out var redirect) &&
+            !string.IsNullOrWhiteSpace(redirect.GetString()))
+        {
+            return new Uri(redirect.GetString()!, UriKind.RelativeOrAbsolute);
+        }
+
+        return null;
+    }
+
+    private async Task<string> RequestAuthorizationCodeAsync(
+        HttpClient browser,
+        string codeVerifier,
+        bool includeResource = true,
+        CancellationToken cancellationToken = default)
+    {
+        string authUri = BuildAuthorizationUri(codeVerifier, includeResource);
+        using var response = await browser.GetAsync(authUri, cancellationToken);
+        AddResponseCookies(browser, response);
+        if (IsRedirect(response.StatusCode) && response.Headers.Location is not null)
+        {
+            return ReadAuthorizationCode(response.Headers.Location);
+        }
+
+        if (response.StatusCode != HttpStatusCode.OK)
+        {
+            string body = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw CreateAuthorizationRedirectException(response, body);
+        }
+
+        string loginPage = await response.Content.ReadAsStringAsync(cancellationToken);
+        using HttpResponseMessage loginResponse = await SubmitLoginFormAsync(
+            browser,
+            authUri,
+            loginPage,
+            cancellationToken);
+
+        return await FollowAuthorizationRedirectAsync(browser, loginResponse, cancellationToken);
+    }
+
+    private static string ReadAuthorizationCode(Uri redirect)
+    {
+        Assert.Equal(AuthCodeRedirectUri, redirect.GetLeftPart(UriPartial.Path));
+        var query = QueryHelpers.ParseQuery(redirect.Query);
+        Assert.Equal(AuthCodeState, query[KeycloakParameters.State].ToString());
+
+        return query[KeycloakParameters.Code].ToString();
+    }
+
+    private async Task<HttpResponseMessage> SubmitLoginFormAsync(
+        HttpClient browser,
+        string authUri,
+        string loginPage,
+        CancellationToken cancellationToken)
+    {
+        string loginAction = ParseLoginFormAction(authUri, loginPage);
+        using var content = new FormUrlEncodedContent(
+        [
+            new(KeycloakParameters.Username, DemoUsername),
+            new(KeycloakParameters.Password, DemoPassword),
+            new(KeycloakParameters.CredentialId, string.Empty),
+            new(KeycloakParameters.Login, "Sign In")
+        ]);
+        HttpResponseMessage response = await browser.PostAsync(loginAction, content, cancellationToken);
+        AddResponseCookies(browser, response);
+        await response.Content.LoadIntoBufferAsync(cancellationToken);
+
+        return response;
+    }
+
+    private static string ParseLoginFormAction(string authUri, string html)
+    {
+        int formIdIndex = html.IndexOf(LoginFormId, StringComparison.Ordinal);
+        if (formIdIndex < 0)
+        {
+            throw new InvalidOperationException("Keycloak login page did not contain the expected login form.");
+        }
+
+        int formStart = html.LastIndexOf("<form", formIdIndex, StringComparison.OrdinalIgnoreCase);
+        int formEnd = html.IndexOf('>', formIdIndex);
+        if (formStart < 0 || formEnd < formStart)
+        {
+            throw new InvalidOperationException("Keycloak login form was malformed.");
+        }
+
+        int actionStart = html.IndexOf(
+            LoginActionAttribute,
+            formStart,
+            formEnd - formStart,
+            StringComparison.OrdinalIgnoreCase);
+        if (actionStart < 0)
+        {
+            throw new InvalidOperationException("Keycloak login form did not contain an action attribute.");
+        }
+
+        actionStart += LoginActionAttribute.Length;
+        int actionEnd = html.IndexOf('"', actionStart);
+        if (actionEnd < actionStart)
+        {
+            throw new InvalidOperationException("Keycloak login form action was malformed.");
+        }
+
+        string action = WebUtility.HtmlDecode(html[actionStart..actionEnd]);
+        Uri baseUri = new(authUri);
+        return new Uri(baseUri, action).ToString();
+    }
+
+    private static async Task<string> FollowAuthorizationRedirectAsync(
+        HttpClient browser,
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        Uri? currentUri = response.RequestMessage?.RequestUri;
+        for (int i = 0; i < MaxRedirects; i++)
+        {
+            if (IsRedirect(response.StatusCode) && response.Headers.Location is not null)
+            {
+                Uri redirect = ResolveRedirect(currentUri, response.Headers.Location);
+                if (redirect.GetLeftPart(UriPartial.Path) == AuthCodeRedirectUri)
+                {
+                    return ReadAuthorizationCode(redirect);
+                }
+
+                response.Dispose();
+                response = await browser.GetAsync(redirect, cancellationToken);
+                AddResponseCookies(browser, response);
+                currentUri = redirect;
+                continue;
+            }
+
+            string body = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw CreateAuthorizationRedirectException(response, body);
+        }
+
+        throw new InvalidOperationException("Keycloak authorization redirect chain did not terminate.");
+    }
+
+    private static Uri ResolveRedirect(Uri? currentUri, Uri redirect) =>
+        redirect.IsAbsoluteUri
+            ? redirect
+            : new Uri(currentUri ?? new Uri(AuthCodeRedirectUri), redirect);
+
+    private static InvalidOperationException CreateAuthorizationRedirectException(
+        HttpResponseMessage response,
+        string body) =>
+        new($"Expected Keycloak authorization redirect, got {(int)response.StatusCode} {response.StatusCode}. Body: {body}");
+
+    private string BuildAuthorizationUri(string codeVerifier, bool includeResource)
+    {
+        var query = new Dictionary<string, string?>
+        {
+            [KeycloakParameters.ResponseType] = CodeResponseType,
+            [KeycloakParameters.ClientId] = McpClientId,
+            [KeycloakParameters.RedirectUri] = AuthCodeRedirectUri,
+            [KeycloakParameters.Scope] = OpenIdScope,
+            [KeycloakParameters.State] = AuthCodeState,
+            [KeycloakParameters.CodeChallenge] = CodeChallenge(codeVerifier),
+            [KeycloakParameters.CodeChallengeMethod] = S256CodeChallengeMethod
+        };
+        if (includeResource)
+        {
+            query[GatewayAuthConventions.Parameters.Resource] = Resource;
+        }
+
+        return QueryHelpers.AddQueryString(AuthorizationEndpoint(), query);
+    }
+
+    private async Task<HttpResponseMessage> ExchangeAuthorizationCodeAsync(
+        string code,
+        string codeVerifier,
+        bool includeResource = true,
+        CancellationToken cancellationToken = default)
+    {
+        using var http = new HttpClient();
+        var formValues = new List<KeyValuePair<string, string>>
+        {
+            new(KeycloakParameters.GrantType, AuthorizationCodeGrantType),
+            new(KeycloakParameters.ClientId, McpClientId),
+            new(KeycloakParameters.Code, code),
+            new(KeycloakParameters.RedirectUri, AuthCodeRedirectUri),
+            new(KeycloakParameters.CodeVerifier, codeVerifier)
+        };
+        if (includeResource)
+        {
+            formValues.Add(new(GatewayAuthConventions.Parameters.Resource, Resource));
+        }
+
+        using var content = new FormUrlEncodedContent(formValues);
+        var response = await http.PostAsync(TokenEndpoint(), content, cancellationToken);
+        await response.Content.LoadIntoBufferAsync(cancellationToken);
+
+        return response;
     }
 
     private static JsonDocument DecodeJwtPayload(string token)
@@ -310,6 +702,22 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
 
         return Convert.FromBase64String(padded);
     }
+
+    private static string CodeChallenge(string codeVerifier) =>
+        EncodeBase64Url(SHA256.HashData(Encoding.ASCII.GetBytes(codeVerifier)));
+
+    private static string EncodeBase64Url(byte[] bytes) =>
+        Convert.ToBase64String(bytes)
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+
+    private static bool IsRedirect(HttpStatusCode statusCode) =>
+        statusCode is HttpStatusCode.Moved or
+            HttpStatusCode.Redirect or
+            HttpStatusCode.RedirectMethod or
+            HttpStatusCode.TemporaryRedirect or
+            HttpStatusCode.PermanentRedirect;
 
     private static void AssertClientRegistrationRejected(HttpResponseMessage response)
     {
@@ -535,23 +943,23 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             using var http = new HttpClient();
             using var content = new FormUrlEncodedContent(
             [
-                new("grant_type", "password"),
-                new("client_id", SmokeClientId),
-                new("username", DemoUsername),
-                new("password", DemoPassword),
-                new("scope", Scope)
+                new(KeycloakParameters.GrantType, PasswordGrantType),
+                new(KeycloakParameters.ClientId, SmokeClientId),
+                new(KeycloakParameters.Username, DemoUsername),
+                new(KeycloakParameters.Password, DemoPassword),
+                new(KeycloakParameters.Scope, Scope)
             ]);
             var tokenResponse = await http.PostAsync(tokenEndpoint, content, cancellationToken);
             tokenResponse.EnsureSuccessStatusCode();
             using var tokenDocument = await JsonDocument.ParseAsync(
                 await tokenResponse.Content.ReadAsStreamAsync(cancellationToken),
                 cancellationToken: cancellationToken);
-            var accessToken = tokenDocument.RootElement.GetProperty("access_token").GetString()
-                              ?? throw new InvalidOperationException("Keycloak token response did not contain access_token.");
+            string accessToken = tokenDocument.RootElement.GetProperty(KeycloakJson.AccessToken).GetString()
+                                 ?? throw new InvalidOperationException("Keycloak token response did not contain access_token.");
             var json = JsonSerializer.Serialize(new
             {
                 access_token = accessToken,
-                token_type = "Bearer",
+                token_type = GatewayAuthConventions.AuthorizationScheme,
                 expires_in = 300,
                 scope = Scope
             });
@@ -561,5 +969,33 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
         }
+    }
+
+    private static class KeycloakParameters
+    {
+        public const string ClientId = "client_id";
+        public const string Code = "code";
+        public const string CodeChallenge = "code_challenge";
+        public const string CodeChallengeMethod = "code_challenge_method";
+        public const string CodeVerifier = "code_verifier";
+        public const string CredentialId = "credentialId";
+        public const string Exact = "exact";
+        public const string GrantType = "grant_type";
+        public const string Login = "login";
+        public const string Password = "password";
+        public const string RedirectUri = "redirect_uri";
+        public const string ResponseType = "response_type";
+        public const string Scope = "scope";
+        public const string State = "state";
+        public const string Username = "username";
+    }
+
+    private static class KeycloakJson
+    {
+        public const string AccessToken = "access_token";
+        public const string Error = "error";
+        public const string Id = "id";
+        public const string Redirect = "redirect";
+        public const string Scope = "scope";
     }
 }

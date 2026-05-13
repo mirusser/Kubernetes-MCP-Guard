@@ -4,7 +4,7 @@
 
 ## What It Covers
 
-- `KeycloakIntegrationTests.cs`: OIDC discovery, anonymous loopback DCR policy, valid-token access, wrong-audience rejection, missing-scope rejection, token claim shape, and the approval browser OAuth callback/cookie path with a real Keycloak-issued token backchannel.
+- `KeycloakIntegrationTests.cs`: OIDC discovery, anonymous loopback DCR policy, `mcp-client` authorization-code + PKCE coverage, wrong-verifier rejection, valid-token access, wrong-audience rejection, missing-scope rejection, token claim shape, and the approval browser OAuth callback/cookie path with a real Keycloak-issued token backchannel.
 
 ## Running Tests
 
