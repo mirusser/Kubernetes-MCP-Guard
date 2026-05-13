@@ -1,6 +1,6 @@
 services:
   keycloak:
-    image: quay.io/keycloak/keycloak:26.2
+    image: quay.io/keycloak/keycloak:26.6.1
     command: start-dev --import-realm
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
@@ -10,11 +10,11 @@ services:
     volumes:
       - ../keycloak:/opt/keycloak/data/import:ro
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8080/realms/infra-gate/.well-known/openid-configuration"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080"]
       interval: 5s
       timeout: 10s
       retries: 12
-      start_period: 30s
+      start_period: 10s
 
   mcp-gateway:
     image: kubernetes-mcp-guard-gateway

@@ -96,7 +96,7 @@ If the plan and challenge were one record, there would be no "before" snapshot t
 
 ### 5. Forward-compatibility for multi-approver flows
 
-The roadmap ([.agents/Plans/security-roadmap.md §13](../.agents/Plans/security-roadmap.md)) calls for two-person rule, approver groups, and break-glass modes — all of which mean *multiple* challenges per plan, possibly with different approvers and different policies. Keeping challenge as a separate record means adding those modes is an additive change to one type, not a schema refactor of the plan.
+The roadmap ([.agents/Plans/archive/security-roadmap.md §13](../.agents/Plans/archive/security-roadmap.md)) calls for two-person rule, approver groups, and break-glass modes — all of which mean *multiple* challenges per plan, possibly with different approvers and different policies. Keeping challenge as a separate record means adding those modes is an additive change to one type, not a schema refactor of the plan.
 
 ---
 

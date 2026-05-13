@@ -2,9 +2,11 @@ using System.Globalization;
 using System.Text.Json;
 using k8s;
 using k8s.Models;
+using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpServer;
 
+// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 public sealed partial class K8sManager
 {
     public async Task<string> GetEventsAsync(
@@ -14,6 +16,9 @@ public sealed partial class K8sManager
         int limit,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation("GetEvents called: Namespace={Namespace}, LabelSelector={LabelSelector}, FieldSelector={FieldSelector}, Limit={Limit}",
+            namespaceName, labelSelector, fieldSelector, limit);
+
         var validation = ValidateNamespace(namespaceName) ??
             ValidateBoundedCount(limit, K8sConventions.MaxEventLimit, "Limit");
         if (validation is not null)
@@ -42,8 +47,9 @@ public sealed partial class K8sManager
                 events = events.Items.Select(EventSummary)
             }, JsonOptions);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
+            logger.LogError(ex, "Event read failed for namespace {Namespace}", namespaceName);
             return FormatApiException("Event read failed", ex);
         }
     }
@@ -92,8 +98,9 @@ public sealed partial class K8sManager
                 log
             }, JsonOptions);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
+            logger.LogError(ex, "Pod log read failed for {Namespace}/{PodName}", namespaceName, podName);
             return FormatApiException("Pod log read failed", ex);
         }
     }
@@ -117,8 +124,9 @@ public sealed partial class K8sManager
             var normalizedKind = kind.Trim();
             return await ReadResourceSummaryAsync(namespaceName, normalizedKind, name, cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
+            logger.LogError(ex, "Resource read failed for {Namespace}/{Kind}/{Name}", namespaceName, kind, name);
             return FormatApiException("Resource read failed", ex);
         }
     }

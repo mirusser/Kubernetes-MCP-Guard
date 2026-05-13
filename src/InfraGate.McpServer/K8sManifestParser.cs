@@ -28,7 +28,7 @@ public static class K8sManifestParser
                 .Where(obj => obj is not null)
                 .ToArray();
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             throw new K8sValidationException($"Manifest could not be parsed: {ex.Message}");
         }

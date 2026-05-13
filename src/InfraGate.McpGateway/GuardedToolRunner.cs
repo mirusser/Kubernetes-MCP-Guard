@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using InfraGate.McpGateway.Auth;
+using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpGateway;
 
@@ -9,28 +10,28 @@ public sealed partial class GuardedToolRunner
         "Guardrail warning: Potential prompt-injection content was detected. Model-visible high-risk text was redacted where applicable.";
 
     private readonly IDownstreamMcpClient downstream;
-    private readonly PromptInjectionGuard guard;
     private readonly IGuardrailAuditStore auditStore;
     private readonly IHttpContextAccessor? httpContextAccessor;
+    private readonly ILogger<GuardedToolRunner> logger;
 
     public GuardedToolRunner(
         IDownstreamMcpClient downstream,
-        PromptInjectionGuard guard,
-        IGuardrailAuditStore auditStore)
-        : this(downstream, guard, auditStore, httpContextAccessor: null)
+        IGuardrailAuditStore auditStore,
+        ILogger<GuardedToolRunner> logger)
+        : this(downstream, auditStore, httpContextAccessor: null, logger)
     {
     }
 
     public GuardedToolRunner(
         IDownstreamMcpClient downstream,
-        PromptInjectionGuard guard,
         IGuardrailAuditStore auditStore,
-        IHttpContextAccessor? httpContextAccessor)
+        IHttpContextAccessor? httpContextAccessor,
+        ILogger<GuardedToolRunner> logger)
     {
         this.downstream = downstream;
-        this.guard = guard;
         this.auditStore = auditStore;
         this.httpContextAccessor = httpContextAccessor;
+        this.logger = logger;
     }
 
     public async Task<string> CallAsync(
@@ -54,7 +55,16 @@ public sealed partial class GuardedToolRunner
                 cancellationToken);
         }
 
-        var downstreamText = await downstream.CallToolAsync(toolName, arguments, cancellationToken);
+        string downstreamText;
+        try
+        {
+            downstreamText = await downstream.CallToolAsync(toolName, arguments, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Downstream call to '{ToolName}' threw an exception", toolName);
+            return $"Tool call failed: {ex.GetType().Name}: {ex.Message}";
+        }
         var response = PromptInjectionGuard.SanitizeResponse(downstreamText);
         if (response.HasFindings || response.ManifestRedacted)
         {

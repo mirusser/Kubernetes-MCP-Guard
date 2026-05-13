@@ -115,6 +115,18 @@ flowchart TB
 <sub><em>Even if the AI agent is compromised, it cannot self-approve. The approval must come from your browser session a channel the AI has no control over.</em></sub>
 <sub><em>Simplified architectural graph. Full version [here](docs/architecture.md)</em></sub>
 
+#### The Three Security Gates
+
+Every mutation passes through three independent checkpoints. Each one can block execution regardless of whether the others passed:
+
+| Phase | What happens | What can block it |
+|---|---|---|
+| **① Plan** | AI calls `request_*`; server runs a server-side dry-run and policy checks; computes a SHA-256 hash of the pending plan and stores it | Dry-run failure, policy violation (privileged containers, hostPath, dangerous caps, …) |
+| **② Approve** | Human opens the approval URL; browser renders the plan from the server-side file — not the AI's description; human clicks Approve | Challenge expired (15 min TTL), approver identity doesn't match requester, or the plan file was modified after the hash was captured |
+| **③ Execute** | AI calls `apply_approved_plan`; server re-checks the hash, re-runs the dry-run, checks live-state drift | Hash mismatch (payload was swapped), no approval on file, plan already applied, second dry-run failure, or live state drifted since approval |
+
+The hash from Phase ① is the integrity seal that links all three phases. If the plan is modified between Phase ① and the human's click in Phase ②, the hash comparison fails and approval is refused. If the plan is modified after approval but before Phase ③, execution is refused. There is no path from Phase ① to Phase ③ that skips the hash check.
+
 ### 🛠️ Technical & Architectural Highlights
 
 - **AI Integration & Safety:** Deep implementation of Model Context Protocol (MCP), handling tool contracts, out-of-band approval workflows, and mitigating prompt-injection risks within model-visible data.
@@ -139,7 +151,7 @@ flowchart TB
 
 Images are automatically built and scanned by the Docker workflow. Release tags publish versioned images, and the `dev` branch publishes moving `:dev` images for the self-hosted development deployment.
 
-| Registry | Gateway (Core) | Dev Issuer (Auth) |
+| Registry | Gateway (Core) | Dev Issuer (deprecated fallback auth) |
 | --- | --- | --- |
 | GitHub (GHCR) | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>` | `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
 | Docker Hub | `mirusser/kubernetes-mcp-guard-gateway:<tag>` | `mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
@@ -163,10 +175,11 @@ git clone https://github.com/mirusser/Kubernetes-MCP-Guard.git
 cd Kubernetes-MCP-Guard
 
 ./scripts/create-demo-kubeconfig.sh --compose
-TAG=latest docker compose -f deploy/mode-c/compose.release.yaml up
+TAG=latest docker compose -f deploy/mode-d/compose.release.yaml up
 ```
 
 Replace `latest` with a specific release tag (e.g. `v0.1.0`) for a stable run. Available tags are listed on the [Releases page](https://github.com/mirusser/Kubernetes-MCP-Guard/releases).
+This starts the Keycloak-backed local OAuth path. The older DevIssuer path remains available under `deploy/mode-c/` as a deprecated fallback while compatibility tests still cover it.
 
 #### **Connect Codex CLI:**
 
@@ -211,7 +224,7 @@ claude
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
-docker compose -f deploy/mode-c/compose.yaml up --build
+docker compose -f deploy/mode-d/compose.yaml up --build
 ```
 
 Connect Codex the same way as Option 1.
@@ -264,7 +277,7 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 | .NET | .NET 10 |
 | Kubernetes | minikube / local cluster initially |
 | MCP transport | HTTP MCP endpoint at `/mcp` |
-| OIDC | DevIssuer (local demo), Keycloak (development deploy), Entra ID later |
+| OIDC | Keycloak (primary local/dev path), DevIssuer (deprecated local fallback), Entra ID later |
 | Container registries | GHCR, Docker Hub |
 | Platforms | linux/amd64 initially |
 
@@ -282,7 +295,7 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 - HTTP MCP gateway: [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md)
 - Gateway auth: [src/InfraGate.McpGateway.Auth/README.md](src/InfraGate.McpGateway.Auth/README.md)
 - Approval storage & audit: [src/InfraGate.Approvals/README.md](src/InfraGate.Approvals/README.md)
-- Local dev OAuth issuer: [src/InfraGate.DevIssuer/README.md](src/InfraGate.DevIssuer/README.md)
+- Deprecated local dev OAuth issuer: [src/InfraGate.DevIssuer/README.md](src/InfraGate.DevIssuer/README.md)
 
 <sub><em>**Naming note:** The public name is **Kubernetes MCP Guard**. The internal codename **InfraGate** appears in `.slnx`, project folders, env-var prefixes (`INFRA_GATE_*`), and Docker labels. They refer to the same project; the rename is gradual and does not change runtime behavior.</em></sub>
 

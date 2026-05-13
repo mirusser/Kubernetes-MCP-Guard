@@ -2,7 +2,7 @@
 
 End-to-end and focused live tests for the seven safety properties listed in [`.agents/Plans/minimum-for-demo.md`](../../.agents/Plans/minimum-for-demo.md) §6 ("Tests proving the safety model"). The suite exercises production components: real Keycloak JWTs for MCP calls, a real gateway HTTP host (`Microsoft.AspNetCore.TestHost`), the gateway's browser approval endpoints with antiforgery, a real `InfraGate.McpServer` subprocess spawned by `DownstreamMcpClient`, and a real Kubernetes API via the developer-provided kubeconfig.
 
-Not every workflow is a full vertical browser flow. Some tests intentionally stay at the gateway-service or downstream-server layer to force clock/hash/principal edge cases without brittle setup. Browser approval identity is simulated at the OAuth callback/backchannel boundary; the tests do not scrape the real Keycloak login form.
+Not every workflow is a full vertical browser flow. Some tests intentionally stay at the gateway-service or downstream-server layer to force clock/hash/principal edge cases without brittle setup. Browser approval identity is simulated at the OAuth callback/backchannel boundary; the tests do not scrape the real Keycloak login form. Real Keycloak approval-token backchannel coverage lives in `InfraGate.McpGateway.KeycloakTests`.
 
 These tests do **not** run in the default repo test pass. They are gated behind an environment variable and require Docker plus a running Kubernetes cluster.
 
@@ -41,11 +41,11 @@ The `PromptInjectionGuard` now decodes strings that appear to be valid base64 (>
 
 The tests do **not** scrape the real Keycloak browser login form. For browser approval operations the fixture uses a `FakeApprovalOAuthBackchannel` that returns a test JWT for any configured subject, simulating the OAuth authorization-code → token exchange. The real Keycloak callback/cookie flow is exercised indirectly (the browser approval page renders real dry-run/diff evidence), but identity is injected at the OAuth backchannel boundary, not through manual HTML form interaction.
 
-This is an intentional test-boundary choice documented in the [implementation plan](../../.agents/Plans/strengthen-safety-e2e-security-flow-plan.md). Real Keycloak JWTs remain for MCP bearer-token coverage. If a follow-up wants stricter real-OIDC coverage for approval decisions, the path is: add a second user to `deploy/keycloak/infra-gate-realm.json` and use that user for browser OAuth throughout.
+This is an intentional test-boundary choice documented in the [implementation plan](../../.agents/Plans/strengthen-safety-e2e-security-flow-plan.md). Real Keycloak JWTs remain for MCP bearer-token coverage, and `InfraGate.McpGateway.KeycloakTests` now covers the gateway approval OAuth callback/cookie path with a real Keycloak-issued token supplied through a stable backchannel. A future Playwright-style browser test can scrape or automate Keycloak login if that fragility becomes worth the maintenance cost.
 
 ### Known limitations
 
-- **Browser approval token validation**: The `FakeApprovalOAuthBackchannel` returns unsigned JWTs for browser approval sessions. The wrong-user browser test (`ApproveChallengeBrowser_BrowserSessionAsDifferentSubject_IsRefused`) proves subject-comparison logic but does not exercise real Keycloak JWT signature validation in the browser path. A separate service-level test (`ApproveChallenge_RealJwtAsDemo2_ApprovalIdentityDerivedFromRealKeycloakToken_IsRefused`) closes this for the `GatewayApprovalService` code path by injecting a `ClaimsPrincipal` derived from a real Keycloak-issued JWT. Full browser-OAuth backchannel replacement is deferred to a future hardening phase. Real Keycloak JWT validation for MCP endpoints is covered by `SmokeTests`.
+- **Browser approval token validation**: The Safety E2E fixture still uses `FakeApprovalOAuthBackchannel` for brittle edge cases, while `InfraGate.McpGateway.KeycloakTests` covers the same gateway OAuth callback/cookie path with a real Keycloak-issued token. Real Keycloak JWT validation for MCP endpoints is covered by `SmokeTests`.
 - **RBAC matrix test uses direct server subprocess**: `RbacMatrixTests` spawns a second McpServer subprocess with a read-only SA kubeconfig, bypassing the gateway. This is sufficient because the architecture uses a static SA for the gateway-to-server connection — there is no dynamic identity forwarding to test at the gateway layer. If dynamic SAs are added in the future, a gateway-path RBAC test should be added.
 
 ## Prerequisites
@@ -196,7 +196,7 @@ KUBECONFIG="$(pwd)/.kube/mcp-nginx-demo.config" \
 
 The first run takes longer than subsequent runs because:
 
-- Testcontainers pulls the Keycloak image (`quay.io/keycloak/keycloak:26.2`) on first use.
+- Testcontainers pulls the Keycloak image (`quay.io/keycloak/keycloak:26.6.1`) on first use.
 - The gateway's `DownstreamMcpClient` does a `dotnet run --project src/InfraGate.McpServer/InfraGate.McpServer.csproj` on the first tool call, which restores and compiles the McpServer if not already compiled.
 
 Expected output ends with a green summary. The current suite has 14 discovered tests:
@@ -230,7 +230,7 @@ You forgot `INFRA_GATE_RUN_SAFETY_E2E=1`. The test methods are still discovered,
 
 ### Approval flow refuses with "requires an authenticated OAuth subject"
 
-The MCP bearer token reached `/mcp`, but it did not contain a requester identity claim. The gateway approval flow requires `sub` or `client_id` so it can bind the browser approval to the same subject. The repo's [`deploy/keycloak/infra-gate-realm.json`](../../deploy/keycloak/infra-gate-realm.json) includes an `mcp-gateway-subject` mapper for the `mcp:tools` client scope; if you use a custom realm, add an equivalent access-token claim.
+The MCP bearer token reached `/mcp`, but it did not contain a requester identity claim. The gateway approval flow requires `sub` or `client_id` so it can bind the browser approval to the same subject. The shared test realm at [`tests/TestData/keycloak/infra-gate-realm.json`](../TestData/keycloak/infra-gate-realm.json) includes an `mcp-gateway-subject` mapper for the `mcp:tools` client scope; if you use a custom realm, add an equivalent access-token claim.
 
 ### Fixture init fails with `DockerApiException` / cannot reach Docker daemon
 
@@ -238,10 +238,10 @@ Docker is not running, or your user lacks permission. See Step 2.
 
 ### Fixture init fails pulling the Keycloak image
 
-No internet access, or the image is gone from `quay.io/keycloak/keycloak:26.2`. Pre-pull it manually:
+No internet access, or the image is gone from `quay.io/keycloak/keycloak:26.6.1`. Pre-pull it manually:
 
 ```bash
-docker pull quay.io/keycloak/keycloak:26.2
+docker pull quay.io/keycloak/keycloak:26.6.1
 ```
 
 ### Tests fail at request time with `404` from Kubernetes

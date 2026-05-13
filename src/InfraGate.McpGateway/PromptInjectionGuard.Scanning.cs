@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 
 namespace InfraGate.McpGateway;
 
-public sealed partial class PromptInjectionGuard
+public static partial class PromptInjectionGuard
 {
     public static GuardScanResult ScanArguments(IReadOnlyDictionary<string, object?> arguments)
     {

@@ -1,12 +1,16 @@
 using System.Text.Json;
 using k8s;
+using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpServer;
 
+// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 public sealed partial class K8sManager
 {
     public async Task<string> GetStatusAsync(string namespaceName, string? labelSelector, CancellationToken cancellationToken)
     {
+        logger.LogInformation("GetStatus called: Namespace={Namespace}, LabelSelector={LabelSelector}", namespaceName, labelSelector);
+
         var validation = ValidateNamespace(namespaceName);
         if (validation is not null)
         {
@@ -37,6 +41,15 @@ public sealed partial class K8sManager
                 namespaceName,
                 labelSelector: labelSelector,
                 cancellationToken: cancellationToken);
+
+            logger.LogInformation(
+                "GetStatus result: Namespace={Namespace}, Deployments={DeploymentCount}, Services={ServiceCount}, ConfigMaps={ConfigMapCount}, Pods={PodCount}, ReplicaSets={ReplicaSetCount}",
+                namespaceName,
+                deployments.Items.Count,
+                services.Items.Count,
+                configMaps.Items.Count,
+                pods.Items.Count,
+                replicaSets.Items.Count);
 
             return JsonSerializer.Serialize(new
             {
@@ -96,8 +109,9 @@ public sealed partial class K8sManager
                 })
             }, JsonOptions);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
+            logger.LogError(ex, "Status read failed for namespace {Namespace}", namespaceName);
             return FormatApiException("Status read failed", ex);
         }
     }

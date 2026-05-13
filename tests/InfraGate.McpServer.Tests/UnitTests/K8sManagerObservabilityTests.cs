@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using InfraGate.Approvals;
 using InfraGate.McpServer;
@@ -286,6 +287,31 @@ public sealed class K8sManagerObservabilityTests
         Assert.Equal(name, root.GetProperty("name").GetString());
     }
 
+    [Fact]
+    public async Task GetEventsAsync_WhenApiReturnsServerError_ReturnsFormattedError()
+    {
+        await using var api = new TestKubernetesApi(_ =>
+            TestResponse.Json(StatusJson("InternalError", 500), statusCode: 500));
+        var manager = CreateManager(api);
+
+        var result = await manager.GetEventsAsync("demo", null, null, 50, CancellationToken.None);
+
+        Assert.Contains("Event read failed", result);
+        Assert.Contains("500", result);
+    }
+
+    [Fact]
+    public async Task GetPodLogsAsync_WhenApiReturnsNotFound_ReturnsFormattedError()
+    {
+        await using var api = new TestKubernetesApi(_ =>
+            TestResponse.Text("not found", statusCode: 404));
+        var manager = CreateManager(api);
+
+        var result = await manager.GetPodLogsAsync("demo", "demo-pod", null, 200, previous: false, CancellationToken.None);
+
+        Assert.Contains("Pod log read failed", result);
+    }
+
     private static K8sManager CreateManager(TestKubernetesApi? api = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
@@ -300,7 +326,19 @@ public sealed class K8sManagerObservabilityTests
                 SkipTlsVerify = true
             });
 
-        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client!);
+        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client!, NullLogger<K8sManager>.Instance);
     }
+
+    private static string StatusJson(string reason, int code) =>
+        $$"""
+          {
+            "apiVersion": "v1",
+            "kind": "Status",
+            "status": "{{reason}}",
+            "reason": "{{reason}}",
+            "message": "{{reason}}",
+            "code": {{code}}
+          }
+          """;
 
 }

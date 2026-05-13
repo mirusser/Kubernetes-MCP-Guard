@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using InfraGate.Approvals;
 using InfraGate.McpServer;
@@ -128,6 +129,53 @@ public sealed class K8sManagerRequestTests
         Assert.Contains("Server-side dry-run failed", result);
         Assert.DoesNotContain("PlanId:", result);
         Assert.Empty(Directory.EnumerateFiles(context.ApprovalStore.PendingDirectory));
+    }
+
+    [Fact]
+    public async Task RequestApplyManifestAsync_WhenAuditWriteFails_StillReturnsDryRunRefusal()
+    {
+        string tempFilePath = Path.GetTempFileName();
+        try
+        {
+            await using var api = new TestKubernetesApi(_ =>
+                TestResponse.Json(StatusJson("Invalid", 422), statusCode: 422));
+            var context = CreateContextWithRoot("demo", api, tempFilePath);
+
+            var result = await context.Manager.RequestApplyManifestAsync("demo", ValidManifest, CancellationToken.None);
+
+            Assert.Contains("Server-side dry-run failed", result);
+            Assert.DoesNotContain("PlanId:", result);
+        }
+        finally
+        {
+            if (File.Exists(tempFilePath))
+            {
+                File.Delete(tempFilePath);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task RequestApplyManifestAsync_WhenPlanStoreUnavailable_ReturnsStoreErrorMessage()
+    {
+        string tempFilePath = Path.GetTempFileName();
+        try
+        {
+            await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
+            var context = CreateContextWithRoot("demo", api, tempFilePath);
+
+            var result = await context.Manager.RequestApplyManifestAsync("demo", ValidManifest, CancellationToken.None);
+
+            Assert.Contains("Failed to create approval plan:", result);
+            Assert.DoesNotContain("PlanId:", result);
+        }
+        finally
+        {
+            if (File.Exists(tempFilePath))
+            {
+                File.Delete(tempFilePath);
+            }
+        }
     }
 
     [Fact]
@@ -418,7 +466,7 @@ public sealed class K8sManagerRequestTests
             new HashSet<string>(StringComparer.Ordinal) { namespaceName },
             root);
 
-        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client: null!);
+        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client: null!, NullLogger<K8sManager>.Instance);
     }
 
     private static ManagerContext CreateContext(string namespaceName, TestKubernetesApi api)
@@ -434,7 +482,23 @@ public sealed class K8sManagerRequestTests
             SkipTlsVerify = true
         });
 
-        return new ManagerContext(new K8sManager(options, approvalStore, client), approvalStore);
+        return new ManagerContext(new K8sManager(options, approvalStore, client, NullLogger<K8sManager>.Instance), approvalStore);
+    }
+
+    private static ManagerContext CreateContextWithRoot(string namespaceName, TestKubernetesApi api, string approvalRoot)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
+        var options = new K8SMcpOptions(
+            new HashSet<string>(StringComparer.Ordinal) { namespaceName },
+            root);
+        var approvalStore = new ApprovalStore(new ApprovalStoreOptions(approvalRoot));
+        var client = new Kubernetes(new KubernetesClientConfiguration
+        {
+            Host = api.Url,
+            SkipTlsVerify = true
+        });
+
+        return new ManagerContext(new K8sManager(options, approvalStore, client, NullLogger<K8sManager>.Instance), approvalStore);
     }
 
     private static string ParsePlanId(string text) =>

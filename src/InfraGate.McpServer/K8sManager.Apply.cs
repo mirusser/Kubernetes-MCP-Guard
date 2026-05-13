@@ -4,9 +4,11 @@ using InfraGate.McpServer.Diff;
 using InfraGate.McpServer.Policy;
 using k8s;
 using k8s.Models;
+using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpServer;
 
+// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 public sealed partial class K8sManager
 {
     public async Task<string> ApplyApprovedPlanAsync(string planId, CancellationToken cancellationToken)
@@ -74,8 +76,9 @@ public sealed partial class K8sManager
                 _ => ApplyResult.Failed($"Unsupported plan operation '{plan.Operation}'.")
             };
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
+            logger.LogError(ex, "API operation failed for plan {PlanId} ({Operation} in {Namespace})", plan.Id, plan.Operation, plan.Namespace);
             return ApplyResult.Failed(FormatApiException("API operation failed", ex));
         }
     }
@@ -145,8 +148,10 @@ public sealed partial class K8sManager
             {
                 await ApplyObjectAsync(obj, cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex)
             {
+                logger.LogError(ex, "API operation failed for {ApiVersion} {Kind} {Namespace}/{Name} during plan {PlanId}",
+                    obj.ApiVersion, obj.Kind, obj.Metadata.NamespaceProperty, obj.Metadata.Name, plan.Id);
                 return ApplyResult.Failed(FormatServerSideApplyException("API operation failed", ex));
             }
 

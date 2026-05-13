@@ -29,7 +29,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\..\deploy\keycloak\infra-gate-realm.json" Link="TestData\infra-gate-realm.json">
+    <Content Include="..\TestData\keycloak\infra-gate-realm.json" Link="TestData\infra-gate-realm.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

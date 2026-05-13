@@ -1,10 +1,16 @@
 using InfraGate.Approvals;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using Microsoft.Extensions.Logging;
 
 var options = McpGatewayOptions.FromEnvironment();
 options.ValidateProductionSafety();
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Logging.AddConsole(options =>
+{
+    options.LogToStandardErrorThreshold = LogLevel.Trace;
+});
 
 if (string.IsNullOrWhiteSpace(builder.Configuration[McpGatewayConventions.ConfigurationKeys.Urls]) &&
     string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.AspNetCoreUrls)))
@@ -13,7 +19,6 @@ if (string.IsNullOrWhiteSpace(builder.Configuration[McpGatewayConventions.Config
 }
 
 builder.Services.AddSingleton(options);
-builder.Services.AddSingleton<PromptInjectionGuard>();
 builder.Services.AddSingleton<IGuardrailAuditStore, GuardrailAuditStore>();
 builder.Services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
 builder.Services.AddSingleton<GuardedToolRunner>();

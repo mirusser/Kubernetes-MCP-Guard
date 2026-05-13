@@ -20,7 +20,7 @@ public static class GatewayAuthentication
     {
         services.AddSingleton(options);
 
-        var authBuilder = AddGatewayAuthenticationSchemes(services, options);
+        var authBuilder = AddGatewayAuthenticationSchemes(services);
         AddJwtBearerAuthentication(authBuilder, options);
         AddApprovalBrowserAuthentication(authBuilder, options);
         AddGatewayAuthorization(services, options);
@@ -28,9 +28,7 @@ public static class GatewayAuthentication
         return services;
     }
 
-    private static AuthenticationBuilder AddGatewayAuthenticationSchemes(
-        IServiceCollection services,
-        GatewayAuthOptions options)
+    private static AuthenticationBuilder AddGatewayAuthenticationSchemes(IServiceCollection services)
     {
         return services
             .AddAuthentication(authenticationOptions =>
