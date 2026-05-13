@@ -8,18 +8,22 @@ unset KUBECONFIG
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NAMESPACE="mcp-nginx-demo"
 SERVICE_ACCOUNT="infra-gate-mcp"
+SA_NAME_FLAG=false
+COMPOSE_MODE=false
 OUT="${ROOT}/.kube/mcp-nginx-demo.config"
 COMPOSE_OUT="${ROOT}/.kube/mcp-nginx-demo.compose.config"
-COMPOSE_MODE=false
+# UID/GID the gateway container runs as (aspnet:10.0-noble-chiseled APP_UID).
+# Must match scripts/setup-development-deploy.sh and the Dockerfile's USER directive.
 GATEWAY_APP_UID="1654"
 GATEWAY_APP_UGID="${GATEWAY_APP_UID}:${GATEWAY_APP_UID}"
 
 usage() {
   cat <<EOF
-Usage: $0 [--compose]
+Usage: $0 [--compose] [--sa-name NAME]
 
 Creates ${OUT}.
 With --compose, also creates ${COMPOSE_OUT} and local persistence directories for Docker Compose.
+With --sa-name, uses the named ServiceAccount instead of the default ${SERVICE_ACCOUNT}.
 EOF
 }
 
@@ -28,16 +32,34 @@ for arg in "$@"; do
     --compose)
       COMPOSE_MODE=true
       ;;
+    --sa-name)
+      SA_NAME_FLAG=true
+      ;;
     -h|--help)
       usage
       exit 0
       ;;
     *)
-      usage >&2
-      exit 1
+      if [[ "${SA_NAME_FLAG}" == "true" ]]; then
+        SERVICE_ACCOUNT="${arg}"
+        SA_NAME_FLAG=false
+      else
+        usage >&2
+        exit 1
+      fi
       ;;
   esac
 done
+
+if [[ "${SA_NAME_FLAG}" == "true" ]]; then
+  echo "Error: --sa-name requires a value." >&2
+  usage >&2
+  exit 1
+fi
+
+if [[ "${SERVICE_ACCOUNT}" != "infra-gate-mcp" ]]; then
+  OUT="${ROOT}/.kube/mcp-nginx-demo-${SERVICE_ACCOUNT}.config"
+fi
 
 write_kubeconfig() {
   local out="$1"
@@ -97,6 +119,20 @@ server_host() {
   fi
 
   printf '%s' "${host_port%%:*}"
+}
+
+grant_container_read() {
+  local target="$1"
+
+  if command -v setfacl >/dev/null 2>&1 &&
+    setfacl -m "u:${GATEWAY_APP_UID}:r" "${target}" 2>/dev/null; then
+    return
+  fi
+
+  # Fallback for systems without ACL support. The token is short-lived (24h)
+  # and the file is gitignored, so a world-readable kubeconfig is acceptable
+  # for local development.
+  chmod 644 "${target}"
 }
 
 prepare_compose_persistence_dirs() {
@@ -177,6 +213,7 @@ if [[ "${COMPOSE_MODE}" == "true" ]]; then
   fi
 
   write_kubeconfig "${COMPOSE_OUT}" "${COMPOSE_SERVER}" "${TLS_SERVER_NAME}"
+  grant_container_read "${COMPOSE_OUT}"
   prepare_compose_persistence_dirs
 fi
 

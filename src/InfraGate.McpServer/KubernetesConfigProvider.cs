@@ -23,7 +23,15 @@ internal sealed class KubernetesConfigProvider(K8SMcpOptions options)
         {
             string kubeConfig = options.KubeConfig ??
                                 throw new InvalidOperationException($"{K8sConventions.EnvironmentVariables.KubeConfig} is required.");
-            config = kubeConfigFactory(kubeConfig);
+            try
+            {
+                config = kubeConfigFactory(kubeConfig);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to load kubeconfig from '{kubeConfig}': {ex.Message}", ex);
+            }
         }
         else if (options.IsInClusterConfigEnabled)
         {

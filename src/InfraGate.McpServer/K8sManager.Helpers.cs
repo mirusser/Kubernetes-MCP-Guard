@@ -1,10 +1,12 @@
 using System.Net;
 using InfraGate.Approvals;
+using InfraGate.Approvals.AuditPayloads;
 using k8s;
 using k8s.Autorest;
 
 namespace InfraGate.McpServer;
 
+// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 public sealed partial class K8sManager
 {
     private const string ServerSideApplyConflictMessage = """
@@ -69,28 +71,30 @@ public sealed partial class K8sManager
         K8sPlan plan,
         string message,
         CancellationToken cancellationToken) =>
-        approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.DryRunFailed, new
-        {
-            phase,
-            planId = plan.Id,
-            plan.Operation,
-            plan.Namespace,
-            objects = plan.Objects.Select(FormatObjectRef).ToArray(),
-            message
-        }, cancellationToken);
+        approvalStore.WriteAuditAsync(
+            ApprovalConventions.AuditEvents.DryRunFailed,
+            new DryRunFailedPayload(
+                phase,
+                plan.Id,
+                plan.Operation,
+                plan.Namespace,
+                plan.Objects.Select(FormatObjectRef).ToArray(),
+                message),
+            cancellationToken);
 
     private Task WriteDiffFailedAuditAsync(
         K8sPlan plan,
         string message,
         CancellationToken cancellationToken) =>
-        approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.DiffFailed, new
-        {
-            planId = plan.Id,
-            plan.Operation,
-            plan.Namespace,
-            objects = plan.Objects.Select(FormatObjectRef).ToArray(),
-            message
-        }, cancellationToken);
+        approvalStore.WriteAuditAsync(
+            ApprovalConventions.AuditEvents.DiffFailed,
+            new DiffFailedPayload(
+                plan.Id,
+                plan.Operation,
+                plan.Namespace,
+                plan.Objects.Select(FormatObjectRef).ToArray(),
+                message),
+            cancellationToken);
 
     private static string FormatRequestDryRunRefusal(string message) =>
         $"Server-side dry-run failed; no approval plan was created.{Environment.NewLine}{message}";
@@ -104,7 +108,7 @@ public sealed partial class K8sManager
                ex is HttpOperationException { Response.StatusCode: HttpStatusCode.NotFound };
     }
 
-    private static string FormatServerSideApplyException(string prefix, Exception ex)
+    internal static string FormatServerSideApplyException(string prefix, Exception ex)
     {
         var message = FormatApiException(prefix, ex);
 
@@ -113,7 +117,7 @@ public sealed partial class K8sManager
             : message;
     }
 
-    private static bool IsConflict(Exception ex)
+    internal static bool IsConflict(Exception ex)
     {
         if (ex is KubernetesException { Status: not null } kube)
         {
@@ -124,7 +128,7 @@ public sealed partial class K8sManager
         return ex is HttpOperationException { Response.StatusCode: HttpStatusCode.Conflict };
     }
 
-    private static string FormatApiException(string prefix, Exception ex)
+    internal static string FormatApiException(string prefix, Exception ex)
     {
         if (TryFormatKubernetesException(prefix, ex, out var message))
         {
@@ -139,7 +143,7 @@ public sealed partial class K8sManager
         return $"{prefix}: {ex.Message}";
     }
 
-    private static bool TryFormatKubernetesException(string prefix, Exception ex, out string message)
+    internal static bool TryFormatKubernetesException(string prefix, Exception ex, out string message)
     {
         if (ex is KubernetesException { Status: not null } kube)
         {
@@ -151,7 +155,7 @@ public sealed partial class K8sManager
         return false;
     }
 
-    private static bool TryFormatHttpOperationException(string prefix, Exception ex, out string message)
+    internal static bool TryFormatHttpOperationException(string prefix, Exception ex, out string message)
     {
         if (ex is HttpOperationException { Response: not null } http)
         {

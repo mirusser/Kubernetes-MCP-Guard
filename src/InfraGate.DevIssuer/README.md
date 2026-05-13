@@ -1,6 +1,6 @@
 # InfraGate.DevIssuer
 
-`InfraGate.DevIssuer` is a localhost-only OAuth/OIDC-style issuer for development. It lets Codex or other MCP clients exercise the gateway OAuth flow without relying on an external identity provider.
+`InfraGate.DevIssuer` is a deprecated localhost-only OAuth/OIDC-style issuer for development fallback. Keycloak Mode D is the primary local/test OAuth path; DevIssuer remains so compatibility tests and old local flows can still exercise the gateway without an external identity provider.
 
 ## Runtime Flow
 
@@ -13,18 +13,18 @@
 
 ## Important Contracts
 
-- This issuer is for localhost development only. Registrations, authorization codes, and signing keys are in memory and reset on restart.
+- This issuer is for localhost fallback development only. Registrations, authorization codes, and signing keys are in memory and reset on restart.
 - Redirect URIs must be loopback `http` URIs.
 - Authorization code flow requires PKCE `S256`.
 - Tokens are JWT access tokens signed with the current ephemeral RSA key.
 - The local approval UI client id and redirect URI are pre-registered so browser approvals work without dynamic registration.
 - The token audience/resource and scope should match gateway OAuth configuration.
 - The authorization request must include the resource; the token request may omit it because the authorization code is already resource-bound. If a token request includes an explicitly wrong resource, it is rejected.
-- This behavior is intentionally scoped to local OAuth compatibility testing for the gateway path described in [MCP-compliance.md](../../docs/MCP-compliance.md).
+- This behavior is intentionally scoped to deprecated local OAuth compatibility testing for the gateway path described in [MCP-compliance.md](../../docs/MCP-compliance.md).
 
 ## Settings
 
-Runtime environment variables, defaults, examples, and production guidance are documented in [docs/configuration.md](../../docs/configuration.md). DevIssuer is development-only and must not be used as a production identity provider.
+Runtime environment variables, defaults, examples, and production guidance are documented in [docs/configuration.md](../../docs/configuration.md). DevIssuer is deprecated, development-only, and must not be used as a production identity provider.
 
 ## Verification
 

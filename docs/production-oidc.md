@@ -17,6 +17,8 @@ To configure an external OIDC provider, the Gateway expects the following:
 - **Scopes**: Tokens must include `mcp:tools` in either the `scope` or `scp` claim, unless `INFRA_GATE_OAUTH_SCOPE` is changed.
 - **Identity binding**: Tokens must provide `sub` or `client_id`; the gateway uses that identity to bind browser approvals to the requester.
 
+For Keycloak, bind `aud` with an audience mapper on a client scope or client until Keycloak's MCP/resource-indicator support processes RFC 8707 `resource` values as this gateway requires. The gateway remains the enforcement point for issuer, signature, lifetime, audience, and scope.
+
 ## Keycloak End-to-End Setup
 
 1. **Realm**: Create or use an existing Keycloak realm.
@@ -83,17 +85,21 @@ Keycloak takes ~30 seconds to start. The gateway waits for it via a health check
 | Item | Value |
 |---|---|
 | Realm | `infra-gate` |
-| MCP client | `mcp-client` (public, direct access grants on) |
+| MCP client | `mcp-client` (public, authorization-code + PKCE S256) |
+| Smoke/test client | `mcp-smoke-client` (public, direct grants for local non-browser token acquisition only) |
+| Limited test client | `mcp-client-limited` (valid audience, no `mcp:tools`) |
 | Approval UI client | `infra-gate-approval-ui` (public, PKCE) |
 | Demo user | `demo` / `demo` |
 | Scope | `mcp:tools` with audience mapper for `http://127.0.0.1:3001/mcp` |
+
+Anonymous OIDC Dynamic Client Registration is enabled only for this local/demo realm. It is constrained to loopback hosts and local scopes; production should use pre-registered or admin-managed clients.
 
 **Acquire a token:**
 
 ```bash
 curl -s -X POST \
   http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token \
-  -d "grant_type=password&client_id=mcp-client&username=demo&password=demo&scope=mcp:tools" \
+  -d "grant_type=password&client_id=mcp-smoke-client&username=demo&password=demo&scope=mcp:tools" \
   | jq -r .access_token
 ```
 
@@ -102,7 +108,7 @@ curl -s -X POST \
 ```bash
 TOKEN=$(curl -s -X POST \
   http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token \
-  -d "grant_type=password&client_id=mcp-client&username=demo&password=demo&scope=mcp:tools" \
+  -d "grant_type=password&client_id=mcp-smoke-client&username=demo&password=demo&scope=mcp:tools" \
   | jq -r .access_token)
 
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3001/mcp

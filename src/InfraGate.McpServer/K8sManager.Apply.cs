@@ -1,11 +1,14 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.AuditPayloads;
 using InfraGate.McpServer.Diff;
 using InfraGate.McpServer.Policy;
 using k8s;
 using k8s.Models;
+using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpServer;
 
+// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 public sealed partial class K8sManager
 {
     public async Task<string> ApplyApprovedPlanAsync(string planId, CancellationToken cancellationToken)
@@ -13,11 +16,10 @@ public sealed partial class K8sManager
         var approved = await approvalStore.GetApprovedPlanAsync(planId, cancellationToken);
         if (!approved.IsApproved || approved.Plan is null || approved.Hash is null)
         {
-            await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApplyDenied, new
-            {
-                planId,
-                approved.Message
-            }, cancellationToken);
+            await approvalStore.WriteAuditAsync(
+                ApprovalConventions.AuditEvents.ApplyDenied,
+                new ApplyDeniedPayload(planId, approved.Message),
+                cancellationToken);
 
             return $"Refused: {approved.Message}";
         }
@@ -25,12 +27,10 @@ public sealed partial class K8sManager
         var applyResult = await ApplyPlanAsync(approved.Plan, cancellationToken);
         if (!applyResult.Succeeded)
         {
-            await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApplyFailed, new
-            {
-                approved.Plan.Id,
-                approved.Plan.Operation,
-                applyResult.Message
-            }, cancellationToken);
+            await approvalStore.WriteAuditAsync(
+                ApprovalConventions.AuditEvents.ApplyFailed,
+                new ApplyFailedPayload(approved.Plan.Id, approved.Plan.Operation, applyResult.Message),
+                cancellationToken);
 
             return applyResult.Message;
         }
@@ -76,8 +76,9 @@ public sealed partial class K8sManager
                 _ => ApplyResult.Failed($"Unsupported plan operation '{plan.Operation}'.")
             };
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
+            logger.LogError(ex, "API operation failed for plan {PlanId} ({Operation} in {Namespace})", plan.Id, plan.Operation, plan.Namespace);
             return ApplyResult.Failed(FormatApiException("API operation failed", ex));
         }
     }
@@ -97,13 +98,10 @@ public sealed partial class K8sManager
             return null;
         }
 
-        await approvalStore.WriteAuditAsync(ApprovalConventions.AuditEvents.ApplyDriftDetected, new
-        {
-            plan.Id,
-            plan.Operation,
-            plan.Namespace,
-            message = drift
-        }, cancellationToken);
+        await approvalStore.WriteAuditAsync(
+            ApprovalConventions.AuditEvents.ApplyDriftDetected,
+            new ApplyDriftDetectedPayload(plan.Id, plan.Operation, plan.Namespace, drift),
+            cancellationToken);
 
         return ApplyResult.Failed($"Live Kubernetes state changed after approval; refusing to mutate Kubernetes.{Environment.NewLine}{drift}");
     }
@@ -150,8 +148,10 @@ public sealed partial class K8sManager
             {
                 await ApplyObjectAsync(obj, cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex)
             {
+                logger.LogError(ex, "API operation failed for {ApiVersion} {Kind} {Namespace}/{Name} during plan {PlanId}",
+                    obj.ApiVersion, obj.Kind, obj.Metadata.NamespaceProperty, obj.Metadata.Name, plan.Id);
                 return ApplyResult.Failed(FormatServerSideApplyException("API operation failed", ex));
             }
 

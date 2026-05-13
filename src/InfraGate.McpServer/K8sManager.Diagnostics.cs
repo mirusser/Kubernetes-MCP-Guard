@@ -1,9 +1,11 @@
 using System.Text.Json;
 using k8s;
 using k8s.Models;
+using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpServer;
 
+// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 public sealed partial class K8sManager
 {
     public async Task<string> GetDeploymentDiagnosticsAsync(
@@ -65,8 +67,9 @@ public sealed partial class K8sManager
                 events
             }, JsonOptions);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
+            logger.LogError(ex, "Deployment diagnostics failed for {Namespace}/{Name}", namespaceName, name);
             return FormatApiException("Deployment diagnostics failed", ex);
         }
     }
@@ -103,8 +106,9 @@ public sealed partial class K8sManager
                 events
             }, JsonOptions);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
+            logger.LogError(ex, "Pod diagnostics failed for {Namespace}/{PodName}", namespaceName, podName);
             return FormatApiException("Pod diagnostics failed", ex);
         }
     }
@@ -156,8 +160,9 @@ public sealed partial class K8sManager
                 events
             }, JsonOptions);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
+            logger.LogError(ex, "Service diagnostics failed for {Namespace}/{Name}", namespaceName, name);
             return FormatApiException("Service diagnostics failed", ex);
         }
     }

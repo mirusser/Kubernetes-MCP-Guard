@@ -57,3 +57,50 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: infra-gate-mcp-manager
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: infra-gate-mcp-view
+  namespace: mcp-nginx-demo
+  labels:
+    app.kubernetes.io/managed-by: infra-gate-mcp
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: infra-gate-mcp-viewer
+  namespace: mcp-nginx-demo
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: infra-gate-mcp-viewer
+  namespace: mcp-nginx-demo
+subjects:
+  - kind: ServiceAccount
+    name: infra-gate-mcp-view
+    namespace: mcp-nginx-demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: infra-gate-mcp-viewer

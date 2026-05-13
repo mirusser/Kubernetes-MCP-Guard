@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using InfraGate.Approvals;
 using InfraGate.McpServer;
@@ -490,7 +491,7 @@ public sealed class K8sManagerApplyTests
                 SkipTlsVerify = true
             });
 
-        return new ManagerContext(new K8sManager(options, approvalStore, client!), approvalStore);
+        return new ManagerContext(new K8sManager(options, approvalStore, client!, NullLogger<K8sManager>.Instance), approvalStore);
     }
 
     private static async Task<string> ApproveRequestPlanAsync(ManagerContext context, string requestText)

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using InfraGate.Approvals;
 using InfraGate.McpServer;
 using k8s;
@@ -222,7 +223,7 @@ public sealed class K8sToolsTests
         var client = api is null
             ? null
             : new Kubernetes(new KubernetesClientConfiguration { Host = api.Url, SkipTlsVerify = true });
-        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client!);
+        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client!, NullLogger<K8sManager>.Instance);
     }
 
     private static (K8sManager Manager, ApprovalStore Store) CreateManagerContext(TestKubernetesApi api)
@@ -233,7 +234,7 @@ public sealed class K8sToolsTests
             root);
         var store = new ApprovalStore(new ApprovalStoreOptions(root));
         var client = new Kubernetes(new KubernetesClientConfiguration { Host = api.Url, SkipTlsVerify = true });
-        return (new K8sManager(options, store, client), store);
+        return (new K8sManager(options, store, client, NullLogger<K8sManager>.Instance), store);
     }
 
     private static async Task PreApprovePlanAsync(ApprovalStore store, string planId)

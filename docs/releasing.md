@@ -18,7 +18,8 @@ This file owns the release process for Kubernetes MCP Guard. Releases are marked
 12. Mark the GitHub release as **pre-release** while the project is experimental.
 13. Verify quickstart commands (compose, README) reference the released tag.
 14. Verify no secrets, tokens, or live credentials are present in docs, logs, sample manifests, or example env files.
-15. Run the published-image smoke test from Epic 2 against the release tag before announcing.
+15. Run the Keycloak published-image smoke test against the release tag before announcing.
+16. During the DevIssuer deprecation window, run the DevIssuer fallback smoke test when DevIssuer changed.
 
 ## Release Notes Template
 
@@ -60,13 +61,20 @@ Experimental. Not recommended for production workloads.
 
 ## Smoke Test
 
-Run the published-image smoke test manually against the release tag before announcing:
+Run the Keycloak published-image smoke test manually against the release tag before announcing:
+
+```bash
+./scripts/create-demo-kubeconfig.sh --compose
+TAG=vX.Y.Z ./scripts/smoke-test-keycloak-release.sh
+```
+
+The script boots `deploy/mode-d/compose.release.yaml` from GHCR, waits for Keycloak discovery and the gateway HTTP server, asserts the gateway returns a well-formed 401 auth challenge, acquires a real Keycloak token through `mcp-smoke-client`, confirms `/mcp` is not rejected with 401/403, then tears everything down. It exits non-zero and dumps logs on failure.
+
+The deprecated DevIssuer fallback smoke remains available while Mode C exists:
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
 TAG=vX.Y.Z ./scripts/smoke-test-release.sh
 ```
-
-The script boots `deploy/mode-c/compose.release.yaml` from GHCR, waits for both the DevIssuer OIDC discovery endpoint and the gateway HTTP server, asserts the gateway returns a well-formed 401 auth challenge, then tears everything down. It exits non-zero and dumps logs on failure.
 
 A CI workflow (`release-smoke-test.yml`) is planned once a Kubernetes-in-CI path (kind) is in place; until then this step is manual.

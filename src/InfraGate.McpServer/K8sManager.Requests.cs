@@ -3,13 +3,16 @@ using InfraGate.McpServer.Diff;
 using InfraGate.McpServer.Policy;
 using k8s;
 using k8s.Models;
+using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpServer;
 
+// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 public sealed partial class K8sManager
 {
     public async Task<string> RequestApplyManifestAsync(string namespaceName, string manifest, CancellationToken cancellationToken)
     {
+        logger.LogInformation("Requesting apply plan in {Namespace} (manifest length: {ManifestLength})", namespaceName, manifest.Length);
         var validation = ValidateNamespace(namespaceName);
         if (validation is not null)
         {
@@ -52,6 +55,7 @@ public sealed partial class K8sManager
 
     public async Task<string> RequestDeleteManifestAsync(string namespaceName, string manifest, CancellationToken cancellationToken)
     {
+        logger.LogInformation("Requesting delete plan in {Namespace} (manifest length: {ManifestLength})", namespaceName, manifest.Length);
         var validation = ValidateNamespace(namespaceName);
         if (validation is not null)
         {
@@ -87,6 +91,7 @@ public sealed partial class K8sManager
 
     public async Task<string> RequestScaleDeploymentAsync(string namespaceName, string name, int replicas, CancellationToken cancellationToken)
     {
+        logger.LogInformation("Requesting scale plan for Deployment {Namespace}/{Name} to {Replicas} replicas", namespaceName, name, replicas);
         var validation = ValidateNamespace(namespaceName) ?? ValidateName(name) ?? ValidateReplicas(replicas);
         if (validation is not null)
         {
@@ -113,6 +118,7 @@ public sealed partial class K8sManager
 
     public async Task<string> RequestRestartDeploymentAsync(string namespaceName, string name, CancellationToken cancellationToken)
     {
+        logger.LogInformation("Requesting restart plan for Deployment {Namespace}/{Name}", namespaceName, name);
         var validation = ValidateNamespace(namespaceName) ?? ValidateName(name);
         if (validation is not null)
         {
@@ -145,6 +151,7 @@ public sealed partial class K8sManager
         string image,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation("Requesting set-image plan for Deployment {Namespace}/{Name} container {Container} to {Image}", namespaceName, name, container, image);
         var validation = ValidateNamespace(namespaceName) ??
             ValidateName(name) ??
             ValidateRequiredText(container, "Container name") ??
@@ -173,8 +180,9 @@ public sealed partial class K8sManager
                 DryRunSetDeploymentImageAsync(namespaceName, name, container, image, cancellationToken),
                 cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "Deployment image plan failed for {Namespace}/{Name} container {Container}", namespaceName, name, container);
             return FormatApiException("Deployment image plan failed", ex);
         }
     }
@@ -194,11 +202,25 @@ public sealed partial class K8sManager
         var dryRun = await dryRunTask;
         if (!dryRun.Succeeded || dryRun.DryRun is null)
         {
-            await WriteDryRunFailedAuditAsync(
-                K8sConventions.DryRunPhases.Request,
-                plan,
-                dryRun.Message,
-                cancellationToken);
+            logger.LogWarning("Server-side dry-run failed for plan {PlanId} ({Operation} in {Namespace}): {Message}",
+                plan.Id, plan.Operation, plan.Namespace, dryRun.Message);
+
+            // Audit write must not mask the dry-run error — catch separately so we
+            // always return the human-readable refusal even if the store is unavailable.
+            try
+            {
+                await WriteDryRunFailedAuditAsync(
+                    K8sConventions.DryRunPhases.Request,
+                    plan,
+                    dryRun.Message,
+                    cancellationToken);
+            }
+            catch (Exception auditEx)
+            {
+                logger.LogError(auditEx,
+                    "Failed to write dry-run audit for plan {PlanId}; approval store may be unavailable",
+                    plan.Id);
+            }
 
             return FormatRequestDryRunRefusal(dryRun.Message);
         }
@@ -219,15 +241,19 @@ public sealed partial class K8sManager
                 planWithDryRun.DryRun.Objects,
                 cancellationToken);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
+            logger.LogError(ex, "Diff generation failed for plan {PlanId} targeting namespace {Namespace}", plan.Id, plan.Namespace);
             var message = FormatApiException("Diff generation failed", ex);
             await WriteDiffFailedAuditAsync(plan, message, cancellationToken);
 
             return $"Diff generation failed; no approval plan was created.{Environment.NewLine}{message}";
         }
 
-        return await CreateAndFormatPlanAsync(planWithDryRun with { Diffs = diffs }, policyResult, cancellationToken);
+        var formatted = await CreateAndFormatPlanAsync(planWithDryRun with { Diffs = diffs }, policyResult, cancellationToken);
+        logger.LogInformation("Approval plan {PlanId} created ({Operation} in {Namespace}, {ObjectCount} object(s))",
+            planWithDryRun.Id, planWithDryRun.Operation, planWithDryRun.Namespace, planWithDryRun.Objects.Length);
+        return formatted;
     }
 
     private async Task<string> CreateAndFormatPlanAsync(
@@ -235,7 +261,19 @@ public sealed partial class K8sManager
         K8sPolicyResult? policyResult,
         CancellationToken cancellationToken)
     {
-        var result = await approvalStore.CreatePlanAsync(plan, cancellationToken);
+        ApprovalPlanResult result;
+        try
+        {
+            result = await approvalStore.CreatePlanAsync(plan, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Failed to persist approval plan {PlanId} to store; check that the approval root directory is writable by the container",
+                plan.Id);
+            return $"Failed to create approval plan: {ex.Message}";
+        }
+
         var objects = string.Join(
             Environment.NewLine,
             result.Plan.Objects.Select(obj => $"  - {obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}"));
@@ -275,7 +313,7 @@ public sealed partial class K8sManager
         };
     }
 
-    private K8sPlan CreateSetDeploymentImagePlan(
+    private static K8sPlan CreateSetDeploymentImagePlan(
         string namespaceName,
         string name,
         string container,

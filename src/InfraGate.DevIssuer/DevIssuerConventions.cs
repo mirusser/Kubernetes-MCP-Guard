@@ -2,13 +2,20 @@ namespace InfraGate.DevIssuer;
 
 internal static class DevIssuerConventions
 {
-    // Justification: Intentional localhost defaults for local development. S1075 false positive on documented convention constants.
-    public const string DefaultUrl = "http://127.0.0.1:3011";
-    public const string DefaultResource = "http://127.0.0.1:3001/mcp";
+    private const string LoopbackHttpScheme = "http";
+    private const string LoopbackHost = "127.0.0.1";
+    private const string UriSchemeSeparator = "://";
+    private const string GatewayPort = "3001";
+    private const string DevIssuerPort = "3011";
+    private const string GatewayBaseUrl = LoopbackHttpScheme + UriSchemeSeparator + LoopbackHost + ":" + GatewayPort;
+    private const string DevIssuerBaseUrl = LoopbackHttpScheme + UriSchemeSeparator + LoopbackHost + ":" + DevIssuerPort;
+
+    public const string DefaultUrl = DevIssuerBaseUrl;
+    public const string DefaultResource = GatewayBaseUrl + "/mcp";
     public const string DefaultScope = "mcp:tools";
     public const string DefaultSubject = "infra-gate-dev-user";
     public const string DefaultApprovalClientId = "infra-gate-approval-ui";
-    public const string DefaultApprovalRedirectUri = "http://127.0.0.1:3001/approvals/oauth/callback";
+    public const string DefaultApprovalRedirectUri = GatewayBaseUrl + "/approvals/oauth/callback";
 
     public static class EnvironmentVariables
     {

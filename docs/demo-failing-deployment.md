@@ -6,7 +6,7 @@ The demo runs entirely against the local minikube cluster set up by the project'
 
 ## Prerequisites
 
-- Gateway and DevIssuer running per [README "How To Run"](../README.md#how-to-run-) (Option 1 — published images, or Option 2 — build from source).
+- Gateway and Keycloak running per [README "Quick Start"](../README.md#-quick-start) (published images or build from source). The deprecated DevIssuer Mode C also works, but Mode D is the reference path.
 - `./scripts/create-demo-kubeconfig.sh --compose` already executed in this checkout (this provisions the `mcp-nginx-demo` namespace, RBAC, ServiceAccount, and the kubeconfig the gateway mounts).
 - An MCP client connected to `http://127.0.0.1:3001/mcp`. Codex CLI per the README is the reference client. Approval happens in the Gateway browser UI returned by `apply_approved_plan`.
 - `kubectl` available locally — only needed in [Step 1](#step-1--deploy-the-broken-workload) and [Step 8](#step-8--cleanup) to apply and remove the broken manifest directly. The fix is applied through the gateway.
@@ -95,14 +95,14 @@ Re-run the read-only tools from Step 2:
 
 ## Step 7 — Inspect the audit
 
-Two JSONL streams record the demo. Both live under volumes mounted by `deploy/mode-c/compose.yaml` and `deploy/mode-c/compose.release.yaml`.
+Two JSONL streams record the demo. Both live under volumes mounted by `deploy/mode-d/compose.yaml` and `deploy/mode-d/compose.release.yaml` (or the matching Mode C files if you intentionally run the deprecated DevIssuer fallback).
 
 ### Server-side (`.mcp-approvals/audit.jsonl`)
 
 Records the plan lifecycle: `plan_requested`, `plan_approved`, `plan_applied` (and on a tampered plan, `approval_hash_mismatch` + `apply_denied`). One entry shape:
 
 ```json
-{"timestampUtc":"2026-05-03T12:34:56.789Z","eventName":"plan_applied","payload":{"id":"20260503-a1b2c3d4","operation":"setImage","namespace":"mcp-nginx-demo","hash":"sha256:…"}}
+{"timestampUtc":"2026-05-03T12:34:56.789Z","eventName":"plan_applied","payload":{"planId":"20260503-a1b2c3d4","operation":"setImage","namespace":"mcp-nginx-demo","hash":"sha256:…"}}
 ```
 
 ### Gateway-side (`.mcp-guardrails/audit.jsonl`)

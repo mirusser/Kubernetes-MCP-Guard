@@ -1,0 +1,53 @@
+# deploy/mode-d/compose.release.yaml
+# Keycloak + MCP Gateway — published gateway image from GHCR.
+# Override the release tag with: TAG=vX.Y.Z docker compose -f deploy/mode-d/compose.release.yaml up
+# Docker Hub alternate for the gateway image: mirusser/kubernetes-mcp-guard-gateway:${TAG}
+# Keycloak is always pulled from quay.io/keycloak/keycloak (no GHCR equivalent).
+# Prerequisites: ./scripts/create-demo-kubeconfig.sh --compose
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6.1
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+    ports:
+      - "${KEYCLOAK_BIND_ADDRESS:-127.0.0.1}:${KEYCLOAK_PORT:-3010}:8080"
+    volumes:
+      - ../keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 10s
+
+  mcp-gateway:
+    image: ghcr.io/mirusser/kubernetes-mcp-guard-gateway:${TAG:-latest}
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      INFRA_GATE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:3001
+      INFRA_GATE_OAUTH_AUTHORITY: http://127.0.0.1:${KEYCLOAK_PORT:-3010}/realms/infra-gate
+      INFRA_GATE_OAUTH_METADATA_ADDRESS: http://keycloak:8080/realms/infra-gate/.well-known/openid-configuration
+      INFRA_GATE_OAUTH_RESOURCE: http://127.0.0.1:${GATEWAY_PORT:-3001}/mcp
+      INFRA_GATE_OAUTH_SCOPE: mcp:tools
+      INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA: "false"
+      INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID: infra-gate-approval-ui
+      INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT: http://127.0.0.1:${KEYCLOAK_PORT:-3010}/realms/infra-gate/protocol/openid-connect/auth
+      INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
+      INFRA_GATE_APPROVAL_BASE_URL: http://127.0.0.1:${GATEWAY_PORT:-3001}
+      INFRA_GATE_DOWNSTREAM_ASSEMBLY: /app/server/InfraGate.McpServer.dll
+      INFRA_GATE_GUARD_AUDIT_ROOT: /data/guardrails
+      KUBECONFIG: /run/kube/mcp-nginx-demo.compose.config
+      K8S_MCP_APPROVAL_ROOT: /data/approvals
+      K8S_MCP_ALLOWED_NAMESPACES: mcp-nginx-demo
+    volumes:
+      - ../../.kube/mcp-nginx-demo.compose.config:/run/kube/mcp-nginx-demo.compose.config:ro
+      - ../../.mcp-approvals:/data/approvals
+      - ../../.mcp-guardrails:/data/guardrails
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-3001}:3001"
