@@ -11,4 +11,4 @@
 - Keycloak integration: `dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj --filter "Category=Keycloak"`
 - List Keycloak tests without starting Docker: `dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj --list-tests --filter "Category=Keycloak"`
 
-These tests require Docker. The `infra-gate-realm.json` test data file is loaded as the Keycloak realm config.
+These tests require Docker. The shared test realm at `tests/TestData/keycloak/infra-gate-realm.json` is loaded as the Keycloak realm config.

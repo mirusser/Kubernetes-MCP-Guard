@@ -41,7 +41,7 @@ The `PromptInjectionGuard` now decodes strings that appear to be valid base64 (>
 
 The tests do **not** scrape the real Keycloak browser login form. For browser approval operations the fixture uses a `FakeApprovalOAuthBackchannel` that returns a test JWT for any configured subject, simulating the OAuth authorization-code → token exchange. The real Keycloak callback/cookie flow is exercised indirectly (the browser approval page renders real dry-run/diff evidence), but identity is injected at the OAuth backchannel boundary, not through manual HTML form interaction.
 
-This is an intentional test-boundary choice documented in the [implementation plan](../../.agents/Plans/strengthen-safety-e2e-security-flow-plan.md). Real Keycloak JWTs remain for MCP bearer-token coverage. If a follow-up wants stricter real-OIDC coverage for approval decisions, the path is: add a second user to `deploy/keycloak/infra-gate-realm.json` and use that user for browser OAuth throughout.
+This is an intentional test-boundary choice documented in the [implementation plan](../../.agents/Plans/strengthen-safety-e2e-security-flow-plan.md). Real Keycloak JWTs remain for MCP bearer-token coverage. If a follow-up wants stricter real-OIDC coverage for approval decisions, the path is: use the second user in `tests/TestData/keycloak/infra-gate-realm.json` for browser OAuth throughout.
 
 ### Known limitations
 
@@ -230,7 +230,7 @@ You forgot `INFRA_GATE_RUN_SAFETY_E2E=1`. The test methods are still discovered,
 
 ### Approval flow refuses with "requires an authenticated OAuth subject"
 
-The MCP bearer token reached `/mcp`, but it did not contain a requester identity claim. The gateway approval flow requires `sub` or `client_id` so it can bind the browser approval to the same subject. The repo's [`deploy/keycloak/infra-gate-realm.json`](../../deploy/keycloak/infra-gate-realm.json) includes an `mcp-gateway-subject` mapper for the `mcp:tools` client scope; if you use a custom realm, add an equivalent access-token claim.
+The MCP bearer token reached `/mcp`, but it did not contain a requester identity claim. The gateway approval flow requires `sub` or `client_id` so it can bind the browser approval to the same subject. The shared test realm at [`tests/TestData/keycloak/infra-gate-realm.json`](../TestData/keycloak/infra-gate-realm.json) includes an `mcp-gateway-subject` mapper for the `mcp:tools` client scope; if you use a custom realm, add an equivalent access-token claim.
 
 ### Fixture init fails with `DockerApiException` / cannot reach Docker daemon
 
