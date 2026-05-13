@@ -2,6 +2,8 @@
 
 **Bridging the gap between AI Agents and Production Infrastructure with a Security-First Gateway.**
 
+**A Kubernetes MCP gateway with Human-in-the-Loop (HITL) approval for AI-driven operations with OAuth and guardrails**
+
 
 [![Unit Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml)
 [![Integration Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml)
@@ -13,45 +15,58 @@
 
 
 ## 🎯 The Problem
-Giving AI agents direct access to Kubernetes is risky. Without a safety layer, an LLM "hallucination" or a prompt injection could accidentally delete a production namespace or leak sensitive secrets.
+Giving AI agents direct access to Kubernetes is risky. Without a safety layer, an LLM hallucination, prompt injection, or overbroad credential could turn a suggestion into an unsafe cluster change.
 
 ## 🚀 The Solution
-Kubernetes-MCP-Guard is a high-performance gateway built on .NET 10 and the Model Context Protocol (MCP). It provides a secure, audited, and human-gated interface that allows AI agents (like Claude Code or Open WebUI) to interact with your clusters without compromising safety.
+Kubernetes-MCP-Guard is a .NET 10 gateway for the Model Context Protocol (MCP). AI agents can inspect bounded Kubernetes state and request changes, but mutations are staged as dry-run plans and require an OAuth-authenticated human to approve the exact Gateway-rendered plan in a separate browser session before anything is applied.
 
 ## 💎 Key Business Value
 
-- **Human-in-the-Loop Governance:** AI can propose changes, but only a human can approve the final execution plan — via a separate browser-based approval flow that the MCP client cannot intercept or answer on the human's behalf.
-- **Enterprise-Grade Security:** Integrated with OAuth-aware authentication and Namespace-scoped RBAC to ensure the AI only sees what it is allowed to see.
-- **AI Safety & Auditing:** Built-in prompt-injection guardrails and full audit logging for compliance and troubleshooting
-- **Cutting-Edge Stack:** Architected using the latest .NET 10 features and the industry-standard MCP protocol.
+- **Browser-based HITL approval:** AI can propose a change, but only the authenticated human requester can approve or deny the final plan through the Gateway approval UI.
+- **Separated trust channels:** MCP clients receive an approval URL, while approval happens through `/approvals/*` with a browser OAuth cookie, anti-forgery checks, same-subject binding, and a short-lived challenge.
+- **Bounded Kubernetes access:** Namespace allow-lists, namespace-scoped RBAC, typed tools, and supported-kind checks keep the Kubernetes surface narrow.
+- **Auditable safety controls:** Prompt-injection guardrails, approval audit events, plan hashes, dry-runs, and drift checks make decisions traceable before and after execution.
 
 ---
 
 ## 🗺️ System Architecture
 
-The following diagram illustrates the secure request flow from the AI client through the Guardrails and into the Kubernetes cluster.
+The following diagram shows the two trust channels: the AI-facing MCP path and the browser-based HITL approval path. The MCP client can request and retry a plan, but approval is handled by the Gateway UI through a separate human browser session.
 
 ```mermaid
 ---
 title: Kubernetes-MCP-Guard Flow
 ---
 flowchart TB
-    Client["MCP client<br/>Codex / Open WebUI / LibreChat"]
+    Client["MCP client<br/>Codex / Claude Code / Open WebUI"]
+    Browser["Human browser<br/>/approvals/* approval UI"]
 
     subgraph Gateway["HTTP MCP Gateway"]
-        Auth["OAuth JWT auth"]
-        Guardrails["Prompt-injection guardrails"]
-        Audit["Guardrail audit log"]
+        Auth["OAuth JWT auth<br/>scope checks"]
+        Guardrails["Prompt-injection guardrails<br/>response sanitization"]
+        ApprovalUI["Browser approval endpoints<br/>OAuth cookie + anti-forgery"]
+        Audit["JSONL audit logs"]
         Auth --> Guardrails
         Guardrails --> Audit
+        ApprovalUI --> Audit
     end
 
-    subgraph Server["Kubernetes MCP Server"]
+    subgraph Store["Shared approval store"]
+        Pending["pending plan<br/>dry-run + SHA-256 hash"]
+        Challenge["single-use challenge<br/>requester subject + TTL"]
+        Approved["approved hash<br/>applied marker"]
+        Pending --> Challenge
+        Challenge --> Approved
+    end
+
+    subgraph Server["Kubernetes MCP Server (stdio)"]
         Tools["Typed Kubernetes tools"]
         ReadOnly["Bounded read-only observability"]
-        Plans["Approval-gated mutation plans"]
+        Plans["Dry-run mutation plans"]
+        Apply["Exact approved apply"]
         Tools --> ReadOnly
         Tools --> Plans
+        Tools --> Apply
     end
 
     subgraph Kubernetes["Kubernetes boundary"]
@@ -60,16 +75,21 @@ flowchart TB
         RBAC --> API
     end
 
-    Client --> Auth
-    Guardrails --> Tools
+    Client -->|"/mcp + JWT"| Auth
+    Guardrails -->|"stdio, no token passthrough (*yet)"| Tools
+    Plans --> Pending
+    Client -.->|"approval URL shown to user"| Browser
+    Browser -->|"/approvals/* + OAuth cookie"| ApprovalUI
+    ApprovalUI --> Challenge
+    Approved --> Apply
     ReadOnly --> RBAC
-    Plans --> RBAC
+    Apply --> RBAC
 ```
 
 
 ### 🔐 How Approval-Gated Mutations Work
 
-The diagram below shows what happens when an AI agent tries to make a change to your cluster. The key point: **the AI cannot approve its own requests**. Approval happens in your browser, on a completely separate channel with its own login.
+The diagram below shows what happens when an AI agent tries to change your cluster. The key point: **the AI cannot approve its own requests**. Approval happens in your browser through a separate OAuth-authenticated session bound to the same subject that requested the plan.
 
 ```mermaid
 ---
@@ -83,23 +103,22 @@ flowchart TB
 
     subgraph AI["① AI / MCP Channel"]
         direction TB
-        A1["🤖 AI agent requests a change e.g. scale deployment to 3 replicas"]
+        A1["🤖 AI agent requests a change, for example scale deployment to 3 replicas"]
         A2["Gateway validates identity; server dry-runs and creates a pending plan locked with a SHA-256 hash"]
-        A3["⛔ AI receives an approval URL only.
-         It cannot approve on your behalf"]
+        A3["⛔ AI receives only an approval URL<br/>It cannot approve on your behalf"]
         A4["AI calls apply again once human has approved"]
     end
 
-    subgraph OOB["② Your Browser  —  separate login, separate session"]
+    subgraph OOB["② Your Browser - separate login, separate session"]
         direction TB
         B1["🔗 You open the approval URL in your browser"]
         B2["You log in with OAuth independent of the AI session"]
-        B3["Browser shows the real plan rendered by the Gateway from disk not by the AI"]
+        B3["Browser shows the real plan rendered by the Gateway from disk, not by the AI"]
         B4["You review: operation, namespace, affected objects, expiry time"]
         B5["✅ You click Approve  or  ❌ Deny"]
     end
 
-    K8s["☸️ Kubernetes Change is applied only after both channels agree"]
+    K8s["☸️ Kubernetes change is applied only after approval, a second dry-run, and drift checks"]
 
     A1 --> A2 --> A3
     A3 -.->|"URL shown to AI, opened by you"| B1
@@ -112,7 +131,7 @@ flowchart TB
     class K8s k8s
 ```
 
-<sub><em>Even if the AI agent is compromised, it cannot self-approve. The approval must come from your browser session a channel the AI has no control over.</em></sub>
+<sub><em>Even if the AI agent is compromised, it cannot self-approve. Approval must come from your browser session, a channel the AI does not control.</em></sub>
 <sub><em>Simplified architectural graph. Full version [here](docs/architecture.md)</em></sub>
 
 #### The Three Security Gates
@@ -122,30 +141,19 @@ Every mutation passes through three independent checkpoints. Each one can block 
 | Phase | What happens | What can block it |
 |---|---|---|
 | **① Plan** | AI calls `request_*`; server runs a server-side dry-run and policy checks; computes a SHA-256 hash of the pending plan and stores it | Dry-run failure, policy violation (privileged containers, hostPath, dangerous caps, …) |
-| **② Approve** | Human opens the approval URL; browser renders the plan from the server-side file — not the AI's description; human clicks Approve | Challenge expired (15 min TTL), approver identity doesn't match requester, or the plan file was modified after the hash was captured |
-| **③ Execute** | AI calls `apply_approved_plan`; server re-checks the hash, re-runs the dry-run, checks live-state drift | Hash mismatch (payload was swapped), no approval on file, plan already applied, second dry-run failure, or live state drifted since approval |
+| **② Approve** | Human opens the approval URL; browser renders the plan from the server-side file, not the AI's description; human clicks Approve or Deny | Challenge expired (default 15 min TTL), approver subject does not match requester, anti-forgery validation fails, or the plan hash changed after the URL was created |
+| **③ Execute** | AI calls `apply_approved_plan` again; server re-checks the approved hash, re-runs the dry-run, and checks live-state drift | Hash mismatch, no approved challenge on file, plan already applied, second dry-run failure, policy failure on re-validation, or live state drifted since approval |
 
-The hash from Phase ① is the integrity seal that links all three phases. If the plan is modified between Phase ① and the human's click in Phase ②, the hash comparison fails and approval is refused. If the plan is modified after approval but before Phase ③, execution is refused. There is no path from Phase ① to Phase ③ that skips the hash check.
+The hash from Phase ① is the integrity seal that links all three phases. If the plan changes before approval, the browser approval is refused. If it changes after approval but before execution, `apply_approved_plan` is refused. After a successful apply, the applied marker blocks reuse of the same plan.
 
-### 🛠️ Technical & Architectural Highlights
+### 🛠️ Technical Architecture
 
-- **AI Integration & Safety:** Deep implementation of Model Context Protocol (MCP), handling tool contracts, out-of-band approval workflows, and mitigating prompt-injection risks within model-visible data.
-
-- **Security & Identity:** Implemented OAuth 2.0 resource-server patterns, including scope enforcement, identity-based audit logging, and strict Least-Privilege RBAC for Kubernetes interactions.
-
-- **Cloud-Native Engineering:** Advanced usage of the Official Kubernetes .NET Client, utilizing Server-Side Apply (SSA) for dry-run planning, real-time Pod log streaming, and namespace isolation.
-
-- **Modern .NET 10 Stack:** Built with a focus on Clean Architecture, leveraging Dependency Injection, high-performance Async/Await patterns, and a modular project structure that separates Auth, Gateway, and Core logic.
-
-- **Product Mindset:** Prioritized a "small operational surface" and human-readable audit logs, ensuring the tool is as safe for a human SRE as it is powerful for an AI agent.
-
-##### 🏗️ Implementation Details:
-- Exposes Kubernetes operations through the Model Context Protocol (MCP), with a stdio Kubernetes server behind a local HTTP gateway.
-- Uses the Kubernetes API via `KubernetesClient`; it does not shell out to `kubectl` for runtime operations.
-- Adds OAuth authentication at the gateway, including MCP protected-resource metadata, insufficient-scope challenges, and browser approval sessions.
-- Applies prompt-injection guardrails around model-visible tool input/output, with warn, redact, and audit behavior.
-- Keeps mutation paths approval-gated: create a plan first, approve it in the Gateway browser UI, then apply the exact approved plan.
-- Limits Kubernetes blast radius with namespace-scoped RBAC and typed, bounded tool surfaces.
+- **MCP gateway boundary:** The HTTP gateway exposes `/mcp`, validates OAuth JWT issuer, audience, lifetime, signature, and scope, then forwards tool calls to a private stdio Kubernetes MCP server without passing bearer tokens downstream.
+- **OAuth-aware clients:** The gateway publishes MCP protected-resource metadata and returns insufficient-scope challenges so MCP clients can discover the required resource and `mcp:tools` scope. Browser approval pages use an OAuth code flow and a Gateway cookie.
+- **Guarded model-visible data:** The gateway scans tool arguments and responses for prompt-injection patterns, warns or redacts suspicious content, and writes JSONL guardrail audit events with the resolved OAuth identity.
+- **Dry-run-first mutations:** `request_*` tools create pending plans only after Kubernetes `dryRun=All` succeeds. Browser approval renders the stored server-side plan, dry-run result, policy findings, and diff.
+- **Hash-bound execution:** Approved applies require the stored SHA-256 hash to match, re-run Kubernetes dry-run immediately before the write, re-check policy where relevant, detect live-state drift, and mark plans as applied.
+- **Narrow Kubernetes surface:** Runtime operations use the Kubernetes .NET client, namespace allow-lists, namespace-scoped RBAC, bounded read-only tools, and mutation support limited to `Deployment`, `Service`, `ConfigMap`, and narrow Deployment operations.
 
 ## 📦 Container Images
 
@@ -277,7 +285,7 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 | .NET | .NET 10 |
 | Kubernetes | minikube / local cluster initially |
 | MCP transport | HTTP MCP endpoint at `/mcp` |
-| OIDC | Keycloak (primary local/dev path), DevIssuer (deprecated local fallback), Entra ID later |
+| OIDC | Keycloak (primary local/dev path), DevIssuer (deprecated local fallback), external OIDC providers by configuration |
 | Container registries | GHCR, Docker Hub |
 | Platforms | linux/amd64 initially |
 
