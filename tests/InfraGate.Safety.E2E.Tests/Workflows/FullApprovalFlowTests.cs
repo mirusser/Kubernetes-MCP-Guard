@@ -50,8 +50,8 @@ public sealed class FullApprovalFlowTests(SafetyE2EFixture fixture)
         var page = await browser.GetAsync($"/approvals/{challengeId}");
         page.EnsureSuccessStatusCode();
         var pageText = await page.Content.ReadAsStringAsync();
-        Assert.Contains($"PlanId</dt><dd>{planId}</dd>", pageText, StringComparison.Ordinal);
-        Assert.Contains("Plan hash", pageText, StringComparison.Ordinal);
+        Assert.Contains($"<code>{planId}</code>", pageText, StringComparison.Ordinal);
+        Assert.Contains("Plan Hash", pageText, StringComparison.Ordinal);
         Assert.Contains("Server-side dry-run: succeeded", pageText, StringComparison.Ordinal);
         Assert.Contains("<h2>Diff</h2>", pageText, StringComparison.Ordinal);
         Assert.Contains($"{fixture.Namespace}/nginx-demo", pageText, StringComparison.Ordinal);

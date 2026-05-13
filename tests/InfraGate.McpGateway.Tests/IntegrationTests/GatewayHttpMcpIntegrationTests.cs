@@ -301,8 +301,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         var page = await browser.GetAsync($"/approvals/{challengeId}");
         page.EnsureSuccessStatusCode();
         var pageText = await page.Content.ReadAsStringAsync();
-        Assert.Contains($"PlanId</dt><dd>{planId}</dd>", pageText);
-        Assert.Contains("Plan hash", pageText);
+        Assert.Contains($"<code>{planId}</code>", pageText);
+        Assert.Contains("Plan Hash", pageText);
         Assert.Contains("Server-side dry-run: succeeded", pageText);
         Assert.Contains("Dry-run Objects", pageText);
         Assert.Contains("299 - admission warning", pageText);
