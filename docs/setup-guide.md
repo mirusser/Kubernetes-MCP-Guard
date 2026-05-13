@@ -8,15 +8,15 @@ graph LR
     Gateway["InfraGate.McpGateway<br/>HTTP :3001/mcp"]
     Auth["McpGateway.Auth<br/>bearer / OAuth JWT"]
     Server["InfraGate.McpServer<br/>private stdio subprocess"]
-    DevIssuer["InfraGate.DevIssuer<br/>localhost OAuth :3011"]
+    Keycloak["Keycloak<br/>local OAuth :3010"]
     K8s["Kubernetes API<br/>(minikube)"]
 
     Client -- "HTTP MCP + token" --> Gateway
     Gateway --> Auth
     Gateway -- "stdio subprocess" --> Server
     Server -- ".NET KubernetesClient" --> K8s
-    Client -. "OAuth discovery/login" .-> DevIssuer
-    DevIssuer -. "JWT validation" .-> Gateway
+    Client -. "OAuth discovery/login + DCR" .-> Keycloak
+    Keycloak -. "JWKS / issuer metadata" .-> Gateway
 ```
 
 **Four source projects, three runtime processes:**
@@ -26,9 +26,10 @@ graph LR
 | `InfraGate.McpServer` | Kubernetes MCP server (tools, plans, approvals) | stdio child process |
 | `InfraGate.McpGateway` | HTTP MCP endpoint + guardrails + audit | HTTP server `:3001` |
 | `InfraGate.McpGateway.Auth` | Auth library (OAuth JWT + browser approval cookie) | Linked into Gateway |
-| `InfraGate.DevIssuer` | Dev-only OAuth/OIDC issuer | HTTP server `:3011` (optional) |
+| Keycloak realm | Primary local OAuth/OIDC issuer | Container `:3010` |
+| `InfraGate.DevIssuer` | Deprecated localhost OAuth/OIDC fallback | HTTP server `:3011` (optional) |
 
-In source mode all three processes run separately. In the containerized OAuth mode, the gateway and server share a single container (the gateway launches the server as a stdio subprocess), so only two containers run: `mcp-gateway` and `devissuer`.
+In the recommended containerized OAuth mode, Keycloak and the gateway run as separate containers. The gateway launches the server as a private stdio subprocess, so there is no separate network-facing MCP server process. DevIssuer remains available through Mode C for fallback compatibility checks.
 
 ---
 
@@ -131,7 +132,7 @@ All tests should pass without a Kubernetes cluster. Integration tests are opt-in
 
 ## Running the Solution
 
-You have **three modes** depending on what you need. Pick whichever suits your current workflow:
+You have **four modes** depending on what you need. For OAuth work, prefer Mode D.
 
 ---
 
@@ -187,9 +188,9 @@ codex mcp add infra-gate \
 
 ---
 
-### Mode B — HTTP Gateway + OAuth (DevIssuer)
+### Mode B — HTTP Gateway + OAuth (DevIssuer, deprecated fallback)
 
-Use this for the full OAuth/OIDC flow (e.g., testing Codex CLI `mcp login`). The recommended local path is Docker Compose: the gateway and dev issuer run on a Docker bridge network, and the gateway launches the Kubernetes MCP server as a private stdio subprocess. For production identity providers, see the [Production OIDC Guide](production-oidc.md).
+Use this only when you specifically need the deprecated in-memory DevIssuer path. The recommended local OAuth path is Mode D with Keycloak. For production identity providers, see the [Production OIDC Guide](production-oidc.md).
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
@@ -241,7 +242,7 @@ Tradeoff: keeping `InfraGate.McpServer` as a private stdio subprocess makes setu
 
 #### Mode B — Run from published images
 
-This is the fastest path to evaluate the gateway. It pulls released images from GHCR (Docker Hub equivalents are listed below). Use this when you do not need to modify source.
+This pulls the deprecated DevIssuer fallback images from GHCR (Docker Hub equivalents are listed below). Use Mode D unless you are intentionally checking DevIssuer compatibility.
 
 **Prerequisites:**
 
@@ -269,7 +270,7 @@ ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:${TAG} → mirusser/kubernetes-m
 ghcr.io/mirusser/kubernetes-mcp-guard-gateway:${TAG}   → mirusser/kubernetes-mcp-guard-gateway:${TAG}
 ```
 
-After release, the published-image path is verified by `scripts/smoke-test-release.sh` (see [Verification](#verification)).
+During the deprecation window, this published-image path is still verified by `scripts/smoke-test-release.sh` (see [Verification](#verification)).
 
 The same tradeoffs as the build-from-source Compose path apply: the gateway image bundles the server binary, and the server cannot be scaled or restarted independently.
 
@@ -360,6 +361,18 @@ If the network is missing (e.g. minikube was started with a different driver), a
 | `demo` | `demo` |
 | `demo2` | `demo2` |
 
+**Pre-configured clients and scopes**:
+
+| Client/scope | Purpose |
+|---|---|
+| `mcp-client` | Public authorization-code client for MCP clients; PKCE S256 configured; direct password grant disabled |
+| `mcp-smoke-client` | Local/test direct-grant client for non-browser token acquisition and smoke checks |
+| `mcp-client-limited` | Valid-audience client without `mcp:tools`, used to verify 403 insufficient-scope behavior |
+| `infra-gate-approval-ui` | Public PKCE client for browser approval sessions |
+| `mcp:tools` | Client scope with the audience mapper for `http://127.0.0.1:3001/mcp` |
+
+Anonymous OIDC Dynamic Client Registration is enabled for this local/demo realm and constrained to trusted loopback hosts (`localhost`, `127.0.0.1`, and `host.docker.internal`) plus the local scopes above. Do not copy anonymous DCR into production without replacing it with controlled registration or admin-managed clients.
+
 **Codex CLI config** (`~/.codex/config.toml`):
 
 ```toml
@@ -398,7 +411,9 @@ Then run `/mcp` inside Claude Code to trigger the OAuth login flow against Keycl
 TAG=vX.Y.Z docker compose -f deploy/mode-d/compose.release.yaml up
 ```
 
-Keycloak is always pulled from `quay.io/keycloak/keycloak:26.2`; the gateway image is pulled from GHCR. Replace `vX.Y.Z` with the release tag from <https://github.com/mirusser/Kubernetes-MCP-Guard/releases>.
+Keycloak is pulled from `quay.io/keycloak/keycloak:26.6.1`; the gateway image is pulled from GHCR. Replace `vX.Y.Z` with the release tag from <https://github.com/mirusser/Kubernetes-MCP-Guard/releases>.
+
+After release, the Keycloak published-image path is verified by `scripts/smoke-test-keycloak-release.sh` (see [Verification](#verification)).
 
 **Docker Hub alternate for the gateway image** (substitute into `compose.release.yaml` if preferred):
 
@@ -467,6 +482,7 @@ dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.Keyclo
 INFRA_GATE_RUN_SAFETY_E2E=1 dotnet test tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj --no-build
 
 # Compose config validation
+docker compose -f deploy/mode-d/compose.yaml config
 docker compose -f deploy/mode-c/compose.yaml config
 
 # Check cluster state after integration tests
@@ -514,6 +530,8 @@ The canonical environment variable, CI/CD, and release configuration reference i
 │   └── mode-d/compose.release.yaml       # Keycloak + Gateway (published images)
 ├── scripts/
 │   ├── create-demo-kubeconfig.sh         # Bootstrap RBAC & generate kubeconfig
+│   ├── smoke-test-keycloak-release.sh    # Mode D published-image smoke
+│   ├── smoke-test-release.sh             # Mode C DevIssuer fallback smoke
 │   └── approve-plan.sh                   # Manual dev-only hash approval helper
 ├── .kube/                                # Generated kubeconfigs (gitignored)
 ├── .mcp-approvals/                       # Plan files: pending/, approved/, applied/ (gitignored)

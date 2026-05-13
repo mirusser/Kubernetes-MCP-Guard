@@ -38,19 +38,35 @@ Defaults below come from the current source code and workflows. Paths shown as `
 
 | Variable | Component | Required | Default | Example | Description | Production guidance |
 | --- | --- | :---: | --- | --- | --- | --- |
-| `INFRA_GATE_OAUTH_AUTHORITY` | `InfraGate.McpGateway.Auth` | Yes | None | `http://127.0.0.1:3011` | OAuth/OIDC issuer URL used for JWT validation and protected-resource metadata. | Use a real HTTPS issuer in production; DevIssuer is development-only. Production refuses HTTP or loopback values. |
-| `INFRA_GATE_OAUTH_METADATA_ADDRESS` | `InfraGate.McpGateway.Auth` | No | Unset | `http://devissuer:3011/.well-known/openid-configuration` | Optional internal OIDC discovery URL when the gateway reaches the issuer through a different network address than clients use. | Use only when network topology requires it; issuer claims must still match `INFRA_GATE_OAUTH_AUTHORITY`. Production refuses HTTP or loopback values when set. |
+| `INFRA_GATE_OAUTH_AUTHORITY` | `InfraGate.McpGateway.Auth` | Yes | None | `http://127.0.0.1:3010/realms/infra-gate` | OAuth/OIDC issuer URL used for JWT validation and protected-resource metadata. | Use a real HTTPS issuer in production; local Keycloak and DevIssuer are development-only. Production refuses HTTP or loopback values. |
+| `INFRA_GATE_OAUTH_METADATA_ADDRESS` | `InfraGate.McpGateway.Auth` | No | Unset | `http://keycloak:8080/realms/infra-gate/.well-known/openid-configuration` | Optional internal OIDC discovery URL when the gateway reaches the issuer through a different network address than clients use. | Use only when network topology requires it; issuer claims must still match `INFRA_GATE_OAUTH_AUTHORITY`. Production refuses HTTP or loopback values when set. |
 | `INFRA_GATE_OAUTH_RESOURCE` | `InfraGate.McpGateway.Auth` | No | `http://127.0.0.1:3001/mcp` | `https://gateway.example.com/mcp` | Expected JWT audience/resource and MCP protected resource value. | Set to the externally stable HTTPS MCP resource URI and configure the IdP to issue it as an audience. Production refuses the localhost default. |
 | `INFRA_GATE_OAUTH_SCOPE` | `InfraGate.McpGateway.Auth` | No | `mcp:tools` | `mcp:tools` | Required scope checked on MCP requests and requested by the approval UI OAuth flow. | Keep scopes aligned with the IdP and client configuration. |
-| `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA` | `InfraGate.McpGateway.Auth` | No | `true` | `false` | Controls the HTTPS requirement for OIDC discovery metadata. | `false` is acceptable only for local HTTP development issuers such as DevIssuer or the Keycloak demo. Production refuses `false`. |
+| `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA` | `InfraGate.McpGateway.Auth` | No | `true` | `false` | Controls the HTTPS requirement for OIDC discovery metadata. | `false` is acceptable only for local HTTP development issuers such as the Keycloak demo or deprecated DevIssuer. Production refuses `false`. |
 | `INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID` | `InfraGate.McpGateway.Auth` | No | `infra-gate-approval-ui` | `infra-gate-approval-ui` | Public OAuth client id used by the browser approval UI. | Register this as a public PKCE client with the production IdP. |
 | `INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT` | `InfraGate.McpGateway.Auth` | No | `${INFRA_GATE_OAUTH_AUTHORITY}/authorize` | `https://issuer.example.com/realms/demo/protocol/openid-connect/auth` | Browser-visible authorization endpoint override for approval login. | Set when the provider does not expose `/authorize` under the authority root. Production requires the effective endpoint to be HTTPS and non-loopback. |
 | `INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT` | `InfraGate.McpGateway.Auth` | No | `${INFRA_GATE_OAUTH_AUTHORITY}/token` | `https://issuer.example.com/realms/demo/protocol/openid-connect/token` | Gateway-visible token endpoint override for approval login. | Use an endpoint reachable by the gateway; do not point browser-only hosts here. Production requires the effective endpoint to be HTTPS and non-loopback. |
 | `INFRA_GATE_APPROVAL_OAUTH_CALLBACK_PATH` | `InfraGate.McpGateway.Auth` | No | `/approvals/oauth/callback` | `/approvals/oauth/callback` | Local callback path used by the gateway approval UI OAuth flow. | Register the full external redirect URI with the IdP. |
 
-## DevIssuer
+## Local Keycloak Demo
 
-`InfraGate.DevIssuer` is for localhost development only. It uses in-memory clients, authorization codes, and signing keys, and refuses startup when `INFRA_GATE_ENVIRONMENT=Production`.
+Mode D (`deploy/mode-d`) and the development compose path import `deploy/keycloak/infra-gate-realm.json` into `quay.io/keycloak/keycloak:26.6.1`. The matching test realm lives at `tests/TestData/keycloak/infra-gate-realm.json`; clients, scopes, and DCR policy should remain aligned unless a test intentionally documents a difference.
+
+| Realm item | Purpose |
+| --- | --- |
+| `mcp-client` | Public authorization-code + PKCE S256 client for MCP clients. Direct password grant is disabled. |
+| `mcp-smoke-client` | Public direct-grant client used by CI/smoke tests to acquire non-browser tokens. |
+| `mcp-client-limited` | Public direct-grant client with valid audience but no `mcp:tools`, used for 403 insufficient-scope coverage. |
+| `infra-gate-approval-ui` | Public authorization-code + PKCE S256 client for browser approvals. |
+| `mcp:tools` | Client scope with the audience mapper for `http://127.0.0.1:3001/mcp` and a subject mapper suitable for local tests. |
+
+Anonymous OIDC Dynamic Client Registration is enabled only in the local/demo realm. Registration policies restrict redirect URIs to trusted loopback hosts, limit allowed client scopes, cap anonymous client count, and disable full-scope registration. Production deployments should use pre-registered or admin-managed clients instead.
+
+Keycloak does not currently process RFC 8707 `resource` indicators for MCP the same way the DevIssuer test harness does, so the local realm binds `aud` through the `mcp:tools` audience mapper. The gateway still validates issuer, signature, lifetime, audience, and scope.
+
+## DevIssuer (deprecated fallback)
+
+`InfraGate.DevIssuer` is for localhost fallback compatibility only. It uses in-memory clients, authorization codes, and signing keys, and refuses startup when `INFRA_GATE_ENVIRONMENT=Production`. Prefer Keycloak Mode D for local development and tests.
 
 | Variable | Component | Required | Default | Example | Description | Production guidance |
 | --- | --- | :---: | --- | --- | --- | --- |
@@ -101,11 +117,11 @@ To process this report and produce a structured remediation plan, use the `.agen
 | `INFRA_GATE_RUN_GATEWAY_INTEGRATION` | Test environment | No | Unset, live gateway integration test returns early | `1` | Enables live Kubernetes integration coverage for `InfraGate.McpGateway.Tests`. | Run only against a disposable/demo namespace with least-privilege kubeconfig. |
 | `Category=Keycloak` (xUnit trait) | Test environment | No | Keycloak tests excluded from default runs | `dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj --filter "Category=Keycloak"` | Enables real-OIDC integration tests against a Testcontainers Keycloak container. | Requires Docker. The shared test realm under `tests/TestData/keycloak/` is loaded as the realm config. Separate CI workflow at `keycloak-tests.yml`. |
 | `KUBECONFIG` | Tests and local scripts | No | Tests fall back to `.kube/mcp-nginx-demo.config` when unset | `.kube/mcp-nginx-demo.config` | Kubeconfig used by live integration tests and runtime examples. | Use a generated service-account kubeconfig, not the admin kubeconfig. |
-| `TAG` | Docker Compose and smoke test | No for development/demo; required by production Compose | `dev` in development deploy, `latest` in demo release Compose | `v0.1.0` | Image tag used by `deploy/compose/*.yaml`, `deploy/mode-c/compose.release.yaml`, and `scripts/smoke-test-release.sh`. | Use the raw release tag when running production Compose manually; avoid floating tags for production. |
+| `TAG` | Docker Compose and smoke tests | No for development/demo; required by production Compose | `dev` in development deploy, `latest` in demo release Compose | `v0.1.0` | Image tag used by `deploy/compose/*.yaml`, `deploy/mode-c/compose.release.yaml`, `deploy/mode-d/compose.release.yaml`, `scripts/smoke-test-release.sh`, and `scripts/smoke-test-keycloak-release.sh`. | Use the raw release tag when running production Compose manually; avoid floating tags for production. |
 | `INFRA_GATE_GATEWAY_IMAGE` | Docker Compose deploys | No | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway` | `mirusser/kubernetes-mcp-guard-gateway` | Gateway image repository used by deployment Compose files. | Override only when deploying from Docker Hub or a private mirror. |
 | `INFRA_GATE_KUBECONFIG_HOST_PATH` | Docker Compose deploys | No | `/etc/infra-gate/<environment>.kubeconfig` | `/etc/infra-gate/production.kubeconfig` | Host kubeconfig path mounted read-only into the gateway container as `/run/kube/infra-gate.config`. | Use a least-privilege kubeconfig; keep permissions tight on the host. |
 | `INFRA_GATE_APPROVAL_HOST_PATH` | Docker Compose deploys | No | `/var/lib/infra-gate/<environment>/approvals` | `/var/lib/infra-gate/production/approvals` | Host path mounted into the container as `/data/approvals`. | Use durable storage that is not group- or other-writable. |
 | `INFRA_GATE_GUARD_AUDIT_HOST_PATH` | Docker Compose deploys | No | `/var/lib/infra-gate/<environment>/guardrails` | `/var/lib/infra-gate/production/guardrails` | Host path mounted into the container as `/data/guardrails`. | Use durable storage with retention/monitoring appropriate for audit logs. |
 | `INFRA_GATE_BIND_ADDRESS` | Docker Compose deploys | No | `127.0.0.1` | `127.0.0.1` | Host bind address for the gateway container port. | Keep loopback when TLS terminates at a host reverse proxy. |
 | `INFRA_GATE_BIND_PORT` | Docker Compose deploys | No | `3001` | `3001` | Host port mapped to the gateway container. The deploy workflow probes this port after `docker compose up`. | Match the local reverse proxy upstream. |
-| `KUBECONFIG_PATH` | `scripts/smoke-test-release.sh` | No | `<repo>/.kube/mcp-nginx-demo.compose.config` | `.kube/mcp-nginx-demo.compose.config` | Kubeconfig path mounted by the published-image smoke test. | Use a disposable demo kubeconfig created with `./scripts/create-demo-kubeconfig.sh --compose`. |
+| `KUBECONFIG_PATH` | `scripts/smoke-test-release.sh`, `scripts/smoke-test-keycloak-release.sh` | No | `<repo>/.kube/mcp-nginx-demo.compose.config` | `.kube/mcp-nginx-demo.compose.config` | Kubeconfig path mounted by the published-image smoke tests. | Use a disposable demo kubeconfig created with `./scripts/create-demo-kubeconfig.sh --compose`. |

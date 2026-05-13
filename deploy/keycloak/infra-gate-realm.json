@@ -55,6 +55,37 @@
         }
       },
       {
+        "name": "Allowed Client Scopes",
+        "providerId": "allowed-client-templates",
+        "subType": "anonymous",
+        "subComponents": {},
+        "config": {
+          "allow-default-scopes": ["true"],
+          "allowed-client-scopes": [
+            "openid",
+            "profile",
+            "email",
+            "mcp:tools"
+          ]
+        }
+      },
+      {
+        "name": "Anonymous Max Clients",
+        "providerId": "max-clients",
+        "subType": "anonymous",
+        "subComponents": {},
+        "config": {
+          "max-clients": ["200"]
+        }
+      },
+      {
+        "name": "Anonymous Full Scope Disabled",
+        "providerId": "scope",
+        "subType": "anonymous",
+        "subComponents": {},
+        "config": {}
+      },
+      {
         "name": "Trusted Hosts",
         "providerId": "trusted-hosts",
         "subType": "authenticated",
@@ -174,6 +205,24 @@
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": []
+    },
+    {
+      "name": "offline_access",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": []
+    },
+    {
+      "name": "microprofile-jwt",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
         "display.on.consent.screen": "true"
       },
       "protocolMappers": []
@@ -306,12 +355,14 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
       "redirectUris": [
         "http://127.0.0.1:*",
         "http://localhost:*"
       ],
       "defaultClientScopes": [
-        "openid",
         "profile",
         "email",
         "mcp:tools"
@@ -323,7 +374,7 @@
       ]
     },
     {
-      "clientId": "mcp-client-limited",
+      "clientId": "mcp-smoke-client",
       "enabled": true,
       "publicClient": true,
       "standardFlowEnabled": false,
@@ -331,10 +382,38 @@
       "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": false,
       "defaultClientScopes": [
-        "openid",
         "profile",
         "email",
         "mcp:tools"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
+      ]
+    },
+    {
+      "clientId": "mcp-client-limited",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "protocolMappers": [
+        {
+          "name": "mcp-gateway-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "http://127.0.0.1:3001/mcp",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ],
+      "defaultClientScopes": [
+        "profile",
+        "email"
       ],
       "optionalClientScopes": [
         "offline_access"
@@ -348,6 +427,9 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
       "redirectUris": [
         "http://127.0.0.1:3001/*",
         "http://localhost:3001/*"
@@ -357,7 +439,6 @@
         "http://localhost:3001"
       ],
       "defaultClientScopes": [
-        "openid",
         "profile",
         "email"
       ],

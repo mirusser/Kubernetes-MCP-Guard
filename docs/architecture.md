@@ -27,8 +27,9 @@ flowchart TB
         Guardrails --> Downstream
     end
 
-    subgraph DevAuth["Development identity provider"]
-        DevIssuer["InfraGate.DevIssuer<br/>localhost OAuth/OIDC issuer"]
+    subgraph DevAuth["Local identity provider"]
+        Keycloak["Keycloak<br/>primary local/test OIDC issuer"]
+        DevIssuer["InfraGate.DevIssuer<br/>deprecated fallback issuer"]
     end
 
     subgraph ServerRuntime["Kubernetes MCP server"]
@@ -63,16 +64,16 @@ flowchart TB
 
     Client -->|"HTTP MCP + JWT"| Gateway
     Browser -->|"/approvals/* + OAuth cookie"| Gateway
-    Client -. "OAuth discovery/login" .-> DevIssuer
-    Browser -. "approval OAuth login" .-> DevIssuer
-    Auth -. "JWKS / issuer metadata" .-> DevIssuer
+    Client -. "OAuth discovery/login + DCR" .-> Keycloak
+    Browser -. "approval OAuth login" .-> Keycloak
+    Auth -. "JWKS / issuer metadata" .-> Keycloak
     Downstream -->|"stdio, no bearer token"| Server
     Guardrails --> GuardAudit
     Manager --> ApprovalStore
     Manager -->|"KubernetesClient"| RBAC
 ```
 
-In source mode, the gateway launches the server project as a private stdio subprocess. In container mode, the `mcp-gateway` image contains the published server assembly and starts it through `dotnet /app/server/InfraGate.McpServer.dll`. DevIssuer is a development-only identity provider; production deployments use an external OIDC issuer.
+In source mode, the gateway launches the server project as a private stdio subprocess. In container mode, the `mcp-gateway` image contains the published server assembly and starts it through `dotnet /app/server/InfraGate.McpServer.dll`. Keycloak Mode D is the primary local/test identity provider. DevIssuer is retained only as a deprecated local fallback; production deployments use an external OIDC issuer.
 
 ## OAuth Login And MCP Authorization
 
@@ -84,7 +85,7 @@ sequenceDiagram
     actor User
     participant Client as MCP Client
     participant GW as Gateway :3001<br/>Resource Server
-    participant Issuer as DevIssuer :3011<br/>Auth Server
+    participant Issuer as Keycloak :3010<br/>Auth Server
 
     Note over User,Issuer: OAuth login and MCP authorization (once per session)
 
@@ -107,19 +108,18 @@ sequenceDiagram
     Issuer-->>Client: OAuth/OIDC metadata<br/>(authorize / token / register / JWKS)
 
     opt Dynamic client registration (first session only)
-        Note over Client,Issuer: MCP DCR, loopback redirect URI only
-        Client->>Issuer: POST /register (loopback redirect URI)
+        Note over Client,Issuer: OIDC DCR, loopback redirect URI only
+        Client->>Issuer: POST /clients-registrations/openid-connect
         Issuer-->>Client: client_id
-        Note over Issuer: DevIssuerStore<br/>ClientAllowsRedirectUri<br/>IsLoopbackHttpUri
+        Note over Issuer: Keycloak registration policies<br/>trusted-hosts + allowed scopes + max clients
     end
 
     Note over Client,Issuer: Authorization Code + PKCE S256
-    Client->>Issuer: GET /authorize<br/>(PKCE S256, resource=..., scope=mcp:tools)
+    Client->>Issuer: GET /protocol/openid-connect/auth<br/>(PKCE S256, scope=mcp:tools)
     Issuer-->>Client: redirect to loopback callback<br/>code + state
-    Note over Issuer: DevIssuerApplication.Authorize<br/>resource parameter binding (RFC 8707)<br/>code is resource-bound
     Client->>Issuer: POST /token<br/>(grant_type=authorization_code<br/>code + redirect_uri + client_id + code_verifier)
     Issuer-->>Client: JWT access token<br/>(aud = resource, scope = mcp:tools)
-    Note over Issuer: DevIssuerApplication.TokenAsync<br/>PkceMatches, S256 enforced<br/>audience/resource bounded
+    Note over Issuer: aud emitted by mcp:tools audience mapper<br/>gateway enforces issuer/signature/lifetime/audience/scope
 ```
 
 ## Read-Only Tool Call
@@ -312,6 +312,6 @@ Guardrail audit and approval audit are separate streams. Guardrail audit records
 | Runtime image | GHCR | Docker Hub | Contains |
 | --- | --- | --- | --- |
 | Gateway | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>` | `mirusser/kubernetes-mcp-guard-gateway:<tag>` | `InfraGate.McpGateway`, `InfraGate.McpGateway.Auth`, `InfraGate.Approvals`, and published downstream server assembly at `/app/server/InfraGate.McpServer.dll` |
-| DevIssuer | `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:<tag>` | `mirusser/kubernetes-mcp-guard-devissuer:<tag>` | `InfraGate.DevIssuer` development OAuth/OIDC issuer |
+| DevIssuer | `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:<tag>` | `mirusser/kubernetes-mcp-guard-devissuer:<tag>` | Deprecated `InfraGate.DevIssuer` fallback OAuth/OIDC issuer |
 
-The local/demo source Compose file builds both images locally, and the local/demo release Compose file pulls GHCR images by default while documenting Docker Hub equivalents. The deployment Compose files under `deploy/compose/` deploy the gateway image only; development uses the local Keycloak setup script, while production uses a real OIDC provider. Tags and CI/CD settings are owned by [docs/configuration.md](configuration.md) and the release process docs.
+Mode D local/demo Compose builds or pulls the gateway image and starts Keycloak from `quay.io/keycloak/keycloak:26.6.1`; Mode C still builds/pulls DevIssuer during the deprecation window. The deployment Compose files under `deploy/compose/` deploy the gateway image only; development uses the local Keycloak setup script, while production uses a real OIDC provider. Tags and CI/CD settings are owned by [docs/configuration.md](configuration.md) and the release process docs.

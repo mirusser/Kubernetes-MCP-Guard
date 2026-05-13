@@ -29,10 +29,10 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
     public const string EnableEnvVar = "INFRA_GATE_RUN_SAFETY_E2E";
     public const string KubeconfigEnvVar = "KUBECONFIG";
 
-    private const string KeycloakImage = "quay.io/keycloak/keycloak:26.2";
+    private const string KeycloakImage = "quay.io/keycloak/keycloak:26.6.1";
     private const string RealmName = "infra-gate";
     private const string RealmJsonFileName = "infra-gate-realm.json";
-    private const string McpClientId = "mcp-client";
+    private const string McpClientId = "mcp-smoke-client";
     private const string DemoUsername = "demo";
     private const string DemoPassword = "demo";
     private const string DefaultNamespace = "mcp-nginx-demo";

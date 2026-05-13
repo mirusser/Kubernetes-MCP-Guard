@@ -151,7 +151,7 @@ The hash from Phase ① is the integrity seal that links all three phases. If th
 
 Images are automatically built and scanned by the Docker workflow. Release tags publish versioned images, and the `dev` branch publishes moving `:dev` images for the self-hosted development deployment.
 
-| Registry | Gateway (Core) | Dev Issuer (Auth) |
+| Registry | Gateway (Core) | Dev Issuer (deprecated fallback auth) |
 | --- | --- | --- |
 | GitHub (GHCR) | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>` | `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
 | Docker Hub | `mirusser/kubernetes-mcp-guard-gateway:<tag>` | `mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
@@ -175,10 +175,11 @@ git clone https://github.com/mirusser/Kubernetes-MCP-Guard.git
 cd Kubernetes-MCP-Guard
 
 ./scripts/create-demo-kubeconfig.sh --compose
-TAG=latest docker compose -f deploy/mode-c/compose.release.yaml up
+TAG=latest docker compose -f deploy/mode-d/compose.release.yaml up
 ```
 
 Replace `latest` with a specific release tag (e.g. `v0.1.0`) for a stable run. Available tags are listed on the [Releases page](https://github.com/mirusser/Kubernetes-MCP-Guard/releases).
+This starts the Keycloak-backed local OAuth path. The older DevIssuer path remains available under `deploy/mode-c/` as a deprecated fallback while compatibility tests still cover it.
 
 #### **Connect Codex CLI:**
 
@@ -223,7 +224,7 @@ claude
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
-docker compose -f deploy/mode-c/compose.yaml up --build
+docker compose -f deploy/mode-d/compose.yaml up --build
 ```
 
 Connect Codex the same way as Option 1.
@@ -276,7 +277,7 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 | .NET | .NET 10 |
 | Kubernetes | minikube / local cluster initially |
 | MCP transport | HTTP MCP endpoint at `/mcp` |
-| OIDC | DevIssuer (local demo), Keycloak (development deploy), Entra ID later |
+| OIDC | Keycloak (primary local/dev path), DevIssuer (deprecated local fallback), Entra ID later |
 | Container registries | GHCR, Docker Hub |
 | Platforms | linux/amd64 initially |
 
@@ -294,7 +295,7 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 - HTTP MCP gateway: [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md)
 - Gateway auth: [src/InfraGate.McpGateway.Auth/README.md](src/InfraGate.McpGateway.Auth/README.md)
 - Approval storage & audit: [src/InfraGate.Approvals/README.md](src/InfraGate.Approvals/README.md)
-- Local dev OAuth issuer: [src/InfraGate.DevIssuer/README.md](src/InfraGate.DevIssuer/README.md)
+- Deprecated local dev OAuth issuer: [src/InfraGate.DevIssuer/README.md](src/InfraGate.DevIssuer/README.md)
 
 <sub><em>**Naming note:** The public name is **Kubernetes MCP Guard**. The internal codename **InfraGate** appears in `.slnx`, project folders, env-var prefixes (`INFRA_GATE_*`), and Docker labels. They refer to the same project; the rename is gradual and does not change runtime behavior.</em></sub>
 

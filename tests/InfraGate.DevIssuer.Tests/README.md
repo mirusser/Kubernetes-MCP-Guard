@@ -1,6 +1,6 @@
 # InfraGate.DevIssuer.Tests
 
-`InfraGate.DevIssuer.Tests` covers the localhost development issuer and its compatibility with the gateway OAuth resource-server validation.
+`InfraGate.DevIssuer.Tests` covers the deprecated localhost development issuer and its compatibility with the gateway OAuth resource-server validation. Keycloak tests are the primary local OAuth coverage; these tests keep the fallback path from regressing.
 
 ## What It Covers
 
