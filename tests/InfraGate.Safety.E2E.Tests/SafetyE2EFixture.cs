@@ -479,7 +479,6 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
             {
                 services.AddRouting();
                 services.AddSingleton(options);
-                services.AddSingleton<PromptInjectionGuard>();
                 services.AddSingleton<IGuardrailAuditStore, GuardrailAuditStore>();
                 services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
                 services.AddSingleton<GuardedToolRunner>();

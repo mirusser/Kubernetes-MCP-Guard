@@ -19,7 +19,6 @@ if (string.IsNullOrWhiteSpace(builder.Configuration[McpGatewayConventions.Config
 }
 
 builder.Services.AddSingleton(options);
-builder.Services.AddSingleton<PromptInjectionGuard>();
 builder.Services.AddSingleton<IGuardrailAuditStore, GuardrailAuditStore>();
 builder.Services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
 builder.Services.AddSingleton<GuardedToolRunner>();

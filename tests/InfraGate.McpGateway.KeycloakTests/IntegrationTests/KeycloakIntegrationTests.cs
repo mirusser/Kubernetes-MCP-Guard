@@ -157,7 +157,6 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             {
                 services.AddRouting();
                 services.AddSingleton(options);
-                services.AddSingleton<PromptInjectionGuard>();
                 services.AddSingleton<IGuardrailAuditStore, NullAuditStore>();
                 services.AddSingleton<IDownstreamMcpClient, NullDownstreamClient>();
                 services.AddSingleton<GuardedToolRunner>();

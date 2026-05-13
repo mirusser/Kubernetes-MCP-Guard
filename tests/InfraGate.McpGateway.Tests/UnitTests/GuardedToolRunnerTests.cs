@@ -13,7 +13,7 @@ public sealed class GuardedToolRunnerTests
     {
         var downstream = new FakeDownstream("clean output");
         var audit = new InMemoryAuditStore();
-        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), audit, NullLogger<GuardedToolRunner>.Instance);
+        var runner = new GuardedToolRunner(downstream, audit, NullLogger<GuardedToolRunner>.Instance);
 
         var text = await runner.CallAsync(
             "get_k8s_status",
@@ -35,7 +35,7 @@ public sealed class GuardedToolRunnerTests
     {
         var downstream = new FakeDownstream("downstream response");
         var audit = new InMemoryAuditStore();
-        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), audit, NullLogger<GuardedToolRunner>.Instance);
+        var runner = new GuardedToolRunner(downstream, audit, NullLogger<GuardedToolRunner>.Instance);
 
         var text = await runner.CallAsync(
             "request_apply_manifest",
@@ -70,7 +70,7 @@ public sealed class GuardedToolRunnerTests
                                             ```
                                             """);
         var audit = new InMemoryAuditStore();
-        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), audit, NullLogger<GuardedToolRunner>.Instance);
+        var runner = new GuardedToolRunner(downstream, audit, NullLogger<GuardedToolRunner>.Instance);
 
         var text = await runner.CallAsync(
             "request_apply_manifest",
@@ -111,7 +111,7 @@ public sealed class GuardedToolRunnerTests
                     "Bearer"))
             }
         };
-        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), audit, httpContextAccessor, NullLogger<GuardedToolRunner>.Instance);
+        var runner = new GuardedToolRunner(downstream, audit, httpContextAccessor, NullLogger<GuardedToolRunner>.Instance);
 
         await runner.CallAsync(
             "request_apply_manifest",
@@ -131,7 +131,7 @@ public sealed class GuardedToolRunnerTests
     public async Task GetAllowedNamespaces_ForwardsExpectedToolNameWithNoArguments()
     {
         var downstream = new FakeDownstream("""{"allowedNamespaces":["demo"],"count":1}""");
-        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
+        var runner = new GuardedToolRunner(downstream, new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
 
         var result = await K8sGatewayTools.GetAllowedNamespaces(runner, CancellationToken.None);
 
@@ -144,7 +144,7 @@ public sealed class GuardedToolRunnerTests
     public async Task GetK8sEvents_ForwardsExpectedToolNameAndArguments()
     {
         var downstream = new FakeDownstream("events");
-        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
+        var runner = new GuardedToolRunner(downstream, new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
 
         await K8sGatewayTools.GetK8sEvents(
             runner,
@@ -165,7 +165,7 @@ public sealed class GuardedToolRunnerTests
     public async Task GetPodLogs_ForwardsExpectedToolNameAndArguments()
     {
         var downstream = new FakeDownstream("logs");
-        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
+        var runner = new GuardedToolRunner(downstream, new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
 
         await K8sGatewayTools.GetPodLogs(
             runner,
@@ -188,7 +188,7 @@ public sealed class GuardedToolRunnerTests
     public async Task GetK8sResource_ForwardsExpectedToolNameAndArguments()
     {
         var downstream = new FakeDownstream("resource");
-        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
+        var runner = new GuardedToolRunner(downstream, new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
 
         await K8sGatewayTools.GetK8sResource(
             runner,
@@ -209,7 +209,6 @@ public sealed class GuardedToolRunnerTests
         var deploymentDownstream = new FakeDownstream("deployment diagnostics");
         var deploymentRunner = new GuardedToolRunner(
             deploymentDownstream,
-            new PromptInjectionGuard(),
             new InMemoryAuditStore(),
             NullLogger<GuardedToolRunner>.Instance);
 
@@ -226,7 +225,7 @@ public sealed class GuardedToolRunnerTests
         Assert.Equal(7, deploymentDownstream.Arguments["limit"]);
 
         var podDownstream = new FakeDownstream("pod diagnostics");
-        var podRunner = new GuardedToolRunner(podDownstream, new PromptInjectionGuard(), new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
+        var podRunner = new GuardedToolRunner(podDownstream, new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
 
         await K8sGatewayTools.GetPodDiagnostics(
             podRunner,
@@ -243,7 +242,6 @@ public sealed class GuardedToolRunnerTests
         var serviceDownstream = new FakeDownstream("service diagnostics");
         var serviceRunner = new GuardedToolRunner(
             serviceDownstream,
-            new PromptInjectionGuard(),
             new InMemoryAuditStore(),
             NullLogger<GuardedToolRunner>.Instance);
 
@@ -264,7 +262,7 @@ public sealed class GuardedToolRunnerTests
     public async Task RequestSetDeploymentImage_ForwardsExpectedToolNameAndArguments()
     {
         var downstream = new FakeDownstream("set image");
-        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
+        var runner = new GuardedToolRunner(downstream, new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
 
         await K8sGatewayTools.RequestSetDeploymentImage(
             runner,
@@ -285,7 +283,7 @@ public sealed class GuardedToolRunnerTests
     public async Task CallAsync_WhenDownstreamThrows_ReturnsErrorTextWithExceptionMessage()
     {
         var downstream = new FakeDownstream(new InvalidOperationException("kubeconfig not found"));
-        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
+        var runner = new GuardedToolRunner(downstream, new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
 
         var text = await runner.CallAsync(
             "get_k8s_status",
@@ -305,7 +303,7 @@ public sealed class GuardedToolRunnerTests
     {
         var errorText = "Status read failed: Kubernetes API returned 500 InternalError: something went wrong";
         var downstream = new FakeDownstream(errorText);
-        var runner = new GuardedToolRunner(downstream, new PromptInjectionGuard(), new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
+        var runner = new GuardedToolRunner(downstream, new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
 
         var text = await runner.CallAsync(
             "get_k8s_status",

@@ -16,11 +16,13 @@ The `sonarcloud-report.json` file must be downloaded manually from the GitHub Ac
 
 The report is generated on every workflow run — push, pull request, and `workflow_dispatch`.
 
+If the provided report path is missing, check `.agents/Reports/sonarcloud-report.json` before asking the user for a new path.
+
 ## Workflow
 
 ### Step 1 — Orient in the repository
 
-Load `.agents/skills/repo-onboarding/SKILL.md` to read `AGENTS.md`, `README.md`, and the project READMEs relevant to the affected files. This establishes the structural and architectural context needed to propose changes that fit the codebase rather than fight it.
+Read `.agents/lessons.md`, then load `.agents/skills/repo-onboarding/SKILL.md` to read `AGENTS.md`, `README.md`, and the project READMEs relevant to the affected files. This establishes the structural and architectural context needed to propose changes that fit the codebase rather than fight it.
 
 ### Step 2 — Load code conventions
 
@@ -38,6 +40,8 @@ Priority order for remediation:
 1. BLOCKER and CRITICAL bugs and vulnerabilities
 2. MAJOR code smells
 3. MINOR and INFO findings
+
+For `hotspots[]`, treat entries with `status: REVIEWED` and `resolution: SAFE` as already reviewed. Summarize them, but do not change code for those hotspots unless the user explicitly asks.
 
 For each finding, note:
 - `component` — affected file path
@@ -105,4 +109,5 @@ sonarcloud-report.json
 - Do not introduce broad analyzer suppressions or `#pragma warning disable` as a fix — resolve the actual issue.
 - Do not change unrelated code while fixing findings. Keep edits surgical.
 - Do not introduce new public API without confirming it is needed by the fix.
+- Do not rename `K8s` symbols to `K8S` for Sonar S101. `K8s` is the repository convention; keep or add a local `// Justification:` comment.
 - If a finding is a false positive (SonarCloud rule does not apply to this context), document it in a `// Justification:` comment rather than suppressing silently, and flag it in the plan for human review.

@@ -4,8 +4,6 @@ namespace InfraGate.McpGateway.Tests.UnitTests;
 
 public sealed class ResponseSanitizationTests
 {
-    private readonly PromptInjectionGuard guard = new();
-
     [Fact]
     public void SanitizeResponse_LegacyPlanResponse_RedactsManifestBlocksAndSensitivePlanMetadata()
     {

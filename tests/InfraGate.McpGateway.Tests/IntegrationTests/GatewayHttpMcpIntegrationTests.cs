@@ -630,7 +630,6 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             {
                 services.AddRouting();
                 services.AddSingleton(options);
-                services.AddSingleton<PromptInjectionGuard>();
                 services.AddSingleton<IGuardrailAuditStore>(audit);
                 services.AddSingleton(downstream);
                 services.AddSingleton<GuardedToolRunner>();

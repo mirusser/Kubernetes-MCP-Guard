@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace InfraGate.McpGateway;
 
-public sealed partial class PromptInjectionGuard
+public static partial class PromptInjectionGuard
 {
     private static void AddTextFindings(string text, string location, List<GuardrailFinding> findings)
     {

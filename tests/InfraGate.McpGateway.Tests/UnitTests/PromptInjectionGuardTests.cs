@@ -7,8 +7,6 @@ namespace InfraGate.McpGateway.Tests.UnitTests;
 
 public sealed class PromptInjectionGuardTests
 {
-    private readonly PromptInjectionGuard guard = new();
-
     [Fact]
     public void ScanArguments_DoesNotFlagCleanKubernetesText()
     {

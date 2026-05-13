@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpServer;
 
+// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 public sealed partial class K8sManager
 {
     public async Task<string> RequestApplyManifestAsync(string namespaceName, string manifest, CancellationToken cancellationToken)
@@ -312,7 +313,7 @@ public sealed partial class K8sManager
         };
     }
 
-    private K8sPlan CreateSetDeploymentImagePlan(
+    private static K8sPlan CreateSetDeploymentImagePlan(
         string namespaceName,
         string name,
         string container,

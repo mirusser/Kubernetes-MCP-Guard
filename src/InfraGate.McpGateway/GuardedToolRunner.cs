@@ -10,29 +10,25 @@ public sealed partial class GuardedToolRunner
         "Guardrail warning: Potential prompt-injection content was detected. Model-visible high-risk text was redacted where applicable.";
 
     private readonly IDownstreamMcpClient downstream;
-    private readonly PromptInjectionGuard guard;
     private readonly IGuardrailAuditStore auditStore;
     private readonly IHttpContextAccessor? httpContextAccessor;
     private readonly ILogger<GuardedToolRunner> logger;
 
     public GuardedToolRunner(
         IDownstreamMcpClient downstream,
-        PromptInjectionGuard guard,
         IGuardrailAuditStore auditStore,
         ILogger<GuardedToolRunner> logger)
-        : this(downstream, guard, auditStore, httpContextAccessor: null, logger)
+        : this(downstream, auditStore, httpContextAccessor: null, logger)
     {
     }
 
     public GuardedToolRunner(
         IDownstreamMcpClient downstream,
-        PromptInjectionGuard guard,
         IGuardrailAuditStore auditStore,
         IHttpContextAccessor? httpContextAccessor,
         ILogger<GuardedToolRunner> logger)
     {
         this.downstream = downstream;
-        this.guard = guard;
         this.auditStore = auditStore;
         this.httpContextAccessor = httpContextAccessor;
         this.logger = logger;
