@@ -1,6 +1,8 @@
 # 🛡️ Kubernetes MCP Guard 
 
-**A Kubernetes MCP gateway with OAuth, guardrails, and browser-based Human-in-the-Loop (HITL) approval for AI-driven operations.**
+**Bridging the gap between AI Agents and Production Infrastructure with a Security-First Gateway.**
+
+**A Kubernetes MCP gateway with Human-in-the-Loop (HITL) approval for AI-driven operations with OAuth and guardrails**
 
 
 [![Unit Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml)
