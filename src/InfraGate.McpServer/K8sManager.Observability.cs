@@ -46,12 +46,7 @@ public sealed partial class K8sManager
                 events = events.Items.Select(EventSummary)
             }, JsonOptions);
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogError(ex, "Event read timed out for namespace {Namespace}", namespaceName);
-            return FormatApiException("Event read timed out", ex);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogError(ex, "Event read failed for namespace {Namespace}", namespaceName);
             return FormatApiException("Event read failed", ex);
@@ -102,12 +97,7 @@ public sealed partial class K8sManager
                 log
             }, JsonOptions);
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogError(ex, "Pod log read timed out for {Namespace}/{PodName}", namespaceName, podName);
-            return FormatApiException("Pod log read timed out", ex);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogError(ex, "Pod log read failed for {Namespace}/{PodName}", namespaceName, podName);
             return FormatApiException("Pod log read failed", ex);
@@ -133,12 +123,7 @@ public sealed partial class K8sManager
             var normalizedKind = kind.Trim();
             return await ReadResourceSummaryAsync(namespaceName, normalizedKind, name, cancellationToken);
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogError(ex, "Resource read timed out for {Namespace}/{Kind}/{Name}", namespaceName, kind, name);
-            return FormatApiException("Resource read timed out", ex);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogError(ex, "Resource read failed for {Namespace}/{Kind}/{Name}", namespaceName, kind, name);
             return FormatApiException("Resource read failed", ex);

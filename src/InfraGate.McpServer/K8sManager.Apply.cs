@@ -75,12 +75,7 @@ public sealed partial class K8sManager
                 _ => ApplyResult.Failed($"Unsupported plan operation '{plan.Operation}'.")
             };
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogError(ex, "API operation timed out for plan {PlanId} ({Operation} in {Namespace})", plan.Id, plan.Operation, plan.Namespace);
-            return ApplyResult.Failed(FormatApiException("API operation timed out", ex));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogError(ex, "API operation failed for plan {PlanId} ({Operation} in {Namespace})", plan.Id, plan.Operation, plan.Namespace);
             return ApplyResult.Failed(FormatApiException("API operation failed", ex));
@@ -152,13 +147,7 @@ public sealed partial class K8sManager
             {
                 await ApplyObjectAsync(obj, cancellationToken);
             }
-            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-            {
-                logger.LogError(ex, "API operation timed out for {ApiVersion} {Kind} {Namespace}/{Name} during plan {PlanId}",
-                    obj.ApiVersion, obj.Kind, obj.Metadata.NamespaceProperty, obj.Metadata.Name, plan.Id);
-                return ApplyResult.Failed(FormatServerSideApplyException("API operation timed out", ex));
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex)
             {
                 logger.LogError(ex, "API operation failed for {ApiVersion} {Kind} {Namespace}/{Name} during plan {PlanId}",
                     obj.ApiVersion, obj.Kind, obj.Metadata.NamespaceProperty, obj.Metadata.Name, plan.Id);

@@ -66,12 +66,7 @@ public sealed partial class K8sManager
                 events
             }, JsonOptions);
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogError(ex, "Deployment diagnostics timed out for {Namespace}/{Name}", namespaceName, name);
-            return FormatApiException("Deployment diagnostics timed out", ex);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogError(ex, "Deployment diagnostics failed for {Namespace}/{Name}", namespaceName, name);
             return FormatApiException("Deployment diagnostics failed", ex);
@@ -110,12 +105,7 @@ public sealed partial class K8sManager
                 events
             }, JsonOptions);
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogError(ex, "Pod diagnostics timed out for {Namespace}/{PodName}", namespaceName, podName);
-            return FormatApiException("Pod diagnostics timed out", ex);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogError(ex, "Pod diagnostics failed for {Namespace}/{PodName}", namespaceName, podName);
             return FormatApiException("Pod diagnostics failed", ex);
@@ -169,12 +159,7 @@ public sealed partial class K8sManager
                 events
             }, JsonOptions);
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogError(ex, "Service diagnostics timed out for {Namespace}/{Name}", namespaceName, name);
-            return FormatApiException("Service diagnostics timed out", ex);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogError(ex, "Service diagnostics failed for {Namespace}/{Name}", namespaceName, name);
             return FormatApiException("Service diagnostics failed", ex);

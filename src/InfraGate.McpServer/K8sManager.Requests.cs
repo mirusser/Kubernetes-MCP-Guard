@@ -179,12 +179,7 @@ public sealed partial class K8sManager
                 DryRunSetDeploymentImageAsync(namespaceName, name, container, image, cancellationToken),
                 cancellationToken);
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogWarning(ex, "Deployment image plan timed out for {Namespace}/{Name} container {Container}", namespaceName, name, container);
-            return FormatApiException("Deployment image plan timed out", ex);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogWarning(ex, "Deployment image plan failed for {Namespace}/{Name} container {Container}", namespaceName, name, container);
             return FormatApiException("Deployment image plan failed", ex);
@@ -219,13 +214,7 @@ public sealed partial class K8sManager
                     dryRun.Message,
                     cancellationToken);
             }
-            catch (OperationCanceledException auditEx) when (!cancellationToken.IsCancellationRequested)
-            {
-                logger.LogError(auditEx,
-                    "Dry-run audit write timed out for plan {PlanId}; approval store may be unavailable",
-                    plan.Id);
-            }
-            catch (Exception auditEx) when (auditEx is not OperationCanceledException)
+            catch (Exception auditEx)
             {
                 logger.LogError(auditEx,
                     "Failed to write dry-run audit for plan {PlanId}; approval store may be unavailable",
@@ -251,15 +240,7 @@ public sealed partial class K8sManager
                 planWithDryRun.DryRun.Objects,
                 cancellationToken);
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogError(ex, "Diff generation timed out for plan {PlanId} targeting namespace {Namespace}", plan.Id, plan.Namespace);
-            var message = FormatApiException("Diff generation timed out", ex);
-            await WriteDiffFailedAuditAsync(plan, message, cancellationToken);
-
-            return $"Diff generation timed out; no approval plan was created.{Environment.NewLine}{message}";
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogError(ex, "Diff generation failed for plan {PlanId} targeting namespace {Namespace}", plan.Id, plan.Namespace);
             var message = FormatApiException("Diff generation failed", ex);
@@ -284,14 +265,7 @@ public sealed partial class K8sManager
         {
             result = await approvalStore.CreatePlanAsync(plan, cancellationToken);
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogError(ex,
-                "Approval plan {PlanId} creation timed out; check that the approval root directory is writable by the container",
-                plan.Id);
-            return $"Approval plan creation timed out: {ex.Message}";
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogError(ex,
                 "Failed to persist approval plan {PlanId} to store; check that the approval root directory is writable by the container",

@@ -4,6 +4,7 @@ using k8s;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -35,7 +36,22 @@ builder.Services.AddSingleton<K8sManager>();
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
-    .WithToolsFromAssembly();
+    .WithToolsFromAssembly()
+    .WithRequestFilters(filters =>
+    {
+        filters.AddCallToolFilter(next => (request, cancellationToken) =>
+        {
+            var services = request.Services;
+            if (services is null)
+            {
+                return next(request, cancellationToken);
+            }
+
+            var logger = services.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("InfraGate.McpServer.ToolExceptionFilter");
+            return ToolExceptionFilter.CreateSafetyNet(next, logger)(request, cancellationToken);
+        });
+    });
 
 var app = builder.Build();
 

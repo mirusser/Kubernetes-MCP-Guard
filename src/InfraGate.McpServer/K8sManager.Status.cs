@@ -108,12 +108,7 @@ public sealed partial class K8sManager
                 })
             }, JsonOptions);
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogError(ex, "Status read timed out for namespace {Namespace}", namespaceName);
-            return FormatApiException("Status read timed out", ex);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogError(ex, "Status read failed for namespace {Namespace}", namespaceName);
             return FormatApiException("Status read failed", ex);

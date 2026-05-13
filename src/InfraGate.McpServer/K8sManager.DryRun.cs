@@ -28,12 +28,7 @@ public sealed partial class K8sManager
 
             return DryRunResult.Success(dryRunObjects, warnings);
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogWarning(ex, "Server-side dry-run apply timed out for {ObjectCount} object(s)", objects.Count);
-            return DryRunResult.Failed(FormatServerSideApplyException("Server-side dry-run timed out", ex));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogWarning(ex, "Server-side dry-run apply failed for {ObjectCount} object(s)", objects.Count);
             return DryRunResult.Failed(FormatServerSideApplyException(DryRunFailedMessage, ex));
@@ -58,12 +53,7 @@ public sealed partial class K8sManager
 
             return DryRunResult.Success(dryRunObjects, warnings);
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogWarning(ex, "Server-side dry-run delete timed out for {ObjectCount} object(s)", objects.Count);
-            return DryRunResult.Failed(FormatApiException("Server-side dry-run timed out", ex));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogWarning(ex, "Server-side dry-run delete failed for {ObjectCount} object(s)", objects.Count);
             return DryRunResult.Failed(FormatApiException(DryRunFailedMessage, ex));
@@ -93,12 +83,7 @@ public sealed partial class K8sManager
 
             return DryRunResult.Success([dryRunObject], ExtractWarnings(response));
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogWarning(ex, "Server-side dry-run scale timed out for Deployment {Namespace}/{Name} to {Replicas} replicas", namespaceName, name, replicas);
-            return DryRunResult.Failed(FormatApiException("Server-side dry-run timed out", ex));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogWarning(ex, "Server-side dry-run scale failed for Deployment {Namespace}/{Name} to {Replicas} replicas", namespaceName, name, replicas);
             return DryRunResult.Failed(FormatApiException(DryRunFailedMessage, ex));
@@ -128,12 +113,7 @@ public sealed partial class K8sManager
 
             return DryRunResult.Success([dryRunObject], ExtractWarnings(response));
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogWarning(ex, "Server-side dry-run restart timed out for Deployment {Namespace}/{Name}", namespaceName, name);
-            return DryRunResult.Failed(FormatApiException("Server-side dry-run timed out", ex));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogWarning(ex, "Server-side dry-run restart failed for Deployment {Namespace}/{Name}", namespaceName, name);
             return DryRunResult.Failed(FormatApiException(DryRunFailedMessage, ex));
@@ -164,12 +144,7 @@ public sealed partial class K8sManager
 
             return DryRunResult.Success([dryRunObject], ExtractWarnings(response));
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            logger.LogWarning(ex, "Server-side dry-run set-image timed out for Deployment {Namespace}/{Name} container {Container}", namespaceName, name, container);
-            return DryRunResult.Failed(FormatApiException("Server-side dry-run timed out", ex));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogWarning(ex, "Server-side dry-run set-image failed for Deployment {Namespace}/{Name} container {Container}", namespaceName, name, container);
             return DryRunResult.Failed(FormatApiException(DryRunFailedMessage, ex));
