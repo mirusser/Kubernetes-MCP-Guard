@@ -30,13 +30,13 @@ The domain-specific part is the evidence and execution meaning:
 
 ## Roles
 
-**Generic Approval Core** owns the domain-independent approval lifecycle: plan envelopes, lifecycle state, digest checks, approval challenges, audit spine, and pre-execution gate orchestration.
+**Generic Approval Core** owns the domain-independent approval lifecycle: plan envelopes, lifecycle state, digest checks, approval challenges, approval grants, audit spine, review snapshot canonicalization, and pre-execution gate orchestration. It does not define domain-specific review content, but it may host a review surface that renders adapter-provided evidence.
 
-**Domain Adapter** defines, explains, and executes mutation intents for one target system. The Kubernetes adapter is the first adapter and owns Kubernetes mutation meaning, dry-run evidence, diffs, drift detection, Kubernetes policy checks, Kubernetes canonicalization, execution behavior, and adapter audit payloads.
+**Domain Adapter** defines, explains, and executes mutation intents for one target system. The Kubernetes adapter is the first adapter and owns Kubernetes mutation meaning, dry-run evidence, diffs, drift detection, Kubernetes policy checks, Kubernetes mutation-intent canonicalization, execution behavior, evidence artifact digests, and adapter audit payloads.
 
-**Approval Authority** creates approval challenges, enforces approval policies, records approval decisions, and exposes approval state for execution. In this repository, that role is currently implemented by the gateway plus approval store. Another implementation could delegate the role to an external workflow system.
+**Approval Authority** creates approval challenges, enforces approval policies, records approval decisions, and exposes approval grants for execution. In this repository, that role is currently implemented by the gateway plus approval store. Another implementation could delegate the role to an external workflow system.
 
-**Review Surface** presents the trusted review snapshot bound by the review digest. It must not rely on model-supplied approval content as the source of truth.
+**Review Surface** renders the immutable review snapshot identified by the review digest. It must not rely on model-supplied approval content as the source of truth.
 
 ## Plan Envelope
 
@@ -60,8 +60,12 @@ Minimum generic fields:
   },
   "validFrom": "2026-05-14T00:00:00Z",
   "validUntil": "2026-05-14T01:00:00Z",
-  "freshnessCheck": {
-    "type": "adapter-defined"
+  "freshnessPolicy": {
+    "checks": [
+      {
+        "type": "adapter-defined"
+      }
+    ]
   },
   "intentDigest": {
     "algorithm": "sha-256",
@@ -70,12 +74,21 @@ Minimum generic fields:
   },
   "reviewDigest": {
     "algorithm": "sha-256",
-    "canonicalization": "profile-and-adapter-defined",
+    "canonicalization": "profile-defined",
     "value": "..."
   },
-  "evidence": {
+  "evidenceArtifacts": {
     "adapter": "kubernetes",
-    "items": []
+    "items": [
+      {
+        "type": "diff",
+        "digest": {
+          "algorithm": "sha-256",
+          "canonicalization": "adapter-defined",
+          "value": "..."
+        }
+      }
+    ]
   }
 }
 ```
@@ -87,9 +100,9 @@ Minimum generic fields:
 The profile uses two digest bindings:
 
 - **Intent Digest** binds the exact executable mutation intent.
-- **Review Digest** binds the immutable review snapshot, including plan-envelope metadata, plan evidence, redaction metadata, approval policy, execution reuse policy, freshness declaration, requester, and plan validity window.
+- **Review Digest** binds the immutable review snapshot, including plan-envelope metadata, the intent digest, evidence artifact digests or digest-bound references, redaction metadata, approval policy, execution reuse policy, freshness policy, requester, plan validity window, and review-surface context.
 
-Every digest declares its algorithm and canonicalization. The profile should define canonicalization for generic envelope metadata. Each domain adapter defines canonicalization for its mutation intent and adapter evidence.
+Every digest declares its algorithm and canonicalization. The generic approval core defines canonicalization for generic envelope metadata and the review digest. Each domain adapter defines canonicalization for its mutation intent and evidence artifacts.
 
 ## Approval Lifecycle
 
@@ -100,9 +113,10 @@ The generic lifecycle is:
 3. Expose trusted plan evidence through a review surface.
 4. Create one or more short-lived approval challenges while the plan remains valid.
 5. Record an approval, denial, rejection, or expiry through the approval authority.
-6. Before execution, verify all pre-execution gates.
-7. Execute through the domain adapter only if every required gate passes.
-8. Record the outcome in the audit trail.
+6. On successful approval, issue or reference an approval grant bound to the plan identifier, intent digest, review digest, requester, approver, approval policy, expiry, and reuse constraints.
+7. Before execution, verify all pre-execution gates.
+8. Execute through the domain adapter only if every required gate passes.
+9. Record the outcome in the audit trail.
 
 Same-subject approval is the default approval policy: the approver must be the same authenticated subject as the requester. Other approval policies, such as delegated approval or multi-party approval, are future extension points.
 
@@ -112,14 +126,14 @@ Approval is necessary but not sufficient. Immediately before mutation, approval-
 
 - plan validity window still allows execution
 - authorization check still passes
-- approval authority reports valid approval state
+- approval authority reports a valid approval grant
 - intent digest still matches executable intent
 - review digest still matches approved review snapshot
 - execution reuse policy allows another successful execution
-- declared freshness check passes
+- declared freshness policy passes
 - required domain policy checks still pass
 
-Freshness and domain policy meanings are adapter-owned, but the generic profile requires declared gates to be evaluated before execution.
+Freshness and domain policy meanings are adapter-owned, but the generic profile requires declared gates to be evaluated before execution. A freshness policy may contain zero or more freshness checks so adapters can combine checks such as dry-run, resource-version matching, preview recomputation, or other target-specific freshness signals.
 
 ## Replay And Reuse
 
@@ -139,12 +153,13 @@ The profile requires a generic audit spine that proves the lifecycle:
 - `challenge.denied`
 - `challenge.expired`
 - `challenge.rejected`
+- `grant.issued`
 - `execution.started`
 - `execution.blocked`
 - `execution.failed`
 - `execution.succeeded`
 
-Generic audit events should carry plan identifier, intent digest, review digest, requester, approver when relevant, approval policy, timestamps, and outcome. Domain adapters may attach adapter audit payloads such as Kubernetes object references, namespaces, dry-run summaries, drift messages, and policy findings.
+Generic audit events should carry plan identifier, intent digest, review digest, requester, approver when relevant, approval policy, grant identifier when relevant, timestamps, and outcome. Domain adapters may attach adapter audit payloads such as Kubernetes object references, namespaces, dry-run summaries, drift messages, and policy findings.
 
 ## Kubernetes Adapter Boundary
 
@@ -156,7 +171,8 @@ The Kubernetes adapter owns:
 - server-side dry-run
 - Kubernetes diff and drift detection
 - Kubernetes domain policy checks
-- Kubernetes canonicalization
+- Kubernetes mutation-intent canonicalization
+- Kubernetes evidence artifact digests
 - Kubernetes execution and retry behavior
 - Kubernetes adapter audit payloads
 
