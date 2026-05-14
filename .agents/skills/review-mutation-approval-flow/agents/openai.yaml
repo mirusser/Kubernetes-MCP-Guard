@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Mutation Approval Flow"
+  short_description: "Review approval-flow diagrams and glossary"
+  default_prompt: "Use $review-mutation-approval-flow to review the MCP mutation approval flow diagrams, relationships, and glossary for consistency."

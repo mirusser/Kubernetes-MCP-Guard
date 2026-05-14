@@ -18,10 +18,11 @@ Use this skill when you need to get oriented in `k8s-toolkit`, start a broad inv
    - `writing-tests` for adding or modifying tests, or when the task involves internal types.
    - `infragate-mcp-gateway` for Kubernetes or local MCP gateway inspection and guarded changes.
    - `verify-readme-docs` for README audits or documentation refreshes.
+   - `review-mutation-approval-flow` for mutation-approval glossary, flow diagrams, relationship table, profile sketch, and related ADR consistency reviews.
 4. Read `README.md` for project purpose, architecture, quick starts, capabilities, and the project map.
 5. Read `docs/devs-readme.md` for local setup, run commands, MCP tool contracts, and verification.
 6. Selectively read project docs based on the task:
-   - Mutation-approval profile, generic approval core, plan envelopes, domain adapters, or roadmap direction: `docs/mutation-approval-profile.md`, `docs/roadmap.md`, and relevant ADRs under `docs/adr/`.
+   - Mutation-approval profile, generic approval core, plan envelopes, domain adapters, flow diagrams, or roadmap direction: `docs/mutation-approval-profile.md`, `docs/mutation-approval-flow.md`, `docs/roadmap.md`, and relevant ADRs under `docs/adr/`.
    - MCP server, Kubernetes tools, validation, or approval plans: `src/InfraGate.McpServer/README.md`
    - HTTP gateway, forwarding, guardrails, sanitization, or audit logging: `src/InfraGate.McpGateway/README.md`
    - Gateway auth, bearer tokens, OAuth JWTs, protected-resource metadata, or audit identity: `src/InfraGate.McpGateway.Auth/README.md`
