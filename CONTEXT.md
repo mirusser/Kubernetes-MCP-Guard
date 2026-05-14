@@ -5,7 +5,7 @@ InfraGate explores human approval for high-risk MCP mutations. Its language sepa
 ## Core flow
 
 ```text
-Plan Envelope → Approval Challenge → Approval Grant → Execution Attempt
+Plan Envelope → Approval Challenge → Approval Outcome → Approval Grant (approved only) → Execution Attempt
 ```
 
 ## Language
@@ -23,7 +23,7 @@ The first **Domain Adapter**, responsible for Kubernetes **Mutation Intents** an
 _Avoid_: Generic Approval Core, Approval Authority
 
 **Generic Approval Core**:
-The domain-independent approval layer that owns envelope schema, lifecycle state, digest checks, approval challenges, approval grants, audit spine, review snapshot canonicalization, and pre-execution gate orchestration.
+The domain-independent approval layer that owns envelope schema, lifecycle state, digest checks, approval challenges, approval outcomes, approval grants, audit spine, review snapshot canonicalization, and pre-execution gate orchestration.
 _Avoid_: Domain Adapter, domain-specific review content
 
 **Mutation Approval Profile**:
@@ -47,7 +47,7 @@ _Avoid_: Plan Envelope field
 _Avoid_: Hidden plan, omitted data
 
 **Review Surface**:
-The trusted human-facing surface that renders the immutable review snapshot identified by the **Review Digest**.
+The trusted human-facing surface that renders the immutable review snapshot identified by the **Review Digest** to the **Approver**.
 _Avoid_: MCP client summary, model-generated plan
 
 **Requester**:
@@ -55,19 +55,23 @@ The authenticated subject on whose behalf a **Mutation Intent** is proposed.
 _Avoid_: Approver, MCP client
 
 **Approver**:
-The authenticated subject that records an approval decision for an **Approval Challenge**.
+The authenticated subject that records an **Approval Outcome** for an **Approval Challenge**.
 _Avoid_: Requester, reviewer
 
 **Approval Authority**:
-The participant that creates **Approval Challenges**, enforces **Approval Policies**, records approval decisions, and exposes **Approval Grants** for execution.
+The participant that creates **Approval Challenges**, enforces **Approval Policies**, records **Approval Outcomes**, and exposes **Approval Grants** for execution.
 _Avoid_: Gateway, approval store, workflow system
 
+**Approval Outcome**:
+The recorded result of an **Approval Challenge**, such as approved, denied, rejected, expired, or canceled, including outcome time and the authenticated subject that recorded it when applicable.
+_Avoid_: Approval Grant, challenge status
+
 **Approval Grant**:
-A durable approval result issued by the **Approval Authority** after a successful **Approval Challenge**.
-_Avoid_: Approval flag, challenge status
+A durable execution authorization issued by the **Approval Authority** after an approved **Approval Outcome**.
+_Avoid_: Approval flag, challenge status, Approval Outcome
 
 **Audit Trail**:
-The chronological record of approval-profile lifecycle events for **Plan Envelopes**, **Approval Challenges**, and **Execution Attempts**.
+The chronological record of approval-profile lifecycle events for **Plan Envelopes**, **Approval Challenges**, **Approval Outcomes**, **Approval Grants**, and **Execution Attempts**.
 _Avoid_: Log file, Kubernetes event
 
 **Audit Spine**:
@@ -79,12 +83,12 @@ Domain-specific audit data attached to an **Audit Spine** event.
 _Avoid_: Generic audit fields
 
 **Approval Policy**:
-The rule that determines which **Approvers** may decide an **Approval Challenge** for a **Plan Envelope**.
+The rule that determines which **Approvers** may record an **Approval Outcome** for a **Plan Envelope**.
 _Avoid_: OAuth scope, RBAC rule
 
 **Authorization Check**:
 A separate decision that an actor or system is permitted to request or execute a class of operation.
-_Avoid_: Approval Policy, approval decision
+_Avoid_: Approval Policy, Approval Outcome
 
 **Same-Subject Approval**:
 An **Approval Policy** requiring the **Approver** to be the same authenticated subject as the **Requester**.
@@ -112,7 +116,7 @@ _Avoid_: Approved means applied
 
 **Pre-Execution Gate**:
 A required check evaluated immediately before an **Execution Attempt** may mutate the target system.
-_Avoid_: Approval decision
+_Avoid_: Approval Outcome
 
 **Freshness Check**:
 A single pre-execution condition that decides whether an approved **Mutation Intent** is still based on acceptable current state.
@@ -147,11 +151,11 @@ An opaque stable handle for addressing a **Plan Envelope** across MCP calls, app
 _Avoid_: Integrity hash, deterministic plan id
 
 **Plan Validity Window**:
-The time period during which a **Plan Envelope** may still be approved or executed.
+The outer time period during which a **Plan Envelope** may participate in approval or execution, subject to **Challenge TTL**, **Approval Grant** expiry, reuse constraints, and **Freshness Policy**.
 _Avoid_: Challenge TTL, approval URL expiry
 
 **Approval Challenge**:
-A short-lived approval attempt bound to one **Plan Envelope** and one approval decision path.
+A short-lived approval attempt bound to one **Plan Envelope** and one approval outcome path.
 _Avoid_: Plan, approval URL
 
 **Challenge TTL**:
@@ -175,15 +179,17 @@ _Avoid_: Plan expiry, plan validity
 - A **Review Digest** declares its **Canonicalization**
 - A **Plan Envelope** may include or reference **Evidence Artifacts**
 - **Plan Evidence** may be **Redacted Evidence**
-- A **Review Surface** renders the immutable review snapshot identified by the **Review Digest**, not model-supplied approval content
+- A **Review Surface** renders the immutable review snapshot identified by the **Review Digest** to the **Approver**, not model-supplied approval content
 - A **Plan Envelope** may produce one or more **Approval Challenges**
-- An **Approval Challenge** may produce one **Approval Grant**
+- An **Approval Challenge** may produce zero or one **Approval Outcome**
+- An approved **Approval Outcome** may produce one **Approval Grant**
+- A non-approved **Approval Outcome** does not produce an **Approval Grant**
 - An **Approval Grant** is bound to one **Plan Envelope**
 - An **Approval Grant** records one **Approver**
-- An **Approval Grant** is bound to the **Plan Identifier**, **Intent Digest**, **Review Digest**, **Approval Policy**, expiry, and reuse constraints
+- An **Approval Grant** is bound to the **Plan Identifier**, **Requester**, **Approver**, **Intent Digest**, **Review Digest**, **Approval Policy**, expiry, and reuse constraints
 - An **Approval Challenge** does not define the **Mutation Intent**
-- An **Approval Authority** creates and decides **Approval Challenges**
-- An **Audit Trail** records the lifecycle of **Plan Envelopes**, **Approval Challenges**, and **Execution Attempts**
+- An **Approval Authority** creates **Approval Challenges** and records **Approval Outcomes**
+- An **Audit Trail** records the lifecycle of **Plan Envelopes**, **Approval Challenges**, **Approval Outcomes**, **Approval Grants**, and **Execution Attempts**
 - An **Audit Spine** defines the generic lifecycle events in an **Audit Trail**
 - An **Adapter Audit Payload** may be attached to an **Audit Spine** event
 - An **Authorization Check** is separate from an **Approval Policy**
@@ -197,7 +203,7 @@ _Avoid_: Plan expiry, plan validity
 - The **Generic Approval Core** owns the approval lifecycle independent of **Domain Adapters**
 - The **Generic Approval Core** owns **Canonicalization** for **Plan Envelope** metadata and the **Review Digest**
 - The **Generic Approval Core** does not define **Mutation Intents** or domain-specific **Plan Evidence**
-- The **Generic Approval Core** may host a **Review Surface** that renders adapter-provided **Evidence Artifacts**
+- The **Generic Approval Core** may host a **Review Surface**, but **Domain Adapters** supply the domain-specific **Evidence Artifacts** rendered there
 - InfraGate is currently an **Experimental Reference Implementation** for a possible **Mutation Approval Profile**
 - The **Kubernetes Adapter** is a **Domain Adapter**
 - The **Kubernetes Adapter** owns Kubernetes mutation meaning, safety evidence, mutation-intent canonicalization, freshness checks, domain policy checks, execution behavior, and adapter audit payloads
@@ -229,10 +235,10 @@ _Avoid_: Plan expiry, plan validity
 - "digest input" was treated as raw stored file bytes — resolved: every digest declares its **Canonicalization**, with **Domain Adapters** owning intent canonicalization and the **Generic Approval Core** owning review canonicalization.
 - "approval authority" was treated as the gateway implementation — resolved: **Approval Authority** is a generic role that may be implemented by the gateway, MCP server, or an external workflow system.
 - "audit trail" was treated as Kubernetes-specific event records — resolved: the generic profile defines an **Audit Spine** and allows **Adapter Audit Payloads**.
-- "authorization" was treated as if it were approval policy — resolved: **Authorization Check** is separate from **Approval Policy** and approval decisions.
+- "authorization" was treated as if it were approval policy — resolved: **Authorization Check** is separate from **Approval Policy** and **Approval Outcomes**.
 - "policy validation" was treated as approval policy — resolved: **Domain Policy Check** is adapter-owned and separate from **Approval Policy** and **Authorization Check**.
 - "approved" was treated as sufficient to execute — resolved: **Approval-Bound Execution** still requires **Pre-Execution Gates** immediately before mutation.
-- "approval" was treated as a boolean flag — resolved: a successful challenge produces or references an **Approval Grant** bound to the **Plan Identifier**, **Intent Digest**, **Review Digest**, **Approver**, policy, expiry, and reuse constraints.
+- "approval" was treated as a boolean flag — resolved: an **Approval Challenge** records an **Approval Outcome**, and only an approved outcome produces or references an **Approval Grant** bound to the **Plan Identifier**, **Requester**, **Approver**, **Intent Digest**, **Review Digest**, policy, expiry, and reuse constraints.
 - "plan id" was treated as a possible integrity mechanism — resolved: **Plan Identifier** is opaque workflow identity; **Intent Digest** proves same executable intent and **Review Digest** proves same reviewed snapshot.
 - "generic core" was treated as if it might be only terminology — resolved: **Generic Approval Core** owns the reusable lifecycle, while **Domain Adapters** own mutation meaning and evidence.
 - "Kubernetes adapter" was treated as if it might own approval lifecycle behavior — resolved: **Kubernetes Adapter** owns Kubernetes mutation meaning and evidence, while **Generic Approval Core** owns approval lifecycle behavior.

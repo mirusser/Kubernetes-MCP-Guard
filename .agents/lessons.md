@@ -11,3 +11,4 @@
 [mcp-observability] When adding ILogger to a class with multiple test-facing constructors, prefer injecting NullLogger<T>.Instance in tests rather than adding "convenience" overloads to production code — keeps production constructors honest and avoids silent no-logging paths in prod. (cause: test usability vs production clarity)
 [naming] Don't rename K8s to K8S for Sonar S101 — keep canonical K8s and document false positives instead. (cause: project naming convention)
 [docs] Don't make profile glossaries over-strict or boolean-style — model durable grants, artifact digests, and policy wrappers so the design can evolve. (cause: ontology review)
+[docs] Don't collapse approval attempts, outcomes, and execution grants — model Approval Challenge, Approval Outcome, and Approval Grant separately. (cause: approval terminology correction)

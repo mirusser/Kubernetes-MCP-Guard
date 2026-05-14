@@ -7,7 +7,7 @@ This roadmap is intentionally high level. It avoids dates and detailed internal 
 ## Current Focus
 
 - Keep the existing gateway-first Kubernetes safety model intact: OAuth JWTs at the HTTP MCP gateway, namespace-scoped Kubernetes access, bounded tools, prompt-injection guardrails, audit logs, and approval-gated mutations.
-- Shape the generic approval lifecycle described in [mutation-approval-profile.md](mutation-approval-profile.md): plan envelope, opaque plan identifier, intent and review digests, approval challenges, approval grants, audit spine, plan validity, challenge TTL, freshness policy, and pre-execution gates.
+- Shape the generic approval lifecycle described in [mutation-approval-profile.md](mutation-approval-profile.md): plan envelope, opaque plan identifier, intent and review digests, approval challenges, approval outcomes, approval grants, audit spine, plan validity, challenge TTL, freshness policy, and pre-execution gates.
 - Separate generic approval-core responsibilities from Kubernetes adapter responsibilities, following [ADR 0001](adr/0001-separate-generic-approval-core-from-domain-adapters.md).
 - Keep plan identity and integrity separate, following [ADR 0002](adr/0002-use-opaque-plan-identifiers-and-separate-digests.md): `planId` is a workflow handle, while intent and review digests prove what is executed and what was reviewed.
 - Keep public documentation accurate and split by ownership: setup, configuration, architecture, security model, protocol compliance, tool permissions, OIDC guidance, release process, and mutation-approval profile design.
@@ -30,7 +30,7 @@ This roadmap is intentionally high level. It avoids dates and detailed internal 
 - Introduce generic plan-envelope concepts in the shared approval layer while preserving existing Kubernetes behavior.
 - Split Kubernetes-specific mutation intent, evidence, freshness checks, domain policy checks, canonicalization, execution behavior, and adapter audit payloads away from generic approval lifecycle code.
 - Add the two-digest model: intent digest for executable mutation binding and review digest for the trusted human review snapshot.
-- Add approval grants as the durable approval result consumed by execution gates.
+- Add approval outcomes as recorded challenge results, and approval grants as the durable execution authorization consumed by execution gates.
 - Add explicit plan validity windows alongside short-lived approval challenge TTLs.
 - Shape the audit trail toward a generic audit spine with Kubernetes adapter payloads.
 - Keep the public demo aligned with the shipped tool surface, approval workflow, and profile terminology.

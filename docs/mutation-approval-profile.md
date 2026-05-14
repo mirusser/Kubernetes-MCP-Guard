@@ -12,7 +12,7 @@ The generic part is the approval lifecycle:
 - intent and review digest binding
 - plan validity and challenge TTL
 - requester and approver binding
-- approval challenge lifecycle
+- approval challenge and outcome lifecycle
 - replay prevention through execution reuse policy
 - audit spine
 - approval-bound execution semantics
@@ -30,13 +30,13 @@ The domain-specific part is the evidence and execution meaning:
 
 ## Roles
 
-**Generic Approval Core** owns the domain-independent approval lifecycle: plan envelopes, lifecycle state, digest checks, approval challenges, approval grants, audit spine, review snapshot canonicalization, and pre-execution gate orchestration. It does not define domain-specific review content, but it may host a review surface that renders adapter-provided evidence.
+**Generic Approval Core** owns the domain-independent approval lifecycle: plan envelopes, lifecycle state, digest checks, approval challenges, approval outcomes, approval grants, audit spine, review snapshot canonicalization, and pre-execution gate orchestration. It does not define domain-specific review content, but it may host a review surface while domain adapters supply the domain-specific evidence artifacts rendered there.
 
 **Domain Adapter** defines, explains, and executes mutation intents for one target system. The Kubernetes adapter is the first adapter and owns Kubernetes mutation meaning, dry-run evidence, diffs, drift detection, Kubernetes policy checks, Kubernetes mutation-intent canonicalization, execution behavior, evidence artifact digests, and adapter audit payloads.
 
-**Approval Authority** creates approval challenges, enforces approval policies, records approval decisions, and exposes approval grants for execution. In this repository, that role is currently implemented by the gateway plus approval store. Another implementation could delegate the role to an external workflow system.
+**Approval Authority** creates approval challenges, enforces approval policies, records approval outcomes, and exposes approval grants for execution. In this repository, that role is currently implemented by the gateway plus approval store. Another implementation could delegate the role to an external workflow system.
 
-**Review Surface** renders the immutable review snapshot identified by the review digest. It must not rely on model-supplied approval content as the source of truth.
+**Review Surface** renders the immutable review snapshot identified by the review digest to the approver. It must not rely on model-supplied approval content as the source of truth.
 
 ## Plan Envelope
 
@@ -112,8 +112,8 @@ The generic lifecycle is:
 2. Compute intent and review digests using declared canonicalization.
 3. Expose trusted plan evidence through a review surface.
 4. Create one or more short-lived approval challenges while the plan remains valid.
-5. Record an approval, denial, rejection, or expiry through the approval authority.
-6. On successful approval, issue or reference an approval grant bound to the plan identifier, intent digest, review digest, requester, approver, approval policy, expiry, and reuse constraints.
+5. Record an approval outcome, such as approved, denied, rejected, expired, or canceled, through the approval authority.
+6. On an approved outcome, issue or reference an approval grant bound to the plan identifier, requester, approver, intent digest, review digest, approval policy, expiry, and reuse constraints.
 7. Before execution, verify all pre-execution gates.
 8. Execute through the domain adapter only if every required gate passes.
 9. Record the outcome in the audit trail.
@@ -153,11 +153,14 @@ The profile requires a generic audit spine that proves the lifecycle:
 - `challenge.denied`
 - `challenge.expired`
 - `challenge.rejected`
+- `challenge.canceled`
 - `grant.issued`
 - `execution.started`
 - `execution.blocked`
 - `execution.failed`
 - `execution.succeeded`
+
+Terminal challenge events record approval outcomes. `grant.issued` exists only for an approved outcome that creates or references durable execution authorization.
 
 Generic audit events should carry plan identifier, intent digest, review digest, requester, approver when relevant, approval policy, grant identifier when relevant, timestamps, and outcome. Domain adapters may attach adapter audit payloads such as Kubernetes object references, namespaces, dry-run summaries, drift messages, and policy findings.
 
