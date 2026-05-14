@@ -2,6 +2,16 @@
 
 InfraGate explores human approval for high-risk MCP mutations. Its language separates the generic approval profile from the domain-specific adapter that explains and executes a mutation.
 
+## General Idea
+
+```text
+- AI proposes.
+- Domain adapter turns it into exact mutation intent + evidence.
+- Human approves out-of-band.
+- Approval is bound to intent/review digests.
+- Execution verifies the grant immediately before mutation.
+```
+
 ## Core flow
 
 ```text
