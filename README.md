@@ -31,9 +31,7 @@ Kubernetes-MCP-Guard is a .NET 10 gateway for the Model Context Protocol (MCP). 
 
 ## Demo
 
-[![Demo video](assets/demo-preview.png)](assets/demo-github.mp4)
-
-[Open demo video](https://raw.githubusercontent.com/mirusser/Kubernetes-MCP-Guard/main/assets/demo-github.mp4)
+https://github.com/user-attachments/assets/7f43c34f-6516-4141-ad26-e488112d8afd
 
 ---
 
