@@ -1,0 +1,4 @@
+interface:
+  display_name: "Grill with docs"
+  short_description: "Brain storming ideas with docs"
+  default_prompt: "Use $grill-with-docs when working on a new idea against existing repo domain"

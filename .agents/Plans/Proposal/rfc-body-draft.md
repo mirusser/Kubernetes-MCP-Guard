@@ -8,7 +8,7 @@
 
 ## Title
 
-`[RFC] Cryptographic Human-in-the-Loop for MCP Mutations: The Plan-Challenge-Hash Pattern`
+`[RFC] Hash-Bound Human Approval for MCP Mutations: The Plan-Challenge-Execute Pattern`
 
 ---
 
@@ -32,7 +32,7 @@ The existing `--read-only` flags and RBAC in `kubernetes-mcp-server` are excelle
 
 ### The Proposed Solution: Plans, Challenges, and Hashes
 
-In Kubernetes-MCP-Guard I've implemented a pattern I'm calling **Plan-Challenge-Hash**. Here's how it works:
+In Kubernetes-MCP-Guard I've implemented a pattern I'm calling **Plan-Challenge-Execute**. Here's how it works:
 
 #### 1. Plan Generation (not execution)
 
@@ -90,13 +90,13 @@ These properties are not just documented — they are **machine-verified by E2E 
 
 The `feature/safety-tests` branch includes SafetyE2E coverage for hash mismatch, modified pending plans, expired approvals, wrong-user approvals, already-applied plans, dangerous manifests, dry-run failure, and RBAC boundaries. The suite exercises real gateway/MCP/Kubernetes paths and uses real Keycloak JWTs for MCP bearer authentication. Browser approval OAuth is simulated at the callback/backchannel boundary in tests, with separate service-level coverage for real-JWT wrong-user rejection. A GitHub Actions workflow (`safety-e2e.yml`) runs the suite against an ephemeral KinD cluster on demand.
 
-Branch with tests: https://github.com/mirusser/Kubernetes-MCP-Guard/tree/feature/safety-tests
+Branch with tests: https://github.com/mirusser/Kubernetes-MCP-Guard/main
 
 ### Why This Needs a Portable Standard
 
-MCP already has useful primitives: tool annotations (`readOnlyHint`, `destructiveHint`), human-in-the-loop guidance, and in current draft work, elicitation/URL mode for out-of-band sensitive interactions. Those are good foundations. What MCP does not currently standardize is a portable **mutation-approval profile**: a `planId`, immutable digest, approval challenge, same-user identity binding, TTL, single-use semantics, drift check, and execute-after-approval flow. Servers must implement all of these themselves today.
+MCP already has useful primitives: tool annotations (`readOnlyHint`, `destructiveHint`), human-in-the-loop guidance, elicitation/URL mode for out-of-band sensitive interactions. Those are good foundations. What MCP does not currently standardize is a portable **mutation-approval profile**: a `planId`, immutable digest, approval challenge, same-user identity binding, TTL, single-use semantics, drift check, and execute-after-approval flow. Servers must implement all of these themselves today.
 
-Your repository is becoming the foundational reference for Kubernetes MCP. Without a shared profile, infrastructure MCP servers will diverge:
+Your repository is one of the most visible Kubernetes/OpenShift MCP implementations, so it is a good place to incubate this pattern. Without a shared profile, infrastructure MCP servers will diverge:
 - MCP clients won't know whether to expect a boolean `needs_approval` flag, a URL, a hash, or nothing
 - Security auditors will have no shared language for verifying HITL compliance
 - Teams will rely on ad-hoc prompts or untrusted `destructiveHint` annotations for real cluster mutations
@@ -109,13 +109,19 @@ I'm proposing an optional MCP mutation-approval profile that defines a minimal c
 
 This doesn't require adoption of my implementation. It requires agreement on the *interface contract* so that MCP clients can reason about approval state portably.
 
+---
+
+**Threat model:** this profile treats the mutation server/gateway as the trusted policy enforcement point. The goal is to prevent the model, MCP client, or intermediate workflow from substituting or replaying a payload after human review. It is not intended to prove correctness of a malicious server implementation.
+
 ### The Ask
 
 1. Is the TOCTOU concern recognized by the team? Have you considered it in your roadmap?
 2. Would you be open to collaborating on this thread to formalize a `propose → challenge → execute` tool contract for this repository or as an MCP standard for mutations?
 3. If yes, I'm happy to draft a more formal spec document for review.
 
-For reference, the architecture rationale is documented in [docs/why-separated-plan-from-challenge.md](https://github.com/mirusser/Kubernetes-MCP-Guard/blob/feature/safety-tests/docs/why-separated-plan-from-challenge.md) in my repo.
+For reference, the architecture rationale is documented in [docs/why-separated-plan-from-challenge.md](https://github.com/mirusser/Kubernetes-MCP-Guard/blob/main/docs/why-separated-plan-from-challenge.md) in my repo.
+
+Short version [three security gates](https://github.com/mirusser/Kubernetes-MCP-Guard#the-three-security-gates)
 
 Thanks for the great work on this project.
 — @mirusser
