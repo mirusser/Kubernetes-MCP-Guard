@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using InfraGate.Approvals;
@@ -330,6 +331,27 @@ public sealed partial class McpServerIntegrationTests
         var approvedPath = Path.Combine(approvalRoot, "approved", $"{planId}.sha256");
         var hash = await ApprovalStore.ComputeSha256Async(pendingPath, CancellationToken.None);
         await File.WriteAllTextAsync(approvedPath, hash, CancellationToken.None);
+
+        var json = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
+        var envelope = JsonSerializer.Deserialize<PlanEnvelope>(json, JsonWeb);
+        Assert.NotNull(envelope);
+
+        var grant = new ApprovalGrant(
+            Id: Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(),
+            PlanId: envelope.Id,
+            RequesterSubject: envelope.Requester.Subject,
+            ApproverSubject: envelope.Requester.Subject,
+            SourceChallengeId: string.Empty,
+            IntentDigest: envelope.IntentDigest,
+            ReviewDigest: envelope.ReviewDigest,
+            ApprovalPolicy: envelope.ApprovalPolicy,
+            ExecutionReusePolicy: envelope.ExecutionReusePolicy,
+            IssuedAtUtc: DateTimeOffset.UtcNow,
+            ExpiresAtUtc: envelope.ValidUntilUtc);
+
+        var grantsPath = Path.Combine(approvalRoot, "grants", $"{planId}.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(grantsPath)!);
+        await File.WriteAllTextAsync(grantsPath, JsonSerializer.Serialize(grant, JsonWeb), CancellationToken.None);
 
         return planId;
     }

@@ -895,6 +895,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                 services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
                 services.AddSingleton<ApprovalStore>();
                 services.AddSingleton<ApprovalChallengeStore>();
+                services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
                 services.AddSingleton<GatewayApprovalService>();
                 services.AddHttpContextAccessor();
                 services.AddAntiforgery();

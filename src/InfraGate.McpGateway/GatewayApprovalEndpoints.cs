@@ -5,6 +5,7 @@ using InfraGate.Approvals;
 using InfraGate.McpGateway.Auth;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Mvc;
 
 namespace InfraGate.McpGateway;
 
@@ -18,7 +19,7 @@ internal static class GatewayApprovalEndpoints
                 async (
                     string challengeId,
                     GatewayApprovalService approvals,
-                    IPlanReviewRenderer renderer,
+                    [FromServices] IPlanReviewRenderer renderer,
                     HttpContext context,
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
