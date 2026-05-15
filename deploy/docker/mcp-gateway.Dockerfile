@@ -2,6 +2,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY src/InfraGate.Approvals/InfraGate.Approvals.csproj src/InfraGate.Approvals/
+COPY src/InfraGate.KubernetesAdapter/InfraGate.KubernetesAdapter.csproj src/InfraGate.KubernetesAdapter/
 COPY src/InfraGate.RuntimeSafety/InfraGate.RuntimeSafety.csproj src/InfraGate.RuntimeSafety/
 COPY src/InfraGate.McpGateway.Auth/InfraGate.McpGateway.Auth.csproj src/InfraGate.McpGateway.Auth/
 COPY src/InfraGate.McpGateway/InfraGate.McpGateway.csproj src/InfraGate.McpGateway/
@@ -10,6 +11,7 @@ RUN dotnet restore src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
 RUN dotnet restore src/InfraGate.McpServer/InfraGate.McpServer.csproj
 
 COPY src/InfraGate.Approvals/ src/InfraGate.Approvals/
+COPY src/InfraGate.KubernetesAdapter/ src/InfraGate.KubernetesAdapter/
 COPY src/InfraGate.RuntimeSafety/ src/InfraGate.RuntimeSafety/
 COPY src/InfraGate.McpGateway.Auth/ src/InfraGate.McpGateway.Auth/
 COPY src/InfraGate.McpGateway/ src/InfraGate.McpGateway/
