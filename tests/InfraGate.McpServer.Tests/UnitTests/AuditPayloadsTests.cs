@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using InfraGate.Approvals;
 using InfraGate.Approvals.AuditPayloads;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
@@ -15,10 +16,16 @@ public sealed class AuditPayloadsTests
 
     public static IEnumerable<object[]> PlanPayloads()
     {
+        var digest = new ApprovalDigest("sha-256", "test", "deadbeef");
         yield return new object[]
         {
-            new PlanRequestedPayload("plan-1", "apply", "ns", "deadbeef"),
-            new[] { "planId", "operation", "namespace", "hash" }
+            new PlanRequestedPayload("plan-1", "apply", "ns", "deadbeef", digest, digest),
+            new[] { "planId", "operation", "namespace", "hash", "intentDigest", "reviewDigest" }
+        };
+        yield return new object[]
+        {
+            new ApprovalGrantIssuedPayload("plan-1", "grant-1", "challenge-1", "user", "user", digest, digest, DateTimeOffset.UnixEpoch),
+            new[] { "planId", "grantId", "sourceChallengeId", "requesterSubject", "approverSubject", "intentDigest", "reviewDigest", "expiresAtUtc" }
         };
         yield return new object[]
         {

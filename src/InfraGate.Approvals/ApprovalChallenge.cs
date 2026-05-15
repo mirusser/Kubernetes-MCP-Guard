@@ -10,4 +10,7 @@ public sealed record ApprovalChallenge(
     DateTimeOffset ExpiresAtUtc,
     string Status,
     string? ApproverSubject,
-    DateTimeOffset? DecidedAtUtc);
+    DateTimeOffset? DecidedAtUtc,
+    ApprovalDigest? IntentDigest = null,
+    ApprovalDigest? ReviewDigest = null,
+    ChallengeOutcome? Outcome = null);

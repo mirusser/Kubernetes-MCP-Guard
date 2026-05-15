@@ -89,6 +89,8 @@ internal static class McpGatewayConventions
         public const string Replicas = "replicas";
         public const string Image = "image";
         public const string PlanId = "planId";
+        public const string RequesterSubject = "requesterSubject";
+        public const string RequesterAuthenticationType = "requesterAuthenticationType";
     }
 
     public static class GuardrailAudit

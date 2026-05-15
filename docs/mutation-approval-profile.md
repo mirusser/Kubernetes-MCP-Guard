@@ -191,9 +191,9 @@ The current implementation already proves several important properties:
 - browser approval is out of band from MCP tool calls
 - approval is bound to requester identity
 - challenge TTL is enforced
-- approved execution is hash-bound
+- approved execution is bound to Intent Digest and Review Digest through Approval Grants
 - applied plans cannot be applied again
 - Kubernetes dry-run and drift checks gate execution
 - audit events record approval-flow transitions
 
-The main architectural drift from the target profile is that the shared approval layer still models `K8sPlan` directly. Moving toward this profile means separating generic plan-envelope lifecycle from Kubernetes-specific mutation intent and evidence.
+The ADR 0001 implementation now separates generic plan-envelope storage from Kubernetes-specific mutation intent and review evidence, adds Intent Digest and Review Digest binding, records Challenge Outcomes, and issues durable Approval Grants for execution. Remaining drift from the target profile includes fuller generic policy/freshness modeling and richer adapter audit payloads.

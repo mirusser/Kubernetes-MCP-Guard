@@ -44,7 +44,7 @@ flowchart TB
     subgraph Storage["Local durable storage"]
         ApprovalStore["ApprovalStore<br/>K8S_MCP_APPROVAL_ROOT"]
         Pending["pending/*.json"]
-        Approved["approved/*.sha256"]
+        Approved["grants/*.json"]
         Applied["applied/*.json"]
         Challenges["challenges/*.json"]
         ApprovalAudit["audit.jsonl<br/>approval events"]
@@ -194,8 +194,8 @@ sequenceDiagram
     Svr->>Svr: validate namespace, name, replicas, or manifest kind
     Svr->>Svr: K8sManifestParser allows Deployment / Service / ConfigMap
     Svr->>K8s: dry-run against K8s API<br/>(dryRun=All, strict field validation)
-    Svr->>Store: write pending plan with dry-run result<br/>+ compute SHA-256 hash
-    Store-->>Svr: PlanId + pending path + plan hash
+    Svr->>Store: write pending plan with dry-run result<br/>+ Intent/Review Digest binding
+    Store-->>Svr: PlanId + pending path + pending-plan hash
     Note over Svr,Store: K8sManager.Request*<br/>ApprovalStore (.mcp-approvals/pending/)
     Svr-->>GW: PlanId + plan summary<br/>(dry-run result, affected resources)
 
@@ -222,25 +222,25 @@ sequenceDiagram
     Client->>GW: POST /mcp -> apply_approved_plan(planId)<br/>JSON-RPC + JWT Bearer
     GW->>GW: validate JWT + scope
     GW->>Store: read pending plan + current hash
-    GW->>GW: create single-use challenge<br/>bound to planId + hash + requester subject + expiry
+    GW->>GW: create approval challenge<br/>bound to planId + pending hash + digests + requester subject + expiry
     GW->>Store: write challenge file<br/>+ approval_challenge_created audit event
-    GW-->>Client: approval required<br/>PlanId + plan hash + approval URL
+    GW-->>Client: approval required<br/>PlanId + Intent/Review Digests + approval URL
 
     User->>Browser: open approval URL
     Browser->>GW: GET /approvals/{challengeId}
     GW->>GW: require approval OAuth cookie<br/>or redirect to /approvals/login
     GW->>GW: validate same authenticated subject<br/>+ challenge status + expiry
     GW->>Store: read actual pending plan from disk
-    GW-->>Browser: render Gateway-owned approval page<br/>PlanId + hash + objects + dry-run status + expiry
+    GW-->>Browser: render Gateway-owned approval page<br/>PlanId + Intent/Review Digests + objects + dry-run status + expiry
 
     User->>Browser: approve or deny
     Browser->>GW: POST /approvals/{challengeId}/approve<br/>or /deny with anti-forgery token
-    GW->>Store: recompute pending plan SHA-256
-    alt hash still matches
-        GW->>Store: write approved hash<br/>+ approval_challenge_approved audit event
+    GW->>Store: recompute pending-plan hash and verify digests
+    alt bindings still match
+        GW->>Store: record Challenge Outcome<br/>+ issue Approval Grant
         GW-->>Browser: approval recorded
-    else hash changed
-        GW->>Store: write approval_hash_mismatch / rejected audit
+    else pending plan changed
+        GW->>Store: write rejected audit
         GW-->>Browser: approval failed
     end
 ```
@@ -266,13 +266,12 @@ sequenceDiagram
     User->>Client: retry apply approved plan
     Client->>GW: POST /mcp -> apply_approved_plan(planId)<br/>JSON-RPC + JWT Bearer
     GW->>GW: validate JWT + scope
-    GW->>Store: find approved challenge for planId + subject
-    GW->>Store: validate approved hash exists and matches
+    GW->>Store: validate Approval Grant for planId + subject
     GW->>Svr: forward apply_approved_plan(planId)<br/>(no token)
 
-    Svr->>Store: read pending plan + approved hash
-    Svr->>Store: recompute pending plan SHA-256
-    alt hash still matches
+    Svr->>Store: read pending plan + Approval Grant
+    Svr->>Store: validate grant expiry + Intent/Review Digests
+    alt grant and digests still match
         Svr->>K8s: repeat dry-run<br/>(dryRun=All)
         Svr->>K8s: apply mutation<br/>(server-side apply / patch / delete)
         K8s-->>Svr: Kubernetes API response

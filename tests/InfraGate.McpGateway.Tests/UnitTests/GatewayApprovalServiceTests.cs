@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using Microsoft.AspNetCore.Http;
@@ -40,7 +41,7 @@ public sealed class GatewayApprovalServiceTests
     }
 
     [Fact]
-    public async Task ApproveChallengeAsync_SameSubject_WritesApprovalAndRejectsReuse()
+    public async Task ApproveChallengeAsync_SameSubject_WritesGrantOutcomeAndRejectsReuse()
     {
         var context = CreateContext();
         var plan = await CreatePendingPlanAsync(context.Store);
@@ -51,10 +52,12 @@ public sealed class GatewayApprovalServiceTests
         var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
 
         Assert.True(approved.Succeeded);
-        Assert.True(File.Exists(context.Store.GetApprovedPath(plan.Id)));
+        Assert.True(File.Exists(context.Store.GetGrantPath(plan.Id)));
+        Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
         Assert.False(reused.Succeeded);
         Assert.Contains("already approved", reused.Message);
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
+        Assert.Equal(ApprovalConventions.ChallengeOutcomeStatuses.Approved, challenge?.Outcome?.Status);
     }
 
     [Fact]
@@ -106,7 +109,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("missing recorded server-side dry-run data", result.Message);
+        Assert.Contains("missing recorded evidence data", result.Message);
         Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
     }
 
@@ -121,7 +124,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("missing recorded diff data", result.Message);
+        Assert.Contains("missing recorded evidence data", result.Message);
         Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
     }
 
@@ -210,7 +213,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.Contains("missing recorded server-side dry-run data", result.Message);
+        Assert.Contains("missing recorded evidence data", result.Message);
         Assert.Empty(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
     }
 
@@ -226,7 +229,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.Contains("missing recorded server-side dry-run data", result.Message);
+        Assert.Contains("missing recorded evidence data", result.Message);
     }
 
     [Fact]
@@ -241,7 +244,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.Contains("missing recorded diff data", result.Message);
+        Assert.Contains("missing recorded evidence data", result.Message);
     }
 
     [Fact]
@@ -253,7 +256,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.Contains("missing recorded diff data", result.Message);
+        Assert.Contains("missing recorded evidence data", result.Message);
         Assert.Empty(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
     }
 
@@ -267,9 +270,8 @@ public sealed class GatewayApprovalServiceTests
         var page = await context.Service.GetApprovalPageAsync(challengeId, CancellationToken.None);
 
         Assert.True(page.CanDecide);
-        var diff = Assert.Single(page.Plan?.Diffs ?? []);
-        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
-        Assert.Contains("/spec/replicas", diff.ChangedPaths);
+        Assert.NotNull(page.PlanReview);
+        Assert.True(page.PlanReview.HasReviewEvidence);
     }
 
     [Fact]
@@ -360,20 +362,18 @@ public sealed class GatewayApprovalServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Contains("same authenticated subject", result.Message);
-        Assert.Equal(ApprovalConventions.ChallengeStatuses.Pending, challenge?.Status);
+        Assert.Equal(ApprovalConventions.ChallengeStatuses.Rejected, challenge?.Status);
+        Assert.Equal(ApprovalConventions.ChallengeOutcomeStatuses.Rejected, challenge?.Outcome?.Status);
     }
 
-    private static async Task<K8sPlan> CreatePendingPlanAsync(
+    private static async Task<KubernetesPlan> CreatePendingPlanAsync(
         ApprovalStore store,
         bool includeDryRun = true,
         bool includeDiff = true)
     {
         var objects = new[] { new K8sObjectRef("apps/v1", "Deployment", NamespaceName, "demo") };
-        var plan = new K8sPlan(
-            ApprovalStore.NewPlanId(),
-            "scale",
+        var payload = new KubernetesPlanPayload(
             NamespaceName,
-            DateTimeOffset.UtcNow,
             "Scale deployment.",
             new Dictionary<string, string>
             {
@@ -385,9 +385,15 @@ public sealed class GatewayApprovalServiceTests
             DryRun = includeDryRun ? CreateDryRun(objects) : null,
             Diffs = includeDiff ? CreateDiffs(objects) : []
         };
-        await store.CreatePlanAsync(plan, CancellationToken.None);
+        var envelope = KubernetesApprovalAdapter.CreateEnvelope(
+            ApprovalStore.NewPlanId(),
+            "scale",
+            DateTimeOffset.UtcNow,
+            new PlanRequester(Subject, "test"),
+            payload);
+        await store.CreatePlanAsync(envelope, payload.Namespace, CancellationToken.None);
 
-        return plan;
+        return KubernetesApprovalAdapter.Materialize(envelope);
     }
 
     private static K8sPlanDryRun CreateDryRun(IReadOnlyList<K8sObjectRef> objects) =>
@@ -431,12 +437,15 @@ public sealed class GatewayApprovalServiceTests
 
     private static async Task<string> CreateStoredChallengeAsync(TestContext context, string planId, string planHash)
     {
+        var pending = await context.Store.GetPendingPlanAsync(planId, CancellationToken.None);
         var challenge = await context.Challenges.CreateAsync(
             planId,
             planHash,
             Subject,
             "test",
             McpGatewayOptions.DefaultApprovalChallengeTtl,
+            pending.Envelope?.IntentDigest,
+            pending.Envelope?.ReviewDigest,
             CancellationToken.None);
 
         return challenge.Id;
@@ -458,12 +467,15 @@ public sealed class GatewayApprovalServiceTests
             McpGatewayOptions.DefaultApprovalChallengeTtl);
         var httpContextAccessor = new HttpContextAccessor();
         SetUser(httpContextAccessor, Subject);
+        var planReviewAdapter = new KubernetesPlanReviewAdapter();
+        var planReviewRenderer = new KubernetesPlanReviewRenderer();
 
         return new TestContext(
-            new GatewayApprovalService(store, challenges, gatewayOptions, httpContextAccessor),
+            new GatewayApprovalService(store, challenges, planReviewAdapter, planReviewRenderer, gatewayOptions, httpContextAccessor),
             store,
             challenges,
-            httpContextAccessor);
+            httpContextAccessor,
+            planReviewAdapter);
     }
 
     private static void SetUser(HttpContextAccessor accessor, string subject)
@@ -493,5 +505,6 @@ public sealed class GatewayApprovalServiceTests
         GatewayApprovalService Service,
         ApprovalStore Store,
         ApprovalChallengeStore Challenges,
-        HttpContextAccessor HttpContextAccessor);
+        HttpContextAccessor HttpContextAccessor,
+        IPlanReviewAdapter PlanReviewAdapter);
 }

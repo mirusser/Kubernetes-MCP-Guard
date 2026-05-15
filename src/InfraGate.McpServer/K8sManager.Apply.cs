@@ -1,5 +1,6 @@
 using InfraGate.Approvals;
 using InfraGate.Approvals.AuditPayloads;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpServer.Diff;
 using InfraGate.McpServer.Policy;
 using k8s;
@@ -13,38 +14,50 @@ public sealed partial class K8sManager
 {
     public async Task<string> ApplyApprovedPlanAsync(string planId, CancellationToken cancellationToken)
     {
-        var approved = await approvalStore.GetApprovedPlanAsync(planId, cancellationToken);
-        if (!approved.IsApproved || approved.Plan is null || approved.Hash is null)
+        var granted = await approvalStore.GetGrantedPlanAsync(planId, cancellationToken);
+        if (!granted.IsGranted || granted.Envelope is null || granted.Grant is null)
         {
             await approvalStore.WriteAuditAsync(
                 ApprovalConventions.AuditEvents.ApplyDenied,
-                new ApplyDeniedPayload(planId, approved.Message),
+                new ApplyDeniedPayload(planId, granted.Message),
                 cancellationToken);
 
-            return $"Refused: {approved.Message}";
+            return $"Refused: {granted.Message}";
         }
 
-        var applyResult = await ApplyPlanAsync(approved.Plan, cancellationToken);
+        var decoded = KubernetesApprovalAdapter.Decode(granted.Envelope);
+        if (!decoded.Succeeded || decoded.Plan is null)
+        {
+            await approvalStore.WriteAuditAsync(
+                ApprovalConventions.AuditEvents.ApplyDenied,
+                new ApplyDeniedPayload(planId, decoded.Message),
+                cancellationToken);
+
+            return $"Refused: {decoded.Message}";
+        }
+
+        var plan = decoded.Plan;
+        var applyResult = await ApplyPlanAsync(plan, cancellationToken);
         if (!applyResult.Succeeded)
         {
             await approvalStore.WriteAuditAsync(
                 ApprovalConventions.AuditEvents.ApplyFailed,
-                new ApplyFailedPayload(approved.Plan.Id, approved.Plan.Operation, applyResult.Message),
+                new ApplyFailedPayload(plan.Id, plan.Operation, applyResult.Message),
                 cancellationToken);
 
             return applyResult.Message;
         }
 
-        await approvalStore.MarkAppliedAsync(approved.Plan, approved.Hash, cancellationToken);
+        await approvalStore.MarkAppliedAsync(plan.Envelope, plan.Namespace, granted.Grant, cancellationToken);
 
-        var rollout = approved.Plan.Operation == K8sConventions.PlanOperations.Delete
+        var rollout = plan.Operation == K8sConventions.PlanOperations.Delete
             ? "No rollout wait for delete operations."
-            : await WaitForDeploymentsAsync(approved.Plan.Namespace, DeploymentNames(approved.Plan), cancellationToken);
-        var status = await GetStatusAsync(approved.Plan.Namespace, labelSelector: null, cancellationToken);
+            : await WaitForDeploymentsAsync(plan.Namespace, DeploymentNames(plan), cancellationToken);
+        var status = await GetStatusAsync(plan.Namespace, labelSelector: null, cancellationToken);
 
         return $"""
-               Applied plan: {approved.Plan.Id}
-               Operation: {approved.Plan.Operation}
+               Applied plan: {plan.Id}
+               Operation: {plan.Operation}
 
                API operations:
                {applyResult.Message}
@@ -57,7 +70,7 @@ public sealed partial class K8sManager
                """;
     }
 
-    private async Task<ApplyResult> ApplyPlanAsync(K8sPlan plan, CancellationToken cancellationToken)
+    private async Task<ApplyResult> ApplyPlanAsync(KubernetesPlan plan, CancellationToken cancellationToken)
     {
         if (plan.DryRun is null)
         {
@@ -84,7 +97,7 @@ public sealed partial class K8sManager
     }
 
     private async Task<ApplyResult?> RefuseIfPlanDiffsMissingOrLiveDriftedAsync(
-        K8sPlan plan,
+        KubernetesPlan plan,
         CancellationToken cancellationToken)
     {
         if (plan.Diffs.Length == 0)
@@ -106,7 +119,7 @@ public sealed partial class K8sManager
         return ApplyResult.Failed($"Live Kubernetes state changed after approval; refusing to mutate Kubernetes.{Environment.NewLine}{drift}");
     }
 
-    private async Task<ApplyResult> ApplyManifestPlanAsync(K8sPlan plan, CancellationToken cancellationToken)
+    private async Task<ApplyResult> ApplyManifestPlanAsync(KubernetesPlan plan, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(plan.Manifest))
         {
@@ -161,7 +174,7 @@ public sealed partial class K8sManager
         return ApplyResult.Success(string.Join(Environment.NewLine, messages));
     }
 
-    private async Task<ApplyResult> DeleteManifestPlanAsync(K8sPlan plan, CancellationToken cancellationToken)
+    private async Task<ApplyResult> DeleteManifestPlanAsync(KubernetesPlan plan, CancellationToken cancellationToken)
     {
         var driftRefusal = await RefuseIfPlanDiffsMissingOrLiveDriftedAsync(plan, cancellationToken);
         if (driftRefusal is not null)
@@ -187,7 +200,7 @@ public sealed partial class K8sManager
         return ApplyResult.Success(string.Join(Environment.NewLine, messages));
     }
 
-    private async Task<ApplyResult> ScaleDeploymentPlanAsync(K8sPlan plan, CancellationToken cancellationToken)
+    private async Task<ApplyResult> ScaleDeploymentPlanAsync(KubernetesPlan plan, CancellationToken cancellationToken)
     {
         var name = plan.Parameters[K8sConventions.PlanParameters.Name];
         var replicas = int.Parse(plan.Parameters[K8sConventions.PlanParameters.Replicas]);
@@ -217,7 +230,7 @@ public sealed partial class K8sManager
             $"Scaled {K8sConventions.K8sResources.DeploymentDisplayName} {plan.Namespace}/{name} to {replicas} replicas.");
     }
 
-    private async Task<ApplyResult> RestartDeploymentPlanAsync(K8sPlan plan, CancellationToken cancellationToken)
+    private async Task<ApplyResult> RestartDeploymentPlanAsync(KubernetesPlan plan, CancellationToken cancellationToken)
     {
         var name = plan.Parameters[K8sConventions.PlanParameters.Name];
         var restartedAtUtc = plan.Parameters[K8sConventions.PlanParameters.RestartedAtUtc];
@@ -247,7 +260,7 @@ public sealed partial class K8sManager
             $"Restarted {K8sConventions.K8sResources.DeploymentDisplayName} {plan.Namespace}/{name} at {restartedAtUtc}.");
     }
 
-    private async Task<ApplyResult> SetDeploymentImagePlanAsync(K8sPlan plan, CancellationToken cancellationToken)
+    private async Task<ApplyResult> SetDeploymentImagePlanAsync(KubernetesPlan plan, CancellationToken cancellationToken)
     {
         var name = plan.Parameters[K8sConventions.PlanParameters.Name];
         var container = plan.Parameters[K8sConventions.PlanParameters.Container];
@@ -296,7 +309,7 @@ public sealed partial class K8sManager
     }
 
     private async Task<ApplyResult?> RefuseIfPreApplyDryRunFailsAsync(
-        K8sPlan plan,
+        KubernetesPlan plan,
         Task<DryRunResult> dryRunTask,
         CancellationToken cancellationToken)
     {

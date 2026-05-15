@@ -4,17 +4,17 @@
 
 ## What It Covers
 
-- `ApprovalStoreTests.cs`: approval hash matching, denied unapproved plans, changed-plan protection, and server approval writes.
+- `ApprovalStoreTests.cs`: approval hash matching, denied unapproved plans, changed-plan protection, server approval writes, and legacy raw-plan refusal.
 - `K8sManifestParserTests.cs`: supported Kubernetes manifests, namespace defaulting, unsupported kinds, missing names, and namespace mismatch rejection.
 - `K8sManagerApplyTests.cs`: approved plan application for scale, restart, delete not-found, pre-apply dry-run, legacy dry-run refusal, and mismatched manifest refusal.
 - `K8sManagerConfigTests.cs`: allowed namespace listing, sorting, empty configuration, and no K8s client dependency.
 - `K8sManagerObservabilityTests.cs`: bounded Events, Pod logs, focused resource summaries, and sensitive-resource rejection.
 - `K8sManagerDiagnosticsTests.cs`: bounded Deployment, Pod, and Service diagnostics without extra RBAC assumptions.
-- `K8sManagerRequestTests.cs`: request-plan formatting, namespace validation, replica bounds, request-time dry-run, approval guidance, and unapproved apply refusal.
+- `K8sManagerRequestTests.cs`: request-plan formatting, namespace validation, replica bounds, missing-requester rejection, request-time dry-run, approval guidance, and unapproved apply refusal.
 - `AuditPayloadsTests.cs`: serialisation shape for every approval-audit payload record — locks field names, ordering, and PlanId-vs-Id conventions.
 - `K8sManagerSetImageTests.cs`: Deployment image update planning, stale-plan refusal, and patch shape.
 - `K8SMcpOptionsTests.cs`: allowed namespace parsing defaults and comma-separated values.
-- `K8sToolsTests.cs`: MCP tool delegation and argument forwarding to K8sManager.
+- `K8sToolsTests.cs`: MCP tool delegation, argument forwarding to K8sManager, and requester parameter forwarding.
 - `McpServerIntegrationTests.cs`: opt-in stdio MCP client flow that reads demo Kubernetes resources and Events, then creates, approves, applies, updates images, scales, restarts, and deletes demo resources.
 
 ## Running Tests

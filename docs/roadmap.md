@@ -29,9 +29,9 @@ This roadmap is intentionally high level. It avoids dates and detailed internal 
 - Refine the profile sketch into a concrete internal target for implementation without presenting it as a finished standard.
 - Introduce generic plan-envelope concepts in the shared approval layer while preserving existing Kubernetes behavior.
 - Split Kubernetes-specific mutation intent, evidence, freshness checks, domain policy checks, canonicalization, execution behavior, and adapter audit payloads away from generic approval lifecycle code.
-- Add the two-digest model: intent digest for executable mutation binding and review digest for the trusted human review snapshot.
-- Add challenge outcomes as recorded challenge results, and approval grants as the durable execution authorization consumed by execution gates.
-- Add explicit plan validity windows alongside short-lived approval challenge TTLs.
+- Continue hardening the two-digest model: intent digest for executable mutation binding and review digest for the trusted human review snapshot.
+- Continue hardening challenge outcomes and approval grants as the durable execution authorization consumed by execution gates.
+- Expand explicit plan validity windows and grant expiry behavior beyond the default one-hour Single-Execution Plan.
 - Shape the audit trail toward a generic audit spine with Kubernetes adapter payloads.
 - Keep the public demo aligned with the shipped tool surface, approval workflow, and profile terminology.
 - Continue tightening release validation and published-image smoke testing.

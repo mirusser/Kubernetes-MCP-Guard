@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using InfraGate.Approvals;
 using InfraGate.McpGateway;
 
 namespace InfraGate.Safety.E2E.Tests.Workflows;
@@ -34,7 +37,16 @@ public sealed class PlanHashMismatchTests(SafetyE2EFixture fixture)
         Assert.Contains("was approved", approvalResponse, StringComparison.Ordinal);
 
         var pendingPath = fixture.ApprovalStore.GetPendingPath(planId);
-        await File.AppendAllTextAsync(pendingPath, Environment.NewLine, CancellationToken.None);
+        var pendingJson = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
+        var root = JsonNode.Parse(pendingJson)
+            ?? throw new InvalidOperationException("Pending plan JSON was empty.");
+        root["payload"]!["parameters"]!["name"] = "deployment-that-does-not-exist";
+        var rewriteOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            WriteIndented = true
+        };
+        var rewritten = root.ToJsonString(rewriteOptions);
+        await File.WriteAllTextAsync(pendingPath, rewritten, CancellationToken.None);
 
         var applyText = await client.CallToolAsync(
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
@@ -43,14 +55,14 @@ public sealed class PlanHashMismatchTests(SafetyE2EFixture fixture)
                 [McpGatewayConventions.ToolArguments.PlanId] = planId
             });
 
-        Assert.Contains("Approval required.", applyText, StringComparison.Ordinal);
-        Assert.Contains("Approval URL:", applyText, StringComparison.Ordinal);
+        Assert.Contains("Refused", applyText, StringComparison.Ordinal);
+        Assert.Contains("no longer matches", applyText, StringComparison.Ordinal);
         Assert.DoesNotContain("Applied plan:", applyText, StringComparison.Ordinal);
         Assert.False(File.Exists(fixture.ApprovalStore.GetAppliedPath(planId)));
         var auditEvents = await fixture.ReadAuditEventsAsync();
         Assert.Contains(auditEvents, evt =>
-            evt.GetProperty("eventName").GetString() == ApprovalConventions.AuditEvents.ApprovalHashMismatch &&
-            evt.GetProperty("payload").TryGetProperty("planId", out var planIdProp) &&
-            planIdProp.GetString() == planId);
+            evt.GetProperty("eventName").GetString() == ApprovalConventions.AuditEvents.PlanRequested);
+        Assert.Contains(auditEvents, evt =>
+            evt.GetProperty("eventName").GetString() == ApprovalConventions.AuditEvents.ApprovalChallengeApproved);
     }
 }

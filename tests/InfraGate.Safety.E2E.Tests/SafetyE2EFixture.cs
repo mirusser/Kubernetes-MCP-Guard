@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.RuntimeSafety;
@@ -485,6 +486,8 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
                 services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
                 services.AddSingleton<ApprovalStore>();
                 services.AddSingleton<ApprovalChallengeStore>();
+                services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
+                services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
                 services.AddSingleton<GatewayApprovalService>();
                 services.AddHttpContextAccessor();
                 services.AddAntiforgery();

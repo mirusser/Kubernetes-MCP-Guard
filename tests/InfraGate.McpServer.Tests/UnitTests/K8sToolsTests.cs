@@ -8,6 +8,8 @@ namespace InfraGate.McpServer.Tests.UnitTests;
 public sealed class K8sToolsTests
 {
     private const string DemoNamespace = "demo";
+    private const string RequesterSubject = "test-requester";
+    private const string RequesterAuthenticationType = "test";
 
     [Fact]
     public async Task GetAllowedNamespaces_Delegates()
@@ -128,9 +130,25 @@ public sealed class K8sToolsTests
         await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
         var manager = CreateManager(api);
 
-        var result = await K8sTools.RequestApplyManifest(manager, DemoNamespace, DeploymentManifest);
+        var result = await K8sTools.RequestApplyManifest(
+            manager,
+            DemoNamespace,
+            DeploymentManifest,
+            RequesterSubject,
+            RequesterAuthenticationType);
 
         Assert.Contains("PlanId:", result);
+    }
+
+    [Fact]
+    public async Task RequestApplyManifest_MissingRequesterSubject_ReturnsError()
+    {
+        await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
+        var manager = CreateManager(api);
+
+        var result = await K8sTools.RequestApplyManifest(manager, DemoNamespace, DeploymentManifest);
+
+        Assert.Contains("Requester subject is required", result);
     }
 
     [Fact]
@@ -139,7 +157,12 @@ public sealed class K8sToolsTests
         await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
         var manager = CreateManager(api);
 
-        var result = await K8sTools.RequestDeleteManifest(manager, DemoNamespace, DeploymentManifest);
+        var result = await K8sTools.RequestDeleteManifest(
+            manager,
+            DemoNamespace,
+            DeploymentManifest,
+            RequesterSubject,
+            RequesterAuthenticationType);
 
         Assert.Contains("PlanId:", result);
     }
@@ -150,7 +173,13 @@ public sealed class K8sToolsTests
         await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
         var manager = CreateManager(api);
 
-        var result = await K8sTools.RequestScaleDeployment(manager, DemoNamespace, "demo", 2);
+        var result = await K8sTools.RequestScaleDeployment(
+            manager,
+            DemoNamespace,
+            "demo",
+            2,
+            RequesterSubject,
+            RequesterAuthenticationType);
 
         Assert.Contains("PlanId:", result);
     }
@@ -161,7 +190,12 @@ public sealed class K8sToolsTests
         await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
         var manager = CreateManager(api);
 
-        var result = await K8sTools.RequestRestartDeployment(manager, DemoNamespace, "demo");
+        var result = await K8sTools.RequestRestartDeployment(
+            manager,
+            DemoNamespace,
+            "demo",
+            RequesterSubject,
+            RequesterAuthenticationType);
 
         Assert.Contains("PlanId:", result);
     }
@@ -172,7 +206,14 @@ public sealed class K8sToolsTests
         await using var api = new TestKubernetesApi(_ => TestResponse.Json(DeploymentJson()));
         var manager = CreateManager(api);
 
-        var result = await K8sTools.RequestSetDeploymentImage(manager, DemoNamespace, "demo", "nginx", "nginx:1.28-alpine");
+        var result = await K8sTools.RequestSetDeploymentImage(
+            manager,
+            DemoNamespace,
+            "demo",
+            "nginx",
+            "nginx:1.28-alpine",
+            RequesterSubject,
+            RequesterAuthenticationType);
 
         Assert.Contains("PlanId:", result);
     }
@@ -192,7 +233,13 @@ public sealed class K8sToolsTests
             _ => TestResponse.Json("{}")
         });
         var (manager, store) = CreateManagerContext(api);
-        var requestText = await manager.RequestScaleDeploymentAsync(DemoNamespace, "demo", 2, CancellationToken.None);
+        var requestText = await manager.RequestScaleDeploymentAsync(
+            DemoNamespace,
+            "demo",
+            2,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
         var planId = ParsePlanId(requestText);
         await PreApprovePlanAsync(store, planId);
 
@@ -239,8 +286,17 @@ public sealed class K8sToolsTests
 
     private static async Task PreApprovePlanAsync(ApprovalStore store, string planId)
     {
-        var hash = await ApprovalStore.ComputeSha256Async(store.GetPendingPath(planId), CancellationToken.None);
-        await File.WriteAllTextAsync(store.GetApprovedPath(planId), hash, CancellationToken.None);
+        var pending = await store.GetPendingPlanAsync(planId, CancellationToken.None);
+        if (!pending.IsPending || pending.Envelope is null)
+        {
+            throw new InvalidOperationException(pending.Message);
+        }
+
+        await store.CreateGrantAsync(
+            pending.Envelope,
+            RequesterSubject,
+            sourceChallengeId: "test-challenge",
+            CancellationToken.None);
     }
 
     private static string ParsePlanId(string text) =>

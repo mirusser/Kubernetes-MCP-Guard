@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using Microsoft.AspNetCore.Authentication.OAuth;
@@ -200,13 +201,16 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             approvalOAuthBackchannel: new KeycloakTokenBackchannel(TokenEndpoint()));
         var approvalStore = server.Services.GetRequiredService<ApprovalStore>();
         var challengeStore = server.Services.GetRequiredService<ApprovalChallengeStore>();
-        var planResult = await approvalStore.CreatePlanAsync(CreateApprovalPlan(), CancellationToken.None);
+        var plan = CreateApprovalPlan();
+        var planResult = await approvalStore.CreatePlanAsync(plan, "mcp-nginx-demo", CancellationToken.None);
         var challenge = await challengeStore.CreateAsync(
-            planResult.Plan.Id,
+            planResult.Envelope.Id,
             planResult.Hash,
             DemoUsername,
             GatewayAuthConventions.Audit.OAuthAuthenticationType,
             McpGatewayOptions.DefaultApprovalChallengeTtl,
+            planResult.Envelope.IntentDigest,
+            planResult.Envelope.ReviewDigest,
             CancellationToken.None);
         using var browser = await CreateAuthenticatedApprovalBrowserAsync(server, challenge.Id);
 
@@ -726,15 +730,12 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             $"Expected DCR policy rejection, got {(int)response.StatusCode} {response.StatusCode}.");
     }
 
-    private static K8sPlan CreateApprovalPlan()
+    private static PlanEnvelope<KubernetesPlanPayload> CreateApprovalPlan()
     {
         var objects = new[] { new K8sObjectRef("apps/v1", "Deployment", "mcp-nginx-demo", "nginx-demo") };
 
-        return new K8sPlan(
-            ApprovalStore.NewPlanId(),
-            "scale",
+        var payload = new KubernetesPlanPayload(
             "mcp-nginx-demo",
-            DateTimeOffset.UtcNow,
             "Scale nginx-demo deployment.",
             new Dictionary<string, string>
             {
@@ -746,6 +747,13 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             DryRun = CreateDryRun(objects),
             Diffs = CreateDiffs(objects)
         };
+
+        return KubernetesApprovalAdapter.CreateEnvelope(
+            ApprovalStore.NewPlanId(),
+            "scale",
+            DateTimeOffset.UtcNow,
+            new PlanRequester(DemoUsername, GatewayAuthConventions.Audit.OAuthAuthenticationType),
+            payload);
     }
 
     private static K8sPlanDryRun CreateDryRun(IReadOnlyList<K8sObjectRef> objects) =>
@@ -889,6 +897,8 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                 services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
                 services.AddSingleton<ApprovalStore>();
                 services.AddSingleton<ApprovalChallengeStore>();
+                services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
+                services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
                 services.AddSingleton<GatewayApprovalService>();
                 services.AddHttpContextAccessor();
                 services.AddAntiforgery();

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpServer;
 using InfraGate.McpServer.Diff;
 using k8s;
@@ -12,6 +13,8 @@ public sealed class K8sManagerApplyTests
     private const string DemoNamespace = "demo";
     private const string PlanOperationApply = "apply";
     private const string PlanParameterObjectCount = "objectCount";
+    private const string RequesterSubject = "test-requester";
+    private const string RequesterAuthenticationType = "test";
 
     [Fact]
     public async Task ApplyApprovedPlanAsync_PatchesDeploymentScale()
@@ -27,6 +30,8 @@ public sealed class K8sManagerApplyTests
             DemoNamespace,
             "demo",
             3,
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var planId = await ApproveRequestPlanAsync(context, requestText);
 
@@ -66,6 +71,8 @@ public sealed class K8sManagerApplyTests
         var requestText = await context.Manager.RequestRestartDeploymentAsync(
             DemoNamespace,
             "demo",
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var planId = await ApproveRequestPlanAsync(context, requestText);
 
@@ -107,6 +114,8 @@ public sealed class K8sManagerApplyTests
         var requestText = await context.Manager.RequestDeleteManifestAsync(
             DemoNamespace,
             DeleteManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var planId = await ApproveRequestPlanAsync(context, requestText);
 
@@ -128,23 +137,20 @@ public sealed class K8sManagerApplyTests
             : TestResponse.Json("{}"));
         var context = CreateManager(api);
         var serviceRef = new K8sObjectRef("v1", "Service", DemoNamespace, "planned-service");
-        var plan = new K8sPlan(
+        var plan = CreatePlan(
             "apply-mismatch",
             PlanOperationApply,
             DemoNamespace,
-            DateTimeOffset.UtcNow,
             "Apply mismatched test manifest.",
             new Dictionary<string, string>
             {
                 [PlanParameterObjectCount] = "1"
             },
-            [serviceRef])
-        {
-            Manifest = MismatchedApplyManifest,
-            DryRun = CreateDryRun(serviceRef),
-            Diffs = [CreateDiff(serviceRef, ServiceJson("planned-service"), ServiceJson("planned-service"))]
-        };
-        await context.ApprovalStore.CreatePlanAsync(plan, CancellationToken.None);
+            [serviceRef],
+            MismatchedApplyManifest,
+            CreateDryRun(serviceRef),
+            [CreateDiff(serviceRef, ServiceJson("planned-service"), ServiceJson("planned-service"))]);
+        await context.ApprovalStore.CreatePlanAsync(plan, plan.Payload.Namespace, CancellationToken.None);
         await ApprovePlanAsync(context, plan.Id);
 
         var result = await context.Manager.ApplyApprovedPlanAsync(plan.Id, CancellationToken.None);
@@ -156,11 +162,10 @@ public sealed class K8sManagerApplyTests
     public async Task ApplyApprovedPlanAsync_RefusesPlanWithoutRecordedDryRun()
     {
         var context = CreateManager();
-        var plan = new K8sPlan(
+        var plan = CreatePlan(
             "legacy-plan",
             K8sConventions.PlanOperations.Scale,
             DemoNamespace,
-            DateTimeOffset.UtcNow,
             "Legacy scale plan.",
             new Dictionary<string, string>
             {
@@ -168,7 +173,7 @@ public sealed class K8sManagerApplyTests
                 [K8sConventions.PlanParameters.Replicas] = "2"
             },
             [K8sConventions.K8sResources.DeploymentRef(DemoNamespace, "demo")]);
-        await context.ApprovalStore.CreatePlanAsync(plan, CancellationToken.None);
+        await context.ApprovalStore.CreatePlanAsync(plan, plan.Payload.Namespace, CancellationToken.None);
         await ApprovePlanAsync(context, plan.Id);
 
         var result = await context.Manager.ApplyApprovedPlanAsync(plan.Id, CancellationToken.None);
@@ -177,25 +182,122 @@ public sealed class K8sManagerApplyTests
     }
 
     [Fact]
+    public async Task ApplyApprovedPlanAsync_LegacyApprovedHashWithoutGrant_RefusesMutation()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/apis/apps/v1/namespaces/demo/deployments/demo/scale" => TestResponse.Json(ScaleJson(3)),
+            _ => StatusResponse(request, DeploymentJson(3))
+        });
+        var context = CreateManager(api);
+        var requestText = await context.Manager.RequestScaleDeploymentAsync(
+            DemoNamespace,
+            "demo",
+            3,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
+        var planId = ParsePlanId(requestText);
+        var hash = await ApprovalStore.ComputeSha256Async(
+            context.ApprovalStore.GetPendingPath(planId),
+            CancellationToken.None);
+        Directory.CreateDirectory(Path.GetDirectoryName(context.ApprovalStore.GetApprovedPath(planId))!);
+        await File.WriteAllTextAsync(context.ApprovalStore.GetApprovedPath(planId), hash, CancellationToken.None);
+
+        var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
+
+        Assert.Contains("not approved", result, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(api.Requests, request =>
+            request.Method == "PATCH" &&
+            request.Path == "/apis/apps/v1/namespaces/demo/deployments/demo/scale" &&
+            !IsDryRun(request));
+    }
+
+    [Fact]
+    public async Task ApplyApprovedPlanAsync_WhenPendingReviewDigestChangedAfterGrant_RefusesMutation()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/apis/apps/v1/namespaces/demo/deployments/demo/scale" => TestResponse.Json(ScaleJson(3)),
+            _ => StatusResponse(request, DeploymentJson(3))
+        });
+        var context = CreateManager(api);
+        var requestText = await context.Manager.RequestScaleDeploymentAsync(
+            DemoNamespace,
+            "demo",
+            3,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
+        var planId = await ApproveRequestPlanAsync(context, requestText);
+        var pendingPath = context.ApprovalStore.GetPendingPath(planId);
+        var json = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
+        await File.WriteAllTextAsync(
+            pendingPath,
+            json.Replace("Server-side dry-run succeeded.", "Tampered dry-run review.", StringComparison.Ordinal),
+            CancellationToken.None);
+
+        var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
+
+        Assert.Contains("review digest", result, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(api.Requests, request =>
+            request.Method == "PATCH" &&
+            request.Path == "/apis/apps/v1/namespaces/demo/deployments/demo/scale" &&
+            !IsDryRun(request));
+    }
+
+    [Fact]
+    public async Task ApplyApprovedPlanAsync_WhenGrantExpired_RefusesMutation()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/apis/apps/v1/namespaces/demo/deployments/demo/scale" => TestResponse.Json(ScaleJson(3)),
+            _ => StatusResponse(request, DeploymentJson(3))
+        });
+        var context = CreateManager(api);
+        var requestText = await context.Manager.RequestScaleDeploymentAsync(
+            DemoNamespace,
+            "demo",
+            3,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
+        var planId = await ApproveRequestPlanAsync(context, requestText);
+        var grant = await context.ApprovalStore.GetGrantAsync(planId, CancellationToken.None) ??
+                    throw new InvalidOperationException("Grant was not written.");
+        await File.WriteAllTextAsync(
+            context.ApprovalStore.GetGrantPath(planId),
+            JsonSerializer.Serialize(grant with { ExpiresAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1) }),
+            CancellationToken.None);
+
+        var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
+
+        Assert.Contains("expired", result, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(api.Requests, request =>
+            request.Method == "PATCH" &&
+            request.Path == "/apis/apps/v1/namespaces/demo/deployments/demo/scale" &&
+            !IsDryRun(request));
+    }
+
+    [Fact]
     public async Task ApplyApprovedPlanAsync_RefusesPlanWithoutDiff()
     {
         var context = CreateManager();
-        var plan = new K8sPlan(
+        var plan = CreatePlan(
             "legacy-diff-plan",
             K8sConventions.PlanOperations.Scale,
             DemoNamespace,
-            DateTimeOffset.UtcNow,
             "Legacy scale plan without diff.",
             new Dictionary<string, string>
             {
                 [K8sConventions.PlanParameters.Name] = "demo",
                 [K8sConventions.PlanParameters.Replicas] = "2"
             },
-            [K8sConventions.K8sResources.DeploymentRef(DemoNamespace, "demo")])
-        {
-            DryRun = CreateDryRun(K8sConventions.K8sResources.DeploymentRef(DemoNamespace, "demo"))
-        };
-        await context.ApprovalStore.CreatePlanAsync(plan, CancellationToken.None);
+            [K8sConventions.K8sResources.DeploymentRef(DemoNamespace, "demo")],
+            manifest: null,
+            dryRun: CreateDryRun(K8sConventions.K8sResources.DeploymentRef(DemoNamespace, "demo")),
+            diffs: []);
+        await context.ApprovalStore.CreatePlanAsync(plan, plan.Payload.Namespace, CancellationToken.None);
         await ApprovePlanAsync(context, plan.Id);
 
         var result = await context.Manager.ApplyApprovedPlanAsync(plan.Id, CancellationToken.None);
@@ -221,6 +323,8 @@ public sealed class K8sManagerApplyTests
             DemoNamespace,
             "demo",
             3,
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var planId = await ApproveRequestPlanAsync(context, requestText);
 
@@ -241,20 +345,17 @@ public sealed class K8sManagerApplyTests
             : TestResponse.Json("{}"));
         var context = CreateManager(api);
         var deploymentRef = new K8sObjectRef("apps/v1", "Deployment", DemoNamespace, "demo");
-        var plan = new K8sPlan(
+        var plan = CreatePlan(
             "policy-revalidate",
             PlanOperationApply,
             DemoNamespace,
-            DateTimeOffset.UtcNow,
             "Apply tampered manifest.",
             new Dictionary<string, string> { [PlanParameterObjectCount] = "1" },
-            [deploymentRef])
-        {
-            Manifest = PrivilegedDeploymentManifest,
-            DryRun = CreateDryRun(deploymentRef),
-            Diffs = [CreateDiff(deploymentRef, DeploymentJson(), DeploymentJson())]
-        };
-        await context.ApprovalStore.CreatePlanAsync(plan, CancellationToken.None);
+            [deploymentRef],
+            PrivilegedDeploymentManifest,
+            CreateDryRun(deploymentRef),
+            [CreateDiff(deploymentRef, DeploymentJson(), DeploymentJson())]);
+        await context.ApprovalStore.CreatePlanAsync(plan, plan.Payload.Namespace, CancellationToken.None);
         await ApprovePlanAsync(context, plan.Id);
 
         var result = await context.Manager.ApplyApprovedPlanAsync(plan.Id, CancellationToken.None);
@@ -280,6 +381,8 @@ public sealed class K8sManagerApplyTests
             DemoNamespace,
             "demo",
             3,
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var planId = await ApproveRequestPlanAsync(context, requestText);
         liveReplicas = 2;
@@ -308,6 +411,8 @@ public sealed class K8sManagerApplyTests
         var requestText = await context.Manager.RequestApplyManifestAsync(
             DemoNamespace,
             ConfigMapManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var planId = await ApproveRequestPlanAsync(context, requestText);
         exists = true;
@@ -333,6 +438,8 @@ public sealed class K8sManagerApplyTests
         var requestText = await context.Manager.RequestDeleteManifestAsync(
             DemoNamespace,
             ConfigMapManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var planId = await ApproveRequestPlanAsync(context, requestText);
         exists = false;
@@ -360,6 +467,8 @@ public sealed class K8sManagerApplyTests
             DemoNamespace,
             "demo",
             2,
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var planId = await ApproveRequestPlanAsync(context, requestText);
 
@@ -387,6 +496,8 @@ public sealed class K8sManagerApplyTests
         var requestText = await context.Manager.RequestApplyManifestAsync(
             DemoNamespace,
             ConfigMapManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var planId = await ApproveRequestPlanAsync(context, requestText);
 
@@ -430,6 +541,8 @@ public sealed class K8sManagerApplyTests
         var requestText = await context.Manager.RequestApplyManifestAsync(
             DemoNamespace,
             ConfigMapManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var planId = await ApproveRequestPlanAsync(context, requestText);
 
@@ -464,6 +577,8 @@ public sealed class K8sManagerApplyTests
         var requestText = await context.Manager.RequestApplyManifestAsync(
             DemoNamespace,
             ConfigMapManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var planId = await ApproveRequestPlanAsync(context, requestText);
 
@@ -504,12 +619,16 @@ public sealed class K8sManagerApplyTests
 
     private static async Task ApprovePlanAsync(ManagerContext context, string planId)
     {
-        var hash = await ApprovalStore.ComputeSha256Async(
-            context.ApprovalStore.GetPendingPath(planId),
-            CancellationToken.None);
-        await File.WriteAllTextAsync(
-            context.ApprovalStore.GetApprovedPath(planId),
-            hash,
+        var pending = await context.ApprovalStore.GetPendingPlanAsync(planId, CancellationToken.None);
+        if (!pending.IsPending || pending.Envelope is null)
+        {
+            throw new InvalidOperationException(pending.Message);
+        }
+
+        await context.ApprovalStore.CreateGrantAsync(
+            pending.Envelope,
+            RequesterSubject,
+            sourceChallengeId: "test-challenge",
             CancellationToken.None);
     }
 
@@ -533,6 +652,34 @@ public sealed class K8sManagerApplyTests
 
     private static K8sPlanDiff CreateDiff(K8sObjectRef obj, string? liveJson, string? proposedJson) =>
         K8sDiffService.BuildDiff(obj, liveJson, proposedJson);
+
+    private static PlanEnvelope<KubernetesPlanPayload> CreatePlan(
+        string planId,
+        string operation,
+        string namespaceName,
+        string description,
+        Dictionary<string, string> parameters,
+        K8sObjectRef[] objects,
+        string? manifest = null,
+        K8sPlanDryRun? dryRun = null,
+        K8sPlanDiff[]? diffs = null)
+    {
+        var payload = new KubernetesPlanPayload(namespaceName, description, parameters, objects)
+        {
+            Manifest = manifest,
+            DryRun = dryRun,
+            Diffs = diffs ?? []
+        };
+
+        return KubernetesApprovalAdapter.WithPayload(
+            KubernetesApprovalAdapter.CreateEnvelope(
+            planId,
+            operation,
+            DateTimeOffset.UtcNow,
+            new PlanRequester(RequesterSubject, RequesterAuthenticationType),
+            payload),
+            payload);
+    }
 
     private static TestResponse StatusResponse(CapturedRequest request, string deployment) => request.Path switch
     {

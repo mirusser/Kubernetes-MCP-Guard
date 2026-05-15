@@ -22,7 +22,8 @@ public sealed class ExpiredApprovalTests(SafetyE2EFixture fixture)
                 new Dictionary<string, object?>
                 {
                     [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                    [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+                    [McpGatewayConventions.ToolArguments.Name] = "nginx-demo",
+                    ["requesterSubject"] = "safety-e2e-user"
                 },
                 CancellationToken.None);
             var planId = SafetyE2EFixture.ParsePlanId(requestText);
@@ -44,7 +45,7 @@ public sealed class ExpiredApprovalTests(SafetyE2EFixture fixture)
             Assert.False(approveResult.Succeeded);
             Assert.Contains("expired", approveResult.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(ApprovalConventions.ChallengeStatuses.Expired, afterChallenge?.Status);
-            Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+            Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
 
             var auditEvents = await fixture.ReadAuditEventsAsync();
             Assert.Contains(auditEvents, evt =>

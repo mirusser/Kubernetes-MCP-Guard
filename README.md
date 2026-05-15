@@ -25,7 +25,7 @@ Kubernetes-MCP-Guard is a .NET 10 gateway for the Model Context Protocol (MCP). 
 - **Browser-based HITL approval:** AI can propose a change, but only the authenticated human requester can approve or deny the final plan through the Gateway approval UI.
 - **Separated trust channels:** MCP clients receive an approval URL, while approval happens through `/approvals/*` with a browser OAuth cookie, anti-forgery checks, same-subject binding, and a short-lived challenge.
 - **Bounded Kubernetes access:** Namespace allow-lists, namespace-scoped RBAC, typed tools, and supported-kind checks keep the Kubernetes surface narrow.
-- **Auditable safety controls:** Prompt-injection guardrails, approval audit events, plan hashes, dry-runs, and drift checks make decisions traceable before and after execution.
+- **Auditable safety controls:** Prompt-injection guardrails, approval audit events, Intent/Review Digests, dry-runs, grants, and drift checks make decisions traceable before and after execution.
 
 ---
 
@@ -60,9 +60,9 @@ flowchart TB
     end
 
     subgraph Store["Shared approval store"]
-        Pending["pending plan<br/>dry-run + SHA-256 hash"]
-        Challenge["single-use challenge<br/>requester subject + TTL"]
-        Approved["approved hash<br/>applied marker"]
+        Pending["pending plan<br/>intent + review digests"]
+        Challenge["approval challenge<br/>requester subject + TTL"]
+        Approved["approval grant<br/>applied marker"]
         Pending --> Challenge
         Challenge --> Approved
     end
@@ -148,11 +148,11 @@ Every mutation passes through three independent checkpoints. Each one can block 
 
 | Phase | What happens | What can block it |
 |---|---|---|
-| **① Plan** | AI calls `request_*`; server runs a server-side dry-run and policy checks; computes a SHA-256 hash of the pending plan and stores it | Dry-run failure, policy violation (privileged containers, hostPath, dangerous caps, …) |
-| **② Approve** | Human opens the approval URL; browser renders the plan from the server-side file, not the AI's description; human clicks Approve or Deny | Challenge expired (default 15 min TTL), approver subject does not match requester, anti-forgery validation fails, or the plan hash changed after the URL was created |
-| **③ Execute** | AI calls `apply_approved_plan` again; server re-checks the approved hash, re-runs the dry-run, and checks live-state drift | Hash mismatch, no approved challenge on file, plan already applied, second dry-run failure, policy failure on re-validation, or live state drifted since approval |
+| **① Plan** | AI calls `request_*`; server runs a server-side dry-run and policy checks; computes an Intent Digest and Review Digest for the pending plan envelope | Dry-run failure, policy violation (privileged containers, hostPath, dangerous caps, …), or legacy approval file format |
+| **② Approve** | Human opens the approval URL; browser renders the plan from the server-side file, not the AI's description; human clicks Approve or Deny; the gateway records a Challenge Outcome and issues an Approval Grant only for approval | Challenge expired (default 15 min TTL), approver subject does not match requester, anti-forgery validation fails, or the pending plan hash/digest binding changed after the URL was created |
+| **③ Execute** | AI calls `apply_approved_plan` again; server validates the Approval Grant, digest bindings, plan validity window, reuse marker, re-runs the dry-run, and checks live-state drift | Missing/expired/mismatched grant, digest mismatch, plan already applied, second dry-run failure, policy failure on re-validation, or live state drifted since approval |
 
-The hash from Phase ① is the integrity seal that links all three phases. If the plan changes before approval, the browser approval is refused. If it changes after approval but before execution, `apply_approved_plan` is refused. After a successful apply, the applied marker blocks reuse of the same plan.
+The Intent Digest binds the executable mutation intent, while the Review Digest binds the trusted browser review snapshot. If the plan changes before approval, the browser approval is refused. If it changes after approval but before execution, `apply_approved_plan` is refused. After a successful apply, the applied marker blocks reuse of the same Single-Execution Plan.
 
 ### 🛠️ Technical Architecture
 
@@ -160,7 +160,7 @@ The hash from Phase ① is the integrity seal that links all three phases. If th
 - **OAuth-aware clients:** The gateway publishes MCP protected-resource metadata and returns insufficient-scope challenges so MCP clients can discover the required resource and `mcp:tools` scope. Browser approval pages use an OAuth code flow and a Gateway cookie.
 - **Guarded model-visible data:** The gateway scans tool arguments and responses for prompt-injection patterns, warns or redacts suspicious content, and writes JSONL guardrail audit events with the resolved OAuth identity.
 - **Dry-run-first mutations:** `request_*` tools create pending plans only after Kubernetes `dryRun=All` succeeds. Browser approval renders the stored server-side plan, dry-run result, policy findings, and diff.
-- **Hash-bound execution:** Approved applies require the stored SHA-256 hash to match, re-run Kubernetes dry-run immediately before the write, re-check policy where relevant, detect live-state drift, and mark plans as applied.
+- **Digest-bound execution:** Approved applies require a valid Approval Grant bound to the Intent Digest and Review Digest, re-run Kubernetes dry-run immediately before the write, re-check policy where relevant, detect live-state drift, and mark plans as applied.
 - **Narrow Kubernetes surface:** Runtime operations use the Kubernetes .NET client, namespace allow-lists, namespace-scoped RBAC, bounded read-only tools, and mutation support limited to `Deployment`, `Service`, `ConfigMap`, and narrow Deployment operations.
 
 ## 📦 Container Images
@@ -311,6 +311,7 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 - HTTP MCP gateway: [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md)
 - Gateway auth: [src/InfraGate.McpGateway.Auth/README.md](src/InfraGate.McpGateway.Auth/README.md)
 - Approval storage & audit: [src/InfraGate.Approvals/README.md](src/InfraGate.Approvals/README.md)
+- Kubernetes approval adapter: [src/InfraGate.KubernetesAdapter/README.md](src/InfraGate.KubernetesAdapter/README.md)
 - Deprecated local dev OAuth issuer: [src/InfraGate.DevIssuer/README.md](src/InfraGate.DevIssuer/README.md)
 
 <sub><em>**Naming note:** The public name is **Kubernetes MCP Guard**. The internal codename **InfraGate** appears in `.slnx`, project folders, env-var prefixes (`INFRA_GATE_*`), and Docker labels. They refer to the same project; the rename is gradual and does not change runtime behavior.</em></sub>

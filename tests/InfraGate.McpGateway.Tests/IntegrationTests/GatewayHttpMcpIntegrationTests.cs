@@ -1,11 +1,11 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -29,8 +29,6 @@ namespace InfraGate.McpGateway.Tests.IntegrationTests;
 
 public sealed partial class GatewayHttpMcpIntegrationTests
 {
-    private static readonly JsonSerializerOptions JsonWebIndented = new(JsonSerializerDefaults.Web) { WriteIndented = true };
-
     private const string Issuer = "https://issuer.example.com";
     private const string Resource = "http://127.0.0.1:3001/mcp";
     private const string Scope = "mcp:tools";
@@ -221,7 +219,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             new Dictionary<string, object?>
             {
                 [McpGatewayConventions.ToolArguments.Namespace] = NamespaceName,
-                [McpGatewayConventions.ToolArguments.Manifest] = CleanConfigMapManifest
+                [McpGatewayConventions.ToolArguments.Manifest] = CleanConfigMapManifest,
+                [McpGatewayConventions.ToolArguments.RequesterSubject] = Subject,
+                [McpGatewayConventions.ToolArguments.RequesterAuthenticationType] = "test"
             },
             timeout.Token);
 
@@ -302,7 +302,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         page.EnsureSuccessStatusCode();
         var pageText = await page.Content.ReadAsStringAsync();
         Assert.Contains($"<code>{planId}</code>", pageText);
-        Assert.Contains("Plan Hash", pageText);
+        Assert.Contains("Intent Digest", pageText);
+        Assert.Contains("Review Digest", pageText);
         Assert.Contains("Server-side dry-run: succeeded", pageText);
         Assert.Contains("Dry-run Objects", pageText);
         Assert.Contains("299 - admission warning", pageText);
@@ -332,7 +333,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
         Assert.Contains("Scaled apps/v1 Deployment", acceptedResult);
         Assert.Contains("Deployment rollout completed", acceptedResult);
-        Assert.True(File.Exists(Path.Combine(approvalRoot, "approved", $"{planId}.sha256")));
+        Assert.True(File.Exists(Path.Combine(approvalRoot, "grants", $"{planId}.json")));
         Assert.Contains(k8sApi.Requests, apiRequest =>
             apiRequest.Method == "PATCH" &&
             apiRequest.Path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo/scale" &&
@@ -636,6 +637,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
                 services.AddSingleton<ApprovalStore>();
                 services.AddSingleton<ApprovalChallengeStore>();
+                services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
+                services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
                 services.AddSingleton<GatewayApprovalService>();
                 services.AddHttpContextAccessor();
                 services.AddAntiforgery();
@@ -1024,29 +1027,18 @@ public sealed partial class GatewayHttpMcpIntegrationTests
     private static async Task<string> ApprovePlanAsync(string approvalRoot, string requestText, string subject)
     {
         var planId = ParsePlanId(requestText);
-        var pendingPath = Path.Combine(approvalRoot, ApprovalConventions.Storage.PendingDirectory, $"{planId}{ApprovalConventions.Storage.JsonExtension}");
-        var approvedPath = Path.Combine(approvalRoot, ApprovalConventions.Storage.ApprovedDirectory, $"{planId}{ApprovalConventions.Storage.Sha256Extension}");
-        await using var stream = File.OpenRead(pendingPath);
-        var hash = Convert.ToHexString(await SHA256.HashDataAsync(stream)).ToLowerInvariant();
-        Directory.CreateDirectory(Path.GetDirectoryName(approvedPath)!);
-        await File.WriteAllTextAsync(approvedPath, hash);
+        var store = new ApprovalStore(new ApprovalStoreOptions(approvalRoot));
+        var pending = await store.GetPendingPlanAsync(planId, CancellationToken.None);
+        if (!pending.IsPending || pending.Envelope is null)
+        {
+            throw new InvalidOperationException(pending.Message);
+        }
 
-        var challengeId = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
-        var challenge = new ApprovalChallenge(
-            challengeId,
-            planId,
-            hash,
+        await store.CreateGrantAsync(
+            pending.Envelope,
             subject,
-            RequesterAuthenticationType: null,
-            DateTimeOffset.UtcNow,
-            DateTimeOffset.UtcNow.AddHours(1),
-            ApprovalConventions.ChallengeStatuses.Approved,
-            ApproverSubject: subject,
-            DecidedAtUtc: DateTimeOffset.UtcNow);
-        var challengesDir = Path.Combine(approvalRoot, ApprovalConventions.Storage.ChallengesDirectory);
-        Directory.CreateDirectory(challengesDir);
-        var challengeJson = JsonSerializer.Serialize(challenge, JsonWebIndented);
-        await File.WriteAllTextAsync(Path.Combine(challengesDir, $"{challengeId}{ApprovalConventions.Storage.JsonExtension}"), challengeJson);
+            sourceChallengeId: "integration-test",
+            CancellationToken.None);
 
         return planId;
     }

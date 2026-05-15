@@ -57,7 +57,7 @@ sequenceDiagram
         Client-->>Gateway: Browser opens /approvals/{challengeId}
         Gateway->>Gateway: OAuth cookie auth + same-subject check
         Gateway->>Gateway: Recompute pending-plan hash
-        Gateway->>Gateway: Write approved hash if unchanged
+        Gateway->>Gateway: Record Challenge Outcome and issue Approval Grant if unchanged
     end
 
     Downstream-->>Gateway: Tool result text

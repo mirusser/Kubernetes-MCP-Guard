@@ -1,6 +1,8 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpServer;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -13,6 +15,8 @@ namespace InfraGate.McpServer.Tests.IntegrationTests;
 public sealed partial class McpServerIntegrationTests
 {
     private static readonly JsonSerializerOptions JsonWeb = new(JsonSerializerDefaults.Web);
+    private const string RequesterSubject = "integration-requester";
+    private const string RequesterAuthenticationType = "integration";
 
     [Fact]
     public async Task McpServer_CanApplyApprovedK8sPlans_WhenIntegrationEnabled()
@@ -68,7 +72,9 @@ public sealed partial class McpServerIntegrationTests
             new Dictionary<string, object?>
             {
                 ["namespace"] = namespaceName,
-                ["manifest"] = DemoManifest
+                ["manifest"] = DemoManifest,
+                ["requesterSubject"] = RequesterSubject,
+                ["requesterAuthenticationType"] = RequesterAuthenticationType
             },
             cancellationToken: CancellationToken.None);
 
@@ -211,7 +217,9 @@ public sealed partial class McpServerIntegrationTests
                 ["namespace"] = namespaceName,
                 ["name"] = "mcp-api-demo",
                 ["container"] = "nginx",
-                ["image"] = "nginx:1.27-alpine"
+                ["image"] = "nginx:1.27-alpine",
+                ["requesterSubject"] = RequesterSubject,
+                ["requesterAuthenticationType"] = RequesterAuthenticationType
             },
             cancellationToken: CancellationToken.None);
         await AssertPendingPlanHasDiffsAsync(approvalRoot, setImageRequestText);
@@ -234,7 +242,9 @@ public sealed partial class McpServerIntegrationTests
             {
                 ["namespace"] = namespaceName,
                 ["name"] = "mcp-api-demo",
-                ["replicas"] = 2
+                ["replicas"] = 2,
+                ["requesterSubject"] = RequesterSubject,
+                ["requesterAuthenticationType"] = RequesterAuthenticationType
             },
             cancellationToken: CancellationToken.None);
         await AssertPendingPlanHasDiffsAsync(approvalRoot, scaleRequestText);
@@ -256,7 +266,9 @@ public sealed partial class McpServerIntegrationTests
             new Dictionary<string, object?>
             {
                 ["namespace"] = namespaceName,
-                ["name"] = "mcp-api-demo"
+                ["name"] = "mcp-api-demo",
+                ["requesterSubject"] = RequesterSubject,
+                ["requesterAuthenticationType"] = RequesterAuthenticationType
             },
             cancellationToken: CancellationToken.None);
         await AssertPendingPlanHasDiffsAsync(approvalRoot, restartRequestText);
@@ -278,7 +290,9 @@ public sealed partial class McpServerIntegrationTests
             new Dictionary<string, object?>
             {
                 ["namespace"] = namespaceName,
-                ["manifest"] = DemoManifest
+                ["manifest"] = DemoManifest,
+                ["requesterSubject"] = RequesterSubject,
+                ["requesterAuthenticationType"] = RequesterAuthenticationType
             },
             cancellationToken: CancellationToken.None);
         await AssertPendingPlanHasDiffsAsync(approvalRoot, deleteRequestText);
@@ -318,6 +332,27 @@ public sealed partial class McpServerIntegrationTests
         var hash = await ApprovalStore.ComputeSha256Async(pendingPath, CancellationToken.None);
         await File.WriteAllTextAsync(approvedPath, hash, CancellationToken.None);
 
+        var json = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
+        var envelope = JsonSerializer.Deserialize<PlanEnvelope>(json, JsonWeb);
+        Assert.NotNull(envelope);
+
+        var grant = new ApprovalGrant(
+            Id: Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(),
+            PlanId: envelope.Id,
+            RequesterSubject: envelope.Requester.Subject,
+            ApproverSubject: envelope.Requester.Subject,
+            SourceChallengeId: string.Empty,
+            IntentDigest: envelope.IntentDigest,
+            ReviewDigest: envelope.ReviewDigest,
+            ApprovalPolicy: envelope.ApprovalPolicy,
+            ExecutionReusePolicy: envelope.ExecutionReusePolicy,
+            IssuedAtUtc: DateTimeOffset.UtcNow,
+            ExpiresAtUtc: envelope.ValidUntilUtc);
+
+        var grantsPath = Path.Combine(approvalRoot, "grants", $"{planId}.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(grantsPath)!);
+        await File.WriteAllTextAsync(grantsPath, JsonSerializer.Serialize(grant, JsonWeb), CancellationToken.None);
+
         return planId;
     }
 
@@ -328,7 +363,10 @@ public sealed partial class McpServerIntegrationTests
 
         var pendingPath = Path.Combine(approvalRoot, "pending", $"{planId}.json");
         var json = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
-        var plan = JsonSerializer.Deserialize<K8sPlan>(json, JsonWeb);
+        var envelope = JsonSerializer.Deserialize<PlanEnvelope>(json, JsonWeb);
+        Assert.NotNull(envelope);
+        var decoded = KubernetesApprovalAdapter.Decode(envelope);
+        var plan = decoded.Plan;
 
         Assert.NotNull(plan);
         Assert.NotEmpty(plan.Diffs);

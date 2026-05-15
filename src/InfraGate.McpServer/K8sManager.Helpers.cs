@@ -1,6 +1,7 @@
 using System.Net;
 using InfraGate.Approvals;
 using InfraGate.Approvals.AuditPayloads;
+using InfraGate.KubernetesAdapter;
 using k8s;
 using k8s.Autorest;
 
@@ -51,7 +52,7 @@ public sealed partial class K8sManager
             : null;
     }
 
-    private static IEnumerable<string> DeploymentNames(K8sPlan plan)
+    private static IEnumerable<string> DeploymentNames(KubernetesPlan plan)
     {
         return plan.Objects
             .Where(K8sConventions.K8sResources.IsDeployment)
@@ -68,7 +69,7 @@ public sealed partial class K8sManager
 
     private Task WriteDryRunFailedAuditAsync(
         string phase,
-        K8sPlan plan,
+        KubernetesPlan plan,
         string message,
         CancellationToken cancellationToken) =>
         approvalStore.WriteAuditAsync(
@@ -83,7 +84,7 @@ public sealed partial class K8sManager
             cancellationToken);
 
     private Task WriteDiffFailedAuditAsync(
-        K8sPlan plan,
+        KubernetesPlan plan,
         string message,
         CancellationToken cancellationToken) =>
         approvalStore.WriteAuditAsync(

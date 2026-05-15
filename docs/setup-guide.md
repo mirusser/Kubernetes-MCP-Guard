@@ -507,6 +507,7 @@ The canonical environment variable, CI/CD, and release configuration reference i
 ├── InfraGate.slnx                        # Solution file
 ├── src/
 │   ├── InfraGate.Approvals/              # Shared approval storage/challenge contracts
+│   ├── InfraGate.KubernetesAdapter/      # Kubernetes approval payload/evidence adapter
 │   ├── InfraGate.RuntimeSafety/          # Runtime mode and production safety checks
 │   ├── InfraGate.McpServer/              # Stdio MCP server (Kubernetes tools)
 │   ├── InfraGate.McpGateway/             # HTTP gateway (guardrails, downstream client)
@@ -532,9 +533,9 @@ The canonical environment variable, CI/CD, and release configuration reference i
 │   ├── create-demo-kubeconfig.sh         # Bootstrap RBAC & generate kubeconfig
 │   ├── smoke-test-keycloak-release.sh    # Mode D published-image smoke
 │   ├── smoke-test-release.sh             # Mode C DevIssuer fallback smoke
-│   └── approve-plan.sh                   # Manual dev-only hash approval helper
+│   └── approve-plan.sh                   # Legacy manual hash helper; browser grants are normal
 ├── .kube/                                # Generated kubeconfigs (gitignored)
-├── .mcp-approvals/                       # Plan files: pending/, approved/, applied/ (gitignored)
+├── .mcp-approvals/                       # Approval files: pending/, grants/, applied/, challenges/ (gitignored)
 └── .mcp-guardrails/                      # Gateway audit log output (gitignored)
 ```
 

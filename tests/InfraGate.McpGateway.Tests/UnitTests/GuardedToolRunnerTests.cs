@@ -262,7 +262,7 @@ public sealed class GuardedToolRunnerTests
     public async Task RequestSetDeploymentImage_ForwardsExpectedToolNameAndArguments()
     {
         var downstream = new FakeDownstream("set image");
-        var runner = new GuardedToolRunner(downstream, new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
+        var runner = CreateAuthenticatedRunner(downstream);
 
         await K8sGatewayTools.RequestSetDeploymentImage(
             runner,
@@ -277,6 +277,26 @@ public sealed class GuardedToolRunnerTests
         Assert.Equal("demo-api", downstream.Arguments["name"]);
         Assert.Equal("web", downstream.Arguments["container"]);
         Assert.Equal("nginx:1.28-alpine", downstream.Arguments["image"]);
+        Assert.Equal("ada", downstream.Arguments["requesterSubject"]);
+        Assert.Equal("oauth-jwt", downstream.Arguments["requesterAuthenticationType"]);
+    }
+
+    [Fact]
+    public async Task RequestSetDeploymentImage_UnauthenticatedUser_ReturnsRefusal()
+    {
+        var downstream = new FakeDownstream("set image");
+        var runner = new GuardedToolRunner(downstream, new InMemoryAuditStore(), NullLogger<GuardedToolRunner>.Instance);
+
+        var result = await K8sGatewayTools.RequestSetDeploymentImage(
+            runner,
+            "demo",
+            "demo-api",
+            "web",
+            "nginx:1.28-alpine",
+            CancellationToken.None);
+
+        Assert.Contains("authenticated OAuth subject", result);
+        Assert.Null(downstream.ToolName);
     }
 
     [Fact]
@@ -353,6 +373,28 @@ public sealed class GuardedToolRunnerTests
 
             return Task.FromResult(response!);
         }
+    }
+
+    private static GuardedToolRunner CreateAuthenticatedRunner(FakeDownstream downstream)
+    {
+        var httpContextAccessor = new HttpContextAccessor
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    new[]
+                    {
+                        new Claim(GatewayAuthConventions.Claims.PreferredUsername, "ada")
+                    },
+                    "Bearer"))
+            }
+        };
+
+        return new GuardedToolRunner(
+            downstream,
+            new InMemoryAuditStore(),
+            httpContextAccessor,
+            NullLogger<GuardedToolRunner>.Instance);
     }
 
     private sealed class InMemoryAuditStore : IGuardrailAuditStore

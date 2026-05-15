@@ -237,7 +237,6 @@ data:
 
 ## Future Work
 
-- PR 4: Embed `K8sPolicyFinding[]` in `K8sPlan`, include in hash, render in approval UI.
-- PR 4: Audit event for policy denial (`plan_policy_denied`).
-- PR 11: Log and data redaction — extend `WarnOnConfigMapSecretLikeKeys` to also check values against secret-shape patterns.
-- Future: `AllowedImageRegistries` option for registry allow-listing.
+- Audit event for policy denial (`plan_policy_denied`).
+- Log and data redaction — extend `WarnOnConfigMapSecretLikeKeys` to also check values against secret-shape patterns.
+- `AllowedImageRegistries` option for registry allow-listing.

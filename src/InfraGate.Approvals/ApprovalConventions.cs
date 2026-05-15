@@ -13,10 +13,41 @@ public static class ApprovalConventions
         public const string ApprovedDirectory = "approved";
         public const string AppliedDirectory = "applied";
         public const string ChallengesDirectory = "challenges";
+        public const string GrantsDirectory = "grants";
         public const string AuditFileName = "audit.jsonl";
         public const string DefaultRootDirectory = ".mcp-approvals";
         public const string JsonExtension = ".json";
         public const string Sha256Extension = ".sha256";
+    }
+
+    public static class Profiles
+    {
+        public const string MutationApproval = "mcp.mutation-approval";
+    }
+
+    public static class Digests
+    {
+        public const string Sha256 = "sha-256";
+    }
+
+    public static class Canonicalizations
+    {
+        public const string ProfileReviewV1 = "infra-gate.approval.review.v1";
+    }
+
+    public static class ApprovalPolicyTypes
+    {
+        public const string SameSubject = "same-subject";
+    }
+
+    public static class ExecutionReusePolicyTypes
+    {
+        public const string SingleExecution = "single-execution";
+    }
+
+    public static class PlanValidity
+    {
+        public static readonly TimeSpan DefaultWindow = TimeSpan.FromHours(1);
     }
 
     public static class AuditEvents
@@ -35,6 +66,7 @@ public static class ApprovalConventions
         public const string ApprovalChallengeDenied = "approval_challenge_denied";
         public const string ApprovalChallengeExpired = "approval_challenge_expired";
         public const string ApprovalChallengeRejected = "approval_challenge_rejected";
+        public const string GrantIssued = "grant_issued";
     }
 
     public static class ChallengeStatuses
@@ -43,6 +75,15 @@ public static class ApprovalConventions
         public const string Approved = "approved";
         public const string Denied = "denied";
         public const string Expired = "expired";
+        public const string Rejected = "rejected";
+    }
+
+    public static class ChallengeOutcomeStatuses
+    {
+        public const string Approved = "approved";
+        public const string Denied = "denied";
+        public const string Expired = "expired";
+        public const string Rejected = "rejected";
     }
 
     public static class ApprovalSources

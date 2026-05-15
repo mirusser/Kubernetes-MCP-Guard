@@ -1,35 +1,22 @@
-namespace InfraGate.Approvals;
+namespace InfraGate.KubernetesAdapter;
 
-// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
-public sealed record K8sPlan
+public sealed record KubernetesPlanPayload
 {
-    public K8sPlan() { }
+    public KubernetesPlanPayload() { }
 
-    public K8sPlan(
-        string id,
-        string operation,
+    public KubernetesPlanPayload(
         string namespaceName,
-        DateTimeOffset createdAtUtc,
         string description,
         Dictionary<string, string> parameters,
         K8sObjectRef[] objects)
     {
-        Id = id;
-        Operation = operation;
         Namespace = namespaceName;
-        CreatedAtUtc = createdAtUtc;
         Description = description;
         Parameters = parameters;
         Objects = objects;
     }
 
-    public string Id { get; init; } = string.Empty;
-
-    public string Operation { get; init; } = string.Empty;
-
     public string Namespace { get; init; } = string.Empty;
-
-    public DateTimeOffset CreatedAtUtc { get; init; }
 
     public string Description { get; init; } = string.Empty;
 

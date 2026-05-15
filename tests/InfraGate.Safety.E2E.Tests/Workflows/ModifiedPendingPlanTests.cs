@@ -22,7 +22,8 @@ public sealed class ModifiedPendingPlanTests(SafetyE2EFixture fixture)
                 new Dictionary<string, object?>
                 {
                     [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                    [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+                    [McpGatewayConventions.ToolArguments.Name] = "nginx-demo",
+                    ["requesterSubject"] = "safety-e2e-user"
                 },
                 CancellationToken.None);
             var planId = SafetyE2EFixture.ParsePlanId(requestText);
@@ -39,7 +40,7 @@ public sealed class ModifiedPendingPlanTests(SafetyE2EFixture fixture)
 
             Assert.False(result.Succeeded);
             Assert.Contains("pending plan changed", result.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+            Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
             Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
 
             var auditEvents = await fixture.ReadAuditEventsAsync();
