@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpServer;
 using k8s;
 using k8s.Models;
@@ -10,6 +11,8 @@ namespace InfraGate.McpServer.Tests.UnitTests;
 public sealed class K8sManagerRequestTests
 {
     private static readonly JsonSerializerOptions PlanJsonOptions = new(JsonSerializerDefaults.Web);
+    private const string RequesterSubject = "test-requester";
+    private const string RequesterAuthenticationType = "test";
 
     [Fact]
     public async Task RequestApplyManifestAsync_CreatesPlan_ForSupportedManifest()
@@ -17,7 +20,12 @@ public sealed class K8sManagerRequestTests
         await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
         var context = CreateContext("demo", api);
 
-        var result = await context.Manager.RequestApplyManifestAsync("demo", ValidManifest, CancellationToken.None);
+        var result = await context.Manager.RequestApplyManifestAsync(
+            "demo",
+            ValidManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
         var planId = ParsePlanId(result);
         var pending = await File.ReadAllTextAsync(
             context.ApprovalStore.GetPendingPath(planId),
@@ -46,7 +54,12 @@ public sealed class K8sManagerRequestTests
     {
         var manager = CreateManager("demo");
 
-        var result = await manager.RequestApplyManifestAsync("other", ValidManifest, CancellationToken.None);
+        var result = await manager.RequestApplyManifestAsync(
+            "other",
+            ValidManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
 
         Assert.Contains("Namespace 'other' is not allowed", result);
     }
@@ -58,7 +71,12 @@ public sealed class K8sManagerRequestTests
     {
         var manager = CreateManager("demo");
 
-        var result = await manager.RequestApplyManifestAsync(blank, ValidManifest, CancellationToken.None);
+        var result = await manager.RequestApplyManifestAsync(
+            blank,
+            ValidManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
 
         Assert.Contains("Namespace is required", result);
     }
@@ -68,7 +86,13 @@ public sealed class K8sManagerRequestTests
     {
         var manager = CreateManager("demo");
 
-        var result = await manager.RequestScaleDeploymentAsync("demo", "demo", 6, CancellationToken.None);
+        var result = await manager.RequestScaleDeploymentAsync(
+            "demo",
+            "demo",
+            6,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
 
         Assert.Contains("Replicas must be between 0 and 5", result);
     }
@@ -78,9 +102,25 @@ public sealed class K8sManagerRequestTests
     {
         var manager = CreateManager("demo");
 
-        var result = await manager.RequestScaleDeploymentAsync("demo", "demo", -1, CancellationToken.None);
+        var result = await manager.RequestScaleDeploymentAsync(
+            "demo",
+            "demo",
+            -1,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
 
         Assert.Contains("Replicas must be between 0 and 5", result);
+    }
+
+    [Fact]
+    public async Task RequestScaleDeploymentAsync_MissingRequesterSubject_ReturnsError()
+    {
+        var manager = CreateManager("demo");
+
+        var result = await manager.RequestScaleDeploymentAsync("demo", "demo", 1, CancellationToken.None);
+
+        Assert.Contains("Requester subject is required", result);
     }
 
     [Fact]
@@ -89,7 +129,13 @@ public sealed class K8sManagerRequestTests
         await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
         var context = CreateContext("demo", api);
 
-        var result = await context.Manager.RequestScaleDeploymentAsync("demo", "demo", 4, CancellationToken.None);
+        var result = await context.Manager.RequestScaleDeploymentAsync(
+            "demo",
+            "demo",
+            4,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
 
         Assert.Contains("Status: pending_gateway_approval", result);
         Assert.Contains("Next step: call apply_approved_plan with this PlanId.", result);
@@ -108,7 +154,13 @@ public sealed class K8sManagerRequestTests
     {
         await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
         var context = CreateContext("demo", api);
-        var request = await context.Manager.RequestScaleDeploymentAsync("demo", "demo", 4, CancellationToken.None);
+        var request = await context.Manager.RequestScaleDeploymentAsync(
+            "demo",
+            "demo",
+            4,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
         var planId = ParsePlanId(request);
 
         var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
@@ -124,7 +176,12 @@ public sealed class K8sManagerRequestTests
             TestResponse.Json(StatusJson("Invalid", 422), statusCode: 422));
         var context = CreateContext("demo", api);
 
-        var result = await context.Manager.RequestApplyManifestAsync("demo", ValidManifest, CancellationToken.None);
+        var result = await context.Manager.RequestApplyManifestAsync(
+            "demo",
+            ValidManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
 
         Assert.Contains("Server-side dry-run failed", result);
         Assert.DoesNotContain("PlanId:", result);
@@ -141,7 +198,12 @@ public sealed class K8sManagerRequestTests
                 TestResponse.Json(StatusJson("Invalid", 422), statusCode: 422));
             var context = CreateContextWithRoot("demo", api, tempFilePath);
 
-            var result = await context.Manager.RequestApplyManifestAsync("demo", ValidManifest, CancellationToken.None);
+            var result = await context.Manager.RequestApplyManifestAsync(
+                "demo",
+                ValidManifest,
+                RequesterSubject,
+                RequesterAuthenticationType,
+                CancellationToken.None);
 
             Assert.Contains("Server-side dry-run failed", result);
             Assert.DoesNotContain("PlanId:", result);
@@ -164,7 +226,12 @@ public sealed class K8sManagerRequestTests
             await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
             var context = CreateContextWithRoot("demo", api, tempFilePath);
 
-            var result = await context.Manager.RequestApplyManifestAsync("demo", ValidManifest, CancellationToken.None);
+            var result = await context.Manager.RequestApplyManifestAsync(
+                "demo",
+                ValidManifest,
+                RequesterSubject,
+                RequesterAuthenticationType,
+                CancellationToken.None);
 
             Assert.Contains("Failed to create approval plan:", result);
             Assert.DoesNotContain("PlanId:", result);
@@ -185,7 +252,12 @@ public sealed class K8sManagerRequestTests
             TestResponse.Json(StatusJson("Conflict", 409), statusCode: 409));
         var context = CreateContext("demo", api);
 
-        var result = await context.Manager.RequestApplyManifestAsync("demo", ValidManifest, CancellationToken.None);
+        var result = await context.Manager.RequestApplyManifestAsync(
+            "demo",
+            ValidManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
         var audit = await File.ReadAllTextAsync(context.ApprovalStore.AuditPath, CancellationToken.None);
 
         Assert.Contains("Apply refused by Kubernetes field ownership conflict.", result);
@@ -204,7 +276,12 @@ public sealed class K8sManagerRequestTests
             TestResponse.Json(StatusJson("NotFound", 404), statusCode: 404));
         var context = CreateContext("demo", api);
 
-        var result = await context.Manager.RequestDeleteManifestAsync("demo", DeleteManifest, CancellationToken.None);
+        var result = await context.Manager.RequestDeleteManifestAsync(
+            "demo",
+            DeleteManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
 
         Assert.Contains("Server-side dry-run failed", result);
         Assert.DoesNotContain("PlanId:", result);
@@ -217,7 +294,12 @@ public sealed class K8sManagerRequestTests
         await using var api = new TestKubernetesApi(_ => TestResponse.Json(StatusJson("Success", 200)));
         var context = CreateContext("demo", api);
 
-        var result = await context.Manager.RequestDeleteManifestAsync("demo", DeleteManifest, CancellationToken.None);
+        var result = await context.Manager.RequestDeleteManifestAsync(
+            "demo",
+            DeleteManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
 
         var request = Assert.Single(api.Requests, request =>
             request.Method == "DELETE" &&
@@ -236,7 +318,12 @@ public sealed class K8sManagerRequestTests
             : TestResponse.Json(ConfigMapJson("old")));
         var context = CreateContext("demo", api);
 
-        var result = await context.Manager.RequestApplyManifestAsync("demo", DeleteManifest, CancellationToken.None);
+        var result = await context.Manager.RequestApplyManifestAsync(
+            "demo",
+            DeleteManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
         var plan = await ReadPendingPlanAsync(context, ParsePlanId(result));
         var diff = Assert.Single(plan.Diffs);
 
@@ -253,7 +340,12 @@ public sealed class K8sManagerRequestTests
             : TestResponse.Json(ConfigMapJson("old")));
         var context = CreateContext("demo", api);
 
-        var result = await context.Manager.RequestApplyManifestAsync("demo", WarningConfigMapManifest, CancellationToken.None);
+        var result = await context.Manager.RequestApplyManifestAsync(
+            "demo",
+            WarningConfigMapManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
         var plan = await ReadPendingPlanAsync(context, ParsePlanId(result));
         var finding = Assert.Single(plan.PolicyFindings);
 
@@ -272,7 +364,12 @@ public sealed class K8sManagerRequestTests
             : TestResponse.Json(ConfigMapJson("old")));
         var context = CreateContext("demo", api);
 
-        var result = await context.Manager.RequestApplyManifestAsync("demo", MultiWarningConfigMapManifest, CancellationToken.None);
+        var result = await context.Manager.RequestApplyManifestAsync(
+            "demo",
+            MultiWarningConfigMapManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
         var plan = await ReadPendingPlanAsync(context, ParsePlanId(result));
 
         Assert.Contains("Policy: passed_with_2_warnings", result);
@@ -308,17 +405,35 @@ public sealed class K8sManagerRequestTests
         var result = operation switch
         {
             K8sConventions.PlanOperations.Delete =>
-                await context.Manager.RequestDeleteManifestAsync("demo", DeleteManifest, CancellationToken.None),
+                await context.Manager.RequestDeleteManifestAsync(
+                    "demo",
+                    DeleteManifest,
+                    RequesterSubject,
+                    RequesterAuthenticationType,
+                    CancellationToken.None),
             K8sConventions.PlanOperations.Scale =>
-                await context.Manager.RequestScaleDeploymentAsync("demo", "demo", 3, CancellationToken.None),
+                await context.Manager.RequestScaleDeploymentAsync(
+                    "demo",
+                    "demo",
+                    3,
+                    RequesterSubject,
+                    RequesterAuthenticationType,
+                    CancellationToken.None),
             K8sConventions.PlanOperations.Restart =>
-                await context.Manager.RequestRestartDeploymentAsync("demo", "demo", CancellationToken.None),
+                await context.Manager.RequestRestartDeploymentAsync(
+                    "demo",
+                    "demo",
+                    RequesterSubject,
+                    RequesterAuthenticationType,
+                    CancellationToken.None),
             K8sConventions.PlanOperations.SetImage =>
                 await context.Manager.RequestSetDeploymentImageAsync(
                     "demo",
                     "demo",
                     "nginx",
                     "nginx:1.28-alpine",
+                    RequesterSubject,
+                    RequesterAuthenticationType,
                     CancellationToken.None),
             _ => throw new InvalidOperationException($"Unknown operation '{operation}'.")
         };
@@ -335,7 +450,12 @@ public sealed class K8sManagerRequestTests
             : TestResponse.Json(ConfigMapJson("old")));
         var context = CreateContext("demo", api);
 
-        var result = await context.Manager.RequestDeleteManifestAsync("demo", DeleteManifest, CancellationToken.None);
+        var result = await context.Manager.RequestDeleteManifestAsync(
+            "demo",
+            DeleteManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
         var plan = await ReadPendingPlanAsync(context, ParsePlanId(result));
         var diff = Assert.Single(plan.Diffs);
 
@@ -351,7 +471,13 @@ public sealed class K8sManagerRequestTests
             : TestResponse.Json(ScaleJson(1)));
         var context = CreateContext("demo", api);
 
-        var result = await context.Manager.RequestScaleDeploymentAsync("demo", "demo", 3, CancellationToken.None);
+        var result = await context.Manager.RequestScaleDeploymentAsync(
+            "demo",
+            "demo",
+            3,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
         var plan = await ReadPendingPlanAsync(context, ParsePlanId(result));
         var diff = Assert.Single(plan.Diffs);
 
@@ -367,7 +493,12 @@ public sealed class K8sManagerRequestTests
             : TestResponse.Json(DeploymentJson("nginx:1.27-alpine")));
         var context = CreateContext("demo", api);
 
-        var result = await context.Manager.RequestRestartDeploymentAsync("demo", "demo", CancellationToken.None);
+        var result = await context.Manager.RequestRestartDeploymentAsync(
+            "demo",
+            "demo",
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
         var plan = await ReadPendingPlanAsync(context, ParsePlanId(result));
         var diff = Assert.Single(plan.Diffs);
 
@@ -388,6 +519,8 @@ public sealed class K8sManagerRequestTests
             "demo",
             "nginx",
             "nginx:1.28-alpine",
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var plan = await ReadPendingPlanAsync(context, ParsePlanId(result));
         var diff = Assert.Single(plan.Diffs);
@@ -404,7 +537,12 @@ public sealed class K8sManagerRequestTests
             : TestResponse.Json(StatusJson("InternalError", 500), statusCode: 500));
         var context = CreateContext("demo", api);
 
-        var result = await context.Manager.RequestApplyManifestAsync("demo", DeleteManifest, CancellationToken.None);
+        var result = await context.Manager.RequestApplyManifestAsync(
+            "demo",
+            DeleteManifest,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
 
         Assert.Contains("Diff generation failed", result);
         Assert.DoesNotContain("PlanId:", result);
@@ -418,7 +556,13 @@ public sealed class K8sManagerRequestTests
             TestResponse.Json(StatusJson("Invalid", 422), statusCode: 422));
         var context = CreateContext("demo", api);
 
-        var result = await context.Manager.RequestScaleDeploymentAsync("demo", "demo", 3, CancellationToken.None);
+        var result = await context.Manager.RequestScaleDeploymentAsync(
+            "demo",
+            "demo",
+            3,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
 
         Assert.Contains("Server-side dry-run failed", result);
         Assert.DoesNotContain("PlanId:", result);
@@ -432,7 +576,12 @@ public sealed class K8sManagerRequestTests
             TestResponse.Json(StatusJson("Invalid", 422), statusCode: 422));
         var context = CreateContext("demo", api);
 
-        var result = await context.Manager.RequestRestartDeploymentAsync("demo", "demo", CancellationToken.None);
+        var result = await context.Manager.RequestRestartDeploymentAsync(
+            "demo",
+            "demo",
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
 
         Assert.Contains("Server-side dry-run failed", result);
         Assert.DoesNotContain("PlanId:", result);
@@ -452,6 +601,8 @@ public sealed class K8sManagerRequestTests
             "demo",
             "nginx",
             "nginx:1.28-alpine",
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
 
         Assert.Contains("Server-side dry-run failed", result);
@@ -506,14 +657,16 @@ public sealed class K8sManagerRequestTests
             .Single(line => line.StartsWith("PlanId:", StringComparison.Ordinal))
             ["PlanId: ".Length..];
 
-    private static async Task<K8sPlan> ReadPendingPlanAsync(ManagerContext context, string planId)
+    private static async Task<KubernetesPlan> ReadPendingPlanAsync(ManagerContext context, string planId)
     {
         var json = await File.ReadAllTextAsync(
             context.ApprovalStore.GetPendingPath(planId),
             CancellationToken.None);
+        var envelope = JsonSerializer.Deserialize<PlanEnvelope>(json, PlanJsonOptions) ??
+                       throw new InvalidOperationException("Pending plan envelope could not be read.");
+        var decoded = KubernetesApprovalAdapter.Decode(envelope);
 
-        return JsonSerializer.Deserialize<K8sPlan>(json, PlanJsonOptions) ??
-               throw new InvalidOperationException("Pending plan could not be read.");
+        return decoded.Plan ?? throw new InvalidOperationException(decoded.Message);
     }
 
     private static void AssertCompactSuccessfulResponse(string result)

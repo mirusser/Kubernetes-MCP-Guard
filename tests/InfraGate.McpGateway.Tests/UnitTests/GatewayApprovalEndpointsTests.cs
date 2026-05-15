@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 
 namespace InfraGate.McpGateway.Tests.UnitTests;
@@ -153,9 +154,12 @@ public sealed class GatewayApprovalEndpointsTests
         var plan = CreatePlan();
         plan = plan with
         {
-            PolicyFindings = new[]
+            Payload = plan.Payload with
             {
-                new K8sPlanPolicyFinding("Deny", "POL-001", "deployment/demo", "Not allowed in production.")
+                PolicyFindings =
+                [
+                    new K8sPlanPolicyFinding("Deny", "POL-001", "deployment/demo", "Not allowed in production.")
+                ]
             }
         };
 
@@ -349,7 +353,8 @@ public sealed class GatewayApprovalEndpointsTests
     public void RenderApprovalForm_OmitsParameters_WhenEmpty()
     {
         var challenge = CreateChallenge();
-        var plan = CreatePlan() with { Parameters = new Dictionary<string, string>() };
+        var plan = CreatePlan();
+        plan = plan with { Payload = plan.Payload with { Parameters = [] } };
 
         var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, "token");
 
@@ -374,7 +379,8 @@ public sealed class GatewayApprovalEndpointsTests
     public void RenderApprovalForm_OmitsManifest_WhenNull()
     {
         var challenge = CreateChallenge();
-        var plan = CreatePlan() with { Manifest = null };
+        var plan = CreatePlan();
+        plan = plan with { Payload = plan.Payload with { Manifest = null } };
 
         var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, "token");
 
@@ -446,13 +452,10 @@ public sealed class GatewayApprovalEndpointsTests
             DecidedAtUtc: null);
     }
 
-    private static K8sPlan CreatePlan()
+    private static KubernetesPlan CreatePlan()
     {
-        return new K8sPlan(
-            id: "plan-xyz789",
-            operation: "apply_manifest",
+        var payload = new KubernetesPlanPayload(
             namespaceName: "mcp-ns",
-            createdAtUtc: FixedTime,
             description: "Scale deployment demo to 3 replicas.",
             parameters: new Dictionary<string, string> { ["scale"] = "3" },
             objects: [new K8sObjectRef("apps/v1", "Deployment", "mcp-ns", "demo")])
@@ -479,5 +482,13 @@ public sealed class GatewayApprovalEndpointsTests
             ],
             PolicyFindings = [],
         };
+        var envelope = KubernetesApprovalAdapter.CreateEnvelope(
+            "plan-xyz789",
+            "apply_manifest",
+            FixedTime,
+            new PlanRequester("user@example.com", "OAuth"),
+            payload);
+
+        return KubernetesApprovalAdapter.Materialize(envelope);
     }
 }

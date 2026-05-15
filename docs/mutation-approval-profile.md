@@ -196,4 +196,4 @@ The current implementation already proves several important properties:
 - Kubernetes dry-run and drift checks gate execution
 - audit events record approval-flow transitions
 
-The main architectural drift from the target profile is that the shared approval layer still models `K8sPlan` directly. Moving toward this profile means separating generic plan-envelope lifecycle from Kubernetes-specific mutation intent and evidence.
+The first ADR 0001 slice now separates generic plan-envelope storage from Kubernetes-specific mutation intent and review evidence. The remaining drift from the target profile is the deferred ADR 0002 digest split, durable approval grants, challenge outcomes, and fuller generic policy/freshness modeling.

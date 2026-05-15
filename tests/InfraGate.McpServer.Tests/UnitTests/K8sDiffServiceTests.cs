@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpServer;
 using InfraGate.McpServer.Diff;
 using k8s;
@@ -142,17 +143,20 @@ public sealed class K8sDiffServiceTests
             Host = "http://127.0.0.1:1",
             SkipTlsVerify = true
         });
-        var plan = new K8sPlan(
+        var envelope = KubernetesApprovalAdapter.CreateEnvelope(
             "plan-1",
             "apply",
-            "demo",
             DateTimeOffset.UtcNow,
-            "Apply ConfigMap.",
-            [],
-            [ConfigMapRef])
-        {
-            Diffs = []
-        };
+            new PlanRequester("test-requester", "test"),
+            new KubernetesPlanPayload(
+                "demo",
+                "Apply ConfigMap.",
+                [],
+                [ConfigMapRef])
+            {
+                Diffs = []
+            });
+        var plan = KubernetesApprovalAdapter.Materialize(envelope);
 
         var drift = await K8sDiffService.FindDriftAsync(client, plan, CancellationToken.None);
 

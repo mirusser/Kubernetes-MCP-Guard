@@ -1,5 +1,6 @@
 using InfraGate.Approvals;
 using InfraGate.Approvals.AuditPayloads;
+using InfraGate.KubernetesAdapter;
 
 namespace InfraGate.McpGateway;
 
@@ -33,9 +34,20 @@ public sealed class GatewayApprovalService
         }
 
         var approved = await approvalStore.GetApprovedPlanAsync(planId, cancellationToken);
-        if (approved.IsApproved)
+        if (approved.IsApproved && approved.Envelope is not null)
         {
-            var approvedRefusal = GetPlanReadinessRefusal(approved.Plan, planId);
+            var decoded = KubernetesApprovalAdapter.Decode(approved.Envelope);
+            if (!decoded.Succeeded || decoded.Plan is null)
+            {
+                return ApprovalGateResult.RequiresApproval($"Refused: {decoded.Message}");
+            }
+
+            if (!SameSubject(decoded.Plan.Requester.Subject, requester.Subject))
+            {
+                return ApprovalGateResult.RequiresApproval("Refused: apply approval requires the same authenticated subject that requested the plan.");
+            }
+
+            var approvedRefusal = GetPlanReadinessRefusal(decoded.Plan, planId);
             if (approvedRefusal is not null)
             {
                 return ApprovalGateResult.RequiresApproval($"Refused: {approvedRefusal}");
@@ -53,12 +65,23 @@ public sealed class GatewayApprovalService
         }
 
         var pending = await approvalStore.GetPendingPlanAsync(planId, cancellationToken);
-        if (!pending.IsPending || pending.Plan is null || pending.Hash is null)
+        if (!pending.IsPending || pending.Envelope is null || pending.Hash is null)
         {
             return ApprovalGateResult.RequiresApproval($"Refused: {pending.Message}");
         }
 
-        var pendingRefusal = GetPlanReadinessRefusal(pending.Plan, planId);
+        var pendingPlan = KubernetesApprovalAdapter.Decode(pending.Envelope);
+        if (!pendingPlan.Succeeded || pendingPlan.Plan is null)
+        {
+            return ApprovalGateResult.RequiresApproval($"Refused: {pendingPlan.Message}");
+        }
+
+        if (!SameSubject(pendingPlan.Plan.Requester.Subject, requester.Subject))
+        {
+            return ApprovalGateResult.RequiresApproval("Refused: apply approval requires the same authenticated subject that requested the plan.");
+        }
+
+        var pendingRefusal = GetPlanReadinessRefusal(pendingPlan.Plan, planId);
         if (pendingRefusal is not null)
         {
             return ApprovalGateResult.RequiresApproval($"Refused: {pendingRefusal}");
@@ -82,10 +105,10 @@ public sealed class GatewayApprovalService
                 challenge.ExpiresAtUtc),
             cancellationToken);
 
-        return ApprovalGateResult.RequiresApproval(FormatApprovalRequiredMessage(pending.Plan, pending.Hash, challenge));
+        return ApprovalGateResult.RequiresApproval(FormatApprovalRequiredMessage(pendingPlan.Plan, pending.Hash, challenge));
     }
 
-    private static string? GetPlanReadinessRefusal(K8sPlan? plan, string planId)
+    private static string? GetPlanReadinessRefusal(KubernetesPlan? plan, string planId)
     {
         if (plan?.DryRun is null)
         {
@@ -270,7 +293,7 @@ public sealed class GatewayApprovalService
         }
 
         var pending = await approvalStore.GetPendingPlanAsync(challenge.PlanId, cancellationToken);
-        if (!pending.IsPending || pending.Plan is null || pending.Hash is null)
+        if (!pending.IsPending || pending.Envelope is null || pending.Hash is null)
         {
             await WriteChallengeRejectedAuditAsync(
                 challenge,
@@ -279,6 +302,30 @@ public sealed class GatewayApprovalService
                 cancellationToken);
 
             return ChallengeValidation.Invalid(pending.Message, challenge);
+        }
+
+        var decoded = KubernetesApprovalAdapter.Decode(pending.Envelope);
+        if (!decoded.Succeeded || decoded.Plan is null)
+        {
+            await WriteChallengeRejectedAuditAsync(
+                challenge,
+                approver.Subject,
+                decoded.Message,
+                cancellationToken);
+
+            return ChallengeValidation.Invalid(decoded.Message, challenge);
+        }
+
+        if (!SameSubject(challenge.RequesterSubject, decoded.Plan.Requester.Subject))
+        {
+            const string message = "The pending plan requester changed after this approval URL was created. Ask the MCP client to request a new approval URL.";
+            await WriteChallengeRejectedAuditAsync(
+                challenge,
+                approver.Subject,
+                message,
+                cancellationToken);
+
+            return ChallengeValidation.Invalid(message, challenge, decoded.Plan);
         }
 
         if (!FixedTimeStringComparer.Equals(challenge.PlanHash, pending.Hash))
@@ -290,10 +337,10 @@ public sealed class GatewayApprovalService
                 message,
                 cancellationToken);
 
-            return ChallengeValidation.Invalid(message, challenge, pending.Plan);
+            return ChallengeValidation.Invalid(message, challenge, decoded.Plan);
         }
 
-        if (pending.Plan.DryRun is null)
+        if (decoded.Plan.DryRun is null)
         {
             var message = MissingDryRunMessage(challenge.PlanId);
             await WriteChallengeRejectedAuditAsync(
@@ -302,10 +349,10 @@ public sealed class GatewayApprovalService
                 message,
                 cancellationToken);
 
-            return ChallengeValidation.Invalid(message, challenge, pending.Plan);
+            return ChallengeValidation.Invalid(message, challenge, decoded.Plan);
         }
 
-        if (pending.Plan.Diffs.Length == 0)
+        if (decoded.Plan.Diffs.Length == 0)
         {
             var message = MissingDiffMessage(challenge.PlanId);
             await WriteChallengeRejectedAuditAsync(
@@ -314,10 +361,10 @@ public sealed class GatewayApprovalService
                 message,
                 cancellationToken);
 
-            return ChallengeValidation.Invalid(message, challenge, pending.Plan);
+            return ChallengeValidation.Invalid(message, challenge, decoded.Plan);
         }
 
-        return ChallengeValidation.Valid(challenge, pending.Plan);
+        return ChallengeValidation.Valid(challenge, decoded.Plan);
     }
 
     private Task WriteChallengeRejectedAuditAsync(
@@ -336,7 +383,7 @@ public sealed class GatewayApprovalService
                 reason),
             cancellationToken);
 
-    private string FormatApprovalRequiredMessage(K8sPlan plan, string hash, ApprovalChallenge challenge)
+    private string FormatApprovalRequiredMessage(KubernetesPlan plan, string hash, ApprovalChallenge challenge)
     {
         var objects = string.Join(
             Environment.NewLine,
@@ -392,15 +439,15 @@ public sealed class GatewayApprovalService
     private sealed record ChallengeValidation(
         string? Error,
         ApprovalChallenge? Challenge,
-        K8sPlan? Plan)
+        KubernetesPlan? Plan)
     {
-        public static ChallengeValidation Valid(ApprovalChallenge challenge, K8sPlan plan) =>
+        public static ChallengeValidation Valid(ApprovalChallenge challenge, KubernetesPlan plan) =>
             new(null, challenge, plan);
 
         public static ChallengeValidation Invalid(
             string error,
             ApprovalChallenge? challenge = null,
-            K8sPlan? plan = null) =>
+            KubernetesPlan? plan = null) =>
             new(error, challenge, plan);
     }
 }

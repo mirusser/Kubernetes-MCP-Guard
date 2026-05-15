@@ -37,21 +37,24 @@ public sealed class ApprovalStore
         return $"{DateTimeOffset.UtcNow.ToString(ApprovalConventions.DateTimeFormats.PlanIdTimestamp)}-{Convert.ToHexString(bytes).ToLowerInvariant()}";
     }
 
-    public async Task<ApprovalPlanResult> CreatePlanAsync(K8sPlan plan, CancellationToken cancellationToken)
+    public async Task<ApprovalPlanResult> CreatePlanAsync<TPayload>(
+        PlanEnvelope<TPayload> envelope,
+        string targetNamespace,
+        CancellationToken cancellationToken)
     {
         EnsureDirectories();
 
-        var pendingPath = GetPendingPath(plan.Id);
-        var json = JsonSerializer.Serialize(plan, jsonOptions);
+        var pendingPath = GetPendingPath(envelope.Id);
+        var json = JsonSerializer.Serialize(envelope, jsonOptions);
         await File.WriteAllTextAsync(pendingPath, json, cancellationToken);
 
         var hash = await ComputeSha256Async(pendingPath, cancellationToken);
         await WriteAuditAsync(
             ApprovalConventions.AuditEvents.PlanRequested,
-            new PlanRequestedPayload(plan.Id, plan.Operation, plan.Namespace, hash),
+            new PlanRequestedPayload(envelope.Id, envelope.Operation, targetNamespace, hash),
             cancellationToken);
 
-        return new ApprovalPlanResult(plan, pendingPath, GetApprovedPath(plan.Id), hash);
+        return new ApprovalPlanResult(ToUntypedEnvelope(envelope), pendingPath, GetApprovedPath(envelope.Id), hash);
     }
 
     public async Task<ApprovedPlanResult> GetApprovedPlanAsync(string planId, CancellationToken cancellationToken)
@@ -92,12 +95,11 @@ public sealed class ApprovalStore
             return ApprovedPlanResult.Denied($"Plan '{planId}' changed after approval; refusing to apply it.");
         }
 
-        var json = await File.ReadAllTextAsync(pendingPath, cancellationToken);
-        var plan = JsonSerializer.Deserialize<K8sPlan>(json, jsonOptions);
+        var read = await ReadEnvelopeAsync(planId, pendingPath, cancellationToken);
 
-        return plan is null
-            ? ApprovedPlanResult.Denied($"Plan '{planId}' could not be read.")
-            : ApprovedPlanResult.Approved(plan, actualHash);
+        return read.Envelope is null
+            ? ApprovedPlanResult.Denied(read.Message)
+            : ApprovedPlanResult.Approved(read.Envelope, actualHash);
     }
 
     public async Task<PendingPlanResult> GetPendingPlanAsync(string planId, CancellationToken cancellationToken)
@@ -120,12 +122,11 @@ public sealed class ApprovalStore
         }
 
         var actualHash = await ComputeSha256Async(pendingPath, cancellationToken);
-        var json = await File.ReadAllTextAsync(pendingPath, cancellationToken);
-        var plan = JsonSerializer.Deserialize<K8sPlan>(json, jsonOptions);
+        var read = await ReadEnvelopeAsync(planId, pendingPath, cancellationToken);
 
-        return plan is null
-            ? PendingPlanResult.Denied($"Plan '{planId}' could not be read.")
-            : PendingPlanResult.Found(plan, pendingPath, GetApprovedPath(planId), actualHash);
+        return read.Envelope is null
+            ? PendingPlanResult.Denied(read.Message)
+            : PendingPlanResult.Found(read.Envelope, pendingPath, GetApprovedPath(planId), actualHash);
     }
 
     public Task<ApprovedPlanResult> ApprovePendingPlanAsync(
@@ -149,7 +150,7 @@ public sealed class ApprovalStore
         CancellationToken cancellationToken)
     {
         var pending = await GetPendingPlanAsync(planId, cancellationToken);
-        if (!pending.IsPending || pending.Plan is null || pending.Hash is null)
+        if (!pending.IsPending || pending.Envelope is null || pending.Hash is null)
         {
             return ApprovedPlanResult.Denied(pending.Message);
         }
@@ -171,19 +172,24 @@ public sealed class ApprovalStore
             new PlanApprovedPayload(planId, pending.Hash, source, approverSubject, challengeId),
             cancellationToken);
 
-        return ApprovedPlanResult.Approved(pending.Plan, pending.Hash);
+        return ApprovedPlanResult.Approved(pending.Envelope, pending.Hash);
     }
 
-    public async Task MarkAppliedAsync(K8sPlan plan, string hash, CancellationToken cancellationToken)
+    public async Task MarkAppliedAsync(
+        PlanEnvelope envelope,
+        string targetNamespace,
+        string hash,
+        CancellationToken cancellationToken)
     {
         EnsureDirectories();
 
-        var appliedPath = GetAppliedPath(plan.Id);
+        var appliedPath = GetAppliedPath(envelope.Id);
         var json = JsonSerializer.Serialize(new
         {
-            plan.Id,
-            plan.Operation,
-            plan.Namespace,
+            envelope.Id,
+            envelope.AdapterId,
+            envelope.Operation,
+            Namespace = targetNamespace,
             hash,
             appliedAtUtc = DateTimeOffset.UtcNow
         }, jsonOptions);
@@ -191,7 +197,7 @@ public sealed class ApprovalStore
         await File.WriteAllTextAsync(appliedPath, json, cancellationToken);
         await WriteAuditAsync(
             ApprovalConventions.AuditEvents.PlanApplied,
-            new PlanAppliedPayload(plan.Id, plan.Operation, plan.Namespace, hash),
+            new PlanAppliedPayload(envelope.Id, envelope.Operation, targetNamespace, hash),
             cancellationToken);
     }
 
@@ -240,5 +246,71 @@ public sealed class ApprovalStore
         }
 
         return planId.All(c => c is >= 'a' and <= 'z' || c is >= '0' and <= '9' || c == '-');
+    }
+
+    private async Task<EnvelopeReadResult> ReadEnvelopeAsync(
+        string planId,
+        string pendingPath,
+        CancellationToken cancellationToken)
+    {
+        var json = await File.ReadAllTextAsync(pendingPath, cancellationToken);
+        PlanEnvelope? envelope;
+        try
+        {
+            envelope = JsonSerializer.Deserialize<PlanEnvelope>(json, jsonOptions);
+        }
+        catch (JsonException)
+        {
+            return EnvelopeReadResult.Failed($"Plan '{planId}' could not be read.");
+        }
+
+        if (envelope is null)
+        {
+            return EnvelopeReadResult.Failed($"Plan '{planId}' could not be read.");
+        }
+
+        var validation = ValidateEnvelope(planId, envelope);
+        return validation is null
+            ? EnvelopeReadResult.Success(envelope)
+            : EnvelopeReadResult.Failed(validation);
+    }
+
+    private static string? ValidateEnvelope(string planId, PlanEnvelope envelope)
+    {
+        if (!string.Equals(envelope.Id, planId, StringComparison.Ordinal))
+        {
+            return $"Plan '{planId}' file contains mismatched plan id '{envelope.Id}'.";
+        }
+
+        if (string.IsNullOrWhiteSpace(envelope.AdapterId) ||
+            string.IsNullOrWhiteSpace(envelope.Operation) ||
+            string.IsNullOrWhiteSpace(envelope.Requester.Subject) ||
+            envelope.Payload.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        {
+            return $"Plan '{planId}' uses an old approval file format. Re-request the plan.";
+        }
+
+        return null;
+    }
+
+    private PlanEnvelope ToUntypedEnvelope<TPayload>(PlanEnvelope<TPayload> envelope)
+    {
+        var payload = JsonSerializer.SerializeToElement(envelope.Payload, jsonOptions);
+        return new PlanEnvelope(
+            envelope.Id,
+            envelope.AdapterId,
+            envelope.Operation,
+            envelope.CreatedAtUtc,
+            envelope.Requester,
+            payload);
+    }
+
+    private sealed record EnvelopeReadResult(PlanEnvelope? Envelope, string Message)
+    {
+        public static EnvelopeReadResult Success(PlanEnvelope envelope) =>
+            new(envelope, "Read.");
+
+        public static EnvelopeReadResult Failed(string message) =>
+            new(null, message);
     }
 }

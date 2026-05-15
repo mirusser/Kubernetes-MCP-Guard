@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 
 namespace InfraGate.McpServer;
 

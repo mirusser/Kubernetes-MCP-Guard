@@ -92,6 +92,26 @@ public sealed partial class GuardedToolRunner
         return $"{Warning}{Environment.NewLine}{Environment.NewLine}{response.Text}";
     }
 
+    public Task<string> CallWithRequesterAsync(
+        string toolName,
+        IReadOnlyDictionary<string, object?> arguments,
+        CancellationToken cancellationToken)
+    {
+        var auditIdentity = GetAuditIdentity();
+        if (string.IsNullOrWhiteSpace(auditIdentity.Subject))
+        {
+            return Task.FromResult("Refused: mutation plan creation requires an authenticated OAuth subject.");
+        }
+
+        var downstreamArguments = new Dictionary<string, object?>(arguments)
+        {
+            [McpGatewayConventions.ToolArguments.RequesterSubject] = auditIdentity.Subject,
+            [McpGatewayConventions.ToolArguments.RequesterAuthenticationType] = auditIdentity.AuthenticationType
+        };
+
+        return CallAsync(toolName, downstreamArguments, cancellationToken);
+    }
+
     private AuditIdentity GetAuditIdentity()
     {
         var identity = GatewayAuditIdentityResolver.Resolve(httpContextAccessor?.HttpContext?.User);

@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj" />
     <Project Path="src/InfraGate.Approvals/InfraGate.Approvals.csproj" />
+    <Project Path="src/InfraGate.KubernetesAdapter/InfraGate.KubernetesAdapter.csproj" />
     <Project Path="src/InfraGate.RuntimeSafety/InfraGate.RuntimeSafety.csproj" />
     <Project Path="src/InfraGate.McpGateway.Auth/InfraGate.McpGateway.Auth.csproj" />
     <Project Path="src/InfraGate.McpGateway/InfraGate.McpGateway.csproj" />

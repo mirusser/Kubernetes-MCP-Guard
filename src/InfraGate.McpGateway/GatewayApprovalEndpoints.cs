@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Encodings.Web;
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway.Auth;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -114,7 +115,7 @@ internal static class GatewayApprovalEndpoints
         return RenderDocument(title, body);
     }
 
-    internal static string RenderApprovalForm(ApprovalChallenge challenge, K8sPlan plan, string? requestToken)
+    internal static string RenderApprovalForm(ApprovalChallenge challenge, KubernetesPlan plan, string? requestToken)
     {
         var dryRun = plan.DryRun!;
         var token = Html(requestToken ?? string.Empty);
@@ -136,7 +137,7 @@ internal static class GatewayApprovalEndpoints
         return planSummary + objects + manifest + policyFindings + dryRunSection + diffs + actions;
     }
 
-    private static string RenderPlanSummaryCard(ApprovalChallenge challenge, K8sPlan plan)
+    private static string RenderPlanSummaryCard(ApprovalChallenge challenge, KubernetesPlan plan)
     {
         var parameters = plan.Parameters.Count == 0
             ? "<p>None</p>"
@@ -178,7 +179,7 @@ internal static class GatewayApprovalEndpoints
                 """;
     }
 
-    private static string RenderObjectsCard(K8sPlan plan)
+    private static string RenderObjectsCard(KubernetesPlan plan)
     {
         var objects = string.Join(
             string.Empty,

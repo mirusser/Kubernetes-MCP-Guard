@@ -1,4 +1,4 @@
-# Knowledge memo: why this repo separates `K8sPlan` from `ApprovalChallenge`
+# Knowledge memo: why this repo separates plan envelopes from `ApprovalChallenge`
 
 ## Context
 
@@ -8,13 +8,18 @@ Why there are two distinct concepts — a plan and an approval challenge — whe
 
 ## The two records, side by side
 
-[K8sPlan](../src/InfraGate.Approvals/K8sPlan.cs) — the **mutation request**:
+[PlanEnvelope](../src/InfraGate.Approvals/PlanEnvelope.cs) plus the Kubernetes adapter payload — the **mutation request**:
 
 ```text
 Id                string         (e.g. 20260511172300-000e8c5c)
+AdapterId         string         (kubernetes)
 Operation         string         (apply | delete | scale | restart | set-image)
-Namespace         string
 CreatedAtUtc      DateTimeOffset
+Requester         PlanRequester
+Payload           KubernetesPlanPayload
+
+KubernetesPlanPayload:
+Namespace         string
 Description       string
 Parameters        Dictionary<string,string>
 Objects           K8sObjectRef[]
@@ -28,7 +33,7 @@ PolicyFindings    K8sPlanPolicyFinding[]
 
 ```text
 Id                            string         (challenge id ≠ plan id)
-PlanId                        string         (points at the K8sPlan)
+PlanId                        string         (points at the PlanEnvelope)
 PlanHash                      string         (SHA-256 of pending plan JSON when ticket was issued)
 RequesterSubject              string         (OAuth sub of the AI/client side)
 RequesterAuthenticationType   string?
@@ -43,7 +48,7 @@ They live in different stores on disk ([ApprovalConventions.Storage](../src/Infr
 
 ```text
 <approval-root>/
-  pending/<planId>.json         ← the K8sPlan
+  pending/<planId>.json         ← the PlanEnvelope
   challenges/<challengeId>.json ← the ApprovalChallenge
   approved/<planId>.sha256      ← hash file written after a challenge approves
   applied/<planId>.json         ← post-execution record
@@ -104,7 +109,7 @@ The roadmap ([.agents/Plans/archive/security-roadmap.md §13](../.agents/Plans/a
 
 ```text
 1. AI client calls request_apply_manifest (or scale/restart/setImage/delete)
-   └── McpServer creates K8sPlan, writes pending/<planId>.json
+   └── McpServer creates a PlanEnvelope with KubernetesPlanPayload, writes pending/<planId>.json
        Audit: plan_requested  (PlanRequestedPayload)
 
 2. AI client calls apply_approved_plan(planId)
@@ -146,7 +151,7 @@ The plan threads through every step from 1 to 5. The challenge only matters for 
 
 ## TL;DR
 
-| | Plan (`K8sPlan`) | Challenge (`ApprovalChallenge`) |
+| | Plan envelope + Kubernetes payload | Challenge (`ApprovalChallenge`) |
 |---|---|---|
 | **Conceptual role** | The change being requested | Permission to approve that change |
 | **Lifetime** | Long (until applied/cleaned up) | 15 min, single-use |
@@ -156,4 +161,4 @@ The plan threads through every step from 1 to 5. The challenge only matters for 
 | **Stored at** | `pending/<planId>.json` → `applied/<planId>.json` | `challenges/<challengeId>.json` |
 | **Multiplicity** | 1 per intent | Many possible per plan (retries) |
 
-If you imagine OAuth: `K8sPlan` is the resource, `ApprovalChallenge` is the authorization-code grant. Different lifecycles for different reasons.
+If you imagine OAuth: the plan envelope is the resource, `ApprovalChallenge` is the authorization-code grant. Different lifecycles for different reasons.

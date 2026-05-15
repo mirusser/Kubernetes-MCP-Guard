@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using Microsoft.AspNetCore.Http;
@@ -363,17 +364,14 @@ public sealed class GatewayApprovalServiceTests
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Pending, challenge?.Status);
     }
 
-    private static async Task<K8sPlan> CreatePendingPlanAsync(
+    private static async Task<KubernetesPlan> CreatePendingPlanAsync(
         ApprovalStore store,
         bool includeDryRun = true,
         bool includeDiff = true)
     {
         var objects = new[] { new K8sObjectRef("apps/v1", "Deployment", NamespaceName, "demo") };
-        var plan = new K8sPlan(
-            ApprovalStore.NewPlanId(),
-            "scale",
+        var payload = new KubernetesPlanPayload(
             NamespaceName,
-            DateTimeOffset.UtcNow,
             "Scale deployment.",
             new Dictionary<string, string>
             {
@@ -385,9 +383,15 @@ public sealed class GatewayApprovalServiceTests
             DryRun = includeDryRun ? CreateDryRun(objects) : null,
             Diffs = includeDiff ? CreateDiffs(objects) : []
         };
-        await store.CreatePlanAsync(plan, CancellationToken.None);
+        var envelope = KubernetesApprovalAdapter.CreateEnvelope(
+            ApprovalStore.NewPlanId(),
+            "scale",
+            DateTimeOffset.UtcNow,
+            new PlanRequester(Subject, "test"),
+            payload);
+        await store.CreatePlanAsync(envelope, payload.Namespace, CancellationToken.None);
 
-        return plan;
+        return KubernetesApprovalAdapter.Materialize(envelope);
     }
 
     private static K8sPlanDryRun CreateDryRun(IReadOnlyList<K8sObjectRef> objects) =>

@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using k8s;
 using k8s.Autorest;
 
@@ -39,7 +40,7 @@ internal static class K8sDiffService
 
     public static async Task<string?> FindDriftAsync(
         IKubernetes client,
-        K8sPlan plan,
+        KubernetesPlan plan,
         CancellationToken cancellationToken)
     {
         if (plan.Diffs.Length == 0)

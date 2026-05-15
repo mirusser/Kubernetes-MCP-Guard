@@ -507,6 +507,7 @@ The canonical environment variable, CI/CD, and release configuration reference i
 ├── InfraGate.slnx                        # Solution file
 ├── src/
 │   ├── InfraGate.Approvals/              # Shared approval storage/challenge contracts
+│   ├── InfraGate.KubernetesAdapter/      # Kubernetes approval payload/evidence adapter
 │   ├── InfraGate.RuntimeSafety/          # Runtime mode and production safety checks
 │   ├── InfraGate.McpServer/              # Stdio MCP server (Kubernetes tools)
 │   ├── InfraGate.McpGateway/             # HTTP gateway (guardrails, downstream client)

@@ -90,8 +90,10 @@ public static class K8sTools
         K8sManager manager,
         [Description("Allowed Kubernetes namespace for the manifest.")] string @namespace,
         [Description("Multi-document YAML or JSON containing Deployments, Services, or ConfigMaps.")] string manifest,
+        [Description("Authenticated subject that requested this approval plan.")] string? requesterSubject = null,
+        [Description("Authentication type used by the requester.")] string? requesterAuthenticationType = null,
         CancellationToken cancellationToken = default) =>
-        manager.RequestApplyManifestAsync(@namespace, manifest, cancellationToken);
+        manager.RequestApplyManifestAsync(@namespace, manifest, requesterSubject, requesterAuthenticationType, cancellationToken);
 
     [McpServerTool(Name = K8sConventions.ToolNames.RequestDeleteManifest, Destructive = false, OpenWorld = false)]
     [Description("Creates a pending approval plan to delete each supported Kubernetes object named in a manifest.")]
@@ -99,8 +101,10 @@ public static class K8sTools
         K8sManager manager,
         [Description("Allowed Kubernetes namespace for the manifest.")] string @namespace,
         [Description("Multi-document YAML or JSON naming Deployments, Services, or ConfigMaps to delete.")] string manifest,
+        [Description("Authenticated subject that requested this approval plan.")] string? requesterSubject = null,
+        [Description("Authentication type used by the requester.")] string? requesterAuthenticationType = null,
         CancellationToken cancellationToken = default) =>
-        manager.RequestDeleteManifestAsync(@namespace, manifest, cancellationToken);
+        manager.RequestDeleteManifestAsync(@namespace, manifest, requesterSubject, requesterAuthenticationType, cancellationToken);
 
     [McpServerTool(Name = K8sConventions.ToolNames.RequestScaleDeployment, Destructive = false, OpenWorld = false)]
     [Description("Creates a pending approval plan to scale a Deployment in an allowed namespace.")]
@@ -109,8 +113,10 @@ public static class K8sTools
         [Description("Allowed Kubernetes namespace.")] string @namespace,
         [Description("Deployment name.")] string name,
         [Description("Number of replicas, from 0 to 5.")] int replicas,
+        [Description("Authenticated subject that requested this approval plan.")] string? requesterSubject = null,
+        [Description("Authentication type used by the requester.")] string? requesterAuthenticationType = null,
         CancellationToken cancellationToken = default) =>
-        manager.RequestScaleDeploymentAsync(@namespace, name, replicas, cancellationToken);
+        manager.RequestScaleDeploymentAsync(@namespace, name, replicas, requesterSubject, requesterAuthenticationType, cancellationToken);
 
     [McpServerTool(Name = K8sConventions.ToolNames.RequestRestartDeployment, Destructive = false, OpenWorld = false)]
     [Description("Creates a pending approval plan to restart a Deployment in an allowed namespace.")]
@@ -118,8 +124,10 @@ public static class K8sTools
         K8sManager manager,
         [Description("Allowed Kubernetes namespace.")] string @namespace,
         [Description("Deployment name.")] string name,
+        [Description("Authenticated subject that requested this approval plan.")] string? requesterSubject = null,
+        [Description("Authentication type used by the requester.")] string? requesterAuthenticationType = null,
         CancellationToken cancellationToken = default) =>
-        manager.RequestRestartDeploymentAsync(@namespace, name, cancellationToken);
+        manager.RequestRestartDeploymentAsync(@namespace, name, requesterSubject, requesterAuthenticationType, cancellationToken);
 
     [McpServerTool(Name = K8sConventions.ToolNames.RequestSetDeploymentImage, Destructive = false, OpenWorld = false)]
     [Description("Creates a pending approval plan to update one Deployment container image in an allowed namespace.")]
@@ -129,8 +137,17 @@ public static class K8sTools
         [Description("Deployment name.")] string name,
         [Description("Container name.")] string container,
         [Description("Target container image.")] string image,
+        [Description("Authenticated subject that requested this approval plan.")] string? requesterSubject = null,
+        [Description("Authentication type used by the requester.")] string? requesterAuthenticationType = null,
         CancellationToken cancellationToken = default) =>
-        manager.RequestSetDeploymentImageAsync(@namespace, name, container, image, cancellationToken);
+        manager.RequestSetDeploymentImageAsync(
+            @namespace,
+            name,
+            container,
+            image,
+            requesterSubject,
+            requesterAuthenticationType,
+            cancellationToken);
 
     [McpServerTool(Name = K8sConventions.ToolNames.ApplyApprovedPlan, Destructive = true, OpenWorld = false)]
     [Description("Applies a pending Kubernetes plan that was already approved out-of-band.")]

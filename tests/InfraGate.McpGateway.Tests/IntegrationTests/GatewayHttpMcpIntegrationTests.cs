@@ -221,7 +221,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             new Dictionary<string, object?>
             {
                 [McpGatewayConventions.ToolArguments.Namespace] = NamespaceName,
-                [McpGatewayConventions.ToolArguments.Manifest] = CleanConfigMapManifest
+                [McpGatewayConventions.ToolArguments.Manifest] = CleanConfigMapManifest,
+                [McpGatewayConventions.ToolArguments.RequesterSubject] = Subject,
+                [McpGatewayConventions.ToolArguments.RequesterAuthenticationType] = "test"
             },
             timeout.Token);
 

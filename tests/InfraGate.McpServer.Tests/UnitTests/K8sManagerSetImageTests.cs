@@ -8,6 +8,9 @@ namespace InfraGate.McpServer.Tests.UnitTests;
 
 public sealed class K8sManagerSetImageTests
 {
+    private const string RequesterSubject = "test-requester";
+    private const string RequesterAuthenticationType = "test";
+
     [Fact]
     public async Task RequestSetDeploymentImageAsync_RejectsInvalidInputs()
     {
@@ -18,24 +21,32 @@ public sealed class K8sManagerSetImageTests
             "demo",
             "nginx",
             "nginx:1.28-alpine",
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var blankName = await context.Manager.RequestSetDeploymentImageAsync(
             "demo",
             "",
             "nginx",
             "nginx:1.28-alpine",
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var blankContainer = await context.Manager.RequestSetDeploymentImageAsync(
             "demo",
             "demo",
             "",
             "nginx:1.28-alpine",
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var blankImage = await context.Manager.RequestSetDeploymentImageAsync(
             "demo",
             "demo",
             "nginx",
             "",
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
 
         Assert.Contains("Namespace 'other' is not allowed", disallowedNamespace);
@@ -55,6 +66,8 @@ public sealed class K8sManagerSetImageTests
             "demo",
             "sidecar",
             "nginx:1.28-alpine",
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
 
         Assert.Contains("does not contain container 'sidecar'", result);
@@ -71,6 +84,8 @@ public sealed class K8sManagerSetImageTests
             "demo",
             "nginx",
             "nginx:1.28-alpine",
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var planId = ParsePlanId(result);
         var pending = await File.ReadAllTextAsync(
@@ -109,6 +124,8 @@ public sealed class K8sManagerSetImageTests
             "demo",
             "nginx",
             "nginx:1.28-alpine",
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var planId = await ApprovePlanAsync(context.ApprovalRoot, requestText);
 
@@ -142,6 +159,8 @@ public sealed class K8sManagerSetImageTests
             "demo",
             "nginx",
             "nginx:1.28-alpine",
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var planId = await ApprovePlanAsync(context.ApprovalRoot, requestText);
 
@@ -170,6 +189,8 @@ public sealed class K8sManagerSetImageTests
             "demo",
             "nginx",
             "nginx:1.28-alpine",
+            RequesterSubject,
+            RequesterAuthenticationType,
             CancellationToken.None);
         var planId = await ApprovePlanAsync(context.ApprovalRoot, requestText);
 

@@ -1,5 +1,5 @@
 using System.Text.Json;
-using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using k8s;
 using k8s.Autorest;
 using k8s.Models;

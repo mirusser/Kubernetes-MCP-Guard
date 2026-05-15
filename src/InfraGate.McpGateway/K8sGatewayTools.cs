@@ -154,7 +154,7 @@ public static class K8sGatewayTools
         [Description("Allowed Kubernetes namespace for the manifest.")] string @namespace,
         [Description("Multi-document YAML or JSON containing Deployments, Services, or ConfigMaps.")] string manifest,
         CancellationToken cancellationToken = default) =>
-        runner.CallAsync(
+        runner.CallWithRequesterAsync(
             McpGatewayConventions.ToolNames.RequestApplyManifest,
             new Dictionary<string, object?>
             {
@@ -170,7 +170,7 @@ public static class K8sGatewayTools
         [Description("Allowed Kubernetes namespace for the manifest.")] string @namespace,
         [Description("Multi-document YAML or JSON naming Deployments, Services, or ConfigMaps to delete.")] string manifest,
         CancellationToken cancellationToken = default) =>
-        runner.CallAsync(
+        runner.CallWithRequesterAsync(
             McpGatewayConventions.ToolNames.RequestDeleteManifest,
             new Dictionary<string, object?>
             {
@@ -187,7 +187,7 @@ public static class K8sGatewayTools
         [Description("Deployment name.")] string name,
         [Description("Number of replicas, from 0 to 5.")] int replicas,
         CancellationToken cancellationToken = default) =>
-        runner.CallAsync(
+        runner.CallWithRequesterAsync(
             McpGatewayConventions.ToolNames.RequestScaleDeployment,
             new Dictionary<string, object?>
             {
@@ -204,7 +204,7 @@ public static class K8sGatewayTools
         [Description("Allowed Kubernetes namespace.")] string @namespace,
         [Description("Deployment name.")] string name,
         CancellationToken cancellationToken = default) =>
-        runner.CallAsync(
+        runner.CallWithRequesterAsync(
             McpGatewayConventions.ToolNames.RequestRestartDeployment,
             new Dictionary<string, object?>
             {
@@ -222,7 +222,7 @@ public static class K8sGatewayTools
         [Description("Container name.")] string container,
         [Description("Target container image.")] string image,
         CancellationToken cancellationToken = default) =>
-        runner.CallAsync(
+        runner.CallWithRequesterAsync(
             McpGatewayConventions.ToolNames.RequestSetDeploymentImage,
             new Dictionary<string, object?>
             {
