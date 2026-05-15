@@ -8,7 +8,7 @@
 - `K8sTools.cs` is the MCP-facing tool surface. Tool names are external contracts and must stay aligned with `K8sConventions.ToolNames`.
 - `K8sManager.*.cs` contains the behavior behind those tools: status reads, bounded observability and diagnostics reads, request-plan creation, approved-plan application, rollout waits, and validation helpers.
 - `K8sManifestParser.cs` accepts YAML/JSON manifests and allows only `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap`.
-- `ApprovalStore.cs` persists pending, approved, and applied generic approval envelopes and writes approval audit events.
+- The server uses `InfraGate.Approvals` for persistent generic approval envelope storage and audit writing.
 
 ## Important Contracts
 
