@@ -2,7 +2,7 @@ using InfraGate.Approvals;
 
 namespace InfraGate.KubernetesAdapter;
 
-public sealed record KubernetesPlan(PlanEnvelope Envelope, KubernetesPlanPayload Payload)
+public sealed record KubernetesPlan(PlanEnvelope Envelope, KubernetesPlanPayload Payload) : IPlanReview
 {
     public string Id => Envelope.Id;
 
@@ -27,4 +27,9 @@ public sealed record KubernetesPlan(PlanEnvelope Envelope, KubernetesPlanPayload
     public K8sPlanDiff[] Diffs => Payload.Diffs;
 
     public K8sPlanPolicyFinding[] PolicyFindings => Payload.PolicyFindings;
+
+    bool IPlanReview.HasReviewEvidence => DryRun is not null && Diffs.Length > 0;
+
+    bool IPlanReview.CanBeApproved => !PolicyFindings.Any(f =>
+        string.Equals(f.Severity, "Deny", StringComparison.Ordinal));
 }

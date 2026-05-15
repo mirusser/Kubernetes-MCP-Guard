@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using Microsoft.Extensions.Logging;
@@ -24,6 +25,8 @@ builder.Services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
 builder.Services.AddSingleton<GuardedToolRunner>();
 builder.Services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
 builder.Services.AddSingleton<ApprovalStore>();
+builder.Services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
+builder.Services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
 builder.Services.AddSingleton<ApprovalChallengeStore>();
 builder.Services.AddSingleton<GatewayApprovalService>();
 builder.Services.AddHttpContextAccessor();

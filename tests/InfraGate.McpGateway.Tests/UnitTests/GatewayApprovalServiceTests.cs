@@ -109,7 +109,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("missing recorded server-side dry-run data", result.Message);
+        Assert.Contains("missing recorded evidence data", result.Message);
         Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
     }
 
@@ -124,7 +124,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("missing recorded diff data", result.Message);
+        Assert.Contains("missing recorded evidence data", result.Message);
         Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
     }
 
@@ -213,7 +213,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.Contains("missing recorded server-side dry-run data", result.Message);
+        Assert.Contains("missing recorded evidence data", result.Message);
         Assert.Empty(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
     }
 
@@ -229,7 +229,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.Contains("missing recorded server-side dry-run data", result.Message);
+        Assert.Contains("missing recorded evidence data", result.Message);
     }
 
     [Fact]
@@ -244,7 +244,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.Contains("missing recorded diff data", result.Message);
+        Assert.Contains("missing recorded evidence data", result.Message);
     }
 
     [Fact]
@@ -256,7 +256,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.Contains("missing recorded diff data", result.Message);
+        Assert.Contains("missing recorded evidence data", result.Message);
         Assert.Empty(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
     }
 
@@ -270,9 +270,8 @@ public sealed class GatewayApprovalServiceTests
         var page = await context.Service.GetApprovalPageAsync(challengeId, CancellationToken.None);
 
         Assert.True(page.CanDecide);
-        var diff = Assert.Single(page.Plan?.Diffs ?? []);
-        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
-        Assert.Contains("/spec/replicas", diff.ChangedPaths);
+        Assert.NotNull(page.PlanReview);
+        Assert.True(page.PlanReview.HasReviewEvidence);
     }
 
     [Fact]
@@ -468,12 +467,15 @@ public sealed class GatewayApprovalServiceTests
             McpGatewayOptions.DefaultApprovalChallengeTtl);
         var httpContextAccessor = new HttpContextAccessor();
         SetUser(httpContextAccessor, Subject);
+        var planReviewAdapter = new KubernetesPlanReviewAdapter();
+        var planReviewRenderer = new KubernetesPlanReviewRenderer();
 
         return new TestContext(
-            new GatewayApprovalService(store, challenges, gatewayOptions, httpContextAccessor),
+            new GatewayApprovalService(store, challenges, planReviewAdapter, planReviewRenderer, gatewayOptions, httpContextAccessor),
             store,
             challenges,
-            httpContextAccessor);
+            httpContextAccessor,
+            planReviewAdapter);
     }
 
     private static void SetUser(HttpContextAccessor accessor, string subject)
@@ -503,5 +505,6 @@ public sealed class GatewayApprovalServiceTests
         GatewayApprovalService Service,
         ApprovalStore Store,
         ApprovalChallengeStore Challenges,
-        HttpContextAccessor HttpContextAccessor);
+        HttpContextAccessor HttpContextAccessor,
+        IPlanReviewAdapter PlanReviewAdapter);
 }
