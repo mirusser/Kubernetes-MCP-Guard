@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using InfraGate.Approvals;
 using InfraGate.McpGateway;
 
 namespace InfraGate.Safety.E2E.Tests.Workflows;
@@ -96,11 +97,18 @@ public sealed class DryRunFailureTests(SafetyE2EFixture fixture)
         var pendingJson = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
         var root = JsonNode.Parse(pendingJson)
             ?? throw new InvalidOperationException("Pending plan JSON was empty.");
-        root["parameters"]!["name"] = "deployment-that-does-not-exist";
-        var rewritten = root.ToJsonString(new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        root["payload"]!["parameters"]!["name"] = "deployment-that-does-not-exist";
+
+        var rewriteOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
             WriteIndented = true
-        });
+        };
+        var envelope = JsonSerializer.Deserialize<PlanEnvelope>(root.ToJsonString(), rewriteOptions)
+            ?? throw new InvalidOperationException("Failed to deserialize modified pending plan.");
+        var newReviewDigest = PlanEnvelopeFactory.ComputeReviewDigest(envelope);
+        root["reviewDigest"] = JsonSerializer.SerializeToNode(newReviewDigest, rewriteOptions);
+
+        var rewritten = root.ToJsonString(rewriteOptions);
         await File.WriteAllTextAsync(pendingPath, rewritten, CancellationToken.None);
 
         var approvalRequired = await client.CallToolAsync(

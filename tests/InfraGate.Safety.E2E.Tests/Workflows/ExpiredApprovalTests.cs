@@ -22,7 +22,8 @@ public sealed class ExpiredApprovalTests(SafetyE2EFixture fixture)
                 new Dictionary<string, object?>
                 {
                     [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                    [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+                    [McpGatewayConventions.ToolArguments.Name] = "nginx-demo",
+                    ["requesterSubject"] = "safety-e2e-user"
                 },
                 CancellationToken.None);
             var planId = SafetyE2EFixture.ParsePlanId(requestText);

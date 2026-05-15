@@ -209,6 +209,8 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             DemoUsername,
             GatewayAuthConventions.Audit.OAuthAuthenticationType,
             McpGatewayOptions.DefaultApprovalChallengeTtl,
+            planResult.Envelope.IntentDigest,
+            planResult.Envelope.ReviewDigest,
             CancellationToken.None);
         using var browser = await CreateAuthenticatedApprovalBrowserAsync(server, challenge.Id);
 
