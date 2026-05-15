@@ -57,9 +57,9 @@ The same fix can be planned by submitting `examples/failing-deployment/fix.yaml`
 
 ## Step 4 — Approve the plan
 
-Call `apply_approved_plan(planId="<PlanId>")`. The Gateway returns an approval URL instead of applying immediately. Open that URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan and hash, and approve it.
+Call `apply_approved_plan(planId="<PlanId>")`. The Gateway returns an approval URL instead of applying immediately. Open that URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan, Intent Digest, and Review Digest, and approve it.
 
-**What you should see:** an approval page showing the `PlanId`, affected objects, requester, expiry, and plan hash. After approval, return to the MCP client and call `apply_approved_plan(planId="<PlanId>")` again.
+**What you should see:** an approval page showing the `PlanId`, affected objects, requester, expiry, Intent Digest, and Review Digest. After approval, return to the MCP client and call `apply_approved_plan(planId="<PlanId>")` again.
 
 ### `scripts/approve-plan.sh` dev helper
 
@@ -67,11 +67,9 @@ Call `apply_approved_plan(planId="<PlanId>")`. The Gateway returns an approval U
 ./scripts/approve-plan.sh <PlanId>
 ```
 
-The script reads `.mcp-approvals/pending/<PlanId>.json`, computes its SHA-256, and writes the hash to `.mcp-approvals/approved/<PlanId>.sha256`. It is useful for local development and direct-stdio experiments; the Gateway browser UI is the normal approval path.
+This helper is legacy. Current execution requires an Approval Grant under `.mcp-approvals/grants/`, which is issued by the Gateway browser approval flow.
 
-This is **not** a way to bypass approval — the file-system action *is* the approval. The hash is bound to the exact pending plan; any later edit to the pending JSON breaks the match (see Step 5).
-
-**What you should see:** `Approved <PlanId>` and the path to the approval file.
+Direct hash approval files do not authorize execution in the current grant-bound flow.
 
 ## Step 5 — Apply
 
@@ -79,7 +77,7 @@ This is **not** a way to bypass approval — the file-system action *is* the app
 apply_approved_plan(planId = "<PlanId>")
 ```
 
-The server re-reads `pending/<PlanId>.json`, recomputes its hash, and compares it to `approved/<PlanId>.sha256`. On match, it applies the plan against the Kubernetes API.
+The server re-reads `pending/<PlanId>.json`, validates the Approval Grant and its Intent/Review Digest bindings, repeats Kubernetes dry-run, and applies the plan against the Kubernetes API only if every gate passes.
 
 **What you should see:** the tool returns the apply result describing the patched Deployment. Within seconds, Kubernetes pulls the new image and the Pods become Ready.
 
@@ -128,6 +126,6 @@ The gateway-mediated equivalent is `request_delete_manifest` followed by `apply_
 | Symptom | Cause and fix |
 | --- | --- |
 | `apply_approved_plan` returns "plan not found" | The gateway and server must share the same `K8S_MCP_APPROVAL_ROOT`. The compose files mount `.mcp-approvals` into the gateway container; if you run a custom setup, point both gateway and downstream server at the same directory. |
-| `approval_hash_mismatch` audit entry, apply refused | `pending/<PlanId>.json` was edited between approval and apply (manually, or by re-running `request_*` and overwriting). Generate a fresh plan and approve that one. |
-| Approval URL opens but refuses approval | Sign in with the same OAuth subject that requested the plan, and request a fresh URL if the challenge expired or the plan hash changed. |
+| Digest mismatch or grant mismatch, apply refused | `pending/<PlanId>.json` was edited between approval and apply (manually, or by re-running `request_*` and overwriting). Generate a fresh plan and approve that one. |
+| Approval URL opens but refuses approval | Sign in with the same OAuth subject that requested the plan, and request a fresh URL if the challenge expired or the pending-plan hash/digest binding changed. |
 | Pods stuck in `ImagePullBackOff` after Step 5 | The replica count is 2 and the rollout takes a few seconds; re-run `get_k8s_status`. If it persists, check `get_k8s_events` for a different pull error (e.g. registry rate limiting). |

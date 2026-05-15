@@ -89,7 +89,7 @@ public sealed class K8sManagerSetImageTests
             CancellationToken.None);
         var planId = ParsePlanId(result);
         var pending = await File.ReadAllTextAsync(
-            Path.Combine(context.ApprovalRoot, "pending", $"{planId}.json"),
+            context.ApprovalStore.GetPendingPath(planId),
             CancellationToken.None);
 
         Assert.Contains("Operation: set-image", result);
@@ -127,7 +127,7 @@ public sealed class K8sManagerSetImageTests
             RequesterSubject,
             RequesterAuthenticationType,
             CancellationToken.None);
-        var planId = await ApprovePlanAsync(context.ApprovalRoot, requestText);
+        var planId = await ApprovePlanAsync(context.ApprovalStore, requestText);
 
         var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
 
@@ -162,7 +162,7 @@ public sealed class K8sManagerSetImageTests
             RequesterSubject,
             RequesterAuthenticationType,
             CancellationToken.None);
-        var planId = await ApprovePlanAsync(context.ApprovalRoot, requestText);
+        var planId = await ApprovePlanAsync(context.ApprovalStore, requestText);
 
         var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
 
@@ -192,7 +192,7 @@ public sealed class K8sManagerSetImageTests
             RequesterSubject,
             RequesterAuthenticationType,
             CancellationToken.None);
-        var planId = await ApprovePlanAsync(context.ApprovalRoot, requestText);
+        var planId = await ApprovePlanAsync(context.ApprovalStore, requestText);
 
         var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
         var patch = Assert.Single(api.Requests, request => request.Method == "PATCH" && !IsDryRun(request));
@@ -245,16 +245,25 @@ public sealed class K8sManagerSetImageTests
                 SkipTlsVerify = true
             });
 
-        return new ManagerContext(new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client!, NullLogger<K8sManager>.Instance), root);
+        var approvalStore = new ApprovalStore(new ApprovalStoreOptions(root));
+
+        return new ManagerContext(new K8sManager(options, approvalStore, client!, NullLogger<K8sManager>.Instance), approvalStore);
     }
 
-    private static async Task<string> ApprovePlanAsync(string approvalRoot, string requestText)
+    private static async Task<string> ApprovePlanAsync(ApprovalStore store, string requestText)
     {
         var planId = ParsePlanId(requestText);
-        var pendingPath = Path.Combine(approvalRoot, "pending", $"{planId}.json");
-        var approvedPath = Path.Combine(approvalRoot, "approved", $"{planId}.sha256");
-        var hash = await ApprovalStore.ComputeSha256Async(pendingPath, CancellationToken.None);
-        await File.WriteAllTextAsync(approvedPath, hash, CancellationToken.None);
+        var pending = await store.GetPendingPlanAsync(planId, CancellationToken.None);
+        if (!pending.IsPending || pending.Envelope is null)
+        {
+            throw new InvalidOperationException(pending.Message);
+        }
+
+        await store.CreateGrantAsync(
+            pending.Envelope,
+            RequesterSubject,
+            sourceChallengeId: "test-challenge",
+            CancellationToken.None);
 
         return planId;
     }
@@ -335,6 +344,6 @@ public sealed class K8sManagerSetImageTests
           }
           """;
 
-    private sealed record ManagerContext(K8sManager Manager, string ApprovalRoot);
+    private sealed record ManagerContext(K8sManager Manager, ApprovalStore ApprovalStore);
 
 }

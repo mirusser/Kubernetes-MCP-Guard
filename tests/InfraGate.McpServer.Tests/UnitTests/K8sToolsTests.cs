@@ -286,8 +286,17 @@ public sealed class K8sToolsTests
 
     private static async Task PreApprovePlanAsync(ApprovalStore store, string planId)
     {
-        var hash = await ApprovalStore.ComputeSha256Async(store.GetPendingPath(planId), CancellationToken.None);
-        await File.WriteAllTextAsync(store.GetApprovedPath(planId), hash, CancellationToken.None);
+        var pending = await store.GetPendingPlanAsync(planId, CancellationToken.None);
+        if (!pending.IsPending || pending.Envelope is null)
+        {
+            throw new InvalidOperationException(pending.Message);
+        }
+
+        await store.CreateGrantAsync(
+            pending.Envelope,
+            RequesterSubject,
+            sourceChallengeId: "test-challenge",
+            CancellationToken.None);
     }
 
     private static string ParsePlanId(string text) =>

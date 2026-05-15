@@ -41,7 +41,7 @@ public sealed class GatewayApprovalServiceTests
     }
 
     [Fact]
-    public async Task ApproveChallengeAsync_SameSubject_WritesApprovalAndRejectsReuse()
+    public async Task ApproveChallengeAsync_SameSubject_WritesGrantOutcomeAndRejectsReuse()
     {
         var context = CreateContext();
         var plan = await CreatePendingPlanAsync(context.Store);
@@ -52,10 +52,12 @@ public sealed class GatewayApprovalServiceTests
         var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
 
         Assert.True(approved.Succeeded);
-        Assert.True(File.Exists(context.Store.GetApprovedPath(plan.Id)));
+        Assert.True(File.Exists(context.Store.GetGrantPath(plan.Id)));
+        Assert.False(File.Exists(context.Store.GetApprovedPath(plan.Id)));
         Assert.False(reused.Succeeded);
         Assert.Contains("already approved", reused.Message);
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
+        Assert.Equal(ApprovalConventions.ChallengeOutcomeStatuses.Approved, challenge?.Outcome?.Status);
     }
 
     [Fact]
@@ -361,7 +363,8 @@ public sealed class GatewayApprovalServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Contains("same authenticated subject", result.Message);
-        Assert.Equal(ApprovalConventions.ChallengeStatuses.Pending, challenge?.Status);
+        Assert.Equal(ApprovalConventions.ChallengeStatuses.Rejected, challenge?.Status);
+        Assert.Equal(ApprovalConventions.ChallengeOutcomeStatuses.Rejected, challenge?.Outcome?.Status);
     }
 
     private static async Task<KubernetesPlan> CreatePendingPlanAsync(
@@ -435,12 +438,15 @@ public sealed class GatewayApprovalServiceTests
 
     private static async Task<string> CreateStoredChallengeAsync(TestContext context, string planId, string planHash)
     {
+        var pending = await context.Store.GetPendingPlanAsync(planId, CancellationToken.None);
         var challenge = await context.Challenges.CreateAsync(
             planId,
             planHash,
             Subject,
             "test",
             McpGatewayOptions.DefaultApprovalChallengeTtl,
+            pending.Envelope?.IntentDigest,
+            pending.Envelope?.ReviewDigest,
             CancellationToken.None);
 
         return challenge.Id;

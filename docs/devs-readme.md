@@ -244,11 +244,11 @@ Approval flow:
 2. Call `apply_approved_plan` with the returned `PlanId`.
 3. The Gateway returns an approval URL instead of applying.
 4. Open the URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan and dry-run status, and approve or deny it.
-5. Call `apply_approved_plan` again. The Gateway forwards only after the approved hash exists and still matches; the server repeats dry-run immediately before the real write.
+5. Call `apply_approved_plan` again. The Gateway forwards only after an Approval Grant exists and still matches the pending plan's Intent Digest and Review Digest; the server repeats dry-run immediately before the real write.
 
-The MCP client never submits approval content. Approval challenges are bound to the plan id, current plan hash, requester subject, expiry, and single-use status.
+The MCP client never submits approval content. Approval challenges are bound to the plan id, current pending-plan hash, requester subject, expected Intent Digest, expected Review Digest, expiry, and Single-Execution status.
 
-The approval file stores the SHA-256 hash of the pending plan envelope, including recorded dry-run data. Old raw pending-plan files must be re-requested after the envelope-format change. If the pending plan changes after approval, or a fresh pre-apply dry-run fails, the MCP server refuses to apply it. Audit events are written under `.mcp-approvals/audit.jsonl`.
+Approval grants are stored under `.mcp-approvals/grants/` and bind the requester, approver, source challenge, Intent Digest, Review Digest, approval policy, reuse policy, and plan validity expiry. Old raw pending-plan files must be re-requested after the envelope-format change. If the pending plan changes after approval, the grant no longer matches and the MCP server refuses to apply it. Audit events are written under `.mcp-approvals/audit.jsonl`.
 
 ### Verification
 

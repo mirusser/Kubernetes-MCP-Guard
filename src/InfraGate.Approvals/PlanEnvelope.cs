@@ -8,21 +8,37 @@ public sealed record PlanEnvelope
 
     public PlanEnvelope(
         string id,
+        string profile,
         string adapterId,
         string operation,
         DateTimeOffset createdAtUtc,
+        DateTimeOffset validFromUtc,
+        DateTimeOffset validUntilUtc,
         PlanRequester requester,
+        ApprovalPolicy approvalPolicy,
+        ExecutionReusePolicy executionReusePolicy,
+        ApprovalDigest intentDigest,
+        ApprovalDigest reviewDigest,
         JsonElement payload)
     {
         Id = id;
+        Profile = profile;
         AdapterId = adapterId;
         Operation = operation;
         CreatedAtUtc = createdAtUtc;
+        ValidFromUtc = validFromUtc;
+        ValidUntilUtc = validUntilUtc;
         Requester = requester;
+        ApprovalPolicy = approvalPolicy;
+        ExecutionReusePolicy = executionReusePolicy;
+        IntentDigest = intentDigest;
+        ReviewDigest = reviewDigest;
         Payload = payload;
     }
 
     public string Id { get; init; } = string.Empty;
+
+    public string Profile { get; init; } = string.Empty;
 
     public string AdapterId { get; init; } = string.Empty;
 
@@ -30,7 +46,19 @@ public sealed record PlanEnvelope
 
     public DateTimeOffset CreatedAtUtc { get; init; }
 
+    public DateTimeOffset ValidFromUtc { get; init; }
+
+    public DateTimeOffset ValidUntilUtc { get; init; }
+
     public PlanRequester Requester { get; init; } = new(string.Empty, null);
+
+    public ApprovalPolicy ApprovalPolicy { get; init; } = new();
+
+    public ExecutionReusePolicy ExecutionReusePolicy { get; init; } = new();
+
+    public ApprovalDigest IntentDigest { get; init; } = new(string.Empty, string.Empty, string.Empty);
+
+    public ApprovalDigest ReviewDigest { get; init; } = new(string.Empty, string.Empty, string.Empty);
 
     public JsonElement Payload { get; init; }
 }

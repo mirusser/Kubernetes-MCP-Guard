@@ -103,7 +103,8 @@ public sealed class GatewayApprovalEndpointsTests
         Assert.Contains(plan.Operation, result);
         Assert.Contains(plan.Namespace, result);
         Assert.Contains(plan.Description, result);
-        Assert.Contains(challenge.PlanHash, result);
+        Assert.Contains(plan.Envelope.IntentDigest.Value, result);
+        Assert.Contains(plan.Envelope.ReviewDigest.Value, result);
         Assert.Contains(challenge.RequesterSubject, result);
         Assert.Contains(challenge.ExpiresAtUtc.ToString("O"), result);
     }

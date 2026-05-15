@@ -150,6 +150,36 @@ public sealed class K8sManagerRequestTests
     }
 
     [Fact]
+    public async Task RequestScaleDeploymentAsync_CreatesPlan_WithDigestBindingAndValidityWindow()
+    {
+        await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
+        var context = CreateContext("demo", api);
+
+        var result = await context.Manager.RequestScaleDeploymentAsync(
+            "demo",
+            "demo",
+            4,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
+        var planId = ParsePlanId(result);
+        var json = await File.ReadAllTextAsync(
+            context.ApprovalStore.GetPendingPath(planId),
+            CancellationToken.None);
+        var envelope = JsonSerializer.Deserialize<PlanEnvelope>(json, PlanJsonOptions) ??
+                       throw new InvalidOperationException("Pending plan envelope could not be read.");
+
+        Assert.Equal(ApprovalConventions.Profiles.MutationApproval, envelope.Profile);
+        Assert.Equal(ApprovalConventions.ApprovalPolicyTypes.SameSubject, envelope.ApprovalPolicy.Type);
+        Assert.Equal(ApprovalConventions.ExecutionReusePolicyTypes.SingleExecution, envelope.ExecutionReusePolicy.Type);
+        Assert.Equal(ApprovalConventions.Digests.Sha256, envelope.IntentDigest.Algorithm);
+        Assert.Equal(ApprovalConventions.Digests.Sha256, envelope.ReviewDigest.Algorithm);
+        Assert.Equal("infra-gate.kubernetes.intent.v1", envelope.IntentDigest.Canonicalization);
+        Assert.Equal(ApprovalConventions.Canonicalizations.ProfileReviewV1, envelope.ReviewDigest.Canonicalization);
+        Assert.Equal(TimeSpan.FromHours(1), envelope.ValidUntilUtc - envelope.ValidFromUtc);
+    }
+
+    [Fact]
     public async Task ApplyApprovedPlanAsync_RefusesPendingPlanWithoutApproval()
     {
         await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));

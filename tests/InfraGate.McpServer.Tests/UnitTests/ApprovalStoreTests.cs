@@ -151,6 +151,39 @@ public sealed class ApprovalStoreTests
         Assert.Contains("Re-request", pending.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task GetPendingPlanAsync_EnvelopeWithoutDigests_ReturnsReRequestMessage()
+    {
+        var store = CreateStore();
+        string planId = ApprovalStore.NewPlanId();
+        Directory.CreateDirectory(store.PendingDirectory);
+        await File.WriteAllTextAsync(
+            store.GetPendingPath(planId),
+            $$"""
+              {
+                "id": "{{planId}}",
+                "adapterId": "dummy",
+                "operation": "scale",
+                "createdAtUtc": "2026-05-15T00:00:00Z",
+                "requester": {
+                  "subject": "test-subject",
+                  "authenticationType": "test"
+                },
+                "payload": {
+                  "name": "mcp-api-demo",
+                  "replicas": "1"
+                }
+              }
+              """,
+            CancellationToken.None);
+
+        var pending = await store.GetPendingPlanAsync(planId, CancellationToken.None);
+
+        Assert.False(pending.IsPending);
+        Assert.Contains("old approval file format", pending.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Re-request", pending.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ApprovalStore CreateStore()
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
@@ -158,12 +191,20 @@ public sealed class ApprovalStoreTests
     }
 
     private static PlanEnvelope<Dictionary<string, string>> CreatePlan() =>
-        new(
+        PlanEnvelopeFactory.Create(
             ApprovalStore.NewPlanId(),
             "dummy",
             "scale",
             DateTimeOffset.UtcNow,
             new PlanRequester("test-subject", "test"),
+            ApprovalDigest.ComputeSha256(
+                "dummy.intent.v1",
+                new
+                {
+                    operation = "scale",
+                    name = "mcp-api-demo",
+                    replicas = "1"
+                }),
             new Dictionary<string, string>
             {
                 ["name"] = "mcp-api-demo",

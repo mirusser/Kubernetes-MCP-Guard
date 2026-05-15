@@ -41,12 +41,15 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
         var pendingHash = await ApprovalStore.ComputeSha256Async(
             fixture.ApprovalStore.GetPendingPath(planId),
             CancellationToken.None);
+        var pending = await fixture.ApprovalStore.GetPendingPlanAsync(planId, CancellationToken.None);
         var tokenChallenge = await fixture.ChallengeStore.CreateAsync(
             planId,
             pendingHash,
             otherSubject,
             requesterAuthenticationType: "test",
             ttl: TimeSpan.FromMinutes(5),
+            pending.Envelope?.IntentDigest,
+            pending.Envelope?.ReviewDigest,
             cancellationToken: CancellationToken.None);
         using var browser = await fixture.CreateAuthenticatedApprovalBrowserAsync(tokenChallenge.Id, otherSubject);
         var tokenPage = await browser.GetAsync($"/approvals/{tokenChallenge.Id}");
@@ -62,7 +65,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
         Assert.Contains("Approval Failed", result, StringComparison.Ordinal);
         Assert.Contains("same authenticated subject", result, StringComparison.OrdinalIgnoreCase);
-        Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+        Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
         Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, originalChallenge?.Status);
 
         var auditEvents = await fixture.ReadAuditEventsAsync();
@@ -116,7 +119,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
             Assert.False(result.Succeeded);
             Assert.Contains("same authenticated subject", result.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+            Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
             Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
         }
         finally
@@ -155,12 +158,15 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
         var pendingHash = await ApprovalStore.ComputeSha256Async(
             fixture.ApprovalStore.GetPendingPath(planId),
             CancellationToken.None);
+        var pending = await fixture.ApprovalStore.GetPendingPlanAsync(planId, CancellationToken.None);
         var tokenChallenge = await fixture.ChallengeStore.CreateAsync(
             planId,
             pendingHash,
             otherSubject,
             requesterAuthenticationType: "test",
             ttl: TimeSpan.FromMinutes(5),
+            pending.Envelope?.IntentDigest,
+            pending.Envelope?.ReviewDigest,
             cancellationToken: CancellationToken.None);
         using var browser = await fixture.CreateAuthenticatedApprovalBrowserAsync(tokenChallenge.Id, otherSubject);
         var tokenPage = await browser.GetAsync($"/approvals/{tokenChallenge.Id}");
@@ -176,7 +182,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
         Assert.Contains("Approval Failed", result, StringComparison.Ordinal);
         Assert.Contains("same authenticated subject", result, StringComparison.OrdinalIgnoreCase);
-        Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+        Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
         Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, originalChallenge?.Status);
 
         var auditEvents = await fixture.ReadAuditEventsAsync();
@@ -220,7 +226,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
             Assert.False(result.Succeeded);
             Assert.Contains("same authenticated subject", result.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+            Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
             Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
         }
         finally

@@ -182,6 +182,104 @@ public sealed class K8sManagerApplyTests
     }
 
     [Fact]
+    public async Task ApplyApprovedPlanAsync_LegacyApprovedHashWithoutGrant_RefusesMutation()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/apis/apps/v1/namespaces/demo/deployments/demo/scale" => TestResponse.Json(ScaleJson(3)),
+            _ => StatusResponse(request, DeploymentJson(3))
+        });
+        var context = CreateManager(api);
+        var requestText = await context.Manager.RequestScaleDeploymentAsync(
+            DemoNamespace,
+            "demo",
+            3,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
+        var planId = ParsePlanId(requestText);
+        var hash = await ApprovalStore.ComputeSha256Async(
+            context.ApprovalStore.GetPendingPath(planId),
+            CancellationToken.None);
+        Directory.CreateDirectory(Path.GetDirectoryName(context.ApprovalStore.GetApprovedPath(planId))!);
+        await File.WriteAllTextAsync(context.ApprovalStore.GetApprovedPath(planId), hash, CancellationToken.None);
+
+        var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
+
+        Assert.Contains("not approved", result, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(api.Requests, request =>
+            request.Method == "PATCH" &&
+            request.Path == "/apis/apps/v1/namespaces/demo/deployments/demo/scale" &&
+            !IsDryRun(request));
+    }
+
+    [Fact]
+    public async Task ApplyApprovedPlanAsync_WhenPendingReviewDigestChangedAfterGrant_RefusesMutation()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/apis/apps/v1/namespaces/demo/deployments/demo/scale" => TestResponse.Json(ScaleJson(3)),
+            _ => StatusResponse(request, DeploymentJson(3))
+        });
+        var context = CreateManager(api);
+        var requestText = await context.Manager.RequestScaleDeploymentAsync(
+            DemoNamespace,
+            "demo",
+            3,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
+        var planId = await ApproveRequestPlanAsync(context, requestText);
+        var pendingPath = context.ApprovalStore.GetPendingPath(planId);
+        var json = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
+        await File.WriteAllTextAsync(
+            pendingPath,
+            json.Replace("Server-side dry-run succeeded.", "Tampered dry-run review.", StringComparison.Ordinal),
+            CancellationToken.None);
+
+        var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
+
+        Assert.Contains("review digest", result, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(api.Requests, request =>
+            request.Method == "PATCH" &&
+            request.Path == "/apis/apps/v1/namespaces/demo/deployments/demo/scale" &&
+            !IsDryRun(request));
+    }
+
+    [Fact]
+    public async Task ApplyApprovedPlanAsync_WhenGrantExpired_RefusesMutation()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/apis/apps/v1/namespaces/demo/deployments/demo/scale" => TestResponse.Json(ScaleJson(3)),
+            _ => StatusResponse(request, DeploymentJson(3))
+        });
+        var context = CreateManager(api);
+        var requestText = await context.Manager.RequestScaleDeploymentAsync(
+            DemoNamespace,
+            "demo",
+            3,
+            RequesterSubject,
+            RequesterAuthenticationType,
+            CancellationToken.None);
+        var planId = await ApproveRequestPlanAsync(context, requestText);
+        var grant = await context.ApprovalStore.GetGrantAsync(planId, CancellationToken.None) ??
+                    throw new InvalidOperationException("Grant was not written.");
+        await File.WriteAllTextAsync(
+            context.ApprovalStore.GetGrantPath(planId),
+            JsonSerializer.Serialize(grant with { ExpiresAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1) }),
+            CancellationToken.None);
+
+        var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
+
+        Assert.Contains("expired", result, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(api.Requests, request =>
+            request.Method == "PATCH" &&
+            request.Path == "/apis/apps/v1/namespaces/demo/deployments/demo/scale" &&
+            !IsDryRun(request));
+    }
+
+    [Fact]
     public async Task ApplyApprovedPlanAsync_RefusesPlanWithoutDiff()
     {
         var context = CreateManager();
@@ -521,12 +619,16 @@ public sealed class K8sManagerApplyTests
 
     private static async Task ApprovePlanAsync(ManagerContext context, string planId)
     {
-        var hash = await ApprovalStore.ComputeSha256Async(
-            context.ApprovalStore.GetPendingPath(planId),
-            CancellationToken.None);
-        await File.WriteAllTextAsync(
-            context.ApprovalStore.GetApprovedPath(planId),
-            hash,
+        var pending = await context.ApprovalStore.GetPendingPlanAsync(planId, CancellationToken.None);
+        if (!pending.IsPending || pending.Envelope is null)
+        {
+            throw new InvalidOperationException(pending.Message);
+        }
+
+        await context.ApprovalStore.CreateGrantAsync(
+            pending.Envelope,
+            RequesterSubject,
+            sourceChallengeId: "test-challenge",
             CancellationToken.None);
     }
 
@@ -569,11 +671,13 @@ public sealed class K8sManagerApplyTests
             Diffs = diffs ?? []
         };
 
-        return KubernetesApprovalAdapter.CreateEnvelope(
+        return KubernetesApprovalAdapter.WithPayload(
+            KubernetesApprovalAdapter.CreateEnvelope(
             planId,
             operation,
             DateTimeOffset.UtcNow,
             new PlanRequester(RequesterSubject, RequesterAuthenticationType),
+            payload),
             payload);
     }
 

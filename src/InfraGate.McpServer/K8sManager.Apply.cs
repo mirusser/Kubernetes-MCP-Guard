@@ -14,18 +14,18 @@ public sealed partial class K8sManager
 {
     public async Task<string> ApplyApprovedPlanAsync(string planId, CancellationToken cancellationToken)
     {
-        var approved = await approvalStore.GetApprovedPlanAsync(planId, cancellationToken);
-        if (!approved.IsApproved || approved.Envelope is null || approved.Hash is null)
+        var granted = await approvalStore.GetGrantedPlanAsync(planId, cancellationToken);
+        if (!granted.IsGranted || granted.Envelope is null || granted.Grant is null)
         {
             await approvalStore.WriteAuditAsync(
                 ApprovalConventions.AuditEvents.ApplyDenied,
-                new ApplyDeniedPayload(planId, approved.Message),
+                new ApplyDeniedPayload(planId, granted.Message),
                 cancellationToken);
 
-            return $"Refused: {approved.Message}";
+            return $"Refused: {granted.Message}";
         }
 
-        var decoded = KubernetesApprovalAdapter.Decode(approved.Envelope);
+        var decoded = KubernetesApprovalAdapter.Decode(granted.Envelope);
         if (!decoded.Succeeded || decoded.Plan is null)
         {
             await approvalStore.WriteAuditAsync(
@@ -48,7 +48,7 @@ public sealed partial class K8sManager
             return applyResult.Message;
         }
 
-        await approvalStore.MarkAppliedAsync(plan.Envelope, plan.Namespace, approved.Hash, cancellationToken);
+        await approvalStore.MarkAppliedAsync(plan.Envelope, plan.Namespace, granted.Grant, cancellationToken);
 
         var rollout = plan.Operation == K8sConventions.PlanOperations.Delete
             ? "No rollout wait for delete operations."

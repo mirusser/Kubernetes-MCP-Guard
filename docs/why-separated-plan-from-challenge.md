@@ -50,7 +50,7 @@ They live in different stores on disk ([ApprovalConventions.Storage](../src/Infr
 <approval-root>/
   pending/<planId>.json         ← the PlanEnvelope
   challenges/<challengeId>.json ← the ApprovalChallenge
-  approved/<planId>.sha256      ← hash file written after a challenge approves
+  grants/<planId>.json          ← Approval Grant issued after an approved challenge
   applied/<planId>.json         ← post-execution record
   audit.jsonl                   ← every state transition
 ```
@@ -113,8 +113,8 @@ The roadmap ([.agents/Plans/archive/security-roadmap.md §13](../.agents/Plans/a
        Audit: plan_requested  (PlanRequestedPayload)
 
 2. AI client calls apply_approved_plan(planId)
-   └── McpServer asks ApprovalStore.GetApprovedPlanAsync
-       └── No approved/<planId>.sha256 exists yet
+   └── McpServer asks ApprovalStore.GetGrantedPlanAsync
+       └── No grants/<planId>.json exists yet
            Server returns "Refused: not approved" up to the Gateway
        Gateway's EnsureApprovedOrCreateChallengeAsync sees no challenge either
            Creates ApprovalChallenge, writes challenges/<challengeId>.json
@@ -131,15 +131,16 @@ The roadmap ([.agents/Plans/archive/security-roadmap.md §13](../.agents/Plans/a
        GatewayApprovalService.ApproveChallengeAsync:
          - Compares HTTP user's `sub` to challenge.RequesterSubject
          - Compares challenge.PlanHash to current pending file hash
+         - Verifies the expected Intent Digest and Review Digest still match
          - Marks challenge Status=approved, sets ApproverSubject + DecidedAtUtc
-         - Calls ApprovalStore.ApprovePendingPlanAsync
-             which writes approved/<planId>.sha256
+         - Calls ApprovalStore.CreateGrantAsync
+             which writes grants/<planId>.json
          Audit: approval_challenge_approved  (ApprovalChallengeApprovedPayload)
-         Audit: plan_approved                 (PlanApprovedPayload)
+         Audit: grant_issued                  (ApprovalGrantIssuedPayload)
 
 5. AI client calls apply_approved_plan(planId) again
-   └── ApprovalStore.GetApprovedPlanAsync now finds approved/<planId>.sha256
-       Recomputes pending hash; must still match (drift check)
+   └── ApprovalStore.GetGrantedPlanAsync now finds grants/<planId>.json
+       Validates grant expiry, Intent Digest, Review Digest, and Single-Execution state
        McpServer reruns dryRun=All; must still succeed (pre-apply gate)
        Then mutates Kubernetes; moves to applied/<planId>.json
        Audit: plan_applied  (PlanAppliedPayload)
@@ -156,7 +157,7 @@ The plan threads through every step from 1 to 5. The challenge only matters for 
 | **Conceptual role** | The change being requested | Permission to approve that change |
 | **Lifetime** | Long (until applied/cleaned up) | 15 min, single-use |
 | **Identifies** | A mutation | An approval attempt |
-| **Bound to** | A namespace + objects | A requester subject + plan hash + clock |
+| **Bound to** | A namespace + objects + Intent/Review Digests | A requester subject + pending-plan hash + clock |
 | **Holds** | Manifest, diff, dry-run, policy findings | Identities, timestamps, status |
 | **Stored at** | `pending/<planId>.json` → `applied/<planId>.json` | `challenges/<challengeId>.json` |
 | **Multiplicity** | 1 per intent | Many possible per plan (retries) |

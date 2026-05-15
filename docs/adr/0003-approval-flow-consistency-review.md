@@ -11,13 +11,9 @@ A full consistency review was performed against the skill checklist in `.agents/
 
 ## Decision
 
-### Accept as intentional drift (migration backlog)
+### Previously accepted drift now resolved
 
-The codebase uses a single `PlanHash` field (`ApprovalChallenge.cs`, `ApprovalStore`, `ApprovalChallengeStore`, `GatewayApprovalService`). The target profile requires separate **Intent Digest** and **Review Digest** values. This is already acknowledged in `roadmap.md` lines 32–33:
-
-> "Add the two-digest model: intent digest for executable mutation binding and review digest for the trusted human review snapshot."
-
-The single-hash code model will remain the source of truth for the **operational docs that describe current behavior** (`architecture.md`, `devs-readme.md`, `demo-failing-deployment.md`, `why-separated-plan-from-challenge.md`) until the two-digest migration lands. These docs will be updated when the code changes.
+The codebase no longer uses an approved hash file as execution authorization. Pending-plan hashes remain for approval-challenge drift detection, but execution now consumes an **Approval Grant** bound to separate **Intent Digest** and **Review Digest** values.
 
 ### Fix now (mechanical renames)
 
@@ -25,7 +21,7 @@ The following will be corrected in the operational docs:
 
 1. **"Kubernetes MCP Guard" → "InfraGate"** wherever the project name appears as a product identifier.
 2. **"single-use" → "Single-Execution"** or `**Single-Execution Plan**` in approval-lifecycle descriptions.
-3. **"plan hash" → "pending-plan hash"** with a clarifying note in operational docs that this is the current single-hash implementation, distinct from the target two-digest model, to stop the term from being read as canonical vocabulary.
+3. **"plan hash" → "pending-plan hash"** where the text specifically describes approval-challenge drift detection; execution documentation should use **Intent Digest**, **Review Digest**, and **Approval Grant**.
 
 ### Already correct (no changes)
 
@@ -44,7 +40,7 @@ The target profile docs (`CONTEXT.md`, `mutation-approval-profile.md`, `mutation
 ## Consequences
 
 - Operational docs will carry the old name "Kubernetes MCP Guard" until renamed to "InfraGate" in a follow-up pass.
-- The "plan hash" to Intent/Review Digest terminology shift in operational docs is deferred until the code implements the two-digest model.
+- Operational docs should now describe the Intent/Review Digest model and Approval Grants for execution authorization.
 - "single-use" → "Single-Execution Plan" renames can be applied immediately without waiting for code changes.
 - `why-separated-plan-from-challenge.md` will need a substantial rewrite after the two-digest migration lands, since its table and code excerpts will become stale.
 - Architecture diagram (`docs/architecture.md`) will need an update to reflect the Generic Core / Domain Adapter boundary after the code split.

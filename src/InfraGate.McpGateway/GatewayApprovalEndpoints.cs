@@ -163,8 +163,10 @@ internal static class GatewayApprovalEndpoints
                     <span class="kv-value">{Html(plan.CreatedAtUtc.ToString("O"))}</span>
                     <span class="kv-label">Challenge Status</span>
                     <span class="kv-value"><span class="badge badge-{Html(challenge.Status)}">{Html(challenge.Status)}</span></span>
-                    <span class="kv-label">Plan Hash</span>
-                    <span class="kv-value"><code>{Html(challenge.PlanHash)}</code></span>
+                    <span class="kv-label">Intent Digest</span>
+                    <span class="kv-value"><code>{Html(plan.Envelope.IntentDigest.Value)}</code></span>
+                    <span class="kv-label">Review Digest</span>
+                    <span class="kv-value"><code>{Html(plan.Envelope.ReviewDigest.Value)}</code></span>
                     <span class="kv-label">Requester</span>
                     <span class="kv-value">{Html(challenge.RequesterSubject)}</span>
                     <span class="kv-label">Requester Auth</span>

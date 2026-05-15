@@ -33,10 +33,10 @@ public sealed class GatewayApprovalService
             return ApprovalGateResult.RequiresApproval("Refused: apply approval requires an authenticated OAuth subject.");
         }
 
-        var approved = await approvalStore.GetApprovedPlanAsync(planId, cancellationToken);
-        if (approved.IsApproved && approved.Envelope is not null)
+        var granted = await approvalStore.GetGrantedPlanAsync(planId, cancellationToken);
+        if (granted.IsGranted && granted.Envelope is not null && granted.Grant is not null)
         {
-            var decoded = KubernetesApprovalAdapter.Decode(approved.Envelope);
+            var decoded = KubernetesApprovalAdapter.Decode(granted.Envelope);
             if (!decoded.Succeeded || decoded.Plan is null)
             {
                 return ApprovalGateResult.RequiresApproval($"Refused: {decoded.Message}");
@@ -53,15 +53,12 @@ public sealed class GatewayApprovalService
                 return ApprovalGateResult.RequiresApproval($"Refused: {approvedRefusal}");
             }
 
-            var approvedChallenge = await challengeStore.FindApprovedAsync(
-                planId,
-                approved.Hash!,
-                requester.Subject,
-                cancellationToken);
-            if (approvedChallenge is not null)
-            {
-                return ApprovalGateResult.Approved();
-            }
+            return ApprovalGateResult.Approved();
+        }
+
+        if (!granted.IsGranted && granted.GrantExists)
+        {
+            return ApprovalGateResult.RequiresApproval($"Refused: {granted.Message}");
         }
 
         var pending = await approvalStore.GetPendingPlanAsync(planId, cancellationToken);
@@ -93,6 +90,8 @@ public sealed class GatewayApprovalService
             requester.Subject,
             requester.AuthenticationType,
             options.ApprovalChallengeTtl,
+            pending.Envelope.IntentDigest,
+            pending.Envelope.ReviewDigest,
             cancellationToken);
         await approvalStore.WriteAuditAsync(
             ApprovalConventions.AuditEvents.ApprovalChallengeCreated,
@@ -105,7 +104,7 @@ public sealed class GatewayApprovalService
                 challenge.ExpiresAtUtc),
             cancellationToken);
 
-        return ApprovalGateResult.RequiresApproval(FormatApprovalRequiredMessage(pendingPlan.Plan, pending.Hash, challenge));
+        return ApprovalGateResult.RequiresApproval(FormatApprovalRequiredMessage(pendingPlan.Plan, challenge));
     }
 
     private static string? GetPlanReadinessRefusal(KubernetesPlan? plan, string planId)
@@ -147,30 +146,23 @@ public sealed class GatewayApprovalService
         }
 
         var approver = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User)!;
-        var approved = await approvalStore.ApprovePendingPlanAsync(
-            validation.Challenge.PlanId,
-            validation.Challenge.PlanHash,
-            ApprovalConventions.ApprovalSources.GatewayOutOfBand,
+        var decidedAt = DateTimeOffset.UtcNow;
+        var grant = await approvalStore.CreateGrantAsync(
+            validation.Plan.Envelope,
             approver.Subject,
             validation.Challenge.Id,
             cancellationToken);
-        if (!approved.IsApproved)
-        {
-            await WriteChallengeRejectedAuditAsync(
-                validation.Challenge,
-                approver.Subject,
-                approved.Message,
-                cancellationToken);
-
-            return new ApprovalDecisionResult(false, approved.Message);
-        }
-
-        var decidedAt = DateTimeOffset.UtcNow;
         var updated = validation.Challenge with
         {
             Status = ApprovalConventions.ChallengeStatuses.Approved,
             ApproverSubject = approver.Subject,
-            DecidedAtUtc = decidedAt
+            DecidedAtUtc = decidedAt,
+            Outcome = new ChallengeOutcome(
+                ApprovalConventions.ChallengeOutcomeStatuses.Approved,
+                approver.Subject,
+                decidedAt,
+                Reason: null,
+                grant.Id)
         };
         await challengeStore.SaveAsync(updated, cancellationToken);
         await approvalStore.WriteAuditAsync(
@@ -186,7 +178,7 @@ public sealed class GatewayApprovalService
 
         return new ApprovalDecisionResult(
             true,
-            $"Plan '{updated.PlanId}' was approved. Return to your MCP client and call apply_approved_plan again.");
+            $"Plan '{updated.PlanId}' was approved with grant '{grant.Id}'. Return to your MCP client and call apply_approved_plan again.");
     }
 
     public async Task<ApprovalDecisionResult> DenyChallengeAsync(
@@ -226,7 +218,13 @@ public sealed class GatewayApprovalService
         {
             Status = ApprovalConventions.ChallengeStatuses.Denied,
             ApproverSubject = approver.Subject,
-            DecidedAtUtc = decidedAt
+            DecidedAtUtc = decidedAt,
+            Outcome = new ChallengeOutcome(
+                ApprovalConventions.ChallengeOutcomeStatuses.Denied,
+                approver.Subject,
+                decidedAt,
+                Reason: null,
+                GrantId: null)
         };
         await challengeStore.SaveAsync(denied, cancellationToken);
         await approvalStore.WriteAuditAsync(
@@ -260,7 +258,18 @@ public sealed class GatewayApprovalService
 
         if (challenge.ExpiresAtUtc <= DateTimeOffset.UtcNow)
         {
-            var expired = challenge with { Status = ApprovalConventions.ChallengeStatuses.Expired };
+            var decidedAt = DateTimeOffset.UtcNow;
+            var expired = challenge with
+            {
+                Status = ApprovalConventions.ChallengeStatuses.Expired,
+                DecidedAtUtc = decidedAt,
+                Outcome = new ChallengeOutcome(
+                    ApprovalConventions.ChallengeOutcomeStatuses.Expired,
+                    ActorSubject: null,
+                    decidedAt,
+                    "Challenge TTL expired.",
+                    GrantId: null)
+            };
             await challengeStore.SaveAsync(expired, cancellationToken);
             await approvalStore.WriteAuditAsync(
                 ApprovalConventions.AuditEvents.ApprovalChallengeExpired,
@@ -302,6 +311,19 @@ public sealed class GatewayApprovalService
                 cancellationToken);
 
             return ChallengeValidation.Invalid(pending.Message, challenge);
+        }
+
+        if (!SameDigest(challenge.IntentDigest, pending.Envelope.IntentDigest) ||
+            !SameDigest(challenge.ReviewDigest, pending.Envelope.ReviewDigest))
+        {
+            const string message = "The pending plan digest binding changed after this approval URL was created. Ask the MCP client to request a new approval URL.";
+            await WriteChallengeRejectedAuditAsync(
+                challenge,
+                approver.Subject,
+                message,
+                cancellationToken);
+
+            return ChallengeValidation.Invalid(message, challenge);
         }
 
         var decoded = KubernetesApprovalAdapter.Decode(pending.Envelope);
@@ -367,12 +389,27 @@ public sealed class GatewayApprovalService
         return ChallengeValidation.Valid(challenge, decoded.Plan);
     }
 
-    private Task WriteChallengeRejectedAuditAsync(
+    private async Task WriteChallengeRejectedAuditAsync(
         ApprovalChallenge challenge,
         string? approverSubject,
         string reason,
-        CancellationToken cancellationToken) =>
-        approvalStore.WriteAuditAsync(
+        CancellationToken cancellationToken)
+    {
+        var decidedAt = DateTimeOffset.UtcNow;
+        var rejected = challenge with
+        {
+            Status = ApprovalConventions.ChallengeStatuses.Rejected,
+            ApproverSubject = approverSubject,
+            DecidedAtUtc = decidedAt,
+            Outcome = new ChallengeOutcome(
+                ApprovalConventions.ChallengeOutcomeStatuses.Rejected,
+                approverSubject,
+                decidedAt,
+                reason,
+                GrantId: null)
+        };
+        await challengeStore.SaveAsync(rejected, cancellationToken);
+        await approvalStore.WriteAuditAsync(
             ApprovalConventions.AuditEvents.ApprovalChallengeRejected,
             new ApprovalChallengeRejectedPayload(
                 challenge.Id,
@@ -382,8 +419,9 @@ public sealed class GatewayApprovalService
                 approverSubject,
                 reason),
             cancellationToken);
+    }
 
-    private string FormatApprovalRequiredMessage(KubernetesPlan plan, string hash, ApprovalChallenge challenge)
+    private string FormatApprovalRequiredMessage(KubernetesPlan plan, ApprovalChallenge challenge)
     {
         var objects = string.Join(
             Environment.NewLine,
@@ -396,7 +434,8 @@ public sealed class GatewayApprovalService
                Namespace: {plan.Namespace}
                Objects:
                {objects}
-               Plan hash: {hash}
+               Intent Digest: {plan.Envelope.IntentDigest.Value}
+               Review Digest: {plan.Envelope.ReviewDigest.Value}
                Approval URL: {CreateApprovalUrl(challenge.Id)}
                Expires at UTC: {challenge.ExpiresAtUtc:O}
 
@@ -429,6 +468,9 @@ public sealed class GatewayApprovalService
 
     private static bool SameSubject(string left, string right) =>
         string.Equals(left, right, StringComparison.Ordinal);
+
+    private static bool SameDigest(ApprovalDigest? left, ApprovalDigest right) =>
+        left is not null && left == right;
 
     private static string MissingDryRunMessage(string planId) =>
         $"Plan '{planId}' is missing recorded server-side dry-run data. Ask the MCP client to re-request the plan.";

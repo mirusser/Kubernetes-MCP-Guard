@@ -325,14 +325,13 @@ public sealed partial class K8sManager
             return FormatRequestDryRunRefusal(dryRun.Message);
         }
 
-        var planWithDryRun = plan with
-        {
-            Payload = plan.Payload with
+        var planWithDryRun = KubernetesApprovalAdapter.WithPayload(
+            plan,
+            plan.Payload with
             {
                 DryRun = dryRun.DryRun,
                 PolicyFindings = ToPlanPolicyFindings(policyResult)
-            }
-        };
+            });
 
         K8sPlanDiff[] diffs;
         try
@@ -353,8 +352,11 @@ public sealed partial class K8sManager
             return $"Diff generation failed; no approval plan was created.{Environment.NewLine}{message}";
         }
 
+        var planWithDiffs = KubernetesApprovalAdapter.WithPayload(
+            planWithDryRun,
+            planWithDryRun.Payload with { Diffs = diffs });
         var formatted = await CreateAndFormatPlanAsync(
-            planWithDryRun with { Payload = planWithDryRun.Payload with { Diffs = diffs } },
+            planWithDiffs,
             policyResult,
             cancellationToken);
         logger.LogInformation("Approval plan {PlanId} created ({Operation} in {Namespace}, {ObjectCount} object(s))",

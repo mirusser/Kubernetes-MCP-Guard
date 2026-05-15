@@ -44,7 +44,7 @@ public sealed class ExpiredApprovalTests(SafetyE2EFixture fixture)
             Assert.False(approveResult.Succeeded);
             Assert.Contains("expired", approveResult.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(ApprovalConventions.ChallengeStatuses.Expired, afterChallenge?.Status);
-            Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+            Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
 
             var auditEvents = await fixture.ReadAuditEventsAsync();
             Assert.Contains(auditEvents, evt =>

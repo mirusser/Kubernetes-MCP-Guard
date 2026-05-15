@@ -23,8 +23,8 @@
 - OAuth access tokens are terminated at the gateway. The downstream stdio server receives tool calls, not bearer tokens.
 - The gateway binds approval challenges to the requester stored in the generic plan envelope; a different authenticated subject must request a fresh plan.
 - Approval is browser-based and out-of-band: MCP clients receive an approval URL but cannot submit approval content through MCP.
-- Browser approval pages render the stored Kubernetes server-side dry-run status and refuse legacy pending plans without envelope payloads, dry-run data, or diff data.
-- Approval challenges are bound to plan id, plan hash, requester subject, expiry, and single-use status.
+- Browser approval pages render the stored Kubernetes server-side dry-run status, Intent Digest, and Review Digest, and refuse legacy pending plans without envelope payloads, dry-run data, or diff data.
+- Approval challenges are bound to plan id, pending-plan hash, requester subject, expected digests, expiry, and Single-Execution status. Approved challenges issue Approval Grants consumed by execution.
 - Guardrail audit entries must not include bearer tokens or raw credentials.
 
 ## Settings

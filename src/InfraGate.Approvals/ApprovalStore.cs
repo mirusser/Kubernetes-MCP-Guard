@@ -7,6 +7,7 @@ namespace InfraGate.Approvals;
 public sealed class ApprovalStore
 {
     private const int PlanIdRandomByteCount = 4;
+    private const int GrantIdByteCount = 16;
 
     private readonly ApprovalStoreOptions options;
     private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web)
@@ -26,6 +27,8 @@ public sealed class ApprovalStore
     public string AppliedDirectory => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.AppliedDirectory);
 
     public string ChallengesDirectory => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.ChallengesDirectory);
+
+    public string GrantsDirectory => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.GrantsDirectory);
 
     public string AuditPath => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.AuditFileName);
 
@@ -51,7 +54,13 @@ public sealed class ApprovalStore
         var hash = await ComputeSha256Async(pendingPath, cancellationToken);
         await WriteAuditAsync(
             ApprovalConventions.AuditEvents.PlanRequested,
-            new PlanRequestedPayload(envelope.Id, envelope.Operation, targetNamespace, hash),
+            new PlanRequestedPayload(
+                envelope.Id,
+                envelope.Operation,
+                targetNamespace,
+                hash,
+                envelope.IntentDigest,
+                envelope.ReviewDigest),
             cancellationToken);
 
         return new ApprovalPlanResult(ToUntypedEnvelope(envelope), pendingPath, GetApprovedPath(envelope.Id), hash);
@@ -100,6 +109,44 @@ public sealed class ApprovalStore
         return read.Envelope is null
             ? ApprovedPlanResult.Denied(read.Message)
             : ApprovedPlanResult.Approved(read.Envelope, actualHash);
+    }
+
+    public async Task<GrantedPlanResult> GetGrantedPlanAsync(string planId, CancellationToken cancellationToken)
+    {
+        if (!IsSafePlanId(planId))
+        {
+            return GrantedPlanResult.Denied("Plan id contains unsupported characters.", grantExists: false);
+        }
+
+        var pendingPath = GetPendingPath(planId);
+        if (!File.Exists(pendingPath))
+        {
+            return GrantedPlanResult.MissingGrant($"No pending plan exists for '{planId}'.");
+        }
+
+        var appliedPath = GetAppliedPath(planId);
+        if (File.Exists(appliedPath))
+        {
+            return GrantedPlanResult.Denied($"Plan '{planId}' was already applied.", grantExists: false);
+        }
+
+        var grant = await GetGrantAsync(planId, cancellationToken);
+        if (grant is null)
+        {
+            return GrantedPlanResult.MissingGrant($"Plan '{planId}' is not approved yet.");
+        }
+
+        var read = await ReadEnvelopeAsync(planId, pendingPath, cancellationToken);
+        if (read.Envelope is null)
+        {
+            return GrantedPlanResult.Denied(read.Message);
+        }
+
+        var validation = ValidateGrant(read.Envelope, grant);
+
+        return validation is null
+            ? GrantedPlanResult.Granted(read.Envelope, grant)
+            : GrantedPlanResult.Denied(validation);
     }
 
     public async Task<PendingPlanResult> GetPendingPlanAsync(string planId, CancellationToken cancellationToken)
@@ -201,6 +248,91 @@ public sealed class ApprovalStore
             cancellationToken);
     }
 
+    public async Task MarkAppliedAsync(
+        PlanEnvelope envelope,
+        string targetNamespace,
+        ApprovalGrant grant,
+        CancellationToken cancellationToken)
+    {
+        EnsureDirectories();
+
+        var appliedPath = GetAppliedPath(envelope.Id);
+        var json = JsonSerializer.Serialize(new
+        {
+            envelope.Id,
+            envelope.AdapterId,
+            envelope.Operation,
+            Namespace = targetNamespace,
+            grantId = grant.Id,
+            intentDigest = grant.IntentDigest,
+            reviewDigest = grant.ReviewDigest,
+            appliedAtUtc = DateTimeOffset.UtcNow
+        }, jsonOptions);
+
+        await File.WriteAllTextAsync(appliedPath, json, cancellationToken);
+        await WriteAuditAsync(
+            ApprovalConventions.AuditEvents.PlanApplied,
+            new PlanAppliedPayload(envelope.Id, envelope.Operation, targetNamespace, grant.ReviewDigest.Value),
+            cancellationToken);
+    }
+
+    public async Task<ApprovalGrant> CreateGrantAsync(
+        PlanEnvelope envelope,
+        string approverSubject,
+        string sourceChallengeId,
+        CancellationToken cancellationToken)
+    {
+        EnsureDirectories();
+        var issuedAtUtc = DateTimeOffset.UtcNow;
+        var grant = new ApprovalGrant(
+            NewGrantId(),
+            envelope.Id,
+            envelope.Requester.Subject,
+            approverSubject,
+            sourceChallengeId,
+            envelope.IntentDigest,
+            envelope.ReviewDigest,
+            envelope.ApprovalPolicy,
+            envelope.ExecutionReusePolicy,
+            issuedAtUtc,
+            envelope.ValidUntilUtc);
+
+        var json = JsonSerializer.Serialize(grant, jsonOptions);
+        await File.WriteAllTextAsync(GetGrantPath(envelope.Id), json, cancellationToken);
+        await WriteAuditAsync(
+            ApprovalConventions.AuditEvents.GrantIssued,
+            new ApprovalGrantIssuedPayload(
+                envelope.Id,
+                grant.Id,
+                sourceChallengeId,
+                envelope.Requester.Subject,
+                approverSubject,
+                envelope.IntentDigest,
+                envelope.ReviewDigest,
+                grant.ExpiresAtUtc),
+            cancellationToken);
+
+        return grant;
+    }
+
+    public async Task<ApprovalGrant?> GetGrantAsync(string planId, CancellationToken cancellationToken)
+    {
+        if (!IsSafePlanId(planId))
+        {
+            return null;
+        }
+
+        var path = GetGrantPath(planId);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        var json = await File.ReadAllTextAsync(path, cancellationToken);
+
+        return JsonSerializer.Deserialize<ApprovalGrant>(json, jsonOptions);
+    }
+
     public Task WriteAuditAsync(string eventName, object payload, CancellationToken cancellationToken)
     {
         EnsureDirectories();
@@ -219,6 +351,8 @@ public sealed class ApprovalStore
 
     public string GetApprovedPath(string planId) => Path.Combine(ApprovedDirectory, planId + ApprovalConventions.Storage.Sha256Extension);
 
+    public string GetGrantPath(string planId) => Path.Combine(GrantsDirectory, planId + ApprovalConventions.Storage.JsonExtension);
+
     public string GetAppliedPath(string planId) => Path.Combine(AppliedDirectory, planId + ApprovalConventions.Storage.JsonExtension);
 
     public static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
@@ -236,6 +370,15 @@ public sealed class ApprovalStore
         Directory.CreateDirectory(ApprovedDirectory);
         Directory.CreateDirectory(AppliedDirectory);
         Directory.CreateDirectory(ChallengesDirectory);
+        Directory.CreateDirectory(GrantsDirectory);
+    }
+
+    private static string NewGrantId()
+    {
+        var bytes = new byte[GrantIdByteCount];
+        RandomNumberGenerator.Fill(bytes);
+
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
     private static bool IsSafePlanId(string planId)
@@ -283,8 +426,15 @@ public sealed class ApprovalStore
         }
 
         if (string.IsNullOrWhiteSpace(envelope.AdapterId) ||
+            string.IsNullOrWhiteSpace(envelope.Profile) ||
             string.IsNullOrWhiteSpace(envelope.Operation) ||
             string.IsNullOrWhiteSpace(envelope.Requester.Subject) ||
+            !IsSupportedPolicy(envelope.ApprovalPolicy) ||
+            !IsSupportedReusePolicy(envelope.ExecutionReusePolicy) ||
+            IsMissingDigest(envelope.IntentDigest) ||
+            IsMissingDigest(envelope.ReviewDigest) ||
+            envelope.ValidFromUtc == default ||
+            envelope.ValidUntilUtc <= envelope.ValidFromUtc ||
             envelope.Payload.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
         {
             return $"Plan '{planId}' uses an old approval file format. Re-request the plan.";
@@ -293,15 +443,89 @@ public sealed class ApprovalStore
         return null;
     }
 
+    private static bool IsMissingDigest(ApprovalDigest digest) =>
+        !string.Equals(digest.Algorithm, ApprovalConventions.Digests.Sha256, StringComparison.Ordinal) ||
+        string.IsNullOrWhiteSpace(digest.Canonicalization) ||
+        string.IsNullOrWhiteSpace(digest.Value);
+
+    private static bool IsSupportedPolicy(ApprovalPolicy policy) =>
+        string.Equals(policy.Type, ApprovalConventions.ApprovalPolicyTypes.SameSubject, StringComparison.Ordinal);
+
+    private static bool IsSupportedReusePolicy(ExecutionReusePolicy policy) =>
+        string.Equals(policy.Type, ApprovalConventions.ExecutionReusePolicyTypes.SingleExecution, StringComparison.Ordinal);
+
+    private static string? ValidateGrant(PlanEnvelope envelope, ApprovalGrant grant)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (envelope.ValidFromUtc > now)
+        {
+            return $"Plan '{envelope.Id}' is not valid yet.";
+        }
+
+        if (envelope.ValidUntilUtc <= now)
+        {
+            return $"Plan '{envelope.Id}' expired before execution.";
+        }
+
+        if (grant.ExpiresAtUtc <= now)
+        {
+            return $"Approval grant '{grant.Id}' expired before execution.";
+        }
+
+        if (!string.Equals(grant.PlanId, envelope.Id, StringComparison.Ordinal) ||
+            !string.Equals(grant.RequesterSubject, envelope.Requester.Subject, StringComparison.Ordinal) ||
+            !SameDigest(grant.IntentDigest, envelope.IntentDigest) ||
+            !SameDigest(grant.ReviewDigest, envelope.ReviewDigest) ||
+            !SamePolicy(grant.ApprovalPolicy, envelope.ApprovalPolicy) ||
+            !SameReusePolicy(grant.ExecutionReusePolicy, envelope.ExecutionReusePolicy))
+        {
+            return $"Approval grant '{grant.Id}' no longer matches plan '{envelope.Id}'.";
+        }
+
+        if (string.Equals(envelope.ApprovalPolicy.Type, ApprovalConventions.ApprovalPolicyTypes.SameSubject, StringComparison.Ordinal) &&
+            !string.Equals(grant.RequesterSubject, grant.ApproverSubject, StringComparison.Ordinal))
+        {
+            return $"Approval grant '{grant.Id}' violates same-subject approval policy.";
+        }
+
+        var actualReviewDigest = PlanEnvelopeFactory.ComputeReviewDigest(envelope);
+        if (!SameDigest(envelope.ReviewDigest, actualReviewDigest))
+        {
+            return $"Plan '{envelope.Id}' review digest no longer matches the pending plan.";
+        }
+
+        return null;
+    }
+
+    private static bool SameDigest(ApprovalDigest left, ApprovalDigest right)
+    {
+        return string.Equals(left.Algorithm, right.Algorithm, StringComparison.Ordinal) &&
+               string.Equals(left.Canonicalization, right.Canonicalization, StringComparison.Ordinal) &&
+               FixedTimeStringComparer.Equals(left.Value, right.Value);
+    }
+
+    private static bool SamePolicy(ApprovalPolicy left, ApprovalPolicy right) =>
+        string.Equals(left.Type, right.Type, StringComparison.Ordinal);
+
+    private static bool SameReusePolicy(ExecutionReusePolicy left, ExecutionReusePolicy right) =>
+        string.Equals(left.Type, right.Type, StringComparison.Ordinal);
+
     private PlanEnvelope ToUntypedEnvelope<TPayload>(PlanEnvelope<TPayload> envelope)
     {
         var payload = JsonSerializer.SerializeToElement(envelope.Payload, jsonOptions);
         return new PlanEnvelope(
             envelope.Id,
+            envelope.Profile,
             envelope.AdapterId,
             envelope.Operation,
             envelope.CreatedAtUtc,
+            envelope.ValidFromUtc,
+            envelope.ValidUntilUtc,
             envelope.Requester,
+            envelope.ApprovalPolicy,
+            envelope.ExecutionReusePolicy,
+            envelope.IntentDigest,
+            envelope.ReviewDigest,
             payload);
     }
 

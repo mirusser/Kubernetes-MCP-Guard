@@ -30,13 +30,13 @@ See [`src/InfraGate.McpGateway.Auth/README.md`](../src/InfraGate.McpGateway.Auth
 
 ### 1.4 Approval-Gated Mutation Flow
 
-The `request_*` tools create pending plans only after Kubernetes `dryRun=All` succeeds; they do not persist Kubernetes mutations at request time. The dry-run result is stored inside the pending plan and covered by the plan hash. The MCP client then calls `apply_approved_plan`, and the gateway returns a browser approval URL instead of forwarding the apply call immediately.
+The `request_*` tools create pending plans only after Kubernetes `dryRun=All` succeeds; they do not persist Kubernetes mutations at request time. The dry-run result is stored inside the pending plan and covered by the Review Digest; the executable mutation is covered by the Intent Digest. The MCP client then calls `apply_approved_plan`, and the gateway returns a browser approval URL instead of forwarding the apply call immediately.
 
-Approval happens out of band in the gateway-hosted browser UI. The challenge has a cryptographically random ID, a TTL, the requester subject, the current plan hash, and single-use status. The browser approval flow requires a separate OAuth session bound to the same subject.
+Approval happens out of band in the gateway-hosted browser UI. The challenge has a cryptographically random ID, a TTL, the requester subject, the current pending-plan hash, expected Intent Digest, expected Review Digest, and Single-Execution status. The browser approval flow requires a separate OAuth session bound to the same subject.
 
-The pending plan SHA-256 is stored separately. The gateway recomputes the hash at challenge creation and again at approval time. The server recomputes it before apply, then repeats Kubernetes dry-run immediately before the real write. A mismatch is refused and audited as `approval_hash_mismatch`; dry-run failures are audited as `dry_run_failed`.
+Approval issues an Approval Grant under `.mcp-approvals/grants/`, bound to the plan id, requester, approver, challenge id, Intent Digest, Review Digest, approval policy, reuse policy, and expiry. The gateway still recomputes the pending-plan hash at challenge creation and approval time to detect approval-URL drift. The server validates the grant and digests before apply, then repeats Kubernetes dry-run immediately before the real write. A mismatch is refused; dry-run failures are audited as `dry_run_failed`.
 
-The gateway approval endpoints require anti-forgery tokens, same-subject binding, challenge TTL checks, and plan-hash time-of-check/time-of-use re-verification at approval time.
+The gateway approval endpoints require anti-forgery tokens, same-subject binding, challenge TTL checks, and pending-plan hash plus digest time-of-check/time-of-use re-verification at approval time.
 
 See [`src/InfraGate.McpServer/README.md`](../src/InfraGate.McpServer/README.md) for the `ApprovalStore` contract and [`src/InfraGate.McpGateway/README.md`](../src/InfraGate.McpGateway/README.md) for `GatewayApprovalService` and browser approval endpoints.
 

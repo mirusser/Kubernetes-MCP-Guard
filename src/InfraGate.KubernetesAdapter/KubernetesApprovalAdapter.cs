@@ -15,14 +15,31 @@ public static class KubernetesApprovalAdapter
         string operation,
         DateTimeOffset createdAtUtc,
         PlanRequester requester,
-        KubernetesPlanPayload payload) =>
-        new(
+        KubernetesPlanPayload payload)
+    {
+        var intentDigest = ComputeIntentDigest(operation, payload);
+
+        return PlanEnvelopeFactory.Create(
             planId,
             KubernetesAdapterConventions.AdapterId,
             operation,
             createdAtUtc,
             requester,
+            intentDigest,
             payload);
+    }
+
+    public static PlanEnvelope<KubernetesPlanPayload> WithPayload(
+        PlanEnvelope<KubernetesPlanPayload> envelope,
+        KubernetesPlanPayload payload)
+    {
+        return CreateEnvelope(
+            envelope.Id,
+            envelope.Operation,
+            envelope.CreatedAtUtc,
+            envelope.Requester,
+            payload);
+    }
 
     public static KubernetesPlan Materialize(PlanEnvelope<KubernetesPlanPayload> envelope) =>
         new(ToEnvelope(envelope), envelope.Payload);
@@ -32,10 +49,17 @@ public static class KubernetesApprovalAdapter
         var payload = JsonSerializer.SerializeToElement(envelope.Payload, JsonOptions);
         return new PlanEnvelope(
             envelope.Id,
+            envelope.Profile,
             envelope.AdapterId,
             envelope.Operation,
             envelope.CreatedAtUtc,
+            envelope.ValidFromUtc,
+            envelope.ValidUntilUtc,
             envelope.Requester,
+            envelope.ApprovalPolicy,
+            envelope.ExecutionReusePolicy,
+            envelope.IntentDigest,
+            envelope.ReviewDigest,
             payload);
     }
 
@@ -61,5 +85,19 @@ public static class KubernetesApprovalAdapter
         return payload is null
             ? KubernetesPlanDecodeResult.Failed($"Plan '{envelope.Id}' Kubernetes payload could not be read.")
             : KubernetesPlanDecodeResult.Success(new KubernetesPlan(envelope, payload));
+    }
+
+    private static ApprovalDigest ComputeIntentDigest(string operation, KubernetesPlanPayload payload)
+    {
+        return ApprovalDigest.ComputeSha256(
+            KubernetesAdapterConventions.Canonicalizations.IntentV1,
+            new
+            {
+                operation,
+                @namespace = payload.Namespace,
+                payload.Parameters,
+                payload.Objects,
+                payload.Manifest
+            });
     }
 }
