@@ -10,7 +10,6 @@ public static class ApprovalConventions
     public static class Storage
     {
         public const string PendingDirectory = "pending";
-        public const string ApprovedDirectory = "approved";
         public const string AppliedDirectory = "applied";
         public const string ChallengesDirectory = "challenges";
         public const string GrantsDirectory = "grants";

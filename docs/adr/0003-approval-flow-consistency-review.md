@@ -15,13 +15,18 @@ A full consistency review was performed against the skill checklist in `.agents/
 
 The codebase no longer uses an approved hash file as execution authorization. Pending-plan hashes remain for approval-challenge drift detection, but execution now consumes an **Approval Grant** bound to separate **Intent Digest** and **Review Digest** values.
 
-### Fix now (mechanical renames)
+### Fix now (mechanical renames) — status
 
-The following will be corrected in the operational docs:
+1. **"Kubernetes MCP Guard" → "InfraGate"** wherever the project name appears as a product identifier. **Deferred** — 14 occurrences in 8 operational docs; needs a coordinated product rename pass.
+2. **"single-use" → "Single-Execution"** or `**Single-Execution Plan**` in approval-lifecycle descriptions. **Done** — all occurrences replaced in `why-separated-plan-from-challenge.md`, `tool-permissions.md`, and other operational docs.
+3. **"plan hash" → "pending-plan hash"** where the text specifically describes approval-challenge drift detection; execution documentation should use **Intent Digest**, **Review Digest**, and **Approval Grant**. **Done** — zero bare "plan hash" remains in any doc.
 
-1. **"Kubernetes MCP Guard" → "InfraGate"** wherever the project name appears as a product identifier.
-2. **"single-use" → "Single-Execution"** or `**Single-Execution Plan**` in approval-lifecycle descriptions.
-3. **"plan hash" → "pending-plan hash"** where the text specifically describes approval-challenge drift detection; execution documentation should use **Intent Digest**, **Review Digest**, and **Approval Grant**.
+### Additional fixes applied since original ADR
+
+- **Code rename:** `ReviewContext` → `ReviewSurfaceContext` to align with the canonical **Review Surface** glossary term (CONTEXT.md L125-127). Property names (`Surface`, `Renderer`) unchanged; serialization unaffected.
+- **Vestigial constant removed:** `ApprovedDirectory = "approved"` constant removed from `ApprovalConventions.Storage`. No production code reads from the `approved/` directory. Test helpers that intentionally test legacy-path rejection now inline the `"approved"` literal.
+- **Legacy script removed:** `scripts/approve-plan.sh` removed. Execution is now authorized exclusively by **Approval Grants** bound to **Intent Digest** and **Review Digest**.
+- **Integration test cleaned up:** `McpServerIntegrationTests.ApprovePlanAsync()` no longer writes a legacy `approved/<planId>.sha256` file; it only writes an **Approval Grant**.
 
 ### Already correct (no changes)
 
@@ -39,11 +44,13 @@ The target profile docs (`CONTEXT.md`, `mutation-approval-profile.md`, `mutation
 
 ## Consequences
 
-- Operational docs will carry the old name "Kubernetes MCP Guard" until renamed to "InfraGate" in a follow-up pass.
-- Operational docs should now describe the Intent/Review Digest model and Approval Grants for execution authorization.
-- "single-use" → "Single-Execution Plan" renames can be applied immediately without waiting for code changes.
-- `why-separated-plan-from-challenge.md` will need a substantial rewrite after the two-digest migration lands, since its table and code excerpts will become stale.
-- Architecture diagram (`docs/architecture.md`) will need an update to reflect the Generic Core / Domain Adapter boundary after the code split.
+- **Deferred:** Operational docs will carry the old name "Kubernetes MCP Guard" until renamed to "InfraGate" in a coordinated product-rename pass (14 occurrences across 8 files).
+- **Done:** Operational docs now describe the Intent/Review Digest model and Approval Grants for execution authorization.
+- **Done:** "single-use" → "Single-Execution Plan" renames applied across all operational docs.
+- **Done:** `why-separated-plan-from-challenge.md` has been updated with Intent/Review Digest/Approval Grant terminology and "single-use" replaced with "Single-Execution".
+- **Pending:** Architecture diagram (`docs/architecture.md`) will need an update to reflect the Generic Core / Domain Adapter boundary after the code split.
+- **Done:** `ReviewContext` C# type renamed to `ReviewSurfaceContext` to match the canonical **Review Surface** glossary term.
+- **Done:** `ApprovedDirectory` constant, `scripts/approve-plan.sh`, and integration-test legacy approved-hash writes removed.
 
 ## Cross-References
 

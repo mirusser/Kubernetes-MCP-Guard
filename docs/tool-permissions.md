@@ -37,9 +37,9 @@ These tools create pending plans. They run Kubernetes `dryRun=All` first, but th
 
 | MCP Tool | MCP Annotation | K8s Verbs | K8s Resources | Approval Required | Bounds / Notes |
 |---|---|---|---|---|---|
-| `apply_approved_plan` | `Destructive = true` | Depends on approved plan | Depends on approved plan | Yes | Through the gateway, requires out-of-band browser approval through a single-use challenge URL; the gateway checks the approved challenge record and the server validates the SHA-256 hash match and repeats `dryRun=All` before any Kubernetes write |
+| `apply_approved_plan` | `Destructive = true` | Depends on approved plan | Depends on approved plan | Yes | Through the gateway, requires out-of-band browser approval through a Single-Execution challenge URL; the gateway checks the approved challenge record and the server validates grant-bound digests and repeats `dryRun=All` before any Kubernetes write |
 
-`scripts/approve-plan.sh` writes a direct approval hash for local direct-stdio server experiments. It does not create a Gateway approval challenge record and is not the normal gateway approval path.
+Local direct-stdio server experiments must use an Approval Grant for execution authorization. The legacy `scripts/approve-plan.sh` has been removed; the grant-based flow is the only supported path.
 
 | Plan Operation | K8s Verbs | K8s Resources |
 |---|---|---|

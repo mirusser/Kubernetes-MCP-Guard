@@ -59,17 +59,9 @@ The same fix can be planned by submitting `examples/failing-deployment/fix.yaml`
 
 Call `apply_approved_plan(planId="<PlanId>")`. The Gateway returns an approval URL instead of applying immediately. Open that URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan, Intent Digest, and Review Digest, and approve it.
 
-**What you should see:** an approval page showing the `PlanId`, affected objects, requester, expiry, Intent Digest, and Review Digest. After approval, return to the MCP client and call `apply_approved_plan(planId="<PlanId>")` again.
+**What you should see:** an approval page showing the `PlanId`, affected objects, requester, expiry, Intent Digest, and Review Digest. After approval, the Gateway issues an Approval Grant, and the MCP client can call `apply_approved_plan(planId="<PlanId>")` to execute.
 
-### `scripts/approve-plan.sh` dev helper
-
-```bash
-./scripts/approve-plan.sh <PlanId>
-```
-
-This helper is legacy. Current execution requires an Approval Grant under `.mcp-approvals/grants/`, which is issued by the Gateway browser approval flow.
-
-Direct hash approval files do not authorize execution in the current grant-bound flow.
+Direct hash approval files do not authorize execution in the current grant-bound flow. The legacy `scripts/approve-plan.sh` helper has been removed.
 
 ## Step 5 — Apply
 

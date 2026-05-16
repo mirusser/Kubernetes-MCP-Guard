@@ -25,7 +25,7 @@ public sealed class ApprovalStoreTests
 
         await store.CreatePlanAsync(plan, TargetNamespace, CancellationToken.None);
 
-        Assert.False(Directory.Exists(Path.Combine(root, ApprovalConventions.Storage.ApprovedDirectory)));
+        Assert.False(Directory.Exists(Path.Combine(root, "approved")));
     }
 
     [Fact]

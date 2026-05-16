@@ -796,7 +796,7 @@ public sealed class K8sManagerApplyTests
     private static string LegacyApprovedPath(ApprovalStore store, string planId) =>
         Path.Combine(
             Path.GetDirectoryName(store.PendingDirectory)!,
-            ApprovalConventions.Storage.ApprovedDirectory,
+            "approved",
             planId + ApprovalConventions.Storage.Sha256Extension);
 
     private const string DeleteManifest = """

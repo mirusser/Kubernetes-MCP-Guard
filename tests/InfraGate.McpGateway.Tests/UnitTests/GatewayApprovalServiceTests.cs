@@ -487,7 +487,7 @@ public sealed class GatewayApprovalServiceTests
     private static string LegacyApprovedPath(ApprovalStore store, string planId) =>
         Path.Combine(
             Path.GetDirectoryName(store.PendingDirectory)!,
-            ApprovalConventions.Storage.ApprovedDirectory,
+            "approved",
             planId + ApprovalConventions.Storage.Sha256Extension);
 
     private static TestContext CreateContext()

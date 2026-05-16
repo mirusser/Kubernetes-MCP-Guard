@@ -73,7 +73,7 @@ Five concrete reasons, each visible in the code:
 ### 1. Different lifetimes
 
 - A plan lives from creation (request_*) through `applied/` (or denial/cleanup). Days, potentially.
-- A challenge has a hard 15-minute TTL by default ([`McpGatewayOptions.DefaultApprovalChallengeTtl`](../src/InfraGate.McpGateway/McpGatewayOptions.cs#L22)) and is single-use. If it expires, the plan is still valid — you just need a new challenge.
+- A challenge has a hard 15-minute TTL by default ([`McpGatewayOptions.DefaultApprovalChallengeTtl`](../src/InfraGate.McpGateway/McpGatewayOptions.cs#L22)) and is a Single-Execution challenge. If it expires, the plan is still valid — you just need a new challenge.
 
 If they were one record, the TTL on the challenge side would either over-constrain the plan or under-constrain the approval window.
 
@@ -155,7 +155,7 @@ The plan threads through every step from 1 to 5. The challenge only matters for 
 | | Plan envelope + Kubernetes payload | Challenge (`ApprovalChallenge`) |
 |---|---|---|
 | **Conceptual role** | The change being requested | Permission to approve that change |
-| **Lifetime** | Long (until applied/cleaned up) | 15 min, single-use |
+| **Lifetime** | Long (until applied/cleaned up) | 15 min, Single-Execution |
 | **Identifies** | A mutation | An approval attempt |
 | **Bound to** | A namespace + objects + Intent/Review Digests | A requester subject + pending-plan hash + clock |
 | **Holds** | Manifest, diff, dry-run, policy findings | Identities, timestamps, status |
