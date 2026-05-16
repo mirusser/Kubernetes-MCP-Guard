@@ -21,6 +21,7 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
         services.AddSingleton<GatewayApprovalService>();
         services.AddHttpContextAccessor();
+        services.AddLogging();
 
         using var provider = services.BuildServiceProvider();
         var resolved = provider.GetRequiredService<GatewayApprovalService>();

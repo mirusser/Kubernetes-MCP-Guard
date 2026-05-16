@@ -4,6 +4,9 @@ namespace InfraGate.McpGateway.Tests.UnitTests;
 
 public sealed class ApprovalChallengeStoreTests
 {
+    private static readonly ApprovalDigest IntentDigest = CreateDigest("intent");
+    private static readonly ApprovalDigest ReviewDigest = CreateDigest("review");
+
     [Fact]
     public async Task GetAsync_WithNullChallengeId_ReturnsNull()
     {
@@ -65,6 +68,8 @@ public sealed class ApprovalChallengeStoreTests
             "alice",
             "oauth-jwt",
             TimeSpan.FromMinutes(10),
+            IntentDigest,
+            ReviewDigest,
             CancellationToken.None);
 
         Assert.NotEmpty(challenge.Id);
@@ -72,6 +77,8 @@ public sealed class ApprovalChallengeStoreTests
         Assert.Equal("hash-abc", challenge.PendingPlanHash);
         Assert.Equal("alice", challenge.RequesterSubject);
         Assert.Equal("oauth-jwt", challenge.RequesterAuthenticationType);
+        Assert.Equal(IntentDigest, challenge.IntentDigest);
+        Assert.Equal(ReviewDigest, challenge.ReviewDigest);
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Pending, challenge.Status);
         Assert.True(challenge.ExpiresAtUtc > challenge.CreatedAtUtc);
     }
@@ -87,12 +94,16 @@ public sealed class ApprovalChallengeStoreTests
             "alice",
             "oauth-jwt",
             TimeSpan.FromMinutes(10),
+            IntentDigest,
+            ReviewDigest,
             CancellationToken.None);
 
         var path = Directory.EnumerateFiles(store.ChallengeDirectory).Single();
         var json = await File.ReadAllTextAsync(path, CancellationToken.None);
 
         Assert.Contains("\"pendingPlanHash\"", json);
+        Assert.Contains("\"intentDigest\"", json);
+        Assert.Contains("\"reviewDigest\"", json);
         Assert.DoesNotContain("\"planHash\"", json);
     }
 
@@ -102,7 +113,14 @@ public sealed class ApprovalChallengeStoreTests
         var store = CreateStore();
 
         var created = await store.CreateAsync(
-            "plan-456", "hash-def", "bob", null, TimeSpan.FromMinutes(5), CancellationToken.None);
+            "plan-456",
+            "hash-def",
+            "bob",
+            null,
+            TimeSpan.FromMinutes(5),
+            IntentDigest,
+            ReviewDigest,
+            CancellationToken.None);
 
         var fetched = await store.GetAsync(created.Id, CancellationToken.None);
 
@@ -127,7 +145,9 @@ public sealed class ApprovalChallengeStoreTests
             ExpiresAtUtc: DateTimeOffset.UtcNow.AddMinutes(10),
             Status: ApprovalConventions.ChallengeStatuses.Approved,
             ApproverSubject: "carol",
-            DecidedAtUtc: DateTimeOffset.UtcNow);
+            DecidedAtUtc: DateTimeOffset.UtcNow,
+            IntentDigest: IntentDigest,
+            ReviewDigest: ReviewDigest);
 
         await store.SaveAsync(challenge, CancellationToken.None);
 
@@ -151,7 +171,9 @@ public sealed class ApprovalChallengeStoreTests
             ExpiresAtUtc: DateTimeOffset.UtcNow.AddMinutes(10),
             Status: ApprovalConventions.ChallengeStatuses.Pending,
             ApproverSubject: null,
-            DecidedAtUtc: null);
+            DecidedAtUtc: null,
+            IntentDigest: IntentDigest,
+            ReviewDigest: ReviewDigest);
 
         await store.SaveAsync(challenge, CancellationToken.None);
 
@@ -174,7 +196,9 @@ public sealed class ApprovalChallengeStoreTests
             ExpiresAtUtc: DateTimeOffset.UtcNow.AddMinutes(10),
             Status: ApprovalConventions.ChallengeStatuses.Approved,
             ApproverSubject: "carol",
-            DecidedAtUtc: DateTimeOffset.UtcNow);
+            DecidedAtUtc: DateTimeOffset.UtcNow,
+            IntentDigest: IntentDigest,
+            ReviewDigest: ReviewDigest);
 
         await store.SaveAsync(challenge, CancellationToken.None);
 
@@ -190,4 +214,7 @@ public sealed class ApprovalChallengeStoreTests
 
         return new ApprovalChallengeStore(options);
     }
+
+    private static ApprovalDigest CreateDigest(string value) =>
+        new(ApprovalConventions.Digests.Sha256, "test.canonicalization.v1", value);
 }

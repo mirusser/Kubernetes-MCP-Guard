@@ -212,8 +212,13 @@ public sealed class GatewayApprovalEndpointsTests
             ExpiresAtUtc: FixedTime.AddHours(1),
             Status: "pending",
             ApproverSubject: null,
-            DecidedAtUtc: null);
+            DecidedAtUtc: null,
+            IntentDigest: CreateDigest("intent"),
+            ReviewDigest: CreateDigest("review"));
     }
+
+    private static ApprovalDigest CreateDigest(string value) =>
+        new(ApprovalConventions.Digests.Sha256, "test.canonicalization.v1", value);
 
     private static IPlanReview CreatePlan(bool canBeApproved = true)
     {

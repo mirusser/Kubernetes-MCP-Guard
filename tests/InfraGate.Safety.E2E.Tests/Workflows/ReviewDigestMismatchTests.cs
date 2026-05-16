@@ -7,10 +7,10 @@ namespace InfraGate.Safety.E2E.Tests.Workflows;
 
 [Trait("Category", "SafetyE2E")]
 [Collection(SafetyE2ECollection.Name)]
-public sealed class PlanHashMismatchTests(SafetyE2EFixture fixture)
+public sealed class ReviewDigestMismatchTests(SafetyE2EFixture fixture)
 {
     [Fact]
-    public async Task ApplyApprovedPlan_PendingFileChangedAfterBrowserApproval_RequiresNewApprovalAndAudits()
+    public async Task ApplyApprovedPlan_ReviewDigestChangedAfterBrowserApproval_RefusesAndAudits()
     {
         if (!fixture.IsEnabled)
         {
@@ -64,5 +64,8 @@ public sealed class PlanHashMismatchTests(SafetyE2EFixture fixture)
             evt.GetProperty("eventName").GetString() == ApprovalConventions.AuditEvents.PlanRequested);
         Assert.Contains(auditEvents, evt =>
             evt.GetProperty("eventName").GetString() == ApprovalConventions.AuditEvents.ApprovalChallengeApproved);
+        Assert.Contains(auditEvents, evt =>
+            evt.GetProperty("eventName").GetString() == ApprovalConventions.AuditEvents.ApplyDenied &&
+            evt.GetProperty("payload").GetProperty("planId").GetString() == planId);
     }
 }

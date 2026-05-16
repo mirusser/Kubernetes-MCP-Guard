@@ -81,7 +81,7 @@ The server re-reads `pending/<PlanId>.json`, validates the Approval Grant and it
 
 **What you should see:** the tool returns the apply result describing the patched Deployment. Within seconds, Kubernetes pulls the new image and the Pods become Ready.
 
-If anything edits `pending/<PlanId>.json` between approval and apply, the recomputed hash no longer matches and the server refuses to apply, emitting an `approval_hash_mismatch` audit entry. This is the tamper-detection guarantee in action.
+If anything edits `pending/<PlanId>.json` between approval and apply, the recomputed Review Digest no longer matches and execution is refused, emitting an `apply_denied` audit entry. This is the tamper-detection guarantee in action.
 
 ## Step 6 — Verify recovery
 
@@ -97,7 +97,7 @@ Two JSONL streams record the demo. Both live under volumes mounted by `deploy/mo
 
 ### Server-side (`.mcp-approvals/audit.jsonl`)
 
-Records the plan lifecycle: `plan_requested`, `plan_approved`, `plan_applied` (and on a tampered plan, `approval_hash_mismatch` + `apply_denied`). One entry shape:
+Records the plan lifecycle: `plan_requested`, `approval_challenge_created`, `approval_challenge_approved`, `grant_issued`, `plan_applied` (and on a tampered plan, `apply_denied`). One entry shape:
 
 ```json
 {"timestampUtc":"2026-05-03T12:34:56.789Z","eventName":"plan_applied","payload":{"planId":"20260503-a1b2c3d4","operation":"setImage","namespace":"mcp-nginx-demo","hash":"sha256:…"}}

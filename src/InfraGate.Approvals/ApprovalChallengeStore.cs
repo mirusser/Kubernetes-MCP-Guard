@@ -21,33 +21,19 @@ public sealed class ApprovalChallengeStore
 
     public string ChallengeDirectory => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.ChallengesDirectory);
 
-    public Task<ApprovalChallenge> CreateAsync(
-        string planId,
-        string pendingPlanHash,
-        string requesterSubject,
-        string? requesterAuthenticationType,
-        TimeSpan ttl,
-        CancellationToken cancellationToken) =>
-        CreateAsync(
-            planId,
-            pendingPlanHash,
-            requesterSubject,
-            requesterAuthenticationType,
-            ttl,
-            intentDigest: null,
-            reviewDigest: null,
-            cancellationToken);
-
     public async Task<ApprovalChallenge> CreateAsync(
         string planId,
         string pendingPlanHash,
         string requesterSubject,
         string? requesterAuthenticationType,
         TimeSpan ttl,
-        ApprovalDigest? intentDigest,
-        ApprovalDigest? reviewDigest,
+        ApprovalDigest intentDigest,
+        ApprovalDigest reviewDigest,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(intentDigest);
+        ArgumentNullException.ThrowIfNull(reviewDigest);
+
         var now = DateTimeOffset.UtcNow;
         var challenge = new ApprovalChallenge(
             NewChallengeId(),
@@ -60,8 +46,8 @@ public sealed class ApprovalChallengeStore
             ApprovalConventions.ChallengeStatuses.Pending,
             ApproverSubject: null,
             DecidedAtUtc: null,
-            intentDigest,
-            reviewDigest);
+            IntentDigest: intentDigest,
+            ReviewDigest: reviewDigest);
 
         await SaveAsync(challenge, cancellationToken);
 

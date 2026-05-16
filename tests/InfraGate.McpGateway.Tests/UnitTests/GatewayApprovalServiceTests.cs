@@ -4,6 +4,7 @@ using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace InfraGate.McpGateway.Tests.UnitTests;
 
@@ -141,6 +142,26 @@ public sealed class GatewayApprovalServiceTests
 
         Assert.False(result.IsApproved);
         Assert.Contains("Approval URL:", result.Message);
+    }
+
+    [Fact]
+    public async Task EnsureApprovedOrCreateChallengeAsync_GrantReviewDigestMismatch_WritesApplyDeniedAudit()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+        var approved = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
+        await ChangePendingPlanReviewEvidenceAsync(context.Store, plan.Id);
+
+        var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+
+        Assert.True(approved.Succeeded);
+        Assert.False(result.IsApproved);
+        Assert.Contains("review digest", result.Message, StringComparison.OrdinalIgnoreCase);
+        string audit = await File.ReadAllTextAsync(context.Store.AuditPath, CancellationToken.None);
+        Assert.Contains("\"eventName\": \"apply_denied\"", audit);
+        Assert.Contains($"\"planId\": \"{plan.Id}\"", audit);
+        Assert.Contains("review digest no longer matches", audit);
     }
 
     [Fact]
@@ -446,11 +467,21 @@ public sealed class GatewayApprovalServiceTests
             Subject,
             "test",
             McpGatewayOptions.DefaultApprovalChallengeTtl,
-            pending.Envelope?.IntentDigest,
-            pending.Envelope?.ReviewDigest,
+            pending.Envelope?.IntentDigest ?? CreateDigest("intent"),
+            pending.Envelope?.ReviewDigest ?? CreateDigest("review"),
             CancellationToken.None);
 
         return challenge.Id;
+    }
+
+    private static async Task ChangePendingPlanReviewEvidenceAsync(ApprovalStore store, string planId)
+    {
+        string pendingPath = store.GetPendingPath(planId);
+        string json = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
+        await File.WriteAllTextAsync(
+            pendingPath,
+            json.Replace("/spec/replicas", "/spec/template/spec/containers/0/image", StringComparison.Ordinal),
+            CancellationToken.None);
     }
 
     private static string LegacyApprovedPath(ApprovalStore store, string planId) =>
@@ -479,7 +510,14 @@ public sealed class GatewayApprovalServiceTests
         var planReviewRenderer = new KubernetesPlanReviewRenderer();
 
         return new TestContext(
-            new GatewayApprovalService(store, challenges, planReviewAdapter, planReviewRenderer, gatewayOptions, httpContextAccessor),
+            new GatewayApprovalService(
+                store,
+                challenges,
+                planReviewAdapter,
+                planReviewRenderer,
+                gatewayOptions,
+                httpContextAccessor,
+                NullLogger<GatewayApprovalService>.Instance),
             store,
             challenges,
             httpContextAccessor,
@@ -508,6 +546,9 @@ public sealed class GatewayApprovalServiceTests
             ]))
         };
     }
+
+    private static ApprovalDigest CreateDigest(string value) =>
+        new(ApprovalConventions.Digests.Sha256, "test.canonicalization.v1", value);
 
     private sealed record TestContext(
         GatewayApprovalService Service,

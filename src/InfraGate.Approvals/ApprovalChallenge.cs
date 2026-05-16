@@ -11,6 +11,6 @@ public sealed record ApprovalChallenge(
     string Status,
     string? ApproverSubject,
     DateTimeOffset? DecidedAtUtc,
-    ApprovalDigest? IntentDigest = null,
-    ApprovalDigest? ReviewDigest = null,
+    ApprovalDigest IntentDigest,
+    ApprovalDigest ReviewDigest,
     ChallengeOutcome? Outcome = null);

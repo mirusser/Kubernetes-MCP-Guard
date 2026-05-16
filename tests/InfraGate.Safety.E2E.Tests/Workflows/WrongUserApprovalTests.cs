@@ -62,8 +62,8 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
             otherSubject,
             requesterAuthenticationType: "test",
             ttl: TimeSpan.FromMinutes(5),
-            otherPlanResult.Envelope.IntentDigest,
-            otherPlanResult.Envelope.ReviewDigest,
+            intentDigest: otherPlanResult.Envelope.IntentDigest,
+            reviewDigest: otherPlanResult.Envelope.ReviewDigest,
             cancellationToken: CancellationToken.None);
 
         using var browser = await fixture.CreateAuthenticatedApprovalBrowserAsync(otherChallenge.Id, otherSubject);
@@ -185,8 +185,8 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
             otherSubject,
             requesterAuthenticationType: "test",
             ttl: TimeSpan.FromMinutes(5),
-            otherPlanResult.Envelope.IntentDigest,
-            otherPlanResult.Envelope.ReviewDigest,
+            intentDigest: otherPlanResult.Envelope.IntentDigest,
+            reviewDigest: otherPlanResult.Envelope.ReviewDigest,
             cancellationToken: CancellationToken.None);
 
         using var browser = await fixture.CreateAuthenticatedApprovalBrowserAsync(otherChallenge.Id, otherSubject);

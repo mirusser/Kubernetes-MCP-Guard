@@ -641,6 +641,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
                 services.AddSingleton<GatewayApprovalService>();
                 services.AddHttpContextAccessor();
+                services.AddLogging();
                 services.AddAntiforgery();
                 services.AddGatewayAuthentication(options.Auth);
                 services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, jwtOptions =>

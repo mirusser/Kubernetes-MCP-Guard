@@ -490,6 +490,7 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
                 services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
                 services.AddSingleton<GatewayApprovalService>();
                 services.AddHttpContextAccessor();
+                services.AddLogging();
                 services.AddAntiforgery();
                 services.AddGatewayAuthentication(options.Auth);
                 services.PostConfigure<OAuthOptions>(GatewayAuthConventions.Schemes.ApprovalOAuth, oauthOptions =>
