@@ -10,8 +10,10 @@ internal static class EnvFileRenderer
         ArgumentNullException.ThrowIfNull(profile);
 
         var builder = new StringBuilder();
-        builder.AppendLine($"# Generated from {configFileName} profile: {profile.Name}");
-        builder.AppendLine($"# Do not edit. Run: dotnet run --project src/InfraGate.RunProfiles -- generate {profile.Name}");
+        builder.AppendLine(
+            $"{RunProfileConventions.GeneratedFile.HeaderLinePrefix}{configFileName}{RunProfileConventions.GeneratedFile.ProfileMarker}{profile.Name}");
+        builder.AppendLine(
+            $"{RunProfileConventions.GeneratedFile.DoNotEditLinePrefix}{profile.Name}");
 
         AppendRuntime(builder, profile);
         AppendGateway(builder, profile);

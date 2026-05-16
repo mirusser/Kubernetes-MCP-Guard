@@ -23,6 +23,7 @@ internal static class RunProfileConventions
     {
         public const string HeaderLinePrefix = "# Generated from ";
         public const string ProfileMarker = " profile: ";
+        public const string DoNotEditLinePrefix = "# Do not edit. Run: dotnet run --project src/InfraGate.RunProfiles -- generate ";
     }
 
     public static class YamlKeys
