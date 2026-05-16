@@ -13,10 +13,16 @@ public static class ApprovalConventions
         public const string AppliedDirectory = "applied";
         public const string ChallengesDirectory = "challenges";
         public const string GrantsDirectory = "grants";
+        public const string DataProtectionKeysDirectory = "dataprotection-keys";
         public const string AuditFileName = "audit.jsonl";
         public const string DefaultRootDirectory = ".mcp-approvals";
         public const string JsonExtension = ".json";
         public const string Sha256Extension = ".sha256";
+    }
+
+    public static class Application
+    {
+        public const string Name = "InfraGate";
     }
 
     public static class Profiles

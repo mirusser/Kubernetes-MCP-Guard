@@ -61,6 +61,7 @@ services:
       - ../../.mcp-approvals:/data/approvals
       - ../../.mcp-guardrails:/data/guardrails
       - ../../.mcp-logs:/data/logs
+      - ../../.mcp-dataprotection-keys:/data/dataprotection-keys
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-3001}:3001"
     networks:

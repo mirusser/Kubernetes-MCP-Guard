@@ -24,7 +24,7 @@ RUN dotnet publish src/InfraGate.McpGateway/InfraGate.McpGateway.csproj \
     --configuration Release \
     --output /app/gateway \
     --no-restore
-RUN install -d -o $APP_UID -g $APP_UID /data/approvals /data/guardrails /data/logs
+RUN install -d -o $APP_UID -g $APP_UID /data/approvals /data/guardrails /data/logs /data/dataprotection-keys
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled AS runtime
 WORKDIR /app/gateway

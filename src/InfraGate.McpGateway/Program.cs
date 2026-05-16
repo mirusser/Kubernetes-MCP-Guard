@@ -2,6 +2,7 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging;
 
 var options = McpGatewayOptions.FromEnvironment();
@@ -18,6 +19,12 @@ if (string.IsNullOrWhiteSpace(builder.Configuration[McpGatewayConventions.Config
 {
     builder.WebHost.UseUrls(McpGatewayOptions.DefaultUrl);
 }
+
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(
+        Path.GetDirectoryName(options.ApprovalRoot)!,
+        ApprovalConventions.Storage.DataProtectionKeysDirectory)))
+    .SetApplicationName(ApprovalConventions.Application.Name);
 
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<IGuardrailAuditStore, GuardrailAuditStore>();

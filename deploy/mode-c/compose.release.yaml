@@ -43,6 +43,7 @@ services:
       - ../../.kube/mcp-nginx-demo.compose.config:/run/kube/mcp-nginx-demo.compose.config:ro
       - ../../.mcp-approvals:/data/approvals
       - ../../.mcp-guardrails:/data/guardrails
+      - ../../.mcp-dataprotection-keys:/data/dataprotection-keys
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

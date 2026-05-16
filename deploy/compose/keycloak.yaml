@@ -45,9 +45,11 @@ services:
       - ../../.kube/mcp-nginx-demo.compose.config:/run/kube/mcp-nginx-demo.compose.config:ro
       - mcp-gateway-approvals:/data/approvals
       - mcp-gateway-guardrails:/data/guardrails
+      - mcp-gateway-dataprotection-keys:/data/dataprotection-keys
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-3001}:3001"
 
 volumes:
   mcp-gateway-approvals:
   mcp-gateway-guardrails:
+  mcp-gateway-dataprotection-keys:
