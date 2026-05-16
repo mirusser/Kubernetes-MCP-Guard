@@ -16,6 +16,7 @@ public sealed partial class K8sManager
         int limit,
         CancellationToken cancellationToken)
     {
+        // Justification: CA1873 — all log arguments are simple scalars (strings, int). Negligible evaluation cost.
         logger.LogInformation("GetEvents called: Namespace={Namespace}, LabelSelector={LabelSelector}, FieldSelector={FieldSelector}, Limit={Limit}",
             namespaceName, labelSelector, fieldSelector, limit);
 

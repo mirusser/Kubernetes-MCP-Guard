@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -98,14 +99,7 @@ public static partial class PromptInjectionGuard
             return false;
         }
 
-        var printable = 0;
-        foreach (char c in decodedText)
-        {
-            if (!char.IsControl(c) || c == '\n' || c == '\r' || c == '\t')
-            {
-                printable++;
-            }
-        }
+        var printable = decodedText.Count(c => !char.IsControl(c) || c == '\n' || c == '\r' || c == '\t');
 
         if (printable < decodedText.Length * 0.7)
         {

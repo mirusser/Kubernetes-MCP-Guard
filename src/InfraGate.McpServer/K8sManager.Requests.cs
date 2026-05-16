@@ -26,6 +26,7 @@ public sealed partial class K8sManager
         string? requesterAuthenticationType,
         CancellationToken cancellationToken)
     {
+        // Justification: CA1873 — all log arguments are simple scalars (strings, ints). Negligible evaluation cost.
         logger.LogInformation("Requesting apply plan in {Namespace} (manifest length: {ManifestLength})", namespaceName, manifest.Length);
         var validation = ValidateNamespace(namespaceName);
         if (validation is not null)
@@ -87,6 +88,7 @@ public sealed partial class K8sManager
         string? requesterAuthenticationType,
         CancellationToken cancellationToken)
     {
+        // Justification: CA1873 — all log arguments are simple scalars. Negligible evaluation cost.
         logger.LogInformation("Requesting delete plan in {Namespace} (manifest length: {ManifestLength})", namespaceName, manifest.Length);
         var validation = ValidateNamespace(namespaceName);
         if (validation is not null)
@@ -143,6 +145,7 @@ public sealed partial class K8sManager
         string? requesterAuthenticationType,
         CancellationToken cancellationToken)
     {
+        // Justification: CA1873 — all log arguments are simple scalars (strings, int). Negligible evaluation cost.
         logger.LogInformation("Requesting scale plan for Deployment {Namespace}/{Name} to {Replicas} replicas", namespaceName, name, replicas);
         var validation = ValidateNamespace(namespaceName) ?? ValidateName(name) ?? ValidateReplicas(replicas);
         if (validation is not null)
@@ -188,6 +191,7 @@ public sealed partial class K8sManager
         string? requesterAuthenticationType,
         CancellationToken cancellationToken)
     {
+        // Justification: CA1873 — all log arguments are simple scalars (strings). Negligible evaluation cost.
         logger.LogInformation("Requesting restart plan for Deployment {Namespace}/{Name}", namespaceName, name);
         var validation = ValidateNamespace(namespaceName) ?? ValidateName(name);
         if (validation is not null)
@@ -245,6 +249,7 @@ public sealed partial class K8sManager
         string? requesterAuthenticationType,
         CancellationToken cancellationToken)
     {
+        // Justification: CA1873 — all log arguments are simple scalars (strings). Negligible evaluation cost.
         logger.LogInformation("Requesting set-image plan for Deployment {Namespace}/{Name} container {Container} to {Image}", namespaceName, name, container, image);
         var validation = ValidateNamespace(namespaceName) ??
             ValidateName(name) ??

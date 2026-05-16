@@ -424,7 +424,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                ?? throw new InvalidOperationException($"Keycloak user '{username}' did not contain id.");
     }
 
-    private async Task FollowImpersonationRedirectAsync(
+    private static async Task FollowImpersonationRedirectAsync(
         HttpClient browser,
         HttpResponseMessage impersonation,
         CancellationToken cancellationToken)
@@ -520,7 +520,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         return query[KeycloakParameters.Code].ToString();
     }
 
-    private async Task<HttpResponseMessage> SubmitLoginFormAsync(
+    private static async Task<HttpResponseMessage> SubmitLoginFormAsync(
         HttpClient browser,
         string authUri,
         string loginPage,

@@ -34,6 +34,7 @@ public sealed class StreamWriterLoggerProviderTests : IDisposable
         using var provider = new StreamWriterLoggerProvider(tempPath);
         var logger = provider.CreateLogger("TestCategory");
 
+        // Justification: CA1873 — test assertions depend on log output; logging is always enabled during tests.
         logger.LogInformation("Hello {Name}", "World");
 
         provider.Dispose();
@@ -85,6 +86,7 @@ public sealed class StreamWriterLoggerProviderTests : IDisposable
                 var logger = provider.CreateLogger($"Category{threadIndex}");
                 for (int i = 0; i < messagesPerThread; i++)
                 {
+                        // Justification: CA1873 — test assertions depend on log output; logging is always enabled during tests.
                     logger.LogInformation("Message {Index}", i);
                 }
             }))
