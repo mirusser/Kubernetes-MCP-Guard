@@ -9,6 +9,7 @@ public static class PlanEnvelopeFactory
         DateTimeOffset createdAtUtc,
         PlanRequester requester,
         ApprovalDigest intentDigest,
+        ReviewSurfaceContext reviewSurfaceContext,
         TPayload payload)
     {
         var validityWindow = new PlanValidityWindow(
@@ -26,6 +27,7 @@ public static class PlanEnvelopeFactory
             requester,
             approvalPolicy,
             executionReusePolicy,
+            reviewSurfaceContext,
             intentDigest,
             payload);
 
@@ -40,6 +42,7 @@ public static class PlanEnvelopeFactory
             requester,
             approvalPolicy,
             executionReusePolicy,
+            reviewSurfaceContext,
             intentDigest,
             reviewDigest,
             payload);
@@ -56,6 +59,7 @@ public static class PlanEnvelopeFactory
             envelope.Requester,
             envelope.ApprovalPolicy,
             envelope.ExecutionReusePolicy,
+            envelope.ReviewSurfaceContext,
             envelope.IntentDigest,
             envelope.Payload);
 
@@ -69,6 +73,7 @@ public static class PlanEnvelopeFactory
         PlanRequester requester,
         ApprovalPolicy approvalPolicy,
         ExecutionReusePolicy executionReusePolicy,
+        ReviewSurfaceContext reviewSurfaceContext,
         ApprovalDigest intentDigest,
         TPayload payload)
     {
@@ -86,6 +91,7 @@ public static class PlanEnvelopeFactory
                 requester,
                 approvalPolicy,
                 executionReusePolicy,
+                reviewSurfaceContext,
                 intentDigest,
                 payload
             });

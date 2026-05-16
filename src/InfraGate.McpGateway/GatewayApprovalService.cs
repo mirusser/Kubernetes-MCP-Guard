@@ -104,7 +104,7 @@ public sealed class GatewayApprovalService
             new ApprovalChallengeCreatedPayload(
                 challenge.Id,
                 challenge.PlanId,
-                challenge.PlanHash,
+                challenge.PendingPlanHash,
                 challenge.RequesterSubject,
                 challenge.RequesterAuthenticationType,
                 challenge.ExpiresAtUtc),
@@ -174,7 +174,7 @@ public sealed class GatewayApprovalService
             new ApprovalChallengeApprovedPayload(
                 updated.Id,
                 updated.PlanId,
-                updated.PlanHash,
+                updated.PendingPlanHash,
                 updated.RequesterSubject,
                 updated.ApproverSubject,
                 decidedAt),
@@ -236,7 +236,7 @@ public sealed class GatewayApprovalService
             new ApprovalChallengeDeniedPayload(
                 denied.Id,
                 denied.PlanId,
-                denied.PlanHash,
+                denied.PendingPlanHash,
                 denied.RequesterSubject,
                 denied.ApproverSubject,
                 decidedAt),
@@ -280,7 +280,7 @@ public sealed class GatewayApprovalService
                 new ApprovalChallengeExpiredPayload(
                     expired.Id,
                     expired.PlanId,
-                    expired.PlanHash,
+                    expired.PendingPlanHash,
                     expired.RequesterSubject,
                     expired.ExpiresAtUtc),
                 cancellationToken);
@@ -354,7 +354,7 @@ public sealed class GatewayApprovalService
             return ChallengeValidation.Invalid(message, challenge, decoded);
         }
 
-        if (!FixedTimeStringComparer.Equals(challenge.PlanHash, pending.Hash))
+        if (!FixedTimeStringComparer.Equals(challenge.PendingPlanHash, pending.Hash))
         {
             const string message = "The pending plan changed after this approval URL was created. Ask the MCP client to request a new approval URL.";
             await WriteChallengeRejectedAuditAsync(
@@ -406,7 +406,7 @@ public sealed class GatewayApprovalService
             new ApprovalChallengeRejectedPayload(
                 challenge.Id,
                 challenge.PlanId,
-                challenge.PlanHash,
+                challenge.PendingPlanHash,
                 challenge.RequesterSubject,
                 approverSubject,
                 reason),

@@ -8,107 +8,24 @@ public sealed class ApprovalStoreTests
     private const string TargetNamespace = K8SMcpOptions.DefaultNamespace;
 
     [Fact]
-    public async Task GetApprovedPlanAsync_DeniesUnapprovedPlan()
+    public void NewPlanId_ReturnsOpaquePlanIdentifier()
     {
-        var store = CreateStore();
-        var plan = CreatePlan();
-        var created = await store.CreatePlanAsync(plan, TargetNamespace, CancellationToken.None);
+        string planId = ApprovalStore.NewPlanId();
 
-        var approved = await store.GetApprovedPlanAsync(created.Envelope.Id, CancellationToken.None);
-
-        Assert.False(approved.IsApproved);
-        Assert.Contains("not approved", approved.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Matches("^[0-9a-f]{32}$", planId);
+        Assert.DoesNotMatch("^\\d{14}-", planId);
     }
 
     [Fact]
-    public async Task GetApprovedPlanAsync_ApprovesMatchingHash()
+    public async Task CreatePlanAsync_DoesNotCreateLegacyApprovedHashDirectory()
     {
-        var store = CreateStore();
+        var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
+        var store = new ApprovalStore(new ApprovalStoreOptions(root));
         var plan = CreatePlan();
-        var created = await store.CreatePlanAsync(plan, TargetNamespace, CancellationToken.None);
-        await File.WriteAllTextAsync(created.ApprovedPath, created.Hash, CancellationToken.None);
 
-        var approved = await store.GetApprovedPlanAsync(created.Envelope.Id, CancellationToken.None);
+        await store.CreatePlanAsync(plan, TargetNamespace, CancellationToken.None);
 
-        Assert.True(approved.IsApproved);
-        Assert.Equal(plan.Id, approved.Envelope?.Id);
-        Assert.Equal(created.Hash, approved.Hash);
-    }
-
-    [Fact]
-    public async Task ApprovePendingPlanAsync_WritesServerApprovalForMatchingHash()
-    {
-        var store = CreateStore();
-        var plan = CreatePlan();
-        var created = await store.CreatePlanAsync(plan, TargetNamespace, CancellationToken.None);
-
-        var approved = await store.ApprovePendingPlanAsync(created.Envelope.Id, created.Hash, CancellationToken.None);
-
-        Assert.True(approved.IsApproved);
-        Assert.Equal(plan.Id, approved.Envelope?.Id);
-        Assert.Equal(created.Hash, approved.Hash);
-        Assert.True(File.Exists(created.ApprovedPath));
-        Assert.Equal(created.Hash, (await File.ReadAllTextAsync(created.ApprovedPath)).Trim());
-    }
-
-    [Fact]
-    public async Task GetApprovedPlanAsync_DeniesPlanChangedAfterApproval()
-    {
-        var store = CreateStore();
-        var plan = CreatePlan();
-        var created = await store.CreatePlanAsync(plan, TargetNamespace, CancellationToken.None);
-        await File.WriteAllTextAsync(created.ApprovedPath, created.Hash, CancellationToken.None);
-        await File.AppendAllTextAsync(created.PendingPath, Environment.NewLine, CancellationToken.None);
-
-        var approved = await store.GetApprovedPlanAsync(created.Envelope.Id, CancellationToken.None);
-
-        Assert.False(approved.IsApproved);
-        Assert.Contains("changed after approval", approved.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task ApprovePendingPlanAsync_DeniesPlanChangedDuringApproval()
-    {
-        var store = CreateStore();
-        var plan = CreatePlan();
-        var created = await store.CreatePlanAsync(plan, TargetNamespace, CancellationToken.None);
-        await File.AppendAllTextAsync(created.PendingPath, Environment.NewLine, CancellationToken.None);
-
-        var approved = await store.ApprovePendingPlanAsync(created.Envelope.Id, created.Hash, CancellationToken.None);
-
-        Assert.False(approved.IsApproved);
-        Assert.Contains("changed during approval", approved.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.False(File.Exists(created.ApprovedPath));
-    }
-
-    [Fact]
-    public async Task ApprovePendingPlanAsync_DeniesWrongHash()
-    {
-        var store = CreateStore();
-        var plan = CreatePlan();
-        var created = await store.CreatePlanAsync(plan, TargetNamespace, CancellationToken.None);
-
-        var approved = await store.ApprovePendingPlanAsync(created.Envelope.Id, "0000000000000000", CancellationToken.None);
-
-        Assert.False(approved.IsApproved);
-        Assert.Contains("changed during approval", approved.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.False(File.Exists(created.ApprovedPath));
-    }
-
-    [Fact]
-    public async Task GetApprovedPlanAsync_DeniesAlreadyAppliedPlan()
-    {
-        var store = CreateStore();
-        var plan = CreatePlan();
-        var created = await store.CreatePlanAsync(plan, TargetNamespace, CancellationToken.None);
-        await File.WriteAllTextAsync(created.ApprovedPath, created.Hash, CancellationToken.None);
-        await store.MarkAppliedAsync(created.Envelope, TargetNamespace, created.Hash, CancellationToken.None);
-
-        var approved = await store.GetApprovedPlanAsync(created.Envelope.Id, CancellationToken.None);
-
-        Assert.False(approved.IsApproved);
-        Assert.Contains("already applied", approved.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.True(File.Exists(store.GetAppliedPath(created.Envelope.Id)));
+        Assert.False(Directory.Exists(Path.Combine(root, ApprovalConventions.Storage.ApprovedDirectory)));
     }
 
     [Fact]
@@ -117,8 +34,8 @@ public sealed class ApprovalStoreTests
         var store = CreateStore();
         var plan = CreatePlan();
         var created = await store.CreatePlanAsync(plan, TargetNamespace, CancellationToken.None);
-        await File.WriteAllTextAsync(created.ApprovedPath, created.Hash, CancellationToken.None);
-        await store.MarkAppliedAsync(created.Envelope, TargetNamespace, created.Hash, CancellationToken.None);
+        var grant = await store.CreateGrantAsync(created.Envelope, "test-subject", "challenge-1", CancellationToken.None);
+        await store.MarkAppliedAsync(created.Envelope, TargetNamespace, grant, CancellationToken.None);
 
         var pending = await store.GetPendingPlanAsync(created.Envelope.Id, CancellationToken.None);
 
@@ -205,6 +122,7 @@ public sealed class ApprovalStoreTests
                     name = "mcp-api-demo",
                     replicas = "1"
                 }),
+            new ReviewSurfaceContext(ApprovalConventions.ReviewSurfaces.GatewayBrowser, "dummy-review-v1"),
             new Dictionary<string, string>
             {
                 ["name"] = "mcp-api-demo",

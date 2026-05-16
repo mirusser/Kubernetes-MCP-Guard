@@ -34,7 +34,7 @@ PolicyFindings    K8sPlanPolicyFinding[]
 ```text
 Id                            string         (challenge id ≠ plan id)
 PlanId                        string         (points at the PlanEnvelope)
-PlanHash                      string         (SHA-256 of pending plan JSON when ticket was issued)
+PendingPlanHash               string         (SHA-256 of pending plan JSON when ticket was issued)
 RequesterSubject              string         (OAuth sub of the AI/client side)
 RequesterAuthenticationType   string?
 CreatedAtUtc                  DateTimeOffset
@@ -89,13 +89,13 @@ The challenge answers: *"Did the right human, while still authorized, click Appr
 - The approver's `sub` claim equals `RequesterSubject` (same-subject mode).
 - `ExpiresAtUtc` is still in the future.
 - The challenge's `Status` is still `pending`.
-- The challenge's stored `PlanHash` still matches the live pending file hash (drift detection).
+- The challenge's stored `PendingPlanHash` still matches the live pending file hash (drift detection).
 
 Splitting the records makes it impossible for one concern to silently mutate the other.
 
 ### 4. Hash binding, decoupled from approval mechanics
 
-When a challenge is created, it snapshots the current `PlanHash`. If the pending plan file changes between challenge creation and the approve click, the hash comparison in [GatewayApprovalService.cs](../src/InfraGate.McpGateway/GatewayApprovalService.cs) detects it and refuses approval ("The pending plan changed after this approval URL was created."). This is the safety property proved by [`ModifiedPendingPlanTests`](../tests/InfraGate.Safety.E2E.Tests/Workflows/ModifiedPendingPlanTests.cs) and [`ApproveChallengeAsync_PlanHashDrift_Rejects`](../tests/InfraGate.McpGateway.Tests/UnitTests/GatewayApprovalServiceTests.cs).
+When a challenge is created, it snapshots the current `PendingPlanHash`. If the pending plan file changes between challenge creation and the approve click, the hash comparison in [GatewayApprovalService.cs](../src/InfraGate.McpGateway/GatewayApprovalService.cs) detects it and refuses approval ("The pending plan changed after this approval URL was created."). This is the safety property proved by [`ModifiedPendingPlanTests`](../tests/InfraGate.Safety.E2E.Tests/Workflows/ModifiedPendingPlanTests.cs) and [`ApproveChallengeAsync_PendingPlanHashDrift_Rejects`](../tests/InfraGate.McpGateway.Tests/UnitTests/GatewayApprovalServiceTests.cs).
 
 If the plan and challenge were one record, there would be no "before" snapshot to compare against.
 
@@ -130,7 +130,7 @@ The roadmap ([.agents/Plans/archive/security-roadmap.md §13](../.agents/Plans/a
    └── POST /approvals/{challengeId}/approve  (antiforgery-protected)
        GatewayApprovalService.ApproveChallengeAsync:
          - Compares HTTP user's `sub` to challenge.RequesterSubject
-         - Compares challenge.PlanHash to current pending file hash
+         - Compares challenge.PendingPlanHash to current pending file hash
          - Verifies the expected Intent Digest and Review Digest still match
          - Marks challenge Status=approved, sets ApproverSubject + DecidedAtUtc
          - Calls ApprovalStore.CreateGrantAsync

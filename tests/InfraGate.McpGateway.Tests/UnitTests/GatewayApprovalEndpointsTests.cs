@@ -205,7 +205,7 @@ public sealed class GatewayApprovalEndpointsTests
         return new ApprovalChallenge(
             Id: "chall-abc123",
             PlanId: "plan-xyz789",
-            PlanHash: "abcdef0123456789",
+            PendingPlanHash: "abcdef0123456789",
             RequesterSubject: "user@example.com",
             RequesterAuthenticationType: "OAuth",
             CreatedAtUtc: FixedTime,

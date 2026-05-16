@@ -69,11 +69,31 @@ public sealed class ApprovalChallengeStoreTests
 
         Assert.NotEmpty(challenge.Id);
         Assert.Equal("plan-123", challenge.PlanId);
-        Assert.Equal("hash-abc", challenge.PlanHash);
+        Assert.Equal("hash-abc", challenge.PendingPlanHash);
         Assert.Equal("alice", challenge.RequesterSubject);
         Assert.Equal("oauth-jwt", challenge.RequesterAuthenticationType);
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Pending, challenge.Status);
         Assert.True(challenge.ExpiresAtUtc > challenge.CreatedAtUtc);
+    }
+
+    [Fact]
+    public async Task CreateAsync_PersistsPendingPlanHashName()
+    {
+        var store = CreateStore();
+
+        await store.CreateAsync(
+            "plan-123",
+            "hash-abc",
+            "alice",
+            "oauth-jwt",
+            TimeSpan.FromMinutes(10),
+            CancellationToken.None);
+
+        var path = Directory.EnumerateFiles(store.ChallengeDirectory).Single();
+        var json = await File.ReadAllTextAsync(path, CancellationToken.None);
+
+        Assert.Contains("\"pendingPlanHash\"", json);
+        Assert.DoesNotContain("\"planHash\"", json);
     }
 
     [Fact]
@@ -100,7 +120,7 @@ public sealed class ApprovalChallengeStoreTests
         var challenge = new ApprovalChallenge(
             Id: "aabbcc1122",
             PlanId: "plan-789",
-            PlanHash: "hash-xyz",
+            PendingPlanHash: "hash-xyz",
             RequesterSubject: "carol",
             RequesterAuthenticationType: "oauth-jwt",
             CreatedAtUtc: DateTimeOffset.UtcNow,
@@ -124,7 +144,7 @@ public sealed class ApprovalChallengeStoreTests
         var challenge = new ApprovalChallenge(
             Id: "aabbcc9988",
             PlanId: "plan-789",
-            PlanHash: "hash-xyz",
+            PendingPlanHash: "hash-xyz",
             RequesterSubject: "carol",
             RequesterAuthenticationType: null,
             CreatedAtUtc: DateTimeOffset.UtcNow,
@@ -147,7 +167,7 @@ public sealed class ApprovalChallengeStoreTests
         var challenge = new ApprovalChallenge(
             Id: "aabbcc7766",
             PlanId: "plan-other",
-            PlanHash: "hash-xyz",
+            PendingPlanHash: "hash-xyz",
             RequesterSubject: "carol",
             RequesterAuthenticationType: null,
             CreatedAtUtc: DateTimeOffset.UtcNow,

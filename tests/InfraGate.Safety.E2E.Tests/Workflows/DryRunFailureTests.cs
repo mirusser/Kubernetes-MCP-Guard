@@ -89,9 +89,9 @@ public sealed class DryRunFailureTests(SafetyE2EFixture fixture)
 
         // Rewrite the planned target name to a deployment that does not exist, then
         // create and approve a browser challenge for the mutated hash. Result:
-        // GetApprovedPlanAsync succeeds, drift check sees the original Objects[]
-        // (still unchanged in the cluster), and the pre-apply dry-run patches a
-        // non-existent target -> 404 -> dry-run fails.
+        // Grant validation succeeds, drift check sees the original Objects[] (still
+        // unchanged in the cluster), and the pre-apply dry-run patches a non-existent
+        // target -> 404 -> dry-run fails.
         // String-based replace is too brittle because ApprovalStore writes pending plans
         // with WriteIndented = true (key/value separated by ": ", not ":").
         var pendingJson = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);

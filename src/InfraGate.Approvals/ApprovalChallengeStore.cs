@@ -23,14 +23,14 @@ public sealed class ApprovalChallengeStore
 
     public Task<ApprovalChallenge> CreateAsync(
         string planId,
-        string planHash,
+        string pendingPlanHash,
         string requesterSubject,
         string? requesterAuthenticationType,
         TimeSpan ttl,
         CancellationToken cancellationToken) =>
         CreateAsync(
             planId,
-            planHash,
+            pendingPlanHash,
             requesterSubject,
             requesterAuthenticationType,
             ttl,
@@ -40,7 +40,7 @@ public sealed class ApprovalChallengeStore
 
     public async Task<ApprovalChallenge> CreateAsync(
         string planId,
-        string planHash,
+        string pendingPlanHash,
         string requesterSubject,
         string? requesterAuthenticationType,
         TimeSpan ttl,
@@ -52,7 +52,7 @@ public sealed class ApprovalChallengeStore
         var challenge = new ApprovalChallenge(
             NewChallengeId(),
             planId,
-            planHash,
+            pendingPlanHash,
             requesterSubject,
             requesterAuthenticationType,
             now,
@@ -88,7 +88,7 @@ public sealed class ApprovalChallengeStore
 
     public async Task<ApprovalChallenge?> FindApprovedAsync(
         string planId,
-        string planHash,
+        string pendingPlanHash,
         string subject,
         CancellationToken cancellationToken)
     {
@@ -105,7 +105,7 @@ public sealed class ApprovalChallengeStore
             var json = await File.ReadAllTextAsync(path, cancellationToken);
             var challenge = JsonSerializer.Deserialize<ApprovalChallenge>(json, jsonOptions);
             if (challenge is not null &&
-                IsApprovedForSubject(challenge, planId, planHash, subject))
+                IsApprovedForSubject(challenge, planId, pendingPlanHash, subject))
             {
                 return challenge;
             }
@@ -153,12 +153,12 @@ public sealed class ApprovalChallengeStore
     private static bool IsApprovedForSubject(
         ApprovalChallenge challenge,
         string planId,
-        string planHash,
+        string pendingPlanHash,
         string subject)
     {
         return string.Equals(challenge.Status, ApprovalConventions.ChallengeStatuses.Approved, StringComparison.Ordinal) &&
                string.Equals(challenge.PlanId, planId, StringComparison.Ordinal) &&
-               FixedTimeStringComparer.Equals(challenge.PlanHash, planHash) &&
+               FixedTimeStringComparer.Equals(challenge.PendingPlanHash, pendingPlanHash) &&
                string.Equals(challenge.RequesterSubject, subject, StringComparison.Ordinal) &&
                string.Equals(challenge.ApproverSubject, subject, StringComparison.Ordinal);
     }
