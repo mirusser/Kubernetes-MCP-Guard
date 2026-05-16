@@ -1,5 +1,11 @@
 # deploy/compose/production.yaml
 # Remote production deployment. Uses a real OIDC provider.
+#
+# Run:
+#   dotnet run --project src/InfraGate.RunProfiles -- generate production \
+#     --output deploy/generated/production.env
+#   TAG=vX.Y.Z docker compose --env-file deploy/generated/production.env \
+#     -f deploy/compose/production.yaml up
 
 name: infra-gate-production
 

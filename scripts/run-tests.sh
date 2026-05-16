@@ -19,8 +19,6 @@ FAILED=0
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-KUBECONFIG_FILE="${KUBECONFIG:-${REPO_ROOT}/.kube/mcp-nginx-demo.config}"
-
 echo -e "${CYAN}=== run-tests.sh ===${NC}"
 echo ""
 
@@ -38,6 +36,23 @@ if dotnet --version 2>/dev/null | grep -qE '^10\.'; then
 else
     echo -e "  ${RED}✗${NC} .NET 10 SDK not found (found: $(dotnet --version 2>/dev/null || echo 'none'))"
 fi
+
+# Derive the test kubeconfig path from the run profile so it stays in sync with
+# deploy/run-profiles.yaml rather than being hardcoded here.
+PROFILE_KUBECONFIG=""
+if $DOTNET_OK; then
+    mkdir -p "${REPO_ROOT}/deploy/generated"
+    if dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- generate test-integration \
+        --output "${REPO_ROOT}/deploy/generated/test-integration.env" >/dev/null 2>&1; then
+        raw_kube="$(grep '^KUBECONFIG=' "${REPO_ROOT}/deploy/generated/test-integration.env" 2>/dev/null | cut -d= -f2-)"
+        if [[ -n "$raw_kube" && "$raw_kube" != /* ]]; then
+            PROFILE_KUBECONFIG="${REPO_ROOT}/${raw_kube}"
+        else
+            PROFILE_KUBECONFIG="$raw_kube"
+        fi
+    fi
+fi
+KUBECONFIG_FILE="${KUBECONFIG:-${PROFILE_KUBECONFIG:-${REPO_ROOT}/.kube/mcp-nginx-demo.config}}"
 
 if docker info &>/dev/null; then
     echo -e "  ${GREEN}✓${NC} Docker available"
@@ -109,7 +124,7 @@ fi
 if $K8S_OK; then
     run_tier \
         "McpServer Integration" \
-        'INFRA_GATE_RUN_INTEGRATION=1 dotnet test tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj'
+        "INFRA_GATE_RUN_INTEGRATION=1 KUBECONFIG=\"$KUBECONFIG_FILE\" dotnet test tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj"
 else
     SKIPPED_TIERS+=("McpServer Integration (K8s cluster not reachable)")
 fi

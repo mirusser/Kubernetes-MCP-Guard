@@ -64,6 +64,45 @@ Anonymous OIDC Dynamic Client Registration is enabled only in the local/demo rea
 
 Keycloak does not currently process RFC 8707 `resource` indicators for MCP as the gateway ultimately needs, so the local realm binds `aud` through the `mcp:tools` audience mapper. The gateway still validates issuer, signature, lifetime, audience, and scope. InfraGate should revisit issuer-side RFC 8707 resource-indicator coverage when Keycloak supports the needed MCP flow cleanly.
 
+## Run Profiles
+
+`deploy/run-profiles.yaml` is the canonical source of truth for all runnable environment configuration. It defines named profiles (tiers) that compile into `.env` files consumed by Docker Compose via `--env-file`.
+
+**CLI commands** (from repo root):
+
+```bash
+# List available profiles
+dotnet run --project src/InfraGate.RunProfiles -- list
+
+# Validate all profiles parse correctly (run in CI before tests)
+dotnet run --project src/InfraGate.RunProfiles -- validate
+
+# Generate an env file from a profile
+dotnet run --project src/InfraGate.RunProfiles -- generate <profile-name> \
+  [--set section.field=value ...] \
+  [--output path/to/output.env] \
+  [--force]
+
+# Example: generate for a local Compose run with absolute host paths
+REPO_ROOT="$(pwd)"
+dotnet run --project src/InfraGate.RunProfiles -- generate local-compose \
+  --set "host.kubeconfigHostPath=${REPO_ROOT}/.kube/mcp-nginx-demo.compose.config" \
+  --set "host.approvalHostPath=${REPO_ROOT}/.mcp-approvals" \
+  --set "host.guardAuditHostPath=${REPO_ROOT}/.mcp-guardrails" \
+  --set "host.dataProtectionHostPath=${REPO_ROOT}/.mcp-dataprotection-keys" \
+  --output deploy/generated/local-compose.env
+```
+
+**Generated file transport**: `deploy/generated/*.env` files are gitignored. The only committed example is `deploy/local-oauth/release.env.example`, regenerated with `dotnet run --project src/InfraGate.RunProfiles -- generate smoke-release`.
+
+**Section inheritance**: profiles only inherit `defaults:` values for sections they explicitly declare. A profile must include `gateway: {}` to receive gateway defaults; omitting the key produces no gateway vars. This keeps test profiles free of Compose-only configuration.
+
+**`--set` overrides**: use `section.field=value` syntax. Section names match the YAML keys (`gateway`, `identityProvider`, `approvalAuthority`, `genericApprovalCore`, `host`). Overrides are applied after merging defaults and are required for host-path fields that must be absolute (Docker Compose resolves bind-mount paths relative to the Compose file directory).
+
+**`--force`**: by default, `generate` refuses to overwrite an existing file. Pass `--force` when the generator must write to a system path (e.g., `/etc/infra-gate/development.env` from `scripts/setup-development-deploy.sh`).
+
+See `src/InfraGate.RunProfiles/README.md` for the full schema reference and profile catalogue.
+
 ## CI, Release, And Scripts
 
 | Variable | Component | Required | Default | Example | Description | Production guidance |

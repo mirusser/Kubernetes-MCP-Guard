@@ -17,7 +17,7 @@ services:
       start_period: 10s
 
   mcp-gateway:
-    image: kubernetes-mcp-guard-gateway
+    image: ${INFRA_GATE_GATEWAY_IMAGE:-kubernetes-mcp-guard-gateway}
     build:
       context: ../..
       dockerfile: deploy/docker/mcp-gateway.Dockerfile
@@ -25,29 +25,31 @@ services:
       keycloak:
         condition: service_healthy
     environment:
-      INFRA_GATE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://0.0.0.0:3001
-      INFRA_GATE_OAUTH_AUTHORITY: http://127.0.0.1:${KEYCLOAK_PORT:-3010}/realms/infra-gate
-      INFRA_GATE_OAUTH_METADATA_ADDRESS: http://keycloak:8080/realms/infra-gate/.well-known/openid-configuration
-      INFRA_GATE_OAUTH_RESOURCE: http://127.0.0.1:${GATEWAY_PORT:-3001}/mcp
-      INFRA_GATE_OAUTH_SCOPE: mcp:tools
-      INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA: "false"
-      INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID: infra-gate-approval-ui
-      INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT: http://127.0.0.1:${KEYCLOAK_PORT:-3010}/realms/infra-gate/protocol/openid-connect/auth
-      INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
-      INFRA_GATE_APPROVAL_BASE_URL: http://127.0.0.1:${GATEWAY_PORT:-3001}
-      INFRA_GATE_DOWNSTREAM_ASSEMBLY: /app/server/InfraGate.McpServer.dll
-      INFRA_GATE_GUARD_AUDIT_ROOT: /data/guardrails
-      KUBECONFIG: ${KUBECONFIG:-/run/kube/mcp-nginx-demo.compose.config}
-      K8S_MCP_APPROVAL_ROOT: /data/approvals
-      K8S_MCP_ALLOWED_NAMESPACES: mcp-nginx-demo
+      INFRA_GATE_ENVIRONMENT: ${INFRA_GATE_ENVIRONMENT}
+      DOTNET_ENVIRONMENT: Development
+      ASPNETCORE_URLS: ${ASPNETCORE_URLS}
+      INFRA_GATE_OAUTH_AUTHORITY: ${INFRA_GATE_OAUTH_AUTHORITY}
+      INFRA_GATE_OAUTH_METADATA_ADDRESS: ${INFRA_GATE_OAUTH_METADATA_ADDRESS}
+      INFRA_GATE_OAUTH_RESOURCE: ${INFRA_GATE_OAUTH_RESOURCE}
+      INFRA_GATE_OAUTH_SCOPE: ${INFRA_GATE_OAUTH_SCOPE}
+      INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA: ${INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA}
+      INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID: ${INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID}
+      INFRA_GATE_APPROVAL_OAUTH_CALLBACK_PATH: ${INFRA_GATE_APPROVAL_OAUTH_CALLBACK_PATH}
+      INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT: ${INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT}
+      INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT: ${INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT}
+      INFRA_GATE_APPROVAL_BASE_URL: ${INFRA_GATE_APPROVAL_BASE_URL}
+      INFRA_GATE_DOWNSTREAM_ASSEMBLY: ${INFRA_GATE_DOWNSTREAM_ASSEMBLY}
+      INFRA_GATE_GUARD_AUDIT_ROOT: ${INFRA_GATE_GUARD_AUDIT_ROOT}
+      KUBECONFIG: ${KUBECONFIG}
+      K8S_MCP_APPROVAL_ROOT: ${K8S_MCP_APPROVAL_ROOT}
+      K8S_MCP_ALLOWED_NAMESPACES: ${K8S_MCP_ALLOWED_NAMESPACES}
     volumes:
-      - ../../.kube/mcp-nginx-demo.compose.config:/run/kube/mcp-nginx-demo.compose.config:ro
+      - ${INFRA_GATE_KUBECONFIG_HOST_PATH}:/run/kube/mcp-nginx-demo.compose.config:ro
       - mcp-gateway-approvals:/data/approvals
       - mcp-gateway-guardrails:/data/guardrails
       - mcp-gateway-dataprotection-keys:/data/dataprotection-keys
     ports:
-      - "127.0.0.1:${GATEWAY_PORT:-3001}:3001"
+      - "${INFRA_GATE_BIND_ADDRESS:-127.0.0.1}:${INFRA_GATE_BIND_PORT:-3001}:3001"
 
 volumes:
   mcp-gateway-approvals:

@@ -193,8 +193,12 @@ Use this when you want the supported local OAuth setup with persistent user acco
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
-docker compose -f deploy/local-oauth/compose.yaml up --build
+./scripts/generate-env.sh local-compose
+docker compose --env-file deploy/generated/local-compose.env \
+  -f deploy/local-oauth/compose.yaml up --build
 ```
+
+`generate-env.sh` writes `deploy/generated/local-compose.env` from `deploy/run-profiles.yaml` (profile `local-compose`) and supplies absolute host paths via `--set`. Docker Compose resolves volume bind-mount paths relative to the Compose file directory, not the working directory, so absolute paths are required. The generated file is gitignored; `deploy/local-oauth/release.env.example` is the committed reference for the released profile.
 
 Keycloak starts first and takes ~30s to pass its health check before the gateway comes up. No manual step is needed — the `depends_on: condition: service_healthy` gate handles the ordering.
 
@@ -282,10 +286,12 @@ Then run `/mcp` inside Claude Code to trigger the OAuth login flow against Keycl
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
-TAG=vX.Y.Z docker compose -f deploy/local-oauth/compose.release.yaml up
+./scripts/generate-env.sh smoke-release
+TAG=vX.Y.Z docker compose --env-file deploy/generated/smoke-release.env \
+  -f deploy/local-oauth/compose.release.yaml up
 ```
 
-Keycloak is pulled from `quay.io/keycloak/keycloak:26.6.1`; the gateway image is pulled from GHCR. Replace `vX.Y.Z` with the release tag from <https://github.com/mirusser/Kubernetes-MCP-Guard/releases>.
+Keycloak is pulled from `quay.io/keycloak/keycloak:26.6.1`; the gateway image is pulled from GHCR. Replace `vX.Y.Z` with the release tag from <https://github.com/mirusser/Kubernetes-MCP-Guard/releases>. Pass additional `--set` flags after the profile name to override individual fields (e.g. `./scripts/generate-env.sh smoke-release --set host.kubeconfigHostPath=/custom/path`).
 
 After release, the published-image path is verified by `scripts/smoke-test-release.sh` (see [Verification](#verification)).
 
@@ -400,6 +406,7 @@ The canonical environment variable, CI/CD, and release configuration reference i
 │   └── local-oauth/compose.release.yaml  # Keycloak + Gateway (published images)
 ├── scripts/
 │   ├── create-demo-kubeconfig.sh         # Bootstrap RBAC & generate kubeconfig
+│   ├── generate-env.sh                   # Generate a run profile env file for local Compose use
 │   └── smoke-test-release.sh             # Published-image smoke
 ├── .kube/                                # Generated kubeconfigs (gitignored)
 ├── .mcp-approvals/                       # Approval files: pending/, grants/, applied/, challenges/ (gitignored)

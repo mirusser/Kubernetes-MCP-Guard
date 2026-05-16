@@ -191,10 +191,11 @@ git clone https://github.com/mirusser/Kubernetes-MCP-Guard.git
 cd Kubernetes-MCP-Guard
 
 ./scripts/create-demo-kubeconfig.sh --compose
-TAG=latest docker compose -f deploy/local-oauth/compose.release.yaml up
+TAG=latest docker compose --env-file deploy/local-oauth/release.env.example \
+  -f deploy/local-oauth/compose.release.yaml up
 ```
 
-Replace `latest` with a specific release tag (e.g. `v0.1.0`) for a stable run. Available tags are listed on the [Releases page](https://github.com/mirusser/Kubernetes-MCP-Guard/releases).
+The committed `deploy/local-oauth/release.env.example` provides the required configuration — no .NET SDK needed. Replace `latest` with a specific release tag (e.g. `v0.1.0`) for a stable run. Available tags are listed on the [Releases page](https://github.com/mirusser/Kubernetes-MCP-Guard/releases).
 This starts the Keycloak-backed local OAuth path.
 
 #### **Connect Codex CLI:**
@@ -240,7 +241,9 @@ claude
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
-docker compose -f deploy/local-oauth/compose.yaml up --build
+./scripts/generate-env.sh local-compose
+docker compose --env-file deploy/generated/local-compose.env \
+  -f deploy/local-oauth/compose.yaml up --build
 ```
 
 Connect Codex the same way as Option 1.

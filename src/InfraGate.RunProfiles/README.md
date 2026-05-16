@@ -1,0 +1,214 @@
+# InfraGate.RunProfiles
+
+CLI tool that compiles named profiles from `deploy/run-profiles.yaml` into `.env` files for Docker Compose and deployment scripts. It is the canonical source of truth for all runnable environment configuration.
+
+## Commands
+
+```bash
+# List available profiles
+dotnet run --project src/InfraGate.RunProfiles -- list
+
+# Validate all profiles parse without error
+dotnet run --project src/InfraGate.RunProfiles -- validate
+
+# Generate an env file from a profile
+dotnet run --project src/InfraGate.RunProfiles -- generate <profile> [options]
+```
+
+### `generate` options
+
+| Flag | Description |
+|---|---|
+| `--output <path>` | Write to a file instead of stdout |
+| `--set section.field=value` | Override a single field after profile merge; repeatable |
+| `--force` | Overwrite an existing output file (default: refuse) |
+| `--config <path>` | Use an alternate YAML file (default: `deploy/run-profiles.yaml`) |
+
+## Profile catalogue
+
+| Profile | Kind | Purpose |
+|---|---|---|
+| `local-compose` | `compose` | Local Compose stack built from source via `deploy/local-oauth/compose.yaml` |
+| `local-source-gateway` | `dotnet` | Gateway run from source (`dotnet run`) against local Keycloak |
+| `local-stdio` | `mcp-stdio` | MCP server run from source as a stdio subprocess |
+| `development` | `compose-deploy` | Self-hosted development deployment via `deploy/compose/development.yaml` |
+| `production` | `compose-deploy` | Production deployment via `deploy/compose/production.yaml` |
+| `test-integration` | `test` | MCP server live integration tests |
+| `test-gateway-integration` | `test` | Gateway live integration tests |
+| `test-safety-e2e` | `test` | Safety E2E tests in KinD |
+| `smoke-local` | `smoke` | Smoke test against local-build Compose stack |
+| `smoke-release` | `smoke` | Smoke test against published image Compose stack |
+
+## YAML schema
+
+```yaml
+version: 1
+
+defaults:
+  gateway:
+    aspnetcoreUrls: http://0.0.0.0:3001
+    downstreamAssembly: /app/server/InfraGate.McpServer.dll
+    guardAuditRoot: /data/guardrails
+  identityProvider:
+    scope: mcp:tools
+    requireHttpsMetadata: "false"
+  approvalAuthority:
+    oauthClientId: infra-gate-approval-ui
+    oauthCallbackPath: /approvals/oauth/callback
+
+profiles:
+  <name>:
+    kind: compose | dotnet | mcp-stdio | compose-deploy | test | smoke
+    runtimeMode: Development | Production
+
+    # Section opt-in: only sections declared in the profile merge with defaults.
+    # Use `gateway: {}` to inherit all gateway defaults without adding any fields.
+    gateway:
+      aspnetcoreUrls: <url>
+      downstreamAssembly: <path>
+      guardAuditRoot: <path>
+
+    identityProvider:
+      authority: <url>
+      metadataAddress: <url>       # optional; internal discovery endpoint
+      resource: <url>
+      scope: <scope>
+      requireHttpsMetadata: "true" | "false"
+      realmImport: <path>          # informational; Keycloak realm JSON path
+      oauthClientId: <id>
+      oauthCallbackPath: <path>
+
+    approvalAuthority:
+      baseUrl: <url>
+      oauthClientId: <id>
+      oauthCallbackPath: <path>
+      oauthAuthorizationEndpoint: <url>
+      oauthTokenEndpoint: <url>
+
+    genericApprovalCore:
+      approvalRoot: <path>
+
+    host:                          # Compose bind-mount and image configuration
+      bindAddress: <address>
+      bindPort: "<port>"
+      gatewayImage: <image>
+      kubeconfigHostPath: <path>
+      approvalHostPath: <path>
+      guardAuditHostPath: <path>
+      dataProtectionHostPath: <path>
+
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: <path>
+          allowedNamespaces:
+            - <namespace>
+```
+
+## Section opt-in inheritance
+
+A profile inherits `defaults` values only for sections it explicitly declares. A profile that omits `gateway:` entirely produces no gateway env vars — this keeps test profiles (`kind: test`) free of Compose-only configuration such as `ASPNETCORE_URLS`.
+
+To opt in to all gateway defaults without adding any profile-specific fields, write:
+
+```yaml
+profiles:
+  my-profile:
+    gateway: {}
+```
+
+## `--set` overrides
+
+`--set` is applied after the profile is merged with defaults. The path format is `section.field` where section is the camelCase YAML key:
+
+| Section | Example fields |
+|---|---|
+| `gateway` | `aspnetcoreUrls`, `downstreamAssembly`, `guardAuditRoot` |
+| `identityProvider` | `authority`, `metadataAddress`, `resource`, `scope`, `requireHttpsMetadata` |
+| `approvalAuthority` | `baseUrl`, `oauthAuthorizationEndpoint`, `oauthTokenEndpoint` |
+| `genericApprovalCore` | `approvalRoot` |
+| `host` | `bindAddress`, `bindPort`, `gatewayImage`, `kubeconfigHostPath`, `approvalHostPath`, `guardAuditHostPath`, `dataProtectionHostPath` |
+
+`--set` is required for host-path fields when running Docker Compose: volume bind-mount paths are resolved relative to the Compose file directory, not the working directory. Always pass absolute paths via `--set` for `host.*HostPath` fields in Compose scenarios.
+
+`scripts/generate-env.sh` handles this automatically for local runs:
+
+```bash
+./scripts/generate-env.sh local-compose
+# → writes deploy/generated/local-compose.env with absolute REPO_ROOT-based host paths
+```
+
+To call the generator directly:
+
+```bash
+dotnet run --project src/InfraGate.RunProfiles -- generate local-compose \
+  --set "host.kubeconfigHostPath=$(pwd)/.kube/mcp-nginx-demo.compose.config" \
+  --set "host.approvalHostPath=$(pwd)/.mcp-approvals" \
+  --set "host.guardAuditHostPath=$(pwd)/.mcp-guardrails" \
+  --set "host.dataProtectionHostPath=$(pwd)/.mcp-dataprotection-keys" \
+  --output deploy/generated/local-compose.env
+```
+
+## Generated file layout
+
+The generated `.env` file groups vars into labelled sections and includes a header indicating the source profile:
+
+```
+# Generated from run-profiles.yaml profile: <name>
+# Do not edit. Run: dotnet run --project src/InfraGate.RunProfiles -- generate <name>
+
+# Runtime
+INFRA_GATE_ENVIRONMENT=...
+
+# Gateway
+ASPNETCORE_URLS=...
+INFRA_GATE_DOWNSTREAM_ASSEMBLY=...
+INFRA_GATE_GUARD_AUDIT_ROOT=...
+
+# Identity Provider
+INFRA_GATE_OAUTH_AUTHORITY=...
+...
+
+# Approval Authority
+INFRA_GATE_APPROVAL_BASE_URL=...
+...
+
+# Generic Approval Core
+K8S_MCP_APPROVAL_ROOT=...
+
+# Kubernetes Adapter
+KUBECONFIG=...
+K8S_MCP_ALLOWED_NAMESPACES=...
+
+# Host
+INFRA_GATE_BIND_ADDRESS=...
+...
+```
+
+Sections are omitted when the profile produces no vars for them.
+
+## Output paths and gitignore
+
+Generated files belong in `deploy/generated/`, which is covered by `.gitignore`. The only committed example is `deploy/local-oauth/release.env.example`, generated from the `smoke-release` profile:
+
+```bash
+dotnet run --project src/InfraGate.RunProfiles -- generate smoke-release \
+  --output deploy/local-oauth/release.env.example
+```
+
+Regenerate and commit it whenever the `smoke-release` profile or its merged defaults change.
+
+## Secret handling
+
+`deploy/run-profiles.yaml` must not contain secrets. It is checked into version control and is intended to hold non-secret configuration values only. Dynamic secrets (tokens, passwords) are injected at runtime through environment-specific mechanisms outside the profile system.
+
+## CI integration
+
+All CI workflows validate profiles before running tests:
+
+```bash
+dotnet run --project src/InfraGate.RunProfiles -- validate
+```
+
+This catches YAML parse errors and unknown field references before any test or deployment step runs.

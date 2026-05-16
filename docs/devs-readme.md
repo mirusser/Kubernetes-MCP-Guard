@@ -69,19 +69,27 @@ Expected: `yes`, `yes`, `yes`, `yes`, `no`, then `no`.
 
 This is the supported local OAuth path. See [Keycloak local OAuth in the setup guide](setup-guide.md#keycloak-local-oauth) for full details, Codex CLI config, and tradeoff notes.
 
+Compose files under `deploy/local-oauth/` and `deploy/compose/` use `${VAR}` substitution; generate the env file from the canonical run-profiles YAML first.
+
 For published images (no local build):
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
-TAG=latest docker compose -f deploy/local-oauth/compose.release.yaml up
+./scripts/generate-env.sh smoke-release
+TAG=latest docker compose --env-file deploy/generated/smoke-release.env \
+  -f deploy/local-oauth/compose.release.yaml up
 ```
 
 For building from source:
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
-docker compose -f deploy/local-oauth/compose.yaml up --build
+./scripts/generate-env.sh local-compose
+docker compose --env-file deploy/generated/local-compose.env \
+  -f deploy/local-oauth/compose.yaml up --build
 ```
+
+`scripts/generate-env.sh` compiles the profile from `deploy/run-profiles.yaml` and supplies absolute host paths required by Docker Compose volume bind-mounts. The smoke test scripts (`scripts/smoke-test-local.sh`, `scripts/smoke-test-release.sh`) run both steps automatically.
 
 ### Docker image publishing
 
@@ -247,6 +255,7 @@ Approval grants are stored under `.mcp-approvals/grants/` and bind the requester
 
 ```bash
 dotnet build InfraGate.slnx
+dotnet run --project src/InfraGate.RunProfiles -- validate
 dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak"
 INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak"
 INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build

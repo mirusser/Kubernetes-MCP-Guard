@@ -1,5 +1,14 @@
 # deploy/compose/development.yaml
 # Local development deployment. Uses Keycloak OIDC.
+#
+# Run:
+#   dotnet run --project src/InfraGate.RunProfiles -- generate development \
+#     --set identityProvider.authority=http://127.0.0.1:3010/realms/infra-gate \
+#     --set identityProvider.metadataAddress=http://172.17.0.1:3010/realms/infra-gate/.well-known/openid-configuration \
+#     --set approvalAuthority.oauthTokenEndpoint=http://172.17.0.1:3010/realms/infra-gate/protocol/openid-connect/token \
+#     --output deploy/generated/development.env
+#   docker compose --env-file deploy/generated/development.env \
+#     -f deploy/compose/development.yaml up
 
 name: infra-gate-development
 

@@ -1,3 +1,4 @@
+using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
 
 namespace InfraGate.RunProfiles;
@@ -7,38 +8,103 @@ internal static class RunProfileDocumentReader
     private static readonly IReadOnlySet<string> KnownRootKeys =
         new HashSet<string>(
             [
-                RunProfileConventions.YamlKeys.Version,
-                RunProfileConventions.YamlKeys.Profiles
+                RunProfileConventions.YamlKeys.Defaults,
+                RunProfileConventions.YamlKeys.Profiles,
+                RunProfileConventions.YamlKeys.Version
             ],
             StringComparer.Ordinal);
+
+    private static readonly IReadOnlySet<string> KnownDefaultsKeys =
+        new HashSet<string>(
+            [
+                RunProfileConventions.YamlKeys.ApprovalAuthority,
+                RunProfileConventions.YamlKeys.Gateway,
+                RunProfileConventions.YamlKeys.GenericApprovalCore,
+                RunProfileConventions.YamlKeys.Host,
+                RunProfileConventions.YamlKeys.IdentityProvider
+            ],
+            StringComparer.Ordinal);
+
     private static readonly IReadOnlySet<string> KnownProfileKeys =
         new HashSet<string>(
             [
-                RunProfileConventions.YamlKeys.Kind,
-                RunProfileConventions.YamlKeys.RuntimeMode,
+                RunProfileConventions.YamlKeys.ApprovalAuthority,
+                RunProfileConventions.YamlKeys.DomainAdapters,
+                RunProfileConventions.YamlKeys.Gateway,
                 RunProfileConventions.YamlKeys.GenericApprovalCore,
-                RunProfileConventions.YamlKeys.DomainAdapters
+                RunProfileConventions.YamlKeys.Host,
+                RunProfileConventions.YamlKeys.IdentityProvider,
+                RunProfileConventions.YamlKeys.Kind,
+                RunProfileConventions.YamlKeys.RuntimeMode
             ],
             StringComparer.Ordinal);
+
+    private static readonly IReadOnlySet<string> KnownGatewayKeys =
+        new HashSet<string>(
+            [
+                RunProfileConventions.YamlKeys.AspnetcoreUrls,
+                RunProfileConventions.YamlKeys.DownstreamAssembly,
+                RunProfileConventions.YamlKeys.GuardAuditRoot
+            ],
+            StringComparer.Ordinal);
+
+    private static readonly IReadOnlySet<string> KnownIdentityProviderKeys =
+        new HashSet<string>(
+            [
+                RunProfileConventions.YamlKeys.Authority,
+                RunProfileConventions.YamlKeys.MetadataAddress,
+                RunProfileConventions.YamlKeys.RealmImport,
+                RunProfileConventions.YamlKeys.RequireHttpsMetadata,
+                RunProfileConventions.YamlKeys.Resource,
+                RunProfileConventions.YamlKeys.Scope
+            ],
+            StringComparer.Ordinal);
+
+    private static readonly IReadOnlySet<string> KnownApprovalAuthorityKeys =
+        new HashSet<string>(
+            [
+                RunProfileConventions.YamlKeys.BaseUrl,
+                RunProfileConventions.YamlKeys.OauthAuthorizationEndpoint,
+                RunProfileConventions.YamlKeys.OauthCallbackPath,
+                RunProfileConventions.YamlKeys.OauthClientId,
+                RunProfileConventions.YamlKeys.OauthTokenEndpoint
+            ],
+            StringComparer.Ordinal);
+
     private static readonly IReadOnlySet<string> KnownGenericApprovalCoreKeys =
         new HashSet<string>(
             [
                 RunProfileConventions.YamlKeys.ApprovalRoot
             ],
             StringComparer.Ordinal);
+
+    private static readonly IReadOnlySet<string> KnownHostKeys =
+        new HashSet<string>(
+            [
+                RunProfileConventions.YamlKeys.ApprovalHostPath,
+                RunProfileConventions.YamlKeys.BindAddress,
+                RunProfileConventions.YamlKeys.BindPort,
+                RunProfileConventions.YamlKeys.DataProtectionHostPath,
+                RunProfileConventions.YamlKeys.GatewayImage,
+                RunProfileConventions.YamlKeys.GuardAuditHostPath,
+                RunProfileConventions.YamlKeys.KubeconfigHostPath
+            ],
+            StringComparer.Ordinal);
+
     private static readonly IReadOnlySet<string> KnownDomainAdapterKeys =
         new HashSet<string>(
             [
+                RunProfileConventions.YamlKeys.Kubernetes,
                 RunProfileConventions.YamlKeys.Name,
-                RunProfileConventions.YamlKeys.Type,
-                RunProfileConventions.YamlKeys.Kubernetes
+                RunProfileConventions.YamlKeys.Type
             ],
             StringComparer.Ordinal);
+
     private static readonly IReadOnlySet<string> KnownKubernetesKeys =
         new HashSet<string>(
             [
-                RunProfileConventions.YamlKeys.KubeConfig,
-                RunProfileConventions.YamlKeys.AllowedNamespaces
+                RunProfileConventions.YamlKeys.AllowedNamespaces,
+                RunProfileConventions.YamlKeys.KubeConfig
             ],
             StringComparer.Ordinal);
 
@@ -49,7 +115,15 @@ internal static class RunProfileDocumentReader
         string content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         var yamlStream = new YamlStream();
         using var reader = new StringReader(content);
-        yamlStream.Load(reader);
+        try
+        {
+            yamlStream.Load(reader);
+        }
+        catch (YamlException ex) when (ex.Message.StartsWith("Duplicate key ", StringComparison.Ordinal))
+        {
+            string key = ex.Message["Duplicate key ".Length..];
+            throw new InvalidOperationException($"Duplicate profile name: {key}");
+        }
 
         if (yamlStream.Documents.Count != 1 ||
             yamlStream.Documents[0].RootNode is not YamlMappingNode root)
@@ -58,6 +132,7 @@ internal static class RunProfileDocumentReader
         }
 
         ValidateKnownKeys(root, KnownRootKeys);
+        ProfileDefaults? defaults = ReadDefaults(root);
         YamlMappingNode profilesNode = GetRequiredMapping(root, RunProfileConventions.YamlKeys.Profiles);
         var profiles = new List<RunProfile>();
         foreach (KeyValuePair<YamlNode, YamlNode> entry in profilesNode.Children)
@@ -71,23 +146,132 @@ internal static class RunProfileDocumentReader
             ValidateKnownKeys(profileNode, KnownProfileKeys);
             string kind = GetRequiredScalar(profileNode, RunProfileConventions.YamlKeys.Kind);
             string? runtimeMode = GetOptionalScalar(profileNode, RunProfileConventions.YamlKeys.RuntimeMode);
+            GatewayProfile? gateway = ReadGateway(profileNode);
+            IdentityProviderProfile? identityProvider = ReadIdentityProvider(profileNode);
+            ApprovalAuthorityProfile? approvalAuthority = ReadApprovalAuthority(profileNode);
             GenericApprovalCoreProfile? genericApprovalCore = ReadGenericApprovalCore(profileNode);
             IReadOnlyList<DomainAdapterProfile> domainAdapters = ReadDomainAdapters(profileNode);
+            HostProfile? host = ReadHost(profileNode);
+
             if (domainAdapters.Count != 1)
             {
                 throw new InvalidOperationException(
                     $"Run Profile '{profileName}' must declare exactly one Domain Adapter.");
             }
 
-            profiles.Add(new RunProfile(profileName, kind, runtimeMode, genericApprovalCore, domainAdapters));
+            profiles.Add(new RunProfile(
+                profileName,
+                kind,
+                runtimeMode,
+                gateway,
+                identityProvider,
+                approvalAuthority,
+                genericApprovalCore,
+                domainAdapters,
+                host));
         }
 
-        return new RunProfileDocument(profiles);
+        return new RunProfileDocument(profiles) { Defaults = defaults };
     }
 
-    private static GenericApprovalCoreProfile? ReadGenericApprovalCore(YamlMappingNode profileNode)
+    private static ProfileDefaults? ReadDefaults(YamlMappingNode root)
     {
-        if (!profileNode.Children.TryGetValue(
+        if (!root.Children.TryGetValue(
+                new YamlScalarNode(RunProfileConventions.YamlKeys.Defaults),
+                out YamlNode? value))
+        {
+            return null;
+        }
+
+        if (value is not YamlMappingNode mapping)
+        {
+            throw new InvalidOperationException(
+                $"YAML key '{RunProfileConventions.YamlKeys.Defaults}' must be a mapping.");
+        }
+
+        ValidateKnownKeys(mapping, KnownDefaultsKeys);
+        return new ProfileDefaults(
+            ReadGateway(mapping),
+            ReadIdentityProvider(mapping),
+            ReadApprovalAuthority(mapping),
+            ReadGenericApprovalCore(mapping),
+            ReadHost(mapping));
+    }
+
+    private static GatewayProfile? ReadGateway(YamlMappingNode node)
+    {
+        if (!node.Children.TryGetValue(
+                new YamlScalarNode(RunProfileConventions.YamlKeys.Gateway),
+                out YamlNode? value))
+        {
+            return null;
+        }
+
+        if (value is not YamlMappingNode mapping)
+        {
+            throw new InvalidOperationException(
+                $"YAML key '{RunProfileConventions.YamlKeys.Gateway}' must be a mapping.");
+        }
+
+        ValidateKnownKeys(mapping, KnownGatewayKeys);
+        return new GatewayProfile(
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.AspnetcoreUrls),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.DownstreamAssembly),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.GuardAuditRoot));
+    }
+
+    private static IdentityProviderProfile? ReadIdentityProvider(YamlMappingNode node)
+    {
+        if (!node.Children.TryGetValue(
+                new YamlScalarNode(RunProfileConventions.YamlKeys.IdentityProvider),
+                out YamlNode? value))
+        {
+            return null;
+        }
+
+        if (value is not YamlMappingNode mapping)
+        {
+            throw new InvalidOperationException(
+                $"YAML key '{RunProfileConventions.YamlKeys.IdentityProvider}' must be a mapping.");
+        }
+
+        ValidateKnownKeys(mapping, KnownIdentityProviderKeys);
+        return new IdentityProviderProfile(
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.RealmImport),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.Authority),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.MetadataAddress),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.Resource),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.Scope),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.RequireHttpsMetadata));
+    }
+
+    private static ApprovalAuthorityProfile? ReadApprovalAuthority(YamlMappingNode node)
+    {
+        if (!node.Children.TryGetValue(
+                new YamlScalarNode(RunProfileConventions.YamlKeys.ApprovalAuthority),
+                out YamlNode? value))
+        {
+            return null;
+        }
+
+        if (value is not YamlMappingNode mapping)
+        {
+            throw new InvalidOperationException(
+                $"YAML key '{RunProfileConventions.YamlKeys.ApprovalAuthority}' must be a mapping.");
+        }
+
+        ValidateKnownKeys(mapping, KnownApprovalAuthorityKeys);
+        return new ApprovalAuthorityProfile(
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.BaseUrl),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.OauthClientId),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.OauthCallbackPath),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.OauthAuthorizationEndpoint),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.OauthTokenEndpoint));
+    }
+
+    private static GenericApprovalCoreProfile? ReadGenericApprovalCore(YamlMappingNode node)
+    {
+        if (!node.Children.TryGetValue(
                 new YamlScalarNode(RunProfileConventions.YamlKeys.GenericApprovalCore),
                 out YamlNode? value))
         {
@@ -103,6 +287,32 @@ internal static class RunProfileDocumentReader
         ValidateKnownKeys(mapping, KnownGenericApprovalCoreKeys);
         string approvalRoot = GetRequiredScalar(mapping, RunProfileConventions.YamlKeys.ApprovalRoot);
         return new GenericApprovalCoreProfile(approvalRoot);
+    }
+
+    private static HostProfile? ReadHost(YamlMappingNode node)
+    {
+        if (!node.Children.TryGetValue(
+                new YamlScalarNode(RunProfileConventions.YamlKeys.Host),
+                out YamlNode? value))
+        {
+            return null;
+        }
+
+        if (value is not YamlMappingNode mapping)
+        {
+            throw new InvalidOperationException(
+                $"YAML key '{RunProfileConventions.YamlKeys.Host}' must be a mapping.");
+        }
+
+        ValidateKnownKeys(mapping, KnownHostKeys);
+        return new HostProfile(
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.BindAddress),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.BindPort),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.GatewayImage),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.KubeconfigHostPath),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ApprovalHostPath),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.GuardAuditHostPath),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.DataProtectionHostPath));
     }
 
     private static IReadOnlyList<DomainAdapterProfile> ReadDomainAdapters(YamlMappingNode profileNode)
