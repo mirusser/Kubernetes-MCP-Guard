@@ -24,7 +24,7 @@
 - The gateway binds approval challenges to the requester stored in the generic plan envelope; a different authenticated subject must request a fresh plan.
 - Approval is browser-based and out-of-band: MCP clients receive an approval URL but cannot submit approval content through MCP.
 - Browser approval pages render the stored Kubernetes server-side dry-run status, Intent Digest, and Review Digest, and refuse legacy pending plans without envelope payloads, dry-run data, or diff data.
-- Approval challenges are bound to plan id, pending-plan hash, requester subject, expected digests, expiry, and Single-Execution status. Approved challenges issue Approval Grants consumed by execution.
+- Approval challenges are bound to plan id, intent/review digests, requester subject, expiry, and Single-Execution status. The gateway recomputes the plan file's intent and review digests at challenge creation and approval time to detect drift between the stored plan and the challenge bindings. Approved challenges issue Approval Grants consumed by execution.
 - Guardrail audit entries must not include bearer tokens or raw credentials.
 
 ## Settings

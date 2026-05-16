@@ -6,6 +6,7 @@ obj/
 .mcp-dataprotection-keys/
 TestResults/
 coverage-report/
+deploy/generated/*.env
 .sonarqube/
 actions-runner/
 .mcp.json

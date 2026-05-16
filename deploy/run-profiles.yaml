@@ -1,0 +1,132 @@
+version: 1
+
+profiles:
+  local-compose:
+    kind: compose
+    runtimeMode: Development
+    genericApprovalCore:
+      approvalRoot: /data/approvals
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: /run/kube/mcp-nginx-demo.compose.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  local-source-gateway:
+    kind: dotnet
+    runtimeMode: Development
+    genericApprovalCore:
+      approvalRoot: .mcp-approvals
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: .kube/mcp-nginx-demo.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  local-stdio:
+    kind: mcp-stdio
+    runtimeMode: Development
+    genericApprovalCore:
+      approvalRoot: .mcp-approvals
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: .kube/mcp-nginx-demo.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  development:
+    kind: compose-deploy
+    runtimeMode: Development
+    genericApprovalCore:
+      approvalRoot: /data/approvals
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: /run/kube/infra-gate.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  production:
+    kind: compose-deploy
+    runtimeMode: Production
+    genericApprovalCore:
+      approvalRoot: /data/approvals
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: /run/kube/infra-gate.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  test-integration:
+    kind: test
+    runtimeMode: Development
+    genericApprovalCore:
+      approvalRoot: .mcp-approvals
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: .kube/mcp-nginx-demo.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  test-gateway-integration:
+    kind: test
+    runtimeMode: Development
+    genericApprovalCore:
+      approvalRoot: .mcp-approvals
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: .kube/mcp-nginx-demo.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  test-safety-e2e:
+    kind: test
+    runtimeMode: Development
+    genericApprovalCore:
+      approvalRoot: .mcp-approvals
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: .kube/mcp-nginx-demo.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  smoke-local:
+    kind: smoke
+    runtimeMode: Development
+    genericApprovalCore:
+      approvalRoot: /data/approvals
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: /run/kube/mcp-nginx-demo.compose.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  smoke-release:
+    kind: smoke
+    runtimeMode: Development
+    genericApprovalCore:
+      approvalRoot: /data/approvals
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: /run/kube/mcp-nginx-demo.compose.config
+          allowedNamespaces:
+            - mcp-nginx-demo

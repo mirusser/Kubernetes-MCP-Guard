@@ -1,6 +1,6 @@
 # Architecture
 
-This document is the consolidated system map for Kubernetes MCP Guard. It focuses on components and request flows; detailed protocol, security, tool-permission, and configuration references live in:
+This document is the consolidated system map for InfraGate. It focuses on components and request flows; detailed protocol, security, tool-permission, and configuration references live in:
 
 - [docs/MCP-compliance.md](MCP-compliance.md) for MCP transport, OAuth 2.1, PKCE, protected-resource metadata, and RFC 8707 details.
 - [docs/security-model.md](security-model.md) for hard boundaries, threat model, non-goals, and production warnings.
@@ -11,7 +11,7 @@ This document is the consolidated system map for Kubernetes MCP Guard. It focuse
 
 ```mermaid
 ---
-title: Kubernetes MCP Guard Components
+title: InfraGate Components
 ---
 flowchart TB
     Client["MCP client<br/>Codex / Open WebUI / LibreChat"]
@@ -31,6 +31,26 @@ flowchart TB
         Keycloak["Keycloak<br/>local/test OIDC issuer"]
     end
 
+    subgraph GenericCore["Generic Approval Core"]
+        ApprovalStore["InfraGate.Approvals<br/>plan envelopes, challenges, grants, audit spine"]
+        Pending["pending/*.json<br/>Plan Envelope"]
+        Grants["grants/*.json<br/>Approval Grant"]
+        Applied["applied/*.json"]
+        Challenges["challenges/*.json<br/>Approval Challenge / Challenge Outcome"]
+        ApprovalAudit["audit.jsonl<br/>approval events"]
+        ApprovalStore --> Pending
+        ApprovalStore --> Grants
+        ApprovalStore --> Applied
+        ApprovalStore --> Challenges
+        ApprovalStore --> ApprovalAudit
+    end
+
+    subgraph K8sAdapter["Kubernetes Adapter"]
+        Adapter["InfraGate.KubernetesAdapter<br/>mutation intent, evidence, intent canonicalization"]
+        Payload["KubernetesPlanPayload<br/>namespace, objects, diff, dry-run, policy findings"]
+        Adapter --> Payload
+    end
+
     subgraph ServerRuntime["Kubernetes MCP server"]
         Server["InfraGate.McpServer<br/>private stdio subprocess"]
         Tools["K8sTools<br/>typed MCP tool surface"]
@@ -40,19 +60,8 @@ flowchart TB
         Manager --> Parser
     end
 
-    subgraph Storage["Local durable storage"]
-        ApprovalStore["ApprovalStore<br/>K8S_MCP_APPROVAL_ROOT"]
-        Pending["pending/*.json"]
-        Approved["grants/*.json"]
-        Applied["applied/*.json"]
-        Challenges["challenges/*.json"]
-        ApprovalAudit["audit.jsonl<br/>approval events"]
+    subgraph GuardrailStore["Guardrail audit"]
         GuardAudit[".mcp-guardrails/audit.jsonl<br/>guardrail events"]
-        ApprovalStore --> Pending
-        ApprovalStore --> Approved
-        ApprovalStore --> Applied
-        ApprovalStore --> Challenges
-        ApprovalStore --> ApprovalAudit
     end
 
     subgraph Kubernetes["Kubernetes boundary"]
@@ -68,11 +77,14 @@ flowchart TB
     Auth -. "JWKS / issuer metadata" .-> Keycloak
     Downstream -->|"stdio, no bearer token"| Server
     Guardrails --> GuardAudit
-    Manager --> ApprovalStore
+    Manager -->|"creates typed envelopes"| Adapter
+    Adapter -->|"persists + loads"| ApprovalStore
     Manager -->|"KubernetesClient"| RBAC
 ```
 
 In source mode, the gateway launches the server project as a private stdio subprocess. In container mode, the `mcp-gateway` image contains the published server assembly and starts it through `dotnet /app/server/InfraGate.McpServer.dll`. Keycloak is the local/test identity provider. Production deployments use an external OIDC issuer.
+
+The Generic Approval Core (`InfraGate.Approvals`) owns plan envelopes, approval challenges, challenge outcomes, approval grants, and the audit spine independent of any target system. The Kubernetes Adapter (`InfraGate.KubernetesAdapter`) owns Kubernetes mutation intents, evidence artifacts (diffs, dry-run results, policy findings), and intent-digest canonicalization. The adatper sits between the server and the approval store: the server builds typed intent/evidence through the adapter, and the adapter persists and loads generic envelopes from the approval store.
 
 ## OAuth Login And MCP Authorization
 
@@ -194,7 +206,7 @@ sequenceDiagram
     Svr->>Svr: K8sManifestParser allows Deployment / Service / ConfigMap
     Svr->>K8s: dry-run against K8s API<br/>(dryRun=All, strict field validation)
     Svr->>Store: write pending plan with dry-run result<br/>+ Intent/Review Digest binding
-    Store-->>Svr: PlanId + pending path + pending-plan hash
+    Store-->>Svr: PlanId + pending path + Plan Envelope
     Note over Svr,Store: K8sManager.Request*<br/>ApprovalStore (.mcp-approvals/pending/)
     Svr-->>GW: PlanId + plan summary<br/>(dry-run result, affected resources)
 
@@ -221,7 +233,7 @@ sequenceDiagram
     Client->>GW: POST /mcp -> apply_approved_plan(planId)<br/>JSON-RPC + JWT Bearer
     GW->>GW: validate JWT + scope
     GW->>Store: read pending plan + current hash
-    GW->>GW: create approval challenge<br/>bound to planId + pending hash + digests + requester subject + expiry
+    GW->>GW: create approval challenge<br/>bound to planId + Intent Digest + Review Digest + requester subject + expiry
     GW->>Store: write challenge file<br/>+ approval_challenge_created audit event
     GW-->>Client: approval required<br/>PlanId + Intent/Review Digests + approval URL
 
@@ -234,7 +246,7 @@ sequenceDiagram
 
     User->>Browser: approve or deny
     Browser->>GW: POST /approvals/{challengeId}/approve<br/>or /deny with anti-forgery token
-    GW->>Store: recompute pending-plan hash and verify digests
+    GW->>Store: recompute Intent Digest and Review Digest
     alt bindings still match
         GW->>Store: record Challenge Outcome<br/>+ issue Approval Grant
         GW-->>Browser: approval recorded

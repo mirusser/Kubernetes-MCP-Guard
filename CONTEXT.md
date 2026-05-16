@@ -30,6 +30,10 @@ _Avoid_: Standard
 The current public positioning for InfraGate as a working implementation that explores a possible **Mutation Approval Profile**.
 _Avoid_: Finished standard implementation
 
+**Run Profile**:
+The authoring record for one target runnable environment. It declares the environment's runtime shape without owning CI/CD triggers, job ordering, or release policy.
+_Avoid_: CI workflow, environment variable dump, secret store
+
 **Generic Approval Core**:
 The domain-independent approval layer that owns envelope schema, lifecycle state, digest checks, approval challenges, challenge outcomes, approval grants, audit spine, review snapshot canonicalization, and pre-execution gate orchestration.
 _Avoid_: Domain Adapter, domain-specific review content
@@ -223,6 +227,10 @@ _Avoid_: Generic audit fields
 - The **Generic Approval Core** does not define **Mutation Intents** or domain-specific **Plan Evidence**
 - The **Generic Approval Core** may host a **Review Surface**, but **Domain Adapters** supply the domain-specific **Evidence Artifacts** rendered there
 - InfraGate is currently an **Experimental Reference Implementation** for a possible **Mutation Approval Profile**
+- A **Run Profile** describes one target runnable environment
+- A **Run Profile** does not own CI/CD triggers, job ordering, or release policy
+- A **Run Profile** may declare one or more **Domain Adapters**
+- InfraGate run profiles currently support only one **Domain Adapter**: the **Kubernetes Adapter**
 - The **Kubernetes Adapter** is a **Domain Adapter**
 - The **Kubernetes Adapter** owns Kubernetes mutation meaning, safety evidence, mutation-intent canonicalization, freshness checks, domain policy checks, execution behavior, and adapter audit payloads
 - The **Kubernetes Adapter** does not own approval challenge creation or **Approval Policy** enforcement

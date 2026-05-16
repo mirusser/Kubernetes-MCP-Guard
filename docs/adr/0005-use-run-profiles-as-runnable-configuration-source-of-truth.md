@@ -1,0 +1,5 @@
+# Use Run Profiles As Runnable Configuration Source Of Truth
+
+InfraGate will use a canonical YAML **Run Profile** file as the human-edited source of truth for target runnable environments across local runs, development CI/CD, production CI/CD, smoke tests, and integration test tiers. Runtime processes, Docker Compose, scripts, and GitHub Actions will continue to receive environment variables as the transport format, but those env files must be generated or validated from the Run Profile rather than hand-maintained as independent defaults.
+
+The Run Profile describes runnable environment shape, not CI/CD workflow policy: GitHub Actions still owns triggers, job ordering, credentials, image publishing policy, and branch/tag rules. Generated env files are build artifacts and stay gitignored; the exception is a committed no-SDK release/demo env template for the published-image quick start, which CI must verify against the Run Profile so users can run published images without installing the .NET SDK.
