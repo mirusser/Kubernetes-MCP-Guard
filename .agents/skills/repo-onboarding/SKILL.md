@@ -26,7 +26,6 @@ Use this skill when you need to get oriented in `k8s-toolkit`, start a broad inv
    - MCP server, Kubernetes tools, validation, or approval plans: `src/InfraGate.McpServer/README.md`
    - HTTP gateway, forwarding, guardrails, sanitization, or audit logging: `src/InfraGate.McpGateway/README.md`
    - Gateway auth, bearer tokens, OAuth JWTs, protected-resource metadata, or audit identity: `src/InfraGate.McpGateway.Auth/README.md`
-   - Development OAuth issuer or Codex login testing: `src/InfraGate.DevIssuer/README.md`
    - Test work: the matching `tests/*/README.md`
    - Demo manifests: `examples/failing-deployment/README.md`
 

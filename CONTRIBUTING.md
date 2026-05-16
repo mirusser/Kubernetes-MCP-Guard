@@ -32,13 +32,13 @@ For the local demo namespace and kubeconfig:
 For the containerized OAuth demo:
 
 ```bash
-docker compose -f deploy/mode-c/compose.yaml up --build
+docker compose -f deploy/local-oauth/compose.yaml up --build
 ```
 
 For Compose validation without starting services:
 
 ```bash
-docker compose -f deploy/mode-c/compose.yaml config
+docker compose -f deploy/local-oauth/compose.yaml config
 ```
 
 ## Verification
@@ -47,13 +47,13 @@ Run the narrowest useful checks for your change. For most code or contract chang
 
 ```bash
 dotnet build InfraGate.slnx
-dotnet test InfraGate.slnx --no-build
+dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak"
 ```
 
 For live Kubernetes coverage against the demo namespace:
 
 ```bash
-INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build
+INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak"
 INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build
 ```
 

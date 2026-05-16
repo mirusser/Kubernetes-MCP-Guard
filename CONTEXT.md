@@ -46,6 +46,10 @@ _Avoid_: Generic Approval Core, Approval Authority
 The participant that creates **Approval Challenges**, enforces **Approval Policies**, records **Challenge Outcomes**, and issues or exposes **Approval Grants** for execution.
 _Avoid_: Gateway, approval store, workflow system
 
+**Identity Provider**:
+The external OAuth/OIDC authority that authenticates **Requesters** and **Approvers** and issues JWTs consumed by the gateway.
+_Avoid_: Approval Authority, Gateway
+
 **Mutation Intent**:
 The exact domain-specific operation that an executor may later perform after approval.
 _Avoid_: Plan payload, request body
@@ -202,6 +206,7 @@ _Avoid_: Generic audit fields
 - An **Approval Grant** is bound to the **Plan Identifier**, **Requester**, **Approver**, **Intent Digest**, **Review Digest**, **Approval Policy**, expiry, and reuse constraints
 - An **Approval Challenge** does not define the **Mutation Intent**
 - An **Approval Authority** creates **Approval Challenges** and records **Challenge Outcomes**
+- An **Identity Provider** authenticates **Requesters** and **Approvers** but does not create **Approval Challenges** or issue **Approval Grants**
 - An **Audit Trail** records the lifecycle of **Plan Envelopes**, **Approval Challenges**, **Challenge Outcomes**, **Approval Grants**, and **Execution Attempts**
 - An **Audit Spine** defines the generic lifecycle events in an **Audit Trail**
 - An **Adapter Audit Payload** may be attached to an **Audit Spine** event

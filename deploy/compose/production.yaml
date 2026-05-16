@@ -1,5 +1,5 @@
 # deploy/compose/production.yaml
-# Remote production deployment. Uses a real OIDC provider; DevIssuer is local/demo only.
+# Remote production deployment. Uses a real OIDC provider.
 
 name: infra-gate-production
 

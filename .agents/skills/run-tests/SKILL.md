@@ -66,7 +66,7 @@ Two test projects use `Testcontainers.Keycloak` which starts a Keycloak containe
 
 ### Tier 1: Unit Tests
 
-**What it covers:** All unit tests across 6 test projects that don't need Docker or K8s. Also includes DevIssuer, RuntimeSafety, and approval store tests.
+**What it covers:** All unit tests that don't need Docker or K8s. Also includes RuntimeSafety and approval store tests.
 
 ```bash
 dotnet test InfraGate.slnx --filter "Category!=Keycloak"
@@ -76,7 +76,6 @@ dotnet test InfraGate.slnx --filter "Category!=Keycloak"
 - `InfraGate.McpServer.Tests` (253 unit tests)
 - `InfraGate.McpGateway.Tests` (166 unit tests)
 - `InfraGate.RuntimeSafety.Tests`
-- `InfraGate.DevIssuer.Tests`
 
 **Prerequisites:**
 - .NET 10 SDK (`dotnet --version` must report 10.x)

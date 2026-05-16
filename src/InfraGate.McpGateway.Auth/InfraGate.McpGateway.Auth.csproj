@@ -11,7 +11,6 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <InternalsVisibleTo Include="InfraGate.McpGateway.KeycloakTests" />
     <InternalsVisibleTo Include="InfraGate.McpGateway.Tests" />
-    <InternalsVisibleTo Include="InfraGate.DevIssuer.Tests" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.7" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.2.0" />
   </ItemGroup>

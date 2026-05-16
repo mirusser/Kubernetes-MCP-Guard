@@ -116,7 +116,7 @@ The server does not provide kubectl exec passthrough, shell execution, namespace
 ## 4. Non-Goals
 
 - Not a replacement for Kubernetes RBAC.
-- Local Keycloak and DevIssuer are not production identity providers. See [docs/production-oidc.md](production-oidc.md) for production OIDC guidance.
+- Local Keycloak is not a production identity provider. See [docs/production-oidc.md](production-oidc.md) for production OIDC guidance.
 - Not a full policy engine.
 - No guarantee that AI-generated actions are correct or safe.
 - Not production-certified; the project is experimental.
@@ -126,21 +126,19 @@ The server does not provide kubectl exec passthrough, shell execution, namespace
 
 Must not be used in any production or shared environment.
 
-### 5.1 Local Keycloak And DevIssuer
+### 5.1 Local Keycloak
 
-The Mode D Keycloak realm is the primary local/test issuer, but it runs via `start-dev` over HTTP and enables anonymous DCR only for loopback demo use. `InfraGate.DevIssuer` is a deprecated fallback that is HTTP-only, localhost-only, and keeps registrations, authorization codes, and signing keys in memory. Neither is suitable for production.
-
-See [`src/InfraGate.DevIssuer/README.md`](../src/InfraGate.DevIssuer/README.md).
+The local Keycloak realm runs via `start-dev` over HTTP and enables anonymous DCR only for loopback demo use. It is not suitable for production.
 
 ### 5.2 `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false`
 
-`INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` disables the HTTPS requirement for OIDC discovery metadata. It is acceptable only when the gateway points at a local HTTP issuer during development, such as the local Keycloak demo or deprecated DevIssuer fallback.
+`INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` disables the HTTPS requirement for OIDC discovery metadata. It is acceptable only when the gateway points at a local HTTP issuer during development, such as the local Keycloak demo.
 
 See [`src/InfraGate.McpGateway.Auth/README.md`](../src/InfraGate.McpGateway.Auth/README.md).
 
 ### 5.3 Static Bearer Tokens
 
-Static bearer token authentication is not a supported gateway mode. Opaque bearer values such as `change-me` are rejected by JWT validation before signature or scope checks. Use the local Keycloak demo for local OAuth testing, deprecated DevIssuer only for fallback compatibility, or a production OIDC provider for shared environments.
+Static bearer token authentication is not a supported gateway mode. Opaque bearer values such as `change-me` are rejected by JWT validation before signature or scope checks. Use the local Keycloak demo for local OAuth testing or a production OIDC provider for shared environments.
 
 See [`src/InfraGate.McpGateway.Auth/README.md`](../src/InfraGate.McpGateway.Auth/README.md) and [docs/mcp-clients-quirks.md](mcp-clients-quirks.md).
 

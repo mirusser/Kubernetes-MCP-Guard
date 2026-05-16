@@ -1,8 +1,8 @@
-# deploy/mode-d/compose.yaml
+# deploy/local-oauth/compose.yaml
 # Keycloak + MCP Gateway — local build.
 # Keycloak is auto-configured from deploy/keycloak/infra-gate-realm.json.
 # Prerequisites: ./scripts/create-demo-kubeconfig.sh --compose
-# Run: docker compose -f deploy/mode-d/compose.yaml up --build
+# Run: docker compose -f deploy/local-oauth/compose.yaml up --build
 # Docker Hub alternate for the gateway image: mirusser/kubernetes-mcp-guard-gateway
 #
 # Network topology (production-like separation):

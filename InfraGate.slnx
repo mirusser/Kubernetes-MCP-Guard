@@ -1,6 +1,5 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj" />
     <Project Path="src/InfraGate.Approvals/InfraGate.Approvals.csproj" />
     <Project Path="src/InfraGate.KubernetesAdapter/InfraGate.KubernetesAdapter.csproj" />
     <Project Path="src/InfraGate.RuntimeSafety/InfraGate.RuntimeSafety.csproj" />
@@ -9,7 +8,6 @@
     <Project Path="src/InfraGate.McpServer/InfraGate.McpServer.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/InfraGate.DevIssuer.Tests/InfraGate.DevIssuer.Tests.csproj" />
     <Project Path="tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj" />
     <Project Path="tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj" />
     <Project Path="tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj" />

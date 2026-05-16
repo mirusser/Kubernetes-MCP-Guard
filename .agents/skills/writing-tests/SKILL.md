@@ -13,7 +13,6 @@ Each runtime project has a matching test project under `tests/`:
 |---|---|
 | `InfraGate.McpServer` | `InfraGate.McpServer.Tests` |
 | `InfraGate.McpGateway` | `InfraGate.McpGateway.Tests` |
-| `InfraGate.DevIssuer` | `InfraGate.DevIssuer.Tests` |
 | (gateway + auth OIDC integration) | `InfraGate.McpGateway.KeycloakTests` |
 
 Tests are split by scope:

@@ -12,8 +12,8 @@ Use the InfraGate MCP gateway as the preferred interface to the demo Kubernetes 
 ## Defaults
 
 - HTTP MCP endpoint: `http://127.0.0.1:3001/mcp`
-- Auth: OAuth JWT Bearer (obtain a token from the dev issuer; see Starting The Gateway below)
-- Dev OAuth issuer: `http://127.0.0.1:3011`
+- Auth: OAuth JWT Bearer (obtain a token from the local Keycloak realm; see Starting The Gateway below)
+- Local OAuth issuer: `http://127.0.0.1:3010/realms/infra-gate`
 - OAuth resource/scope: `http://127.0.0.1:3001/mcp`, `mcp:tools`
 - Default allowed namespace: `mcp-nginx-demo`
 - Approval root: `.mcp-approvals`
@@ -110,23 +110,25 @@ dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
 
 Use a long-running terminal session for the server. If port `3001` is busy, inspect the running process before choosing a different setup, because the configured MCP URL and skill metadata assume that default port.
 
-For the OAuth path, first run the dev issuer in another long-running terminal session:
+For source-run OAuth debugging, first run only the local Keycloak service:
 
 ```bash
-dotnet run --project src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj
+./scripts/create-demo-kubeconfig.sh --compose
+docker compose -f deploy/local-oauth/compose.yaml up keycloak
 ```
 
-Then start the gateway with:
+For source-run gateway debugging against that Keycloak instance, start the gateway with:
 
 ```bash
 export REPO_ROOT="$(pwd)"
-export INFRA_GATE_OAUTH_AUTHORITY="http://127.0.0.1:3011"
+export INFRA_GATE_OAUTH_AUTHORITY="http://127.0.0.1:3010/realms/infra-gate"
+export INFRA_GATE_OAUTH_METADATA_ADDRESS="http://127.0.0.1:3010/realms/infra-gate/.well-known/openid-configuration"
 export INFRA_GATE_OAUTH_RESOURCE="http://127.0.0.1:3001/mcp"
 export INFRA_GATE_OAUTH_SCOPE="mcp:tools"
 export INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false
 export INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID="infra-gate-approval-ui"
-export INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT="http://127.0.0.1:3011/authorize"
-export INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT="http://127.0.0.1:3011/token"
+export INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT="http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/auth"
+export INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT="http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token"
 export INFRA_GATE_APPROVAL_BASE_URL="http://127.0.0.1:3001"
 export INFRA_GATE_DOWNSTREAM_PROJECT="${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
 export KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config"

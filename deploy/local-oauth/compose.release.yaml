@@ -1,6 +1,6 @@
-# deploy/mode-d/compose.release.yaml
+# deploy/local-oauth/compose.release.yaml
 # Keycloak + MCP Gateway — published gateway image from GHCR.
-# Override the release tag with: TAG=vX.Y.Z docker compose -f deploy/mode-d/compose.release.yaml up
+# Override the release tag with: TAG=vX.Y.Z docker compose -f deploy/local-oauth/compose.release.yaml up
 # Docker Hub alternate for the gateway image: mirusser/kubernetes-mcp-guard-gateway:${TAG}
 # Keycloak is always pulled from quay.io/keycloak/keycloak (no GHCR equivalent).
 # Prerequisites: ./scripts/create-demo-kubeconfig.sh --compose

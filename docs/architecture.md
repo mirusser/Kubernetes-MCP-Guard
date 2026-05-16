@@ -28,8 +28,7 @@ flowchart TB
     end
 
     subgraph DevAuth["Local identity provider"]
-        Keycloak["Keycloak<br/>primary local/test OIDC issuer"]
-        DevIssuer["InfraGate.DevIssuer<br/>deprecated fallback issuer"]
+        Keycloak["Keycloak<br/>local/test OIDC issuer"]
     end
 
     subgraph ServerRuntime["Kubernetes MCP server"]
@@ -73,7 +72,7 @@ flowchart TB
     Manager -->|"KubernetesClient"| RBAC
 ```
 
-In source mode, the gateway launches the server project as a private stdio subprocess. In container mode, the `mcp-gateway` image contains the published server assembly and starts it through `dotnet /app/server/InfraGate.McpServer.dll`. Keycloak Mode D is the primary local/test identity provider. DevIssuer is retained only as a deprecated local fallback; production deployments use an external OIDC issuer.
+In source mode, the gateway launches the server project as a private stdio subprocess. In container mode, the `mcp-gateway` image contains the published server assembly and starts it through `dotnet /app/server/InfraGate.McpServer.dll`. Keycloak is the local/test identity provider. Production deployments use an external OIDC issuer.
 
 ## OAuth Login And MCP Authorization
 
@@ -310,6 +309,5 @@ Guardrail audit and approval audit are separate streams. Guardrail audit records
 | Runtime image | GHCR | Docker Hub | Contains |
 | --- | --- | --- | --- |
 | Gateway | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>` | `mirusser/kubernetes-mcp-guard-gateway:<tag>` | `InfraGate.McpGateway`, `InfraGate.McpGateway.Auth`, `InfraGate.Approvals`, and published downstream server assembly at `/app/server/InfraGate.McpServer.dll` |
-| DevIssuer | `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:<tag>` | `mirusser/kubernetes-mcp-guard-devissuer:<tag>` | Deprecated `InfraGate.DevIssuer` fallback OAuth/OIDC issuer |
 
-Mode D local/demo Compose builds or pulls the gateway image and starts Keycloak from `quay.io/keycloak/keycloak:26.6.1`; Mode C still builds/pulls DevIssuer during the deprecation window. The deployment Compose files under `deploy/compose/` deploy the gateway image only; development uses the local Keycloak setup script, while production uses a real OIDC provider. Tags and CI/CD settings are owned by [docs/configuration.md](configuration.md) and the release process docs.
+The local/demo Compose path builds or pulls the gateway image and starts Keycloak from `quay.io/keycloak/keycloak:26.6.1`. The deployment Compose files under `deploy/compose/` deploy the gateway image only; development uses the local Keycloak setup script, while production uses a real OIDC provider. Tags and CI/CD settings are owned by [docs/configuration.md](configuration.md) and the release process docs.

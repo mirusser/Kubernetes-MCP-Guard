@@ -1,5 +1,5 @@
 # deploy/compose/development.yaml
-# Local development deployment. Uses Keycloak OIDC; DevIssuer is local/demo only.
+# Local development deployment. Uses Keycloak OIDC.
 
 name: infra-gate-development
 

@@ -2,9 +2,9 @@
 
 ## Warning: Development vs. Production
 
-The `DevIssuer` and setting `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` are for local development only. Do not use them in production environments.
+The setting `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` is for local development only. Do not use it in production environments.
 
-Set `INFRA_GATE_ENVIRONMENT=Production` for production deployments. In this mode the Gateway and downstream MCP server fail closed when development defaults are present, and `InfraGate.DevIssuer` refuses startup entirely.
+Set `INFRA_GATE_ENVIRONMENT=Production` for production deployments. In this mode the Gateway and downstream MCP server fail closed when development defaults are present.
 
 ## Gateway OIDC Contract
 
@@ -31,7 +31,7 @@ The current gateway does not expose a configurable approval OAuth client secret 
 
 ### Required Gateway Environment Variables
 
-When using Keycloak, set the following environment variables. Note that Keycloak uses different default paths for authorization and token endpoints than the DevIssuer:
+When using Keycloak, set the following environment variables:
 
 ```bash
 export INFRA_GATE_OAUTH_AUTHORITY="https://your-keycloak-domain/realms/your-realm"
@@ -62,7 +62,7 @@ For Docker host deployments, put the production values in `/etc/infra-gate/produ
 TAG=v1.0.0 docker compose --env-file /etc/infra-gate/production.env -f deploy/compose/production.yaml up -d
 ```
 
-The production Compose path does not start `InfraGate.DevIssuer`. TLS may terminate at a host reverse proxy, but the public OAuth/resource/approval URLs in the env file must remain HTTPS and non-loopback.
+The production Compose path runs only the gateway. TLS may terminate at a host reverse proxy, but the public OAuth/resource/approval URLs in the env file must remain HTTPS and non-loopback.
 
 ## Local Keycloak Demo
 
@@ -130,7 +130,6 @@ Before moving to production, ensure you have:
 - [ ] Durable approval and audit paths that are not temp paths, default dev paths, or group/other-writable.
 - [ ] Host Docker env file provisioned at `/etc/infra-gate/production.env` when using the remote Compose deployment.
 - [ ] No opaque manual bearer values in MCP client configuration.
-- [ ] Disabled `DevIssuer` completely.
 
 ## Future Support
 
