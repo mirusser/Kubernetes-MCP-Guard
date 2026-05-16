@@ -33,7 +33,6 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/mcp-gateway.Dockerfile
-    user: "1000:1000"
     depends_on:
       keycloak:
         condition: service_healthy

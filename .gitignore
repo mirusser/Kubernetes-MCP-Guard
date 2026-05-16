@@ -3,6 +3,7 @@ obj/
 .kube/
 .mcp-approvals/
 .mcp-guardrails/
+.mcp-dataprotection-keys/
 TestResults/
 coverage-report/
 .sonarqube/

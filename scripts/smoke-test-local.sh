@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# smoke-test-release.sh — released-image smoke test.
+# smoke-test-local.sh — local-build smoke test.
 #
-# Exercises deploy/local-oauth/compose.release.yaml using the published gateway image:
-#   1. Boots Keycloak and the gateway with docker compose (--pull always).
+# Exercises deploy/local-oauth/compose.yaml and builds the gateway from source:
+#   1. Builds and starts Keycloak + gateway with docker compose (--build).
 #   2. Waits for Keycloak OIDC discovery and the gateway HTTP surface.
 #   3. Verifies host-side volume directories exist.
 #   4. Scans gateway logs for filesystem permission errors.
@@ -11,19 +11,17 @@
 #   7. Confirms a bearer-authenticated /mcp request is not rejected as 401/403.
 #
 # Usage:
-#   TAG=vX.Y.Z ./scripts/smoke-test-release.sh
-#   TAG=latest  ./scripts/smoke-test-release.sh
+#   ./scripts/smoke-test-local.sh
 #
-# Requirements: docker compose v2, curl, jq.
+# Requirements: docker compose v2, curl, jq, .NET 10 SDK (in Docker build).
 # The kubeconfig at KUBECONFIG_PATH must exist before running this script;
 # run ./scripts/create-demo-kubeconfig.sh --compose first.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TAG="${TAG:-latest}"
 KUBECONFIG_PATH="${KUBECONFIG_PATH:-${REPO_ROOT}/.kube/mcp-nginx-demo.compose.config}"
-COMPOSE_FILE="${REPO_ROOT}/deploy/local-oauth/compose.release.yaml"
+COMPOSE_FILE="${REPO_ROOT}/deploy/local-oauth/compose.yaml"
 
 GATEWAY_URL="http://127.0.0.1:3001"
 KEYCLOAK_URL="http://127.0.0.1:3010"
@@ -41,6 +39,7 @@ COMPOSE_VOLUME_DIRS=(
   "${REPO_ROOT}/.mcp-approvals"
   "${REPO_ROOT}/.mcp-guardrails"
   "${REPO_ROOT}/.mcp-dataprotection-keys"
+  "${REPO_ROOT}/.mcp-logs"
 )
 
 docker compose version >/dev/null 2>&1 || {
@@ -66,16 +65,16 @@ teardown() {
   local exit_code=$?
   if [[ ${exit_code} -ne 0 ]]; then
     echo ""
-    echo "FAIL: release smoke test failed for tag '${TAG}'. Last logs:" >&2
-    TAG="${TAG}" docker compose -f "${COMPOSE_FILE}" logs --tail=80 2>/dev/null || true
+    echo "FAIL: local-build smoke test failed. Last logs:" >&2
+    docker compose -f "${COMPOSE_FILE}" logs --tail=80 2>/dev/null || true
   fi
-  TAG="${TAG}" docker compose -f "${COMPOSE_FILE}" down -v --remove-orphans 2>/dev/null || true
+  docker compose -f "${COMPOSE_FILE}" down -v --remove-orphans 2>/dev/null || true
   rm -rf "${tmp_dir}"
 }
 trap teardown EXIT
 
-echo "==> Pulling and starting local OAuth services (tag=${TAG}) ..."
-TAG="${TAG}" docker compose -f "${COMPOSE_FILE}" up -d --pull always
+echo "==> Building and starting local OAuth services (local build) ..."
+docker compose -f "${COMPOSE_FILE}" up -d --build
 
 echo "==> Waiting for Keycloak OIDC discovery ..."
 elapsed=0
@@ -114,7 +113,7 @@ done
 echo "    All host volume directories present."
 
 echo "==> Verifying no filesystem permission errors in gateway logs ..."
-if TAG="${TAG}" docker compose -f "${COMPOSE_FILE}" logs mcp-gateway 2>/dev/null | \
+if docker compose -f "${COMPOSE_FILE}" logs mcp-gateway 2>/dev/null | \
    grep -qE 'KeyRingProvider.*error|UnauthorizedAccessException|Permission denied'; then
   echo "ERROR: Gateway logs contain filesystem permission errors." >&2
   exit 1
@@ -174,4 +173,4 @@ fi
 echo "    Authenticated /mcp passed auth layer (HTTP ${auth_status})."
 
 echo ""
-echo "OK: release smoke test passed for tag '${TAG}'."
+echo "OK: local-build smoke test passed."
