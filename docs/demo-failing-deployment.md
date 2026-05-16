@@ -59,17 +59,9 @@ The same fix can be planned by submitting `examples/failing-deployment/fix.yaml`
 
 Call `apply_approved_plan(planId="<PlanId>")`. The Gateway returns an approval URL instead of applying immediately. Open that URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan, Intent Digest, and Review Digest, and approve it.
 
-**What you should see:** an approval page showing the `PlanId`, affected objects, requester, expiry, Intent Digest, and Review Digest. After approval, return to the MCP client and call `apply_approved_plan(planId="<PlanId>")` again.
+**What you should see:** an approval page showing the `PlanId`, affected objects, requester, expiry, Intent Digest, and Review Digest. After approval, the Gateway issues an Approval Grant, and the MCP client can call `apply_approved_plan(planId="<PlanId>")` to execute.
 
-### `scripts/approve-plan.sh` dev helper
-
-```bash
-./scripts/approve-plan.sh <PlanId>
-```
-
-This helper is legacy. Current execution requires an Approval Grant under `.mcp-approvals/grants/`, which is issued by the Gateway browser approval flow.
-
-Direct hash approval files do not authorize execution in the current grant-bound flow.
+Direct hash approval files do not authorize execution in the current grant-bound flow. The legacy `scripts/approve-plan.sh` helper has been removed.
 
 ## Step 5 — Apply
 
@@ -81,7 +73,7 @@ The server re-reads `pending/<PlanId>.json`, validates the Approval Grant and it
 
 **What you should see:** the tool returns the apply result describing the patched Deployment. Within seconds, Kubernetes pulls the new image and the Pods become Ready.
 
-If anything edits `pending/<PlanId>.json` between approval and apply, the recomputed hash no longer matches and the server refuses to apply, emitting an `approval_hash_mismatch` audit entry. This is the tamper-detection guarantee in action.
+If anything edits `pending/<PlanId>.json` between approval and apply, the recomputed Review Digest no longer matches and execution is refused, emitting an `apply_denied` audit entry. This is the tamper-detection guarantee in action.
 
 ## Step 6 — Verify recovery
 
@@ -97,7 +89,7 @@ Two JSONL streams record the demo. Both live under volumes mounted by `deploy/mo
 
 ### Server-side (`.mcp-approvals/audit.jsonl`)
 
-Records the plan lifecycle: `plan_requested`, `plan_approved`, `plan_applied` (and on a tampered plan, `approval_hash_mismatch` + `apply_denied`). One entry shape:
+Records the plan lifecycle: `plan_requested`, `approval_challenge_created`, `approval_challenge_approved`, `grant_issued`, `plan_applied` (and on a tampered plan, `apply_denied`). One entry shape:
 
 ```json
 {"timestampUtc":"2026-05-03T12:34:56.789Z","eventName":"plan_applied","payload":{"planId":"20260503-a1b2c3d4","operation":"setImage","namespace":"mcp-nginx-demo","hash":"sha256:…"}}

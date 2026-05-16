@@ -5,6 +5,10 @@ namespace InfraGate.KubernetesAdapter;
 
 public static class KubernetesApprovalAdapter
 {
+    private static readonly ReviewSurfaceContext DefaultReviewSurfaceContext = new(
+        ApprovalConventions.ReviewSurfaces.GatewayBrowser,
+        KubernetesAdapterConventions.ReviewRenderers.PlanReviewV1);
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true
@@ -15,7 +19,8 @@ public static class KubernetesApprovalAdapter
         string operation,
         DateTimeOffset createdAtUtc,
         PlanRequester requester,
-        KubernetesPlanPayload payload)
+        KubernetesPlanPayload payload,
+        ReviewSurfaceContext? reviewSurfaceContext = null)
     {
         var intentDigest = ComputeIntentDigest(operation, payload);
 
@@ -26,6 +31,7 @@ public static class KubernetesApprovalAdapter
             createdAtUtc,
             requester,
             intentDigest,
+            reviewSurfaceContext ?? DefaultReviewSurfaceContext,
             payload);
     }
 
@@ -38,7 +44,8 @@ public static class KubernetesApprovalAdapter
             envelope.Operation,
             envelope.CreatedAtUtc,
             envelope.Requester,
-            payload);
+            payload,
+            envelope.ReviewSurfaceContext);
     }
 
     public static KubernetesPlan Materialize(PlanEnvelope<KubernetesPlanPayload> envelope) =>
@@ -58,6 +65,7 @@ public static class KubernetesApprovalAdapter
             envelope.Requester,
             envelope.ApprovalPolicy,
             envelope.ExecutionReusePolicy,
+            envelope.ReviewSurfaceContext,
             envelope.IntentDigest,
             envelope.ReviewDigest,
             payload);

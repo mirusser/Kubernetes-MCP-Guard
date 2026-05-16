@@ -46,13 +46,6 @@ public sealed record ApprovalGrantIssuedPayload(
     ApprovalDigest ReviewDigest,
     DateTimeOffset ExpiresAtUtc) : IPlanAuditPayload;
 
-public sealed record PlanApprovedPayload(
-    string PlanId,
-    string Hash,
-    string Source,
-    string? ApproverSubject,
-    string? ChallengeId) : IPlanAuditPayload;
-
 public sealed record PlanAppliedPayload(
     string PlanId,
     string Operation,
@@ -73,11 +66,6 @@ public sealed record ApplyDriftDetectedPayload(
     string Operation,
     string Namespace,
     string Message) : IPlanAuditPayload;
-
-public sealed record ApprovalHashMismatchPayload(
-    string PlanId,
-    string ApprovedHash,
-    string ActualHash) : IPlanAuditPayload;
 
 public sealed record DryRunFailedPayload(
     string Phase,

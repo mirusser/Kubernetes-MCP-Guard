@@ -21,38 +21,24 @@ public sealed class ApprovalChallengeStore
 
     public string ChallengeDirectory => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.ChallengesDirectory);
 
-    public Task<ApprovalChallenge> CreateAsync(
-        string planId,
-        string planHash,
-        string requesterSubject,
-        string? requesterAuthenticationType,
-        TimeSpan ttl,
-        CancellationToken cancellationToken) =>
-        CreateAsync(
-            planId,
-            planHash,
-            requesterSubject,
-            requesterAuthenticationType,
-            ttl,
-            intentDigest: null,
-            reviewDigest: null,
-            cancellationToken);
-
     public async Task<ApprovalChallenge> CreateAsync(
         string planId,
-        string planHash,
+        string pendingPlanHash,
         string requesterSubject,
         string? requesterAuthenticationType,
         TimeSpan ttl,
-        ApprovalDigest? intentDigest,
-        ApprovalDigest? reviewDigest,
+        ApprovalDigest intentDigest,
+        ApprovalDigest reviewDigest,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(intentDigest);
+        ArgumentNullException.ThrowIfNull(reviewDigest);
+
         var now = DateTimeOffset.UtcNow;
         var challenge = new ApprovalChallenge(
             NewChallengeId(),
             planId,
-            planHash,
+            pendingPlanHash,
             requesterSubject,
             requesterAuthenticationType,
             now,
@@ -60,8 +46,8 @@ public sealed class ApprovalChallengeStore
             ApprovalConventions.ChallengeStatuses.Pending,
             ApproverSubject: null,
             DecidedAtUtc: null,
-            intentDigest,
-            reviewDigest);
+            IntentDigest: intentDigest,
+            ReviewDigest: reviewDigest);
 
         await SaveAsync(challenge, cancellationToken);
 
@@ -88,7 +74,7 @@ public sealed class ApprovalChallengeStore
 
     public async Task<ApprovalChallenge?> FindApprovedAsync(
         string planId,
-        string planHash,
+        string pendingPlanHash,
         string subject,
         CancellationToken cancellationToken)
     {
@@ -105,7 +91,7 @@ public sealed class ApprovalChallengeStore
             var json = await File.ReadAllTextAsync(path, cancellationToken);
             var challenge = JsonSerializer.Deserialize<ApprovalChallenge>(json, jsonOptions);
             if (challenge is not null &&
-                IsApprovedForSubject(challenge, planId, planHash, subject))
+                IsApprovedForSubject(challenge, planId, pendingPlanHash, subject))
             {
                 return challenge;
             }
@@ -153,12 +139,12 @@ public sealed class ApprovalChallengeStore
     private static bool IsApprovedForSubject(
         ApprovalChallenge challenge,
         string planId,
-        string planHash,
+        string pendingPlanHash,
         string subject)
     {
         return string.Equals(challenge.Status, ApprovalConventions.ChallengeStatuses.Approved, StringComparison.Ordinal) &&
                string.Equals(challenge.PlanId, planId, StringComparison.Ordinal) &&
-               FixedTimeStringComparer.Equals(challenge.PlanHash, planHash) &&
+               FixedTimeStringComparer.Equals(challenge.PendingPlanHash, pendingPlanHash) &&
                string.Equals(challenge.RequesterSubject, subject, StringComparison.Ordinal) &&
                string.Equals(challenge.ApproverSubject, subject, StringComparison.Ordinal);
     }

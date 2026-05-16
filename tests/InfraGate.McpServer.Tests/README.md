@@ -4,7 +4,7 @@
 
 ## What It Covers
 
-- `ApprovalStoreTests.cs`: approval hash matching, denied unapproved plans, changed-plan protection, server approval writes, and legacy raw-plan refusal.
+- `ApprovalStoreTests.cs`: grant-bound approval, denied unapproved plans, opaque plan identifiers, old-format refusal, and legacy approved-directory absence.
 - `K8sManifestParserTests.cs`: supported Kubernetes manifests, namespace defaulting, unsupported kinds, missing names, and namespace mismatch rejection.
 - `K8sManagerApplyTests.cs`: approved plan application for scale, restart, delete not-found, pre-apply dry-run, legacy dry-run refusal, and mismatched manifest refusal.
 - `K8sManagerConfigTests.cs`: allowed namespace listing, sorting, empty configuration, and no K8s client dependency.

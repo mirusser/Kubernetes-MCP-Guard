@@ -3,7 +3,7 @@ namespace InfraGate.Approvals;
 public sealed record ApprovalChallenge(
     string Id,
     string PlanId,
-    string PlanHash,
+    string PendingPlanHash,
     string RequesterSubject,
     string? RequesterAuthenticationType,
     DateTimeOffset CreatedAtUtc,
@@ -11,6 +11,6 @@ public sealed record ApprovalChallenge(
     string Status,
     string? ApproverSubject,
     DateTimeOffset? DecidedAtUtc,
-    ApprovalDigest? IntentDigest = null,
-    ApprovalDigest? ReviewDigest = null,
+    ApprovalDigest IntentDigest,
+    ApprovalDigest ReviewDigest,
     ChallengeOutcome? Outcome = null);

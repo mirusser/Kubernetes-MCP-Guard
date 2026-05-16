@@ -901,6 +901,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                 services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
                 services.AddSingleton<GatewayApprovalService>();
                 services.AddHttpContextAccessor();
+                services.AddLogging();
                 services.AddAntiforgery();
                 services.AddGatewayAuthentication(options.Auth);
                 if (approvalOAuthBackchannel is not null)

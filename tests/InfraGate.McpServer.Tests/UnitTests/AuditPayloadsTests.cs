@@ -29,11 +29,6 @@ public sealed class AuditPayloadsTests
         };
         yield return new object[]
         {
-            new PlanApprovedPayload("plan-1", "deadbeef", "gateway_oob", "user@example.com", "challenge-1"),
-            new[] { "planId", "hash", "source", "approverSubject", "challengeId" }
-        };
-        yield return new object[]
-        {
             new PlanAppliedPayload("plan-1", "apply", "ns", "deadbeef"),
             new[] { "planId", "operation", "namespace", "hash" }
         };
@@ -54,11 +49,6 @@ public sealed class AuditPayloadsTests
         };
         yield return new object[]
         {
-            new ApprovalHashMismatchPayload("plan-1", "expected", "actual"),
-            new[] { "planId", "approvedHash", "actualHash" }
-        };
-        yield return new object[]
-        {
             new DryRunFailedPayload("apply", "plan-1", "apply", "ns", ["apps/v1 Deployment ns/nginx-demo"], "schema"),
             new[] { "phase", "planId", "operation", "namespace", "objects", "message" }
         };
@@ -75,27 +65,27 @@ public sealed class AuditPayloadsTests
         yield return new object[]
         {
             new ApprovalChallengeCreatedPayload("ch-1", "plan-1", "deadbeef", "user", "test", expiresAt),
-            new[] { "id", "planId", "planHash", "requesterSubject", "requesterAuthenticationType", "expiresAtUtc" }
+            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "requesterAuthenticationType", "expiresAtUtc" }
         };
         yield return new object[]
         {
             new ApprovalChallengeApprovedPayload("ch-1", "plan-1", "deadbeef", "user", "approver", expiresAt),
-            new[] { "id", "planId", "planHash", "requesterSubject", "approverSubject", "decidedAt" }
+            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "approverSubject", "decidedAt" }
         };
         yield return new object[]
         {
             new ApprovalChallengeDeniedPayload("ch-1", "plan-1", "deadbeef", "user", "approver", expiresAt),
-            new[] { "id", "planId", "planHash", "requesterSubject", "approverSubject", "decidedAt" }
+            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "approverSubject", "decidedAt" }
         };
         yield return new object[]
         {
             new ApprovalChallengeExpiredPayload("ch-1", "plan-1", "deadbeef", "user", expiresAt),
-            new[] { "id", "planId", "planHash", "requesterSubject", "expiresAtUtc" }
+            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "expiresAtUtc" }
         };
         yield return new object[]
         {
             new ApprovalChallengeRejectedPayload("ch-1", "plan-1", "deadbeef", "user", "approver", "subject mismatch"),
-            new[] { "id", "planId", "planHash", "requesterSubject", "approverSubject", "reason" }
+            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "approverSubject", "reason" }
         };
     }
 

@@ -328,9 +328,6 @@ public sealed partial class McpServerIntegrationTests
         Assert.False(string.IsNullOrWhiteSpace(planId));
 
         var pendingPath = Path.Combine(approvalRoot, "pending", $"{planId}.json");
-        var approvedPath = Path.Combine(approvalRoot, "approved", $"{planId}.sha256");
-        var hash = await ApprovalStore.ComputeSha256Async(pendingPath, CancellationToken.None);
-        await File.WriteAllTextAsync(approvedPath, hash, CancellationToken.None);
 
         var json = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
         var envelope = JsonSerializer.Deserialize<PlanEnvelope>(json, JsonWeb);

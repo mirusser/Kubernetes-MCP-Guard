@@ -267,22 +267,21 @@ sequenceDiagram
     Client->>GW: POST /mcp -> apply_approved_plan(planId)<br/>JSON-RPC + JWT Bearer
     GW->>GW: validate JWT + scope
     GW->>Store: validate Approval Grant for planId + subject
-    GW->>Svr: forward apply_approved_plan(planId)<br/>(no token)
-
-    Svr->>Store: read pending plan + Approval Grant
-    Svr->>Store: validate grant expiry + Intent/Review Digests
-    alt grant and digests still match
+    alt gateway grant and subject checks pass
+        GW->>Svr: forward apply_approved_plan(planId)<br/>(no token)
+        Svr->>Store: read pending plan + Approval Grant
+        Svr->>Store: validate grant expiry + Intent/Review Digests
         Svr->>K8s: repeat dry-run<br/>(dryRun=All)
         Svr->>K8s: apply mutation<br/>(server-side apply / patch / delete)
         K8s-->>Svr: Kubernetes API response
         Svr->>Store: write applied plan<br/>+ plan_applied audit event
         Svr-->>GW: apply result + current status
-    else hash changed
-        Svr->>Store: write approval_hash_mismatch audit event
-        Svr-->>GW: refused
+    else grant, subject, or digest validation fails
+        GW->>Store: write apply_denied audit event
+        GW->>GW: format refusal
     end
 
-    GW->>GW: sanitize response, GuardrailAuditStore.Append if needed
+    GW->>GW: sanitize downstream response if present, GuardrailAuditStore.Append if needed
     GW-->>Client: success or refusal
 ```
 

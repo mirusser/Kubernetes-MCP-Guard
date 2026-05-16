@@ -160,7 +160,7 @@ INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Test
 
 ### Tier 5: Safety E2E Tests
 
-**What it covers:** 10+ workflow tests proving the seven safety properties plus RBAC boundary enforcement: full approval flow, plan hash mismatch detection, expired challenge rejection, double-apply refusal, dangerous manifest blocking, modified pending plan detection, wrong-user approval rejection, and dry-run failure at request/apply time.
+**What it covers:** 10+ workflow tests proving the seven safety properties plus RBAC boundary enforcement: full approval flow, review digest mismatch detection, expired challenge rejection, double-apply refusal, dangerous manifest blocking, modified pending plan detection, wrong-user approval rejection, and dry-run failure at request/apply time.
 
 ```bash
 INFRA_GATE_RUN_SAFETY_E2E=1 \

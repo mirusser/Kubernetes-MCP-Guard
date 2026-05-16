@@ -532,8 +532,7 @@ The canonical environment variable, CI/CD, and release configuration reference i
 ├── scripts/
 │   ├── create-demo-kubeconfig.sh         # Bootstrap RBAC & generate kubeconfig
 │   ├── smoke-test-keycloak-release.sh    # Mode D published-image smoke
-│   ├── smoke-test-release.sh             # Mode C DevIssuer fallback smoke
-│   └── approve-plan.sh                   # Legacy manual hash helper; browser grants are normal
+│   └── smoke-test-release.sh             # Mode C DevIssuer fallback smoke
 ├── .kube/                                # Generated kubeconfigs (gitignored)
 ├── .mcp-approvals/                       # Approval files: pending/, grants/, applied/, challenges/ (gitignored)
 └── .mcp-guardrails/                      # Gateway audit log output (gitignored)

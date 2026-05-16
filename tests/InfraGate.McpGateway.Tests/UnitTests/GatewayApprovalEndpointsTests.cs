@@ -205,15 +205,20 @@ public sealed class GatewayApprovalEndpointsTests
         return new ApprovalChallenge(
             Id: "chall-abc123",
             PlanId: "plan-xyz789",
-            PlanHash: "abcdef0123456789",
+            PendingPlanHash: "abcdef0123456789",
             RequesterSubject: "user@example.com",
             RequesterAuthenticationType: "OAuth",
             CreatedAtUtc: FixedTime,
             ExpiresAtUtc: FixedTime.AddHours(1),
             Status: "pending",
             ApproverSubject: null,
-            DecidedAtUtc: null);
+            DecidedAtUtc: null,
+            IntentDigest: CreateDigest("intent"),
+            ReviewDigest: CreateDigest("review"));
     }
+
+    private static ApprovalDigest CreateDigest(string value) =>
+        new(ApprovalConventions.Digests.Sha256, "test.canonicalization.v1", value);
 
     private static IPlanReview CreatePlan(bool canBeApproved = true)
     {

@@ -6,7 +6,7 @@ namespace InfraGate.Approvals;
 
 public sealed class ApprovalStore
 {
-    private const int PlanIdRandomByteCount = 4;
+    private const int PlanIdRandomByteCount = 16;
     private const int GrantIdByteCount = 16;
 
     private readonly ApprovalStoreOptions options;
@@ -22,8 +22,6 @@ public sealed class ApprovalStore
 
     public string PendingDirectory => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.PendingDirectory);
 
-    public string ApprovedDirectory => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.ApprovedDirectory);
-
     public string AppliedDirectory => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.AppliedDirectory);
 
     public string ChallengesDirectory => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.ChallengesDirectory);
@@ -37,7 +35,7 @@ public sealed class ApprovalStore
         Span<byte> bytes = stackalloc byte[PlanIdRandomByteCount];
         RandomNumberGenerator.Fill(bytes);
 
-        return $"{DateTimeOffset.UtcNow.ToString(ApprovalConventions.DateTimeFormats.PlanIdTimestamp)}-{Convert.ToHexString(bytes).ToLowerInvariant()}";
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
     public async Task<ApprovalPlanResult> CreatePlanAsync<TPayload>(
@@ -63,52 +61,7 @@ public sealed class ApprovalStore
                 envelope.ReviewDigest),
             cancellationToken);
 
-        return new ApprovalPlanResult(ToUntypedEnvelope(envelope), pendingPath, GetApprovedPath(envelope.Id), hash);
-    }
-
-    public async Task<ApprovedPlanResult> GetApprovedPlanAsync(string planId, CancellationToken cancellationToken)
-    {
-        if (!IsSafePlanId(planId))
-        {
-            return ApprovedPlanResult.Denied("Plan id contains unsupported characters.");
-        }
-
-        var pendingPath = GetPendingPath(planId);
-        if (!File.Exists(pendingPath))
-        {
-            return ApprovedPlanResult.Denied($"No pending plan exists for '{planId}'.");
-        }
-
-        var appliedPath = GetAppliedPath(planId);
-        if (File.Exists(appliedPath))
-        {
-            return ApprovedPlanResult.Denied($"Plan '{planId}' was already applied.");
-        }
-
-        var approvedPath = GetApprovedPath(planId);
-        if (!File.Exists(approvedPath))
-        {
-            return ApprovedPlanResult.Denied($"Plan '{planId}' is not approved yet.");
-        }
-
-        var actualHash = await ComputeSha256Async(pendingPath, cancellationToken);
-        var approvedHash = (await File.ReadAllTextAsync(approvedPath, cancellationToken)).Trim();
-
-        if (!FixedTimeStringComparer.Equals(actualHash, approvedHash))
-        {
-            await WriteAuditAsync(
-                ApprovalConventions.AuditEvents.ApprovalHashMismatch,
-                new ApprovalHashMismatchPayload(planId, approvedHash, actualHash),
-                cancellationToken);
-
-            return ApprovedPlanResult.Denied($"Plan '{planId}' changed after approval; refusing to apply it.");
-        }
-
-        var read = await ReadEnvelopeAsync(planId, pendingPath, cancellationToken);
-
-        return read.Envelope is null
-            ? ApprovedPlanResult.Denied(read.Message)
-            : ApprovedPlanResult.Approved(read.Envelope, actualHash);
+        return new ApprovalPlanResult(ToUntypedEnvelope(envelope), pendingPath, hash);
     }
 
     public async Task<GrantedPlanResult> GetGrantedPlanAsync(string planId, CancellationToken cancellationToken)
@@ -173,79 +126,7 @@ public sealed class ApprovalStore
 
         return read.Envelope is null
             ? PendingPlanResult.Denied(read.Message)
-            : PendingPlanResult.Found(read.Envelope, pendingPath, GetApprovedPath(planId), actualHash);
-    }
-
-    public Task<ApprovedPlanResult> ApprovePendingPlanAsync(
-        string planId,
-        string expectedHash,
-        CancellationToken cancellationToken) =>
-        ApprovePendingPlanAsync(
-            planId,
-            expectedHash,
-            ApprovalConventions.ApprovalSources.DirectStore,
-            approverSubject: null,
-            challengeId: null,
-            cancellationToken);
-
-    public async Task<ApprovedPlanResult> ApprovePendingPlanAsync(
-        string planId,
-        string expectedHash,
-        string source,
-        string? approverSubject,
-        string? challengeId,
-        CancellationToken cancellationToken)
-    {
-        var pending = await GetPendingPlanAsync(planId, cancellationToken);
-        if (!pending.IsPending || pending.Envelope is null || pending.Hash is null)
-        {
-            return ApprovedPlanResult.Denied(pending.Message);
-        }
-
-        if (!FixedTimeStringComparer.Equals(expectedHash, pending.Hash))
-        {
-            await WriteAuditAsync(
-                ApprovalConventions.AuditEvents.ApprovalHashMismatch,
-                new ApprovalHashMismatchPayload(planId, expectedHash, pending.Hash),
-                cancellationToken);
-
-            return ApprovedPlanResult.Denied($"Plan '{planId}' changed during approval; refusing to apply it.");
-        }
-
-        EnsureDirectories();
-        await File.WriteAllTextAsync(pending.ApprovedPath, pending.Hash, cancellationToken);
-        await WriteAuditAsync(
-            ApprovalConventions.AuditEvents.PlanApproved,
-            new PlanApprovedPayload(planId, pending.Hash, source, approverSubject, challengeId),
-            cancellationToken);
-
-        return ApprovedPlanResult.Approved(pending.Envelope, pending.Hash);
-    }
-
-    public async Task MarkAppliedAsync(
-        PlanEnvelope envelope,
-        string targetNamespace,
-        string hash,
-        CancellationToken cancellationToken)
-    {
-        EnsureDirectories();
-
-        var appliedPath = GetAppliedPath(envelope.Id);
-        var json = JsonSerializer.Serialize(new
-        {
-            envelope.Id,
-            envelope.AdapterId,
-            envelope.Operation,
-            Namespace = targetNamespace,
-            hash,
-            appliedAtUtc = DateTimeOffset.UtcNow
-        }, jsonOptions);
-
-        await File.WriteAllTextAsync(appliedPath, json, cancellationToken);
-        await WriteAuditAsync(
-            ApprovalConventions.AuditEvents.PlanApplied,
-            new PlanAppliedPayload(envelope.Id, envelope.Operation, targetNamespace, hash),
-            cancellationToken);
+            : PendingPlanResult.Found(read.Envelope, pendingPath, actualHash);
     }
 
     public async Task MarkAppliedAsync(
@@ -349,8 +230,6 @@ public sealed class ApprovalStore
 
     public string GetPendingPath(string planId) => Path.Combine(PendingDirectory, planId + ApprovalConventions.Storage.JsonExtension);
 
-    public string GetApprovedPath(string planId) => Path.Combine(ApprovedDirectory, planId + ApprovalConventions.Storage.Sha256Extension);
-
     public string GetGrantPath(string planId) => Path.Combine(GrantsDirectory, planId + ApprovalConventions.Storage.JsonExtension);
 
     public string GetAppliedPath(string planId) => Path.Combine(AppliedDirectory, planId + ApprovalConventions.Storage.JsonExtension);
@@ -367,7 +246,6 @@ public sealed class ApprovalStore
     private void EnsureDirectories()
     {
         Directory.CreateDirectory(PendingDirectory);
-        Directory.CreateDirectory(ApprovedDirectory);
         Directory.CreateDirectory(AppliedDirectory);
         Directory.CreateDirectory(ChallengesDirectory);
         Directory.CreateDirectory(GrantsDirectory);
@@ -431,6 +309,7 @@ public sealed class ApprovalStore
             string.IsNullOrWhiteSpace(envelope.Requester.Subject) ||
             !IsSupportedPolicy(envelope.ApprovalPolicy) ||
             !IsSupportedReusePolicy(envelope.ExecutionReusePolicy) ||
+            IsMissingReviewSurfaceContext(envelope.ReviewSurfaceContext) ||
             IsMissingDigest(envelope.IntentDigest) ||
             IsMissingDigest(envelope.ReviewDigest) ||
             envelope.ValidFromUtc == default ||
@@ -447,6 +326,10 @@ public sealed class ApprovalStore
         !string.Equals(digest.Algorithm, ApprovalConventions.Digests.Sha256, StringComparison.Ordinal) ||
         string.IsNullOrWhiteSpace(digest.Canonicalization) ||
         string.IsNullOrWhiteSpace(digest.Value);
+
+    private static bool IsMissingReviewSurfaceContext(ReviewSurfaceContext reviewSurfaceContext) =>
+        string.IsNullOrWhiteSpace(reviewSurfaceContext.Surface) ||
+        string.IsNullOrWhiteSpace(reviewSurfaceContext.Renderer);
 
     private static bool IsSupportedPolicy(ApprovalPolicy policy) =>
         string.Equals(policy.Type, ApprovalConventions.ApprovalPolicyTypes.SameSubject, StringComparison.Ordinal);
@@ -524,6 +407,7 @@ public sealed class ApprovalStore
             envelope.Requester,
             envelope.ApprovalPolicy,
             envelope.ExecutionReusePolicy,
+            envelope.ReviewSurfaceContext,
             envelope.IntentDigest,
             envelope.ReviewDigest,
             payload);

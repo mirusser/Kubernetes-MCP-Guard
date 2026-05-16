@@ -201,8 +201,9 @@ public sealed class K8sManagerApplyTests
         var hash = await ApprovalStore.ComputeSha256Async(
             context.ApprovalStore.GetPendingPath(planId),
             CancellationToken.None);
-        Directory.CreateDirectory(Path.GetDirectoryName(context.ApprovalStore.GetApprovedPath(planId))!);
-        await File.WriteAllTextAsync(context.ApprovalStore.GetApprovedPath(planId), hash, CancellationToken.None);
+        var legacyApprovedPath = LegacyApprovedPath(context.ApprovalStore, planId);
+        Directory.CreateDirectory(Path.GetDirectoryName(legacyApprovedPath)!);
+        await File.WriteAllTextAsync(legacyApprovedPath, hash, CancellationToken.None);
 
         var result = await context.Manager.ApplyApprovedPlanAsync(planId, CancellationToken.None);
 
@@ -791,6 +792,12 @@ public sealed class K8sManagerApplyTests
             ]
           }
           """;
+
+    private static string LegacyApprovedPath(ApprovalStore store, string planId) =>
+        Path.Combine(
+            Path.GetDirectoryName(store.PendingDirectory)!,
+            "approved",
+            planId + ApprovalConventions.Storage.Sha256Extension);
 
     private const string DeleteManifest = """
                                           apiVersion: v1
