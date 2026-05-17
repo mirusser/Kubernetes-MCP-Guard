@@ -2,6 +2,7 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.Observability;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
@@ -11,9 +12,10 @@ var options = McpGatewayOptions.FromEnvironment();
 options.ValidateProductionSafety();
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Logging.AddConsole(options =>
+builder.AddInfraGateObservability(opt => 
 {
-    options.LogToStandardErrorThreshold = LogLevel.Trace;
+    opt.WriteToConsole = true;
+    opt.ConsoleToStandardError = false;
 });
 
 if (string.IsNullOrWhiteSpace(builder.Configuration[McpGatewayConventions.ConfigurationKeys.Urls]) &&

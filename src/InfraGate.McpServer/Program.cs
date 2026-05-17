@@ -1,4 +1,5 @@
 using InfraGate.McpServer;
+using InfraGate.Observability;
 using k8s;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -10,15 +11,12 @@ var builder = Host.CreateApplicationBuilder(args);
 
 var mcpOptions = K8SMcpOptions.FromEnvironment();
 
-builder.Logging.AddConsole(options =>
+builder.AddInfraGateObservability(opt => 
 {
-    options.LogToStandardErrorThreshold = LogLevel.Trace;
+    opt.WriteToConsole = true;
+    opt.ConsoleToStandardError = true;
+    opt.FilePath = mcpOptions.LogPath;
 });
-
-if (!string.IsNullOrWhiteSpace(mcpOptions.LogPath))
-{
-    builder.Logging.AddProvider(new StreamWriterLoggerProvider(mcpOptions.LogPath));
-}
 
 mcpOptions.ValidateProductionSafety();
 builder.Services.AddSingleton(mcpOptions);

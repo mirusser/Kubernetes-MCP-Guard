@@ -19,6 +19,7 @@
     <ProjectReference Include="..\InfraGate.KubernetesAdapter\InfraGate.KubernetesAdapter.csproj" />
     <ProjectReference Include="..\InfraGate.McpGateway.Auth\InfraGate.McpGateway.Auth.csproj" />
     <ProjectReference Include="..\InfraGate.RuntimeSafety\InfraGate.RuntimeSafety.csproj" />
+    <ProjectReference Include="..\InfraGate.Observability\InfraGate.Observability.csproj" />
   </ItemGroup>
 
 </Project>

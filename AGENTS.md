@@ -107,9 +107,11 @@ Load only the project README you need:
   - [InfraGate.Approvals](src/InfraGate.Approvals/README.md): shared approval storage, challenge lifecycle, audit event conventions, and typed audit payloads.
   - [InfraGate.KubernetesAdapter](src/InfraGate.KubernetesAdapter/README.md): Kubernetes-specific approval payload and evidence records used by the generic approval flow.
   - [InfraGate.RuntimeSafety](src/InfraGate.RuntimeSafety/README.md): runtime mode resolution, production safety validation, and environment variable conventions.
+  - [InfraGate.Observability](src/InfraGate.Observability/README.md): shared Serilog structured logging configuration for the MCP Gateway and MCP Server.
 - Test projects:
   - [InfraGate.McpServer.Tests](tests/InfraGate.McpServer.Tests/README.md): server unit tests and opt-in Kubernetes integration coverage.
   - [InfraGate.McpGateway.Tests](tests/InfraGate.McpGateway.Tests/README.md): gateway auth, guardrail, sanitization, audit, and forwarding tests.
   - [InfraGate.McpGateway.KeycloakTests](tests/InfraGate.McpGateway.KeycloakTests/README.md): opt-in Keycloak Testcontainers integration tests covering real OIDC discovery, JWKS validation, and token acquisition through the gateway's JWT bearer pipeline.
   - [InfraGate.RuntimeSafety.Tests](tests/InfraGate.RuntimeSafety.Tests/README.md): unit tests for runtime mode detection, production safety validation, and environment variable resolution.
+  - [InfraGate.Observability.Tests](tests/InfraGate.Observability.Tests/README.md): unit tests for console and file sink logging configuration.
   - [InfraGate.Safety.E2E.Tests](tests/InfraGate.Safety.E2E.Tests/README.md): opt-in end-to-end tests proving the seven approval-flow safety properties through real OAuth (Keycloak in a container), gateway TestHost, McpServer subprocess, and a developer-provided Kubernetes cluster.

@@ -3,6 +3,7 @@
     <Project Path="src/InfraGate.Approvals/InfraGate.Approvals.csproj" />
     <Project Path="src/InfraGate.KubernetesAdapter/InfraGate.KubernetesAdapter.csproj" />
     <Project Path="src/InfraGate.RuntimeSafety/InfraGate.RuntimeSafety.csproj" />
+    <Project Path="src/InfraGate.Observability/InfraGate.Observability.csproj" />
     <Project Path="src/InfraGate.RunProfiles/InfraGate.RunProfiles.csproj" />
     <Project Path="src/InfraGate.McpGateway.Auth/InfraGate.McpGateway.Auth.csproj" />
     <Project Path="src/InfraGate.McpGateway/InfraGate.McpGateway.csproj" />
@@ -13,6 +14,7 @@
     <Project Path="tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj" />
     <Project Path="tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj" />
     <Project Path="tests/InfraGate.RuntimeSafety.Tests/InfraGate.RuntimeSafety.Tests.csproj" />
+    <Project Path="tests/InfraGate.Observability.Tests/InfraGate.Observability.Tests.csproj" />
     <Project Path="tests/InfraGate.RunProfiles.Tests/InfraGate.RunProfiles.Tests.csproj" />
     <Project Path="tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj" />
   </Folder>
