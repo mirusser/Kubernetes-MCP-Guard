@@ -36,7 +36,7 @@ public sealed partial class K8sManager
     }
 
     private async Task<DryRunResult> DryRunDeleteManifestAsync(
-        IReadOnlyList<K8sObjectRef> objects,
+        K8sObjectRef[] objects,
         CancellationToken cancellationToken)
     {
         try
@@ -55,7 +55,7 @@ public sealed partial class K8sManager
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Server-side dry-run delete failed for {ObjectCount} object(s)", objects.Count);
+            logger.LogWarning(ex, "Server-side dry-run delete failed for {ObjectCount} object(s)", objects.Length);
             return DryRunResult.Failed(FormatApiException(DryRunFailedMessage, ex));
         }
     }

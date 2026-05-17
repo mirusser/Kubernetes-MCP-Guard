@@ -138,24 +138,36 @@ grant_container_read() {
 prepare_compose_persistence_dirs() {
   local approval_dir="${ROOT}/.mcp-approvals"
   local guardrail_dir="${ROOT}/.mcp-guardrails"
+  local dataprotection_dir="${ROOT}/.mcp-dataprotection-keys"
+  local logs_dir="${ROOT}/.mcp-logs"
 
-  mkdir -p "${approval_dir}" "${guardrail_dir}"
-  chmod -R u+rwX,go-rwx "${approval_dir}" "${guardrail_dir}"
+  # Pre-create approval subdirectories so the container finds them host-owned
+  # rather than creating them as UID 1654, which would break chmod on re-runs.
+  mkdir -p \
+    "${approval_dir}/pending" "${approval_dir}/applied" \
+    "${approval_dir}/grants" "${approval_dir}/challenges" \
+    "${guardrail_dir}" "${dataprotection_dir}" "${logs_dir}"
 
+  # Only chmod content we own; container-created files (UID 1654) are skipped.
+  find "${approval_dir}" "${guardrail_dir}" "${dataprotection_dir}" "${logs_dir}" \
+    -user "$(id -u)" -exec chmod u+rwX,go-rwx {} +
+
+  # Apply ACLs to directories only; files created by the container (UID 1654)
+  # are already accessible to that UID and setfacl would fail on them.
   if command -v setfacl >/dev/null 2>&1 &&
-    setfacl -R -m "u:${GATEWAY_APP_UID}:rwx" "${approval_dir}" "${guardrail_dir}" &&
-    find "${approval_dir}" "${guardrail_dir}" -type d -exec setfacl -m "d:u:${GATEWAY_APP_UID}:rwx" {} +; then
+    find "${approval_dir}" "${guardrail_dir}" "${dataprotection_dir}" "${logs_dir}" \
+      -type d -exec setfacl -m "u:${GATEWAY_APP_UID}:rwx,d:u:${GATEWAY_APP_UID}:rwx" {} +; then
     return
   fi
 
-  if chown -R "${GATEWAY_APP_UGID}" "${approval_dir}" "${guardrail_dir}" 2>/dev/null; then
-    chmod -R u+rwX,go-rwx "${approval_dir}" "${guardrail_dir}"
+  if chown -R "${GATEWAY_APP_UGID}" "${approval_dir}" "${guardrail_dir}" "${dataprotection_dir}" "${logs_dir}" 2>/dev/null; then
+    chmod -R u+rwX,go-rwx "${approval_dir}" "${guardrail_dir}" "${dataprotection_dir}" "${logs_dir}"
     return
   fi
 
   if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-    sudo chown -R "${GATEWAY_APP_UGID}" "${approval_dir}" "${guardrail_dir}"
-    sudo chmod -R u+rwX,go-rwx "${approval_dir}" "${guardrail_dir}"
+    sudo chown -R "${GATEWAY_APP_UGID}" "${approval_dir}" "${guardrail_dir}" "${dataprotection_dir}" "${logs_dir}"
+    sudo chmod -R u+rwX,go-rwx "${approval_dir}" "${guardrail_dir}" "${dataprotection_dir}" "${logs_dir}"
     return
   fi
 
@@ -163,10 +175,12 @@ prepare_compose_persistence_dirs() {
 Could not grant the gateway container UID ${GATEWAY_APP_UID} write access to:
   ${approval_dir}
   ${guardrail_dir}
+  ${dataprotection_dir}
+  ${logs_dir}
 
 Install setfacl, run this script with sudo, or run:
-  sudo chown -R ${GATEWAY_APP_UGID} "${approval_dir}" "${guardrail_dir}"
-  sudo chmod -R u+rwX,go-rwx "${approval_dir}" "${guardrail_dir}"
+  sudo chown -R ${GATEWAY_APP_UGID} "${approval_dir}" "${guardrail_dir}" "${dataprotection_dir}" "${logs_dir}"
+  sudo chmod -R u+rwX,go-rwx "${approval_dir}" "${guardrail_dir}" "${dataprotection_dir}" "${logs_dir}"
 EOF
   exit 1
 }

@@ -4,17 +4,18 @@
 
 ## Runtime Flow
 
-- `ApprovalStore.cs` persists generic plan envelopes and approval grants under `K8S_MCP_APPROVAL_ROOT`, computes pending-plan hashes for challenge drift detection, validates Intent Digest and Review Digest bindings before execution, refuses old raw-plan files with a re-request message, and writes approval audit events to `audit.jsonl`.
+- `ApprovalStore.cs` persists generic plan envelopes and approval grants under `K8S_MCP_APPROVAL_ROOT`, detects challenge drift by comparing stored plan-file bytes, validates Intent Digest and Review Digest bindings before execution, refuses old raw-plan files with a re-request message, and writes approval audit events to `audit.jsonl`.
 - `PlanEnvelope.cs`, `PlanEnvelope.Typed.cs`, and `PlanRequester.cs` model the generic approval envelope and the requester identity bound to it.
-- `ApprovalChallengeStore.cs` creates, persists, updates, and queries challenge records — each tied to a pending-plan hash, expected digests, a requester subject, and a configurable TTL.
+- `ApprovalChallengeStore.cs` creates, persists, updates, and queries challenge records — each tied to a plan envelope, expected intent and review digests, a requester subject, and a configurable TTL.
 - `ApprovalConventions.cs` holds all shared constants: environment variable names, on-disk directory names, audit event names, challenge statuses, approval source labels, and diff change types.
 - `AuditPayloads/PlanAuditPayloads.cs` and `AuditPayloads/ChallengeAuditPayloads.cs` define strongly-typed positional records for every approval-audit event, replacing the old anonymous types and locking the JSON wire shape tested by `AuditPayloadsTests`.
-- `FixedTimeStringComparer.cs` provides constant-time SHA-256 comparison for drift detection.
-- `ApprovalChallenge.cs` models the out-of-band approval ticket (id, pending-plan hash, digest bindings, requester, expiry, status, approver, challenge outcome). `ApprovalGrant.cs` models durable execution authorization.
+- `FixedTimeStringComparer.cs` provides constant-time SHA-256 comparison for drift detection and digest verification.
+- `ApprovalChallenge.cs` models the out-of-band approval ticket (id, plan envelope reference, intent/review digest bindings, requester, expiry, status, approver, challenge outcome). `ApprovalGrant.cs` models durable execution authorization.
 
 ## Important Contracts
 
-- The approval root directory (`K8S_MCP_APPROVAL_ROOT`) is shared between the gateway and the downstream server. Every write goes through this directory.
+- The approval root directory (`K8S_MCP_APPROVAL_ROOT`) is the gateway-owned durable approval store for pending plans, grants, applied markers, challenges, and audit events.
+- `IDomainPlanBuilder`, `IDomainPlanExecutor`, `IToolCaller`, `PlanBuildResult`, and `DomainPlanExecutionResult` define the generic seams between the approval core and a domain adapter.
 - Pending plan files are generic envelopes. Domain-specific mutation intent and review evidence live inside the adapter payload; Kubernetes payload types live in `InfraGate.KubernetesAdapter`.
 - Audit events use names from `ApprovalConventions.AuditEvents`. Payloads are typed `IPlanAuditPayload` or `IChallengeAuditPayload` records; their JSON keys under `JsonSerializerDefaults.Web` are the contract.
 - Hash and digest comparison uses `FixedTimeStringComparer` where stored integrity values are compared.

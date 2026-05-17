@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using InfraGate.Approvals;
 using InfraGate.McpServer;
 using k8s;
 
@@ -8,8 +7,6 @@ namespace InfraGate.McpServer.Tests.UnitTests;
 public sealed class K8sToolsTests
 {
     private const string DemoNamespace = "demo";
-    private const string RequesterSubject = "test-requester";
-    private const string RequesterAuthenticationType = "test";
 
     [Fact]
     public async Task GetAllowedNamespaces_Delegates()
@@ -125,140 +122,12 @@ public sealed class K8sToolsTests
     }
 
     [Fact]
-    public async Task RequestApplyManifest_Delegates()
+    public void CheckLiveDrift_DoesNotExposePlanId()
     {
-        await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
-        var manager = CreateManager(api);
+        var method = typeof(K8sTools).GetMethod(nameof(K8sTools.CheckLiveDrift));
 
-        var result = await K8sTools.RequestApplyManifest(
-            manager,
-            DemoNamespace,
-            DeploymentManifest,
-            RequesterSubject,
-            RequesterAuthenticationType);
-
-        Assert.Contains("PlanId:", result);
-    }
-
-    [Fact]
-    public async Task RequestApplyManifest_MissingRequesterSubject_ReturnsError()
-    {
-        await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
-        var manager = CreateManager(api);
-
-        var result = await K8sTools.RequestApplyManifest(manager, DemoNamespace, DeploymentManifest);
-
-        Assert.Contains("Requester subject is required", result);
-    }
-
-    [Fact]
-    public async Task RequestDeleteManifest_Delegates()
-    {
-        await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
-        var manager = CreateManager(api);
-
-        var result = await K8sTools.RequestDeleteManifest(
-            manager,
-            DemoNamespace,
-            DeploymentManifest,
-            RequesterSubject,
-            RequesterAuthenticationType);
-
-        Assert.Contains("PlanId:", result);
-    }
-
-    [Fact]
-    public async Task RequestScaleDeployment_Delegates()
-    {
-        await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
-        var manager = CreateManager(api);
-
-        var result = await K8sTools.RequestScaleDeployment(
-            manager,
-            DemoNamespace,
-            "demo",
-            2,
-            RequesterSubject,
-            RequesterAuthenticationType);
-
-        Assert.Contains("PlanId:", result);
-    }
-
-    [Fact]
-    public async Task RequestRestartDeployment_Delegates()
-    {
-        await using var api = new TestKubernetesApi(_ => TestResponse.Json("{}"));
-        var manager = CreateManager(api);
-
-        var result = await K8sTools.RequestRestartDeployment(
-            manager,
-            DemoNamespace,
-            "demo",
-            RequesterSubject,
-            RequesterAuthenticationType);
-
-        Assert.Contains("PlanId:", result);
-    }
-
-    [Fact]
-    public async Task RequestSetDeploymentImage_Delegates()
-    {
-        await using var api = new TestKubernetesApi(_ => TestResponse.Json(DeploymentJson()));
-        var manager = CreateManager(api);
-
-        var result = await K8sTools.RequestSetDeploymentImage(
-            manager,
-            DemoNamespace,
-            "demo",
-            "nginx",
-            "nginx:1.28-alpine",
-            RequesterSubject,
-            RequesterAuthenticationType);
-
-        Assert.Contains("PlanId:", result);
-    }
-
-    [Fact]
-    public async Task ApplyApprovedPlan_Delegates()
-    {
-        await using var api = new TestKubernetesApi(request => request.Path switch
-        {
-            "/apis/apps/v1/namespaces/demo/deployments/demo/scale" => TestResponse.Json(ScaleJson(2)),
-            "/apis/apps/v1/namespaces/demo/deployments/demo" => TestResponse.Json(DeploymentJson(replicas: 2)),
-            "/apis/apps/v1/namespaces/demo/deployments" => TestResponse.Json(EmptyListJson("apps/v1", "DeploymentList")),
-            "/api/v1/namespaces/demo/services" => TestResponse.Json(EmptyListJson("v1", "ServiceList")),
-            "/api/v1/namespaces/demo/configmaps" => TestResponse.Json(EmptyListJson("v1", "ConfigMapList")),
-            "/api/v1/namespaces/demo/pods" => TestResponse.Json(EmptyListJson("v1", "PodList")),
-            "/apis/apps/v1/namespaces/demo/replicasets" => TestResponse.Json(EmptyListJson("apps/v1", "ReplicaSetList")),
-            _ => TestResponse.Json("{}")
-        });
-        var (manager, store) = CreateManagerContext(api);
-        var requestText = await manager.RequestScaleDeploymentAsync(
-            DemoNamespace,
-            "demo",
-            2,
-            RequesterSubject,
-            RequesterAuthenticationType,
-            CancellationToken.None);
-        var planId = ParsePlanId(requestText);
-        await PreApprovePlanAsync(store, planId);
-
-        var result = await K8sTools.ApplyApprovedPlan(manager, planId);
-
-        Assert.Contains("Applied plan:", result);
-    }
-
-    [Theory]
-    [InlineData(nameof(K8sTools.RequestApplyManifest))]
-    [InlineData(nameof(K8sTools.ApplyApprovedPlan))]
-    public void ToolMethod_ForceApplyArgument_IsNotExposed(string methodName)
-    {
-        var method = typeof(K8sTools).GetMethod(methodName) ??
-                     throw new InvalidOperationException($"Tool method '{methodName}' was not found.");
-        var parameterNames = method.GetParameters().Select(parameter => parameter.Name).ToArray();
-
-        Assert.DoesNotContain(parameterNames, name => string.Equals(name, "force", StringComparison.OrdinalIgnoreCase));
-        Assert.DoesNotContain(parameterNames, name => string.Equals(name, "allowForceApply", StringComparison.OrdinalIgnoreCase));
+        Assert.NotNull(method);
+        Assert.DoesNotContain(method.GetParameters(), parameter => parameter.Name == "planId");
     }
 
     private static K8sManager CreateManager(TestKubernetesApi? api = null)
@@ -270,39 +139,8 @@ public sealed class K8sToolsTests
         var client = api is null
             ? null
             : new Kubernetes(new KubernetesClientConfiguration { Host = api.Url, SkipTlsVerify = true });
-        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client!, NullLogger<K8sManager>.Instance);
+        return new K8sManager(options, client!, NullLogger<K8sManager>.Instance);
     }
-
-    private static (K8sManager Manager, ApprovalStore Store) CreateManagerContext(TestKubernetesApi api)
-    {
-        var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
-        var options = new K8SMcpOptions(
-            new HashSet<string>(StringComparer.Ordinal) { DemoNamespace },
-            root);
-        var store = new ApprovalStore(new ApprovalStoreOptions(root));
-        var client = new Kubernetes(new KubernetesClientConfiguration { Host = api.Url, SkipTlsVerify = true });
-        return (new K8sManager(options, store, client, NullLogger<K8sManager>.Instance), store);
-    }
-
-    private static async Task PreApprovePlanAsync(ApprovalStore store, string planId)
-    {
-        var pending = await store.GetPendingPlanAsync(planId, CancellationToken.None);
-        if (!pending.IsPending || pending.Envelope is null)
-        {
-            throw new InvalidOperationException(pending.Message);
-        }
-
-        await store.CreateGrantAsync(
-            pending.Envelope,
-            RequesterSubject,
-            sourceChallengeId: "test-challenge",
-            CancellationToken.None);
-    }
-
-    private static string ParsePlanId(string text) =>
-        text.Split(Environment.NewLine)
-            .Single(line => line.StartsWith("PlanId:", StringComparison.Ordinal))
-            ["PlanId: ".Length..];
 
     private static string DeploymentJson(int replicas = 1) =>
         $$"""
@@ -374,17 +212,6 @@ public sealed class K8sToolsTests
         }
         """;
 
-    private static string ScaleJson(int replicas) =>
-        $$"""
-          {
-            "apiVersion": "autoscaling/v1",
-            "kind": "Scale",
-            "metadata": { "name": "demo", "namespace": "demo" },
-            "spec": { "replicas": {{replicas}} },
-            "status": { "replicas": {{replicas}} }
-          }
-          """;
-
     private static string EmptyListJson(string apiVersion, string kind) =>
         $$"""
           {
@@ -402,24 +229,4 @@ public sealed class K8sToolsTests
           "items": []
         }
         """;
-
-    private const string DeploymentManifest = """
-                                              apiVersion: apps/v1
-                                              kind: Deployment
-                                              metadata:
-                                                name: demo
-                                              spec:
-                                                replicas: 1
-                                                selector:
-                                                  matchLabels:
-                                                    app: demo
-                                                template:
-                                                  metadata:
-                                                    labels:
-                                                      app: demo
-                                                  spec:
-                                                    containers:
-                                                      - name: nginx
-                                                        image: nginx:1.27-alpine
-                                              """;
 }

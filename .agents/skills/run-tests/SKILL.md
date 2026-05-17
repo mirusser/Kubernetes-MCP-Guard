@@ -15,6 +15,8 @@ description: Run all available tests in the repository, correctly accounting for
 | **4** | Gateway integration | + K8s cluster + kubeconfig | `INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --filter "Category!=Keycloak"` |
 | **5** | Safety E2E | + Docker + K8s + nginx-demo | `INFRA_GATE_RUN_SAFETY_E2E=1 KUBECONFIG=... dotnet test tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj --filter "Category=SafetyE2E"` |
 | **6** | Coverage | .NET 10 (+ Docker for full) | `./scripts/coverage.sh` |
+| **7** | Compose smoke (release) | Docker + K8s + kubeconfig + compose setup | `TAG=latest ./scripts/smoke-test-release.sh` |
+| **8** | Compose smoke (local build) | Docker + K8s + kubeconfig + compose setup | `./scripts/smoke-test-local.sh` |
 
 **One-liner to run everything your machine supports:**
 
@@ -66,7 +68,7 @@ Two test projects use `Testcontainers.Keycloak` which starts a Keycloak containe
 
 ### Tier 1: Unit Tests
 
-**What it covers:** All unit tests across 6 test projects that don't need Docker or K8s. Also includes DevIssuer, RuntimeSafety, and approval store tests.
+**What it covers:** All unit tests that don't need Docker or K8s. Also includes RuntimeSafety and approval store tests.
 
 ```bash
 dotnet test InfraGate.slnx --filter "Category!=Keycloak"
@@ -76,7 +78,6 @@ dotnet test InfraGate.slnx --filter "Category!=Keycloak"
 - `InfraGate.McpServer.Tests` (253 unit tests)
 - `InfraGate.McpGateway.Tests` (166 unit tests)
 - `InfraGate.RuntimeSafety.Tests`
-- `InfraGate.DevIssuer.Tests`
 
 **Prerequisites:**
 - .NET 10 SDK (`dotnet --version` must report 10.x)
@@ -208,6 +209,66 @@ kubectl --kubeconfig .kube/mcp-nginx-demo.config apply -f examples/failing-deplo
 
 ---
 
+### Tier 7: Compose Smoke Test (Released Image)
+
+**What it covers:** Boots the full Keycloak + Gateway compose stack using the published gateway image (`compose.release.yaml`). Verifies:
+- Keycloak OIDC discovery is reachable
+- Gateway HTTP server responds to `/mcp`
+- All host-side volume directories (`.mcp-approvals`, `.mcp-guardrails`, `.mcp-dataprotection-keys`) exist
+- Gateway logs contain no filesystem permission errors (DataProtection key-ring, `UnauthorizedAccessException`, `Permission denied`)
+- Unauthenticated `/mcp` returns 401 with `resource_metadata` in `WWW-Authenticate`
+- A real Keycloak token is acquired and accepted by the gateway auth layer
+
+```bash
+TAG=latest ./scripts/smoke-test-release.sh
+```
+
+Override the tag to test a specific release:
+```bash
+TAG=vX.Y.Z ./scripts/smoke-test-release.sh
+```
+
+**Prerequisites:**
+1. Docker daemon running (`docker compose version` succeeds)
+2. `curl` and `jq` available
+3. `./scripts/create-demo-kubeconfig.sh --compose` must have been run first
+4. K8s cluster reachable through `.kube/mcp-nginx-demo.compose.config`
+5. Pull access to `ghcr.io/mirusser/kubernetes-mcp-guard-gateway` and `quay.io/keycloak/keycloak:26.6.1`
+
+**Expected output:**
+```
+OK: release smoke test passed for tag 'latest'.
+```
+
+**CI equivalent:** none currently (local-only smoke test). Typically runs for ~90s after image pull.
+
+---
+
+### Tier 8: Compose Smoke Test (Local Build)
+
+**What it covers:** Same verifications as tier 7, but builds the gateway image from source via `compose.yaml` (`docker compose up --build`) instead of pulling the published image. Tests the full Docker build pipeline in addition to the runtime smoke checks. Includes `.mcp-logs` in the host volume directory check.
+
+```bash
+./scripts/smoke-test-local.sh
+```
+
+**Prerequisites:**
+1. Docker daemon running with BuildKit/buildx support (`docker compose build` succeeds)
+2. `curl` and `jq` available
+3. `./scripts/create-demo-kubeconfig.sh --compose` must have been run first
+4. K8s cluster reachable through `.kube/mcp-nginx-demo.compose.config`
+5. Pull access to `quay.io/keycloak/keycloak:26.6.1`
+6. Source tree must build (Docker build runs `dotnet restore` and `dotnet publish` inside the container)
+
+**Expected output:**
+```
+OK: local-build smoke test passed.
+```
+
+**CI equivalent:** none currently (local-only smoke test). Typically runs for ~3-5 minutes including the Docker build.
+
+---
+
 ## Prerequisites Verification
 
 Run these checks before running tests:
@@ -237,6 +298,19 @@ echo "INFRA_GATE_RUN_GATEWAY_INTEGRATION=$INFRA_GATE_RUN_GATEWAY_INTEGRATION"  #
 echo "INFRA_GATE_RUN_SAFETY_E2E=$INFRA_GATE_RUN_SAFETY_E2E"          # should be 1 for tier 5
 ```
 
+**Compose smoke prerequisites (for tiers 7, 8):**
+
+```bash
+# Compose setup (populates kubeconfig and persistence dirs)
+./scripts/create-demo-kubeconfig.sh --compose
+# Expected: creates .kube/mcp-nginx-demo.compose.config and directories under .mcp-*
+
+# Verify compose file is valid
+docker compose -f deploy/local-oauth/compose.yaml config >/dev/null
+docker compose -f deploy/local-oauth/compose.release.yaml config >/dev/null
+# Expected: no errors
+```
+
 ---
 
 ## CI Parity
@@ -249,6 +323,8 @@ echo "INFRA_GATE_RUN_SAFETY_E2E=$INFRA_GATE_RUN_SAFETY_E2E"          # should be
 | `safety-e2e.yml` | Manual `workflow_dispatch` only | 5 | `Category=SafetyE2E` |
 | `sonar.yml` | Every PR/push `main`/`dev` | 6 | `Category!=Keycloak` |
 
+Tiers 7 and 8 (compose smoke) are local-only smoke tests run against the full Keycloak + Gateway compose stack. They are not part of any CI workflow — run them before merging if your changes touch the Dockerfile, compose files, volume mounts, `create-demo-kubeconfig.sh`, or DataProtection setup.
+
 Tiers 3, 4, and 5 require real infrastructure (K8s, Docker) and should be verified locally before merging if your changes touch the approval pipeline, Kubernetes adapter, or gateway auth.
 
 ---
@@ -260,7 +336,8 @@ Tiers 3, 4, and 5 require real infrastructure (K8s, Docker) and should be verifi
 1. Always runs tier 1 (unit tests)
 2. Detects Docker → runs tier 2 (Keycloak)
 3. Detects K8s cluster + kubeconfig → runs tiers 3, 4, 5
-4. Reports a summary of what ran, what passed, and what was skipped
+4. Detects Docker + K8s + compose kubeconfig → runs tier 7 (release smoke)
+5. Reports a summary of what ran, what passed, and what was skipped
 
 Run it:
 ```bash

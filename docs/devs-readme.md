@@ -6,8 +6,7 @@ Kubernetes MCP Guard is a .NET 10 MCP gateway/server for AI-safe Kubernetes oper
 
 - `src/InfraGate.McpServer` is a .NET 10 stdio Kubernetes MCP server using the official C# MCP SDK.
 - `src/InfraGate.McpGateway` is a local HTTP MCP gateway that fronts the MCP server with OAuth auth, browser approval pages, and warn+redact prompt-injection guardrails.
-- `deploy/mode-d` is the primary local OAuth path: Keycloak imports `deploy/keycloak/infra-gate-realm.json` with MCP clients, loopback DCR policy, demo users, and the approval UI client.
-- `src/InfraGate.DevIssuer` is a deprecated dev-only localhost OAuth issuer retained as a fallback and compatibility test target.
+- `deploy/local-oauth` is the local OAuth path: Keycloak imports `deploy/keycloak/infra-gate-realm.json` with MCP clients, loopback DCR policy, demo users, and the approval UI client.
 - The MCP server uses the Kubernetes API through `KubernetesClient`, not runtime `kubectl` process execution.
 - Mutating actions are two-step: request a plan through MCP, then approve it in the Gateway browser UI before changing Kubernetes.
 - The server allows only configured namespaces. Manifest apply/delete is limited to `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap`; other mutating tools are narrow Deployment operations.
@@ -68,23 +67,29 @@ Expected: `yes`, `yes`, `yes`, `yes`, `no`, then `no`.
 
 ### Run Containerized OAuth
 
-This is the recommended local OAuth path. See [Mode D in the setup guide](setup-guide.md#mode-d--keycloak--gateway-full-oauth-no-ephemeral-issuer) for full details, Codex CLI config, and tradeoff notes.
+This is the supported local OAuth path. See [Keycloak local OAuth in the setup guide](setup-guide.md#keycloak-local-oauth) for full details, Codex CLI config, and tradeoff notes.
+
+Compose files under `deploy/local-oauth/` and `deploy/compose/` use `${VAR}` substitution; generate the env file from the canonical run-profiles YAML first.
 
 For published images (no local build):
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
-TAG=latest docker compose -f deploy/mode-d/compose.release.yaml up
+./scripts/generate-env.sh smoke-release
+TAG=latest docker compose --env-file deploy/generated/smoke-release.env \
+  -f deploy/local-oauth/compose.release.yaml up
 ```
 
 For building from source:
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
-docker compose -f deploy/mode-d/compose.yaml up --build
+./scripts/generate-env.sh local-compose
+docker compose --env-file deploy/generated/local-compose.env \
+  -f deploy/local-oauth/compose.yaml up --build
 ```
 
-Mode C (`deploy/mode-c`) still runs DevIssuer, but treat it as a deprecated fallback when debugging DevIssuer-specific compatibility behavior.
+`scripts/generate-env.sh` compiles the profile from `deploy/run-profiles.yaml` and supplies absolute host paths required by Docker Compose volume bind-mounts. The smoke test scripts (`scripts/smoke-test-local.sh`, `scripts/smoke-test-release.sh`) run both steps automatically.
 
 ### Docker image publishing
 
@@ -96,7 +101,7 @@ The deployment triggers are separate:
 - Push to `dev`: pushes `:dev` images, then deploys `deploy/compose/development.yaml` on the `development` environment's self-hosted GitHub Actions runner. Run `sudo ./scripts/setup-development-deploy.sh` once to prepare the machine, start local Keycloak, and verify host/container reachability; the optional GitHub Environment variable `DEPLOY_PATH` overrides the workflow default `/opt/infra-gate`.
 - Push a `v*` tag: pushes release images including the raw tag (for example `:v1.0.0`). The Docker workflow does not deploy production for now.
 
-The development deployment defaults to a local Keycloak OIDC provider at `http://127.0.0.1:3010/realms/infra-gate`; any production deployment should use a real OIDC provider. `InfraGate.DevIssuer` remains local/demo only through the `deploy/mode-c` Compose files.
+The development deployment defaults to a local Keycloak OIDC provider at `http://127.0.0.1:3010/realms/infra-gate`; any production deployment should use a real OIDC provider.
 
 Trigger a push:
 
@@ -109,33 +114,29 @@ Or trigger manually from Actions → Docker workflow → Run workflow → check 
 Required repository variables and secrets are listed in the [configuration reference](configuration.md).
 Development runtime configuration is kept in `/etc/infra-gate/development.env` and created locally by `scripts/setup-development-deploy.sh`. GitHub Actions copies only the development Compose file and never writes kubeconfigs or OIDC runtime settings.
 
-Images built: `kubernetes-mcp-guard-devissuer`, `kubernetes-mcp-guard-gateway`.
+Image built: `kubernetes-mcp-guard-gateway`.
 
 ### Run the HTTP MCP gateway
 
-The source-run gateway listens on `http://127.0.0.1:3001/mcp` by default, accepts OAuth JWT access tokens, serves browser approval pages under `/approvals`, and starts the downstream stdio server itself.
-
-For local source-only OAuth/Codex login without starting Keycloak, the repo-local DevIssuer still works as a deprecated fallback:
+The source-run gateway listens on `http://127.0.0.1:3001/mcp` by default, accepts OAuth JWT access tokens, serves browser approval pages under `/approvals`, and starts the downstream stdio server itself. For source-run OAuth debugging, start only Keycloak through the Compose path first:
 
 ```bash
-export INFRA_GATE_ENVIRONMENT=Development
-dotnet run --project src/InfraGate.DevIssuer/InfraGate.DevIssuer.csproj
+docker compose -f deploy/local-oauth/compose.yaml up keycloak
 ```
 
-The dev issuer listens on `http://127.0.0.1:3011` by default, exposes OAuth/OIDC discovery metadata, dynamic client registration, authorization-code + PKCE, and JWKS endpoints, and issues ephemeral JWT access tokens for `http://127.0.0.1:3001/mcp` with `mcp:tools`. It is deprecated for local end-to-end development in favor of Keycloak Mode D, remains localhost-only, and resets registrations, authorization codes, and signing keys on restart. See [configuration.md](configuration.md) for environment variable defaults and production guidance.
-
-Then start the gateway with OAuth enabled:
+Then run the gateway with OAuth enabled:
 
 ```bash
 export REPO_ROOT="$(pwd)"
 export INFRA_GATE_ENVIRONMENT=Development
-export INFRA_GATE_OAUTH_AUTHORITY="http://127.0.0.1:3011"
+export INFRA_GATE_OAUTH_AUTHORITY="http://127.0.0.1:3010/realms/infra-gate"
+export INFRA_GATE_OAUTH_METADATA_ADDRESS="http://127.0.0.1:3010/realms/infra-gate/.well-known/openid-configuration"
 export INFRA_GATE_OAUTH_RESOURCE="http://127.0.0.1:3001/mcp"
 export INFRA_GATE_OAUTH_SCOPE="mcp:tools"
 export INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false
 export INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID="infra-gate-approval-ui"
-export INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT="http://127.0.0.1:3011/authorize"
-export INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT="http://127.0.0.1:3011/token"
+export INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT="http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/auth"
+export INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT="http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token"
 export INFRA_GATE_APPROVAL_BASE_URL="http://127.0.0.1:3001"
 export INFRA_GATE_DOWNSTREAM_PROJECT="${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
 export KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config"
@@ -149,7 +150,7 @@ Set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` only for a localhost-only is
 
 For an external OAuth/OIDC issuer, use its issuer URL for `INFRA_GATE_OAUTH_AUTHORITY`. The gateway remains a resource server only; external issuer setup, users, clients, login, consent, PKCE policy, and token issuance stay outside the gateway. See [docs/production-oidc.md](production-oidc.md) for production OIDC guidance.
 
-Optional DevIssuer settings are documented in [configuration.md](configuration.md). For the preferred Keycloak container path, Mode D sets the internal metadata/token endpoints and approval redirect values for you.
+For the supported Keycloak container path, the Compose file sets the internal metadata/token endpoints and approval redirect values for you.
 
 Codex CLI HTTP MCP config:
 
@@ -215,7 +216,7 @@ Use this shape for a local stdio MCP client:
 
 ### Available MCP tools
 
-The HTTP gateway exposes the same tool names and arguments as the stdio server:
+The HTTP gateway forwards read-only stdio tools as-is, hides raw destructive stdio tools, and generates approval-plan wrappers for each destructive tool:
 
 - `get_allowed_namespaces()`
 - `get_k8s_status(namespace, labelSelector = null)`
@@ -230,9 +231,9 @@ The HTTP gateway exposes the same tool names and arguments as the stdio server:
 - `request_scale_deployment(namespace, name, replicas)`
 - `request_restart_deployment(namespace, name)`
 - `request_set_deployment_image(namespace, name, container, image)`
-- `apply_approved_plan(planId)`
+- `execute_approved_plan(planId)`
 
-When calling the stdio server directly, mutation request tools also require `requesterSubject` and may include `requesterAuthenticationType`. The HTTP Gateway keeps the public tool arguments above unchanged and injects those requester fields from the authenticated OAuth identity.
+When calling the stdio server directly, use the read-only evidence tools (`dry_run_*`, `diff_manifest`, `check_live_drift`) or raw destructive tools (`apply_manifest`, `delete_manifest`, `scale_deployment`, `restart_deployment`, `set_deployment_image`). Direct stdio does not expose `request_*` or `execute_approved_plan`; those are gateway-owned.
 
 Logs and Events are untrusted Kubernetes workload/cluster output. The HTTP gateway sanitizes suspicious model-visible output before returning it; direct stdio use of `InfraGate.McpServer` bypasses that gateway guardrail layer.
 
@@ -240,20 +241,21 @@ Observability bounds: Events and diagnostics default to `limit = 50` and allow u
 
 Approval flow:
 
-1. Ask the MCP server for a plan with `request_apply_manifest`, `request_scale_deployment`, etc. The server runs Kubernetes `dryRun=All` first and stores the dry-run result in the Kubernetes adapter payload inside the pending plan envelope.
-2. Call `apply_approved_plan` with the returned `PlanId`.
+1. Ask the HTTP gateway for a plan with `request_apply_manifest`, `request_scale_deployment`, etc. The Kubernetes adapter calls the downstream evidence tools first and stores the dry-run, policy, and diff evidence in the adapter payload inside the pending plan envelope.
+2. Call `execute_approved_plan` with the returned `PlanId`.
 3. The Gateway returns an approval URL instead of applying.
 4. Open the URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan and dry-run status, and approve or deny it.
-5. Call `apply_approved_plan` again. The Gateway forwards only after an Approval Grant exists and still matches the pending plan's Intent Digest and Review Digest; the server repeats dry-run immediately before the real write.
+5. Call `execute_approved_plan` again. The Gateway forwards only after an Approval Grant exists and still matches the pending plan's Intent Digest and Review Digest; the Kubernetes adapter repeats declared freshness checks immediately before the raw write.
 
 The MCP client never submits approval content. Approval challenges are bound to the plan id, current pending-plan hash, requester subject, expected Intent Digest, expected Review Digest, expiry, and Single-Execution status.
 
-Approval grants are stored under `.mcp-approvals/grants/` and bind the requester, approver, source challenge, Intent Digest, Review Digest, approval policy, reuse policy, and plan validity expiry. Old raw pending-plan files must be re-requested after the envelope-format change. If the pending plan changes after approval, the grant no longer matches and the MCP server refuses to apply it. Audit events are written under `.mcp-approvals/audit.jsonl`.
+Approval grants are stored under `.mcp-approvals/grants/` and bind the requester, approver, source challenge, Intent Digest, Review Digest, approval policy, reuse policy, and plan validity expiry. Old raw pending-plan files must be re-requested after the envelope-format change. If the pending plan changes after approval, the grant no longer matches and the gateway refuses to apply it. Audit events are written under `.mcp-approvals/audit.jsonl`.
 
 ### Verification
 
 ```bash
 dotnet build InfraGate.slnx
+dotnet run --project src/InfraGate.RunProfiles -- validate
 dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak"
 INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak"
 INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build

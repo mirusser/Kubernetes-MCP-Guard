@@ -39,6 +39,9 @@ jobs:
       - name: Build
         run: dotnet build InfraGate.slnx --configuration Release --no-restore
 
+      - name: Validate run profiles
+        run: dotnet run --project src/InfraGate.RunProfiles -- validate
+
       - name: Ensure Minikube is running
         run: |
           minikube start --wait=apiserver,system_pods --wait-timeout=5m

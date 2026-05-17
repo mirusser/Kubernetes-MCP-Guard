@@ -17,3 +17,4 @@
 [docs] Don't make Challenge Outcome the causal source of Approval Grant — resolving an approved Approval Challenge records the outcome and issues or references the grant. (cause: audit object vs execution authorization)
 [docs] Don't keep validating complex lifecycle language with prose alone — add diagrams, relationship tables, and scenario flows once terminology gets dense. (cause: context loss during glossary review)
 [skills] Don't let specialist repo skills bypass repository orientation — point them to repo-onboarding when broader context or current docs matter. (cause: skill dependency correction)
+[dotnet-build] Don't add MSBuild workaround files before clearing generated bin/obj state after project graph changes — clean generated outputs and retest the exact command first. (cause: stale generated build state)

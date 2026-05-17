@@ -37,7 +37,7 @@ Re-authenticating does not help because the stale config is read before the OAut
      --header "Authorization: Bearer change-me"
    ```
 2. Switch to OAuth and put the OAuth config in the repo's `.mcp.json`.
-3. Run `docker compose -f deploy/mode-c/compose.yaml up --build`.
+3. Run `docker compose -f deploy/local-oauth/compose.yaml up --build`.
 4. Open Claude Code inside the repo directory and use `/mcp`.
 5. The gateway receives `Bearer change-me` and rejects it with the "no dots" error.
 
@@ -93,13 +93,13 @@ Then restart Claude Code and use `/mcp` to trigger a fresh OAuth login.
 
 ### Problem
 
-Claude Code caches MCP OAuth state in `~/.claude/.credentials.json` under a `mcpOAuth` key. If a previous OAuth flow attempt failed partway through (e.g. Keycloak or the deprecated DevIssuer fallback was unreachable at the time of token exchange), Claude Code may cache an entry with `"accessToken": ""`. On subsequent reconnects it sends this empty string as a Bearer token, which the gateway also rejects with the "no dots" error.
+Claude Code caches MCP OAuth state in `~/.claude/.credentials.json` under a `mcpOAuth` key. If a previous OAuth flow attempt failed partway through (e.g. Keycloak was unreachable at the time of token exchange), Claude Code may cache an entry with `"accessToken": ""`. On subsequent reconnects it sends this empty string as a Bearer token, which the gateway also rejects with the "no dots" error.
 
 **Symptom:** Same "no dots" JWT error in the gateway log, and the "rejected on reconnect" message in Claude Code, even after a successful re-authentication attempt in the same session.
 
 ### Reproduction steps
 
-1. Start the Keycloak Mode D compose stack, but interrupt it before Keycloak is ready.
+1. Start the Keycloak local OAuth compose stack, but interrupt it before Keycloak is ready.
 2. Trigger an MCP connection from Claude Code — the OAuth discovery partially completes but token exchange fails.
 3. Restart the compose stack fully.
 4. Claude Code now sends `Bearer ` (empty) from its cache → 401 "no dots".

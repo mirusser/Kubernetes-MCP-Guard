@@ -15,12 +15,12 @@ This roadmap is intentionally high level. It avoids dates and detailed internal 
 ## Available Today
 
 - HTTP MCP gateway at `/mcp` backed by a private stdio Kubernetes MCP server.
-- Keycloak-backed local OAuth path, with DevIssuer retained as a deprecated fallback for compatibility testing.
+- Keycloak-backed local OAuth path.
 - Read-only Kubernetes observability tools for status, events, logs, focused resource summaries, and diagnostics.
 - Plan-first mutation tools for supported Deployments, Services, and ConfigMaps, with browser approval before apply.
 - Separate pending plans and approval challenges, with same-subject browser approval, challenge TTL, hash-bound apply, dry-run checks, drift checks, and single successful execution.
 - Guardrail audit and approval audit JSONL streams.
-- Docker images published to GHCR and Docker Hub for gateway and DevIssuer.
+- Gateway Docker image published to GHCR and Docker Hub.
 - Unit, integration, dependency-scan, image-scan, Docker, and SonarCloud workflows.
 - A glossary in [CONTEXT.md](../CONTEXT.md), a profile sketch in [mutation-approval-profile.md](mutation-approval-profile.md), flow diagrams in [mutation-approval-flow.md](mutation-approval-flow.md), and initial ADRs for the new generic-core/domain-adapter boundary.
 

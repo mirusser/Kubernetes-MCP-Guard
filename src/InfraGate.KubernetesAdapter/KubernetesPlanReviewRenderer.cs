@@ -47,7 +47,7 @@ public sealed class KubernetesPlanReviewRenderer : IPlanReviewRenderer
                Approval URL: {approvalUrl}
                Expires at UTC: {expiresAtUtc:O}
 
-               Open the approval URL in a browser, sign in with the same identity, review the Gateway-rendered plan, then call apply_approved_plan again.
+               Open the approval URL in a browser, sign in with the same identity, review the Gateway-rendered plan, then call execute_approved_plan again.
                """;
     }
 

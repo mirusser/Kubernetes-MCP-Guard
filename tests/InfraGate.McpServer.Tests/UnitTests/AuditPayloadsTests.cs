@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using InfraGate.Approvals;
 using InfraGate.Approvals.AuditPayloads;
+using Xunit;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
 
@@ -14,79 +15,57 @@ public sealed class AuditPayloadsTests
         WriteIndented = true
     };
 
-    public static IEnumerable<object[]> PlanPayloads()
+    public static TheoryData<IPlanAuditPayload, string[]> PlanPayloads()
     {
+        var data = new TheoryData<IPlanAuditPayload, string[]>();
         var digest = new ApprovalDigest("sha-256", "test", "deadbeef");
-        yield return new object[]
-        {
+        data.Add(
             new PlanRequestedPayload("plan-1", "apply", "ns", "deadbeef", digest, digest),
-            new[] { "planId", "operation", "namespace", "hash", "intentDigest", "reviewDigest" }
-        };
-        yield return new object[]
-        {
+            new[] { "planId", "operation", "namespace", "hash", "intentDigest", "reviewDigest" });
+        data.Add(
             new ApprovalGrantIssuedPayload("plan-1", "grant-1", "challenge-1", "user", "user", digest, digest, DateTimeOffset.UnixEpoch),
-            new[] { "planId", "grantId", "sourceChallengeId", "requesterSubject", "approverSubject", "intentDigest", "reviewDigest", "expiresAtUtc" }
-        };
-        yield return new object[]
-        {
+            new[] { "planId", "grantId", "sourceChallengeId", "requesterSubject", "approverSubject", "intentDigest", "reviewDigest", "expiresAtUtc" });
+        data.Add(
             new PlanAppliedPayload("plan-1", "apply", "ns", "deadbeef"),
-            new[] { "planId", "operation", "namespace", "hash" }
-        };
-        yield return new object[]
-        {
+            new[] { "planId", "operation", "namespace", "hash" });
+        data.Add(
             new ApplyDeniedPayload("plan-1", "Refused: …"),
-            new[] { "planId", "message" }
-        };
-        yield return new object[]
-        {
+            new[] { "planId", "message" });
+        data.Add(
             new ApplyFailedPayload("plan-1", "apply", "API operation failed"),
-            new[] { "planId", "operation", "message" }
-        };
-        yield return new object[]
-        {
+            new[] { "planId", "operation", "message" });
+        data.Add(
             new ApplyDriftDetectedPayload("plan-1", "apply", "ns", "drifted"),
-            new[] { "planId", "operation", "namespace", "message" }
-        };
-        yield return new object[]
-        {
+            new[] { "planId", "operation", "namespace", "message" });
+        data.Add(
             new DryRunFailedPayload("apply", "plan-1", "apply", "ns", ["apps/v1 Deployment ns/nginx-demo"], "schema"),
-            new[] { "phase", "planId", "operation", "namespace", "objects", "message" }
-        };
-        yield return new object[]
-        {
+            new[] { "phase", "planId", "operation", "namespace", "objects", "message" });
+        data.Add(
             new DiffFailedPayload("plan-1", "apply", "ns", ["apps/v1 Deployment ns/nginx-demo"], "diff"),
-            new[] { "planId", "operation", "namespace", "objects", "message" }
-        };
+            new[] { "planId", "operation", "namespace", "objects", "message" });
+        return data;
     }
 
-    public static IEnumerable<object[]> ChallengePayloads()
+    public static TheoryData<IChallengeAuditPayload, string[]> ChallengePayloads()
     {
+        var data = new TheoryData<IChallengeAuditPayload, string[]>();
         var expiresAt = DateTimeOffset.UnixEpoch;
-        yield return new object[]
-        {
+        data.Add(
             new ApprovalChallengeCreatedPayload("ch-1", "plan-1", "deadbeef", "user", "test", expiresAt),
-            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "requesterAuthenticationType", "expiresAtUtc" }
-        };
-        yield return new object[]
-        {
+            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "requesterAuthenticationType", "expiresAtUtc" });
+        data.Add(
             new ApprovalChallengeApprovedPayload("ch-1", "plan-1", "deadbeef", "user", "approver", expiresAt),
-            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "approverSubject", "decidedAt" }
-        };
-        yield return new object[]
-        {
+            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "approverSubject", "decidedAt" });
+        data.Add(
             new ApprovalChallengeDeniedPayload("ch-1", "plan-1", "deadbeef", "user", "approver", expiresAt),
-            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "approverSubject", "decidedAt" }
-        };
-        yield return new object[]
-        {
+            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "approverSubject", "decidedAt" });
+        data.Add(
             new ApprovalChallengeExpiredPayload("ch-1", "plan-1", "deadbeef", "user", expiresAt),
-            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "expiresAtUtc" }
-        };
-        yield return new object[]
-        {
+            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "expiresAtUtc" });
+        data.Add(
             new ApprovalChallengeRejectedPayload("ch-1", "plan-1", "deadbeef", "user", "approver", "subject mismatch"),
-            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "approverSubject", "reason" }
-        };
+            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "approverSubject", "reason" });
+        return data;
     }
 
     [Theory]

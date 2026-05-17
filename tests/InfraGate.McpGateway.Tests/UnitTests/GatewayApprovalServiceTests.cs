@@ -117,7 +117,10 @@ public sealed class GatewayApprovalServiceTests
     public async Task ApproveChallengeAsync_PendingPlanWithoutDiff_Rejects()
     {
         var context = CreateContext();
-        var plan = await CreatePendingPlanAsync(context.Store, includeDiff: false);
+        var plan = await CreatePendingPlanAsync(
+            context.Store,
+            includeDiff: false,
+            operation: KubernetesAdapterConventions.PlanOperations.Apply);
         var hash = await ApprovalStore.ComputeSha256Async(context.Store.GetPendingPath(plan.Id), CancellationToken.None);
         var challengeId = await CreateStoredChallengeAsync(context, plan.Id, hash);
 
@@ -258,7 +261,10 @@ public sealed class GatewayApprovalServiceTests
     public async Task EnsureApprovedOrCreateChallengeAsync_PlanWithoutDiffAndLegacyApprovedHash_ReturnsRefusal()
     {
         var context = CreateContext();
-        var plan = await CreatePendingPlanAsync(context.Store, includeDiff: false);
+        var plan = await CreatePendingPlanAsync(
+            context.Store,
+            includeDiff: false,
+            operation: KubernetesAdapterConventions.PlanOperations.Apply);
         var hash = await ApprovalStore.ComputeSha256Async(context.Store.GetPendingPath(plan.Id), CancellationToken.None);
         var legacyApprovedPath = LegacyApprovedPath(context.Store, plan.Id);
         Directory.CreateDirectory(Path.GetDirectoryName(legacyApprovedPath)!);
@@ -274,7 +280,10 @@ public sealed class GatewayApprovalServiceTests
     public async Task EnsureApprovedOrCreateChallengeAsync_PlanWithoutDiff_ReturnsRefusal()
     {
         var context = CreateContext();
-        var plan = await CreatePendingPlanAsync(context.Store, includeDiff: false);
+        var plan = await CreatePendingPlanAsync(
+            context.Store,
+            includeDiff: false,
+            operation: KubernetesAdapterConventions.PlanOperations.Apply);
 
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
@@ -392,7 +401,8 @@ public sealed class GatewayApprovalServiceTests
     private static async Task<KubernetesPlan> CreatePendingPlanAsync(
         ApprovalStore store,
         bool includeDryRun = true,
-        bool includeDiff = true)
+        bool includeDiff = true,
+        string operation = KubernetesAdapterConventions.PlanOperations.Scale)
     {
         var objects = new[] { new K8sObjectRef("apps/v1", "Deployment", NamespaceName, "demo") };
         var payload = new KubernetesPlanPayload(
@@ -400,8 +410,8 @@ public sealed class GatewayApprovalServiceTests
             "Scale deployment.",
             new Dictionary<string, string>
             {
-                ["name"] = "demo",
-                ["replicas"] = "2"
+                [KubernetesAdapterConventions.PlanParameters.Name] = "demo",
+                [KubernetesAdapterConventions.PlanParameters.Replicas] = "2"
             },
             objects)
         {
@@ -410,7 +420,7 @@ public sealed class GatewayApprovalServiceTests
         };
         var envelope = KubernetesApprovalAdapter.CreateEnvelope(
             ApprovalStore.NewPlanId(),
-            "scale",
+            operation,
             DateTimeOffset.UtcNow,
             new PlanRequester(Subject, "test"),
             payload);

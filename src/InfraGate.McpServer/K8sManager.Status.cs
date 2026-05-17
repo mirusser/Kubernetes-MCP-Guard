@@ -9,6 +9,7 @@ public sealed partial class K8sManager
 {
     public async Task<string> GetStatusAsync(string namespaceName, string? labelSelector, CancellationToken cancellationToken)
     {
+        // Justification: CA1873 — all log arguments are simple scalars (strings). Negligible evaluation cost.
         logger.LogInformation("GetStatus called: Namespace={Namespace}, LabelSelector={LabelSelector}", namespaceName, labelSelector);
 
         var validation = ValidateNamespace(namespaceName);
@@ -42,14 +43,17 @@ public sealed partial class K8sManager
                 labelSelector: labelSelector,
                 cancellationToken: cancellationToken);
 
-            logger.LogInformation(
-                "GetStatus result: Namespace={Namespace}, Deployments={DeploymentCount}, Services={ServiceCount}, ConfigMaps={ConfigMapCount}, Pods={PodCount}, ReplicaSets={ReplicaSetCount}",
-                namespaceName,
-                deployments.Items.Count,
-                services.Items.Count,
-                configMaps.Items.Count,
-                pods.Items.Count,
-                replicaSets.Items.Count);
+            if (logger.IsEnabled(LogLevel.Information))
+            {
+                logger.LogInformation(
+                    "GetStatus result: Namespace={Namespace}, Deployments={DeploymentCount}, Services={ServiceCount}, ConfigMaps={ConfigMapCount}, Pods={PodCount}, ReplicaSets={ReplicaSetCount}",
+                    namespaceName,
+                    deployments.Items.Count,
+                    services.Items.Count,
+                    configMaps.Items.Count,
+                    pods.Items.Count,
+                    replicaSets.Items.Count);
+            }
 
             return JsonSerializer.Serialize(new
             {

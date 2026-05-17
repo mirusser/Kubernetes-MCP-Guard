@@ -28,8 +28,14 @@ public sealed record KubernetesPlan(PlanEnvelope Envelope, KubernetesPlanPayload
 
     public K8sPlanPolicyFinding[] PolicyFindings => Payload.PolicyFindings;
 
-    bool IPlanReview.HasReviewEvidence => DryRun is not null && Diffs.Length > 0;
+    bool IPlanReview.HasReviewEvidence =>
+        DryRun is not null && (Diffs.Length > 0 || IsDryRunOnlyOperation(Operation));
 
     bool IPlanReview.CanBeApproved => !PolicyFindings.Any(f =>
         string.Equals(f.Severity, "Deny", StringComparison.Ordinal));
+
+    private static bool IsDryRunOnlyOperation(string operation) =>
+        operation is KubernetesAdapterConventions.PlanOperations.Scale
+            or KubernetesAdapterConventions.PlanOperations.Restart
+            or KubernetesAdapterConventions.PlanOperations.SetImage;
 }

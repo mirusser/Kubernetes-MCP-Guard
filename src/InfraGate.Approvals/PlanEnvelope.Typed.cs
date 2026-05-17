@@ -14,4 +14,7 @@ public sealed record PlanEnvelope<TPayload>(
     ReviewSurfaceContext ReviewSurfaceContext,
     ApprovalDigest IntentDigest,
     ApprovalDigest ReviewDigest,
-    TPayload Payload);
+    TPayload Payload)
+{
+    public FreshnessPolicy FreshnessPolicy { get; init; } = FreshnessPolicy.Empty;
+}

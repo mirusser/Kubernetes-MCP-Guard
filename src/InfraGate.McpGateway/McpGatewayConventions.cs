@@ -57,40 +57,13 @@ internal static class McpGatewayConventions
 
     public static class ToolNames
     {
-        public const string GetK8sStatus = "get_k8s_status";
-        public const string GetK8sEvents = "get_k8s_events";
-        public const string GetPodLogs = "get_pod_logs";
-        public const string GetK8sResource = "get_k8s_resource";
-        public const string GetDeploymentDiagnostics = "get_deployment_diagnostics";
-        public const string GetPodDiagnostics = "get_pod_diagnostics";
-        public const string GetServiceDiagnostics = "get_service_diagnostics";
-        public const string RequestApplyManifest = "request_apply_manifest";
-        public const string RequestDeleteManifest = "request_delete_manifest";
-        public const string RequestScaleDeployment = "request_scale_deployment";
-        public const string RequestRestartDeployment = "request_restart_deployment";
-        public const string RequestSetDeploymentImage = "request_set_deployment_image";
-        public const string ApplyApprovedPlan = "apply_approved_plan";
-        public const string GetAllowedNamespaces = "get_allowed_namespaces";
+        public const string RequestToolPrefix = "request_";
+        public const string ApplyApprovedPlan = "execute_approved_plan";
     }
 
     public static class ToolArguments
     {
-        public const string Namespace = "namespace";
-        public const string LabelSelector = "labelSelector";
-        public const string FieldSelector = "fieldSelector";
-        public const string Manifest = "manifest";
-        public const string Kind = "kind";
-        public const string Name = "name";
-        public const string PodName = "podName";
-        public const string Container = "container";
-        public const string TailLines = "tailLines";
-        public const string Previous = "previous";
-        public const string Limit = "limit";
-        public const string Replicas = "replicas";
-        public const string Image = "image";
         public const string PlanId = "planId";
-        public const string RequesterSubject = "requesterSubject";
-        public const string RequesterAuthenticationType = "requesterAuthenticationType";
     }
 
     public static class GuardrailAudit

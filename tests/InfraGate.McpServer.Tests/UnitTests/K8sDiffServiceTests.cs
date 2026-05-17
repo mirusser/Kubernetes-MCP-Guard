@@ -143,24 +143,13 @@ public sealed class K8sDiffServiceTests
             Host = "http://127.0.0.1:1",
             SkipTlsVerify = true
         });
-        var envelope = KubernetesApprovalAdapter.CreateEnvelope(
-            "plan-1",
-            "apply",
-            DateTimeOffset.UtcNow,
-            new PlanRequester("test-requester", "test"),
-            new KubernetesPlanPayload(
-                "demo",
-                "Apply ConfigMap.",
-                [],
-                [ConfigMapRef])
-            {
-                Diffs = []
-            });
-        var plan = KubernetesApprovalAdapter.Materialize(envelope);
+        var drift = await K8sDiffService.FindDriftAsync(
+            client,
+            KubernetesAdapterConventions.PlanOperations.Apply,
+            [],
+            CancellationToken.None);
 
-        var drift = await K8sDiffService.FindDriftAsync(client, plan, CancellationToken.None);
-
-        Assert.Equal("Plan 'plan-1' is missing recorded diff data. Re-request the plan.", drift);
+        Assert.Equal("Recorded diff data is empty.", drift);
     }
 
     private static string DeploymentJson(

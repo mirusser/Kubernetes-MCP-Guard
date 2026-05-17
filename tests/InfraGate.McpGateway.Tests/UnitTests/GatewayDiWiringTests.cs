@@ -2,6 +2,7 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -59,6 +60,9 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
         services.AddSingleton<GatewayApprovalService>();
         services.AddHttpContextAccessor();
+        services.AddDataProtection()
+            .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetTempPath(), "di-wiring-dp", Guid.NewGuid().ToString("N"))))
+            .SetApplicationName(ApprovalConventions.Application.Name);
         services.AddLogging();
 
         using var provider = services.BuildServiceProvider();
@@ -98,6 +102,9 @@ public sealed class GatewayDiWiringTests
             IReadOnlyDictionary<string, object?> arguments,
             CancellationToken cancellationToken) =>
             Task.FromResult("{}");
+
+        public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DownstreamTool>>([]);
     }
 
     private sealed class NullAuditStore : IGuardrailAuditStore

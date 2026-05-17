@@ -188,7 +188,7 @@ public sealed class GatewayApprovalService
 
         return new ApprovalDecisionResult(
             true,
-            $"Plan '{updated.PlanId}' was approved with grant '{grant.Id}'. Return to your MCP client and call apply_approved_plan again.");
+            $"Plan '{updated.PlanId}' was approved with grant '{grant.Id}'. Return to your MCP client and call execute_approved_plan again.");
     }
 
     public async Task<ApprovalDecisionResult> DenyChallengeAsync(

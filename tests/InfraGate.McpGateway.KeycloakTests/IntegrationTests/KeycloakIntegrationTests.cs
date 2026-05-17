@@ -14,6 +14,9 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
+using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
+using ModelContextProtocol.Server;
 using Testcontainers.Keycloak;
 
 #pragma warning disable ASPDEPR004
@@ -424,7 +427,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                ?? throw new InvalidOperationException($"Keycloak user '{username}' did not contain id.");
     }
 
-    private async Task FollowImpersonationRedirectAsync(
+    private static async Task FollowImpersonationRedirectAsync(
         HttpClient browser,
         HttpResponseMessage impersonation,
         CancellationToken cancellationToken)
@@ -520,7 +523,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         return query[KeycloakParameters.Code].ToString();
     }
 
-    private async Task<HttpResponseMessage> SubmitLoginFormAsync(
+    private static async Task<HttpResponseMessage> SubmitLoginFormAsync(
         HttpClient browser,
         string authUri,
         string loginPage,
@@ -900,6 +903,11 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                 services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
                 services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
                 services.AddSingleton<GatewayApprovalService>();
+                services.AddSingleton<IDomainPlanBuilder, KubernetesPlanBuilder>();
+                services.AddSingleton<IDomainPlanExecutor, KubernetesPlanExecutor>();
+                services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
+                services.AddSingleton<DownstreamToolRegistry>();
+                services.AddSingleton<GatewayToolDispatcher>();
                 services.AddHttpContextAccessor();
                 services.AddLogging();
                 services.AddAntiforgery();
@@ -914,7 +922,10 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                 services
                     .AddMcpServer()
                     .WithHttpTransport()
-                    .WithToolsFromAssembly(typeof(K8sGatewayTools).Assembly);
+                    .WithListToolsHandler((RequestContext<ListToolsRequestParams> request, CancellationToken ct) =>
+                        new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<GatewayToolDispatcher>().ListToolsAsync(request.Params, ct)))
+                    .WithCallToolHandler((RequestContext<CallToolRequestParams> request, CancellationToken ct) =>
+                        new ValueTask<CallToolResult>(request.Services!.GetRequiredService<GatewayToolDispatcher>().CallToolAsync(request.Params, ct)));
             })
             .Configure(app =>
             {
@@ -943,6 +954,9 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             IReadOnlyDictionary<string, object?> arguments,
             CancellationToken cancellationToken) =>
             Task.FromResult("{}");
+
+        public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DownstreamTool>>([]);
     }
 
     private sealed class KeycloakTokenBackchannel(string tokenEndpoint) : HttpMessageHandler

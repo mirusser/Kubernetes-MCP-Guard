@@ -8,7 +8,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="InfraGate.DevIssuer.Tests" />
     <InternalsVisibleTo Include="InfraGate.McpGateway.KeycloakTests" />
     <InternalsVisibleTo Include="InfraGate.McpGateway.Tests" />
     <InternalsVisibleTo Include="InfraGate.Safety.E2E.Tests" />
@@ -20,6 +19,7 @@
     <ProjectReference Include="..\InfraGate.KubernetesAdapter\InfraGate.KubernetesAdapter.csproj" />
     <ProjectReference Include="..\InfraGate.McpGateway.Auth\InfraGate.McpGateway.Auth.csproj" />
     <ProjectReference Include="..\InfraGate.RuntimeSafety\InfraGate.RuntimeSafety.csproj" />
+    <ProjectReference Include="..\InfraGate.Observability\InfraGate.Observability.csproj" />
   </ItemGroup>
 
 </Project>

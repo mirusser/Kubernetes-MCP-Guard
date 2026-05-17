@@ -32,3 +32,6 @@ jobs:
 
       - name: Build
         run: dotnet build InfraGate.slnx --configuration Release --no-restore
+
+      - name: Validate run profiles
+        run: dotnet run --project src/InfraGate.RunProfiles -- validate

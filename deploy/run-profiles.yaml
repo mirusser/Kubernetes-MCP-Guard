@@ -1,0 +1,244 @@
+version: 1
+
+defaults:
+  gateway:
+    aspnetcoreUrls: http://0.0.0.0:3001
+    downstreamAssembly: /app/server/InfraGate.McpServer.dll
+    guardAuditRoot: /data/guardrails
+  identityProvider:
+    scope: mcp:tools
+    requireHttpsMetadata: "false"
+  approvalAuthority:
+    oauthClientId: infra-gate-approval-ui
+    oauthCallbackPath: /approvals/oauth/callback
+
+profiles:
+  local-compose:
+    kind: compose
+    runtimeMode: Development
+    gateway: {}
+    identityProvider:
+      realmImport: deploy/keycloak/infra-gate-realm.json
+      authority: http://127.0.0.1:3010/realms/infra-gate
+      metadataAddress: http://keycloak:8080/realms/infra-gate/.well-known/openid-configuration
+      resource: http://127.0.0.1:3001/mcp
+    approvalAuthority:
+      baseUrl: http://127.0.0.1:3001
+      oauthAuthorizationEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/auth
+      oauthTokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
+    genericApprovalCore:
+      approvalRoot: /data/approvals
+    host:
+      bindAddress: 127.0.0.1
+      bindPort: "3001"
+      gatewayImage: kubernetes-mcp-guard-gateway
+      kubeconfigHostPath: .kube/mcp-nginx-demo.compose.config
+      approvalHostPath: .mcp-approvals
+      guardAuditHostPath: .mcp-guardrails
+      dataProtectionHostPath: .mcp-dataprotection-keys
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: /run/kube/mcp-nginx-demo.compose.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  local-source-gateway:
+    kind: dotnet
+    runtimeMode: Development
+    gateway: {}
+    identityProvider:
+      realmImport: deploy/keycloak/infra-gate-realm.json
+      authority: http://127.0.0.1:3010/realms/infra-gate
+      metadataAddress: http://127.0.0.1:3010/realms/infra-gate/.well-known/openid-configuration
+      resource: http://127.0.0.1:3001/mcp
+    approvalAuthority:
+      baseUrl: http://127.0.0.1:3001
+      oauthAuthorizationEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/auth
+      oauthTokenEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token
+    genericApprovalCore:
+      approvalRoot: .mcp-approvals
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: .kube/mcp-nginx-demo.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  local-stdio:
+    kind: mcp-stdio
+    runtimeMode: Development
+    genericApprovalCore:
+      approvalRoot: .mcp-approvals
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: .kube/mcp-nginx-demo.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  development:
+    kind: compose-deploy
+    runtimeMode: Development
+    gateway: {}
+    identityProvider:
+      realmImport: deploy/keycloak/infra-gate-realm.json
+      authority: http://127.0.0.1:3010/realms/infra-gate
+      metadataAddress: http://172.17.0.1:3010/realms/infra-gate/.well-known/openid-configuration
+      resource: http://127.0.0.1:3001/mcp
+    approvalAuthority:
+      baseUrl: http://127.0.0.1:3001
+      oauthAuthorizationEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/auth
+      oauthTokenEndpoint: http://172.17.0.1:3010/realms/infra-gate/protocol/openid-connect/token
+    genericApprovalCore:
+      approvalRoot: /data/approvals
+    host:
+      bindAddress: 127.0.0.1
+      bindPort: "3001"
+      gatewayImage: ghcr.io/mirusser/kubernetes-mcp-guard-gateway
+      kubeconfigHostPath: /etc/infra-gate/development.kubeconfig
+      approvalHostPath: /var/lib/infra-gate/development/approvals
+      guardAuditHostPath: /var/lib/infra-gate/development/guardrails
+      dataProtectionHostPath: /var/lib/infra-gate/development/dataprotection-keys
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: /run/kube/infra-gate.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  production:
+    kind: compose-deploy
+    runtimeMode: Production
+    gateway: {}
+    identityProvider:
+      requireHttpsMetadata: "true"
+      authority: https://issuer.example.com/realms/infra-gate
+      metadataAddress: https://issuer.example.com/.well-known/openid-configuration
+      resource: https://gateway.example.com/mcp
+    approvalAuthority:
+      baseUrl: https://gateway.example.com
+      oauthAuthorizationEndpoint: https://issuer.example.com/realms/infra-gate/protocol/openid-connect/auth
+      oauthTokenEndpoint: https://issuer.example.com/realms/infra-gate/protocol/openid-connect/token
+    genericApprovalCore:
+      approvalRoot: /data/approvals
+    host:
+      bindAddress: 127.0.0.1
+      bindPort: "3001"
+      gatewayImage: ghcr.io/mirusser/kubernetes-mcp-guard-gateway
+      kubeconfigHostPath: /etc/infra-gate/production.kubeconfig
+      approvalHostPath: /var/lib/infra-gate/production/approvals
+      guardAuditHostPath: /var/lib/infra-gate/production/guardrails
+      dataProtectionHostPath: /var/lib/infra-gate/production/dataprotection-keys
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: /run/kube/infra-gate.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  test-integration:
+    kind: test
+    runtimeMode: Development
+    genericApprovalCore:
+      approvalRoot: .mcp-approvals
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: .kube/mcp-nginx-demo.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  test-gateway-integration:
+    kind: test
+    runtimeMode: Development
+    genericApprovalCore:
+      approvalRoot: .mcp-approvals
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: .kube/mcp-nginx-demo.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  test-safety-e2e:
+    kind: test
+    runtimeMode: Development
+    genericApprovalCore:
+      approvalRoot: .mcp-approvals
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: .kube/mcp-nginx-demo.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  smoke-local:
+    kind: smoke
+    runtimeMode: Development
+    gateway: {}
+    identityProvider:
+      realmImport: deploy/keycloak/infra-gate-realm.json
+      authority: http://127.0.0.1:3010/realms/infra-gate
+      metadataAddress: http://keycloak:8080/realms/infra-gate/.well-known/openid-configuration
+      resource: http://127.0.0.1:3001/mcp
+    approvalAuthority:
+      baseUrl: http://127.0.0.1:3001
+      oauthAuthorizationEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/auth
+      oauthTokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
+    genericApprovalCore:
+      approvalRoot: /data/approvals
+    host:
+      bindAddress: 127.0.0.1
+      bindPort: "3001"
+      gatewayImage: kubernetes-mcp-guard-gateway
+      kubeconfigHostPath: .kube/mcp-nginx-demo.compose.config
+      approvalHostPath: .mcp-approvals
+      guardAuditHostPath: .mcp-guardrails
+      dataProtectionHostPath: .mcp-dataprotection-keys
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: /run/kube/mcp-nginx-demo.compose.config
+          allowedNamespaces:
+            - mcp-nginx-demo
+
+  smoke-release:
+    kind: smoke
+    runtimeMode: Development
+    gateway: {}
+    identityProvider:
+      realmImport: deploy/keycloak/infra-gate-realm.json
+      authority: http://127.0.0.1:3010/realms/infra-gate
+      metadataAddress: http://keycloak:8080/realms/infra-gate/.well-known/openid-configuration
+      resource: http://127.0.0.1:3001/mcp
+    approvalAuthority:
+      baseUrl: http://127.0.0.1:3001
+      oauthAuthorizationEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/auth
+      oauthTokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
+    genericApprovalCore:
+      approvalRoot: /data/approvals
+    host:
+      bindAddress: 127.0.0.1
+      bindPort: "3001"
+      gatewayImage: ghcr.io/mirusser/kubernetes-mcp-guard-gateway
+      kubeconfigHostPath: .kube/mcp-nginx-demo.compose.config
+      approvalHostPath: .mcp-approvals
+      guardAuditHostPath: .mcp-guardrails
+      dataProtectionHostPath: .mcp-dataprotection-keys
+    domainAdapters:
+      - name: kubernetesAdapter
+        type: kubernetes
+        kubernetes:
+          kubeconfig: /run/kube/mcp-nginx-demo.compose.config
+          allowedNamespaces:
+            - mcp-nginx-demo

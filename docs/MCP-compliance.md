@@ -1,6 +1,6 @@
 # MCP Protocol Compliance & Architecture Flow
 
-This document details the compliance of the **InfraGate** project against the official Model Context Protocol (MCP) specifications (as of `2025-11-25`), specifically focusing on the HTTP Gateway + OAuth path. Keycloak Mode D is the primary local/test identity provider; DevIssuer remains a deprecated fallback harness.
+This document details the compliance of the **InfraGate** project against the official Model Context Protocol (MCP) specifications (as of `2025-11-25`), specifically focusing on the HTTP Gateway + OAuth path. Keycloak is the supported local/test identity provider.
 
 ## Architecture & Request Flow
 
@@ -51,7 +51,7 @@ sequenceDiagram
         Downstream->>Downstream: Write pending approval plan + audit entry
     end
 
-    opt apply_approved_plan requires approval
+    opt execute_approved_plan requires approval
         Gateway->>Gateway: Read pending plan + hash
         Gateway-->>Client: Approval URL
         Client-->>Gateway: Browser opens /approvals/{challengeId}
@@ -91,22 +91,22 @@ The MCP Authorization standard is built heavily on Draft OAuth 2.1, emphasizing 
 ### B. Resource / Audience Binding
 * **Gateway methods:** `GatewayAuthentication.ConfigureJwtBearerOptions`
 * **Keycloak local/demo implementation:** The imported Keycloak realm emits the gateway resource URI as `aud` through the `mcp:tools` client-scope audience mapper. The gateway validates issuer, signature, lifetime, audience, and scope on every MCP request.
-* **Resource indicator caveat:** Keycloak's MCP guidance currently points to Client ID Metadata Documents and notes limitations around processing RFC 8707 `resource` as MCP clients expect, so this repo keeps mapper-based audience binding for Keycloak. DevIssuer still has strict RFC 8707 resource binding as compatibility coverage, but it is no longer the primary local path.
+* **Resource indicator caveat:** Keycloak's MCP guidance currently points to Client ID Metadata Documents and notes limitations around processing RFC 8707 `resource` as MCP clients expect, so this repo keeps mapper-based audience binding for Keycloak. InfraGate should revisit issuer-side RFC 8707 resource-indicator coverage when Keycloak supports the needed MCP flow cleanly.
 
 ### C. Authorization Code Protection (PKCE)
-* **Methods:** Keycloak realm clients; `DevIssuerApplication.TokenAsync` for deprecated fallback coverage.
-* **Implementation:** Keycloak `mcp-client` and `infra-gate-approval-ui` are public authorization-code clients with PKCE S256 configured. DevIssuer rejects fallback methods and strictly enforces `code_challenge_method=S256`.
+* **Methods:** Keycloak realm clients.
+* **Implementation:** Keycloak `mcp-client` and `infra-gate-approval-ui` are public authorization-code clients with PKCE S256 configured.
 
 ### D. Token Passthrough Prevention
 * **Methods:** `DownstreamMcpClient.GetClientAsync`
 * **Implementation:** The spec warns against forwarding access tokens to downstream services. The `McpGateway` acts as a true structural firewall: it fully terminates the OAuth JWT and initiates a `StdioClientTransport` to the `InfraGate.McpServer`. No tokens or network contexts are passed to the downstream worker, structurally eliminating Token Passthrough vulnerabilities.
 
 ### E. Open Redirection & Localhost Risks
-* **Methods:** Keycloak OIDC Dynamic Client Registration policies; `DevIssuerApplication.RegisterClientAsync` for deprecated fallback coverage.
-* **Implementation:** The local Keycloak realm enables anonymous DCR only for local/demo use and restricts redirect URIs to trusted loopback hosts with an allowed-scope policy and max-client cap. DevIssuer validates loopback `http` redirect URIs in code.
+* **Methods:** Keycloak OIDC Dynamic Client Registration policies.
+* **Implementation:** The local Keycloak realm enables anonymous DCR only for local/demo use and restricts redirect URIs to trusted loopback hosts with an allowed-scope policy and max-client cap.
 
 ---
 
 ## Security Consideration: Development vs. Production
 As per the MCP spec: *"All authorization server endpoints MUST be served over HTTPS."* 
-The local Keycloak demo and deprecated DevIssuer fallback run over HTTP and therefore set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false`. This is a deliberate development exception; production deployments must use HTTPS issuer metadata and keep the gateway in `Production` mode.
+The local Keycloak demo runs over HTTP and therefore sets `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false`. This is a deliberate development exception; production deployments must use HTTPS issuer metadata and keep the gateway in `Production` mode.

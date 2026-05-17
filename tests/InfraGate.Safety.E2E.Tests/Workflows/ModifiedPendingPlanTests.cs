@@ -14,19 +14,18 @@ public sealed class ModifiedPendingPlanTests(SafetyE2EFixture fixture)
             return;
         }
 
-        fixture.SetAuthenticatedSubject("safety-e2e-user");
+        await using var client = await fixture.CreateHttpMcpClientAsync();
+        var requestText = await client.CallToolAsync(
+            "request_restart_deployment",
+            new Dictionary<string, object?>
+            {
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo"
+            });
+        var planId = SafetyE2EFixture.ParsePlanId(requestText);
+        fixture.SetAuthenticatedSubject(client.Subject);
         try
         {
-            var requestText = await fixture.DownstreamClient.CallToolAsync(
-                McpGatewayConventions.ToolNames.RequestRestartDeployment,
-                new Dictionary<string, object?>
-                {
-                    [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                    [McpGatewayConventions.ToolArguments.Name] = "nginx-demo",
-                    ["requesterSubject"] = "safety-e2e-user"
-                },
-                CancellationToken.None);
-            var planId = SafetyE2EFixture.ParsePlanId(requestText);
             var approvals = fixture.GetApprovalService();
             var challengeResult = await approvals.EnsureApprovedOrCreateChallengeAsync(planId, CancellationToken.None);
             Assert.False(challengeResult.IsApproved);
