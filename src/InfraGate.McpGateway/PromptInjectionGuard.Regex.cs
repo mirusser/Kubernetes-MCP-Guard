@@ -99,6 +99,7 @@ public static partial class PromptInjectionGuard
             return false;
         }
 
+        // Justification: S3267 — .Count(predicate) is already the canonical LINQ form; there is no foreach+if loop to simplify with .Where().
         var printable = decodedText.Count(c => !char.IsControl(c) || c == '\n' || c == '\r' || c == '\t');
 
         if (printable < decodedText.Length * 0.7)

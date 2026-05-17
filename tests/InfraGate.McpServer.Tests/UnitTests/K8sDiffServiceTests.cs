@@ -136,6 +136,15 @@ public sealed class K8sDiffServiceTests
     }
 
     [Fact]
+    public void BuildDiff_BothLiveAndProposedNull_ReturnsNoOp()
+    {
+        var diff = K8sDiffService.BuildDiff(DeploymentRef, liveJson: null, proposedJson: null);
+
+        Assert.Equal(ApprovalConventions.DiffChangeTypes.NoOp, diff.ChangeType);
+        Assert.Equal("No diff.", diff.UnifiedDiff);
+    }
+
+    [Fact]
     public async Task FindDriftAsync_MissingDiffs_ReturnsMessage()
     {
         var client = new Kubernetes(new KubernetesClientConfiguration
