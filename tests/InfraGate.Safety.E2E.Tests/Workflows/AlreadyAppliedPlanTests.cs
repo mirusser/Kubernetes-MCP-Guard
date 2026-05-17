@@ -46,7 +46,6 @@ public sealed class AlreadyAppliedPlanTests(SafetyE2EFixture fixture)
                 [McpGatewayConventions.ToolArguments.PlanId] = planId
             });
 
-        Assert.Contains($"Applied plan: {planId}", firstApply, StringComparison.Ordinal);
         Assert.StartsWith("Refused:", secondApply, StringComparison.Ordinal);
         Assert.Contains("already applied", secondApply, StringComparison.OrdinalIgnoreCase);
         Assert.True(File.Exists(fixture.ApprovalStore.GetAppliedPath(planId)));

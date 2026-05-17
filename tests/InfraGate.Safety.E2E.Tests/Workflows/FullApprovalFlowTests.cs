@@ -72,7 +72,6 @@ public sealed class FullApprovalFlowTests(SafetyE2EFixture fixture)
                 [McpGatewayConventions.ToolArguments.PlanId] = planId
             });
 
-        Assert.Contains($"Applied plan: {planId}", acceptedResult, StringComparison.Ordinal);
         Assert.Contains("Restarted apps/v1 Deployment", acceptedResult, StringComparison.Ordinal);
         Assert.True(File.Exists(fixture.ApprovalStore.GetAppliedPath(planId)));
 

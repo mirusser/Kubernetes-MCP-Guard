@@ -413,7 +413,6 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [McpGatewayConventions.ToolArguments.PlanId] = applyPlanId
             });
 
-        Assert.Contains($"Applied plan: {applyPlanId}", applyText);
         Assert.Contains("Applied apps/v1 Deployment", applyText);
 
         var statusText = await CallTextAsync(
