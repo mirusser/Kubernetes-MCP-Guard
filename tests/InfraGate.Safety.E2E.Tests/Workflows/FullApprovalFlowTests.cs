@@ -17,11 +17,11 @@ public sealed class FullApprovalFlowTests(SafetyE2EFixture fixture)
 
         await using var client = await fixture.CreateHttpMcpClientAsync();
         var requestText = await client.CallToolAsync(
-            McpGatewayConventions.ToolNames.RequestRestartDeployment,
+            "request_restart_deployment",
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo"
             });
         var planId = SafetyE2EFixture.ParsePlanId(requestText);
 
@@ -51,7 +51,8 @@ public sealed class FullApprovalFlowTests(SafetyE2EFixture fixture)
         page.EnsureSuccessStatusCode();
         var pageText = await page.Content.ReadAsStringAsync();
         Assert.Contains($"<code>{planId}</code>", pageText, StringComparison.Ordinal);
-        Assert.Contains("Plan Hash", pageText, StringComparison.Ordinal);
+        Assert.Contains("Intent Digest", pageText, StringComparison.Ordinal);
+        Assert.Contains("Review Digest", pageText, StringComparison.Ordinal);
         Assert.Contains("Server-side dry-run: succeeded", pageText, StringComparison.Ordinal);
         Assert.Contains("<h2>Diff</h2>", pageText, StringComparison.Ordinal);
         Assert.Contains($"{fixture.Namespace}/nginx-demo", pageText, StringComparison.Ordinal);
@@ -62,7 +63,7 @@ public sealed class FullApprovalFlowTests(SafetyE2EFixture fixture)
             challengeId,
             SafetyE2EFixture.ParseAntiforgeryToken(pageText));
         Assert.Contains("was approved", approvalResponse, StringComparison.Ordinal);
-        Assert.True(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+        Assert.True(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
 
         var acceptedResult = await client.CallToolAsync(
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
@@ -71,7 +72,6 @@ public sealed class FullApprovalFlowTests(SafetyE2EFixture fixture)
                 [McpGatewayConventions.ToolArguments.PlanId] = planId
             });
 
-        Assert.Contains($"Applied plan: {planId}", acceptedResult, StringComparison.Ordinal);
         Assert.Contains("Restarted apps/v1 Deployment", acceptedResult, StringComparison.Ordinal);
         Assert.True(File.Exists(fixture.ApprovalStore.GetAppliedPath(planId)));
 
@@ -80,6 +80,10 @@ public sealed class FullApprovalFlowTests(SafetyE2EFixture fixture)
             evt.GetProperty("eventName").GetString() == ApprovalConventions.AuditEvents.ApprovalChallengeApproved &&
             evt.GetProperty("payload").TryGetProperty("id", out var approvedChallengeId) &&
             approvedChallengeId.GetString() == challengeId);
+        Assert.Contains(auditEvents, evt =>
+            evt.GetProperty("eventName").GetString() == ApprovalConventions.AuditEvents.GrantIssued &&
+            evt.GetProperty("payload").TryGetProperty("planId", out var grantPlanId) &&
+            grantPlanId.GetString() == planId);
         Assert.Contains(auditEvents, evt =>
             evt.GetProperty("eventName").GetString() == ApprovalConventions.AuditEvents.PlanApplied &&
             evt.GetProperty("payload").TryGetProperty("planId", out var appliedPlanId) &&

@@ -12,14 +12,14 @@ These tests do **not** run in the default repo test pass. They are gated behind 
 |---|---|---|---|
 | [`Workflows/SmokeTests.cs`](Workflows/SmokeTests.cs) | (fixture sanity) | HTTP gateway auth | Gateway `/mcp` returns 401 without a bearer; not-401/403 with a valid Keycloak-issued JWT. |
 | [`Workflows/FullApprovalFlowTests.cs`](Workflows/FullApprovalFlowTests.cs) | full intended flow | HTTP MCP + approval browser + Kubernetes | Requesting a restart through `/mcp`, approving through the browser endpoint, and applying through `/mcp` mutates Kubernetes only after approval and writes approval/applied audit evidence. |
-| [`Workflows/PlanHashMismatchTests.cs`](Workflows/PlanHashMismatchTests.cs) | 1 | HTTP MCP + approval browser + file tamper | After browser approval, mutating the pending plan file prevents the stale approval from being used and forces a fresh approval challenge. |
-| [`Workflows/ExpiredApprovalTests.cs`](Workflows/ExpiredApprovalTests.cs) | 2 | Focused gateway service | A challenge whose `ExpiresAtUtc` is forced into the past is refused at approve time and does not write an approved hash. |
+| [`Workflows/ReviewDigestMismatchTests.cs`](Workflows/ReviewDigestMismatchTests.cs) | 1 | HTTP MCP + approval browser + file tamper | After browser approval, mutating the pending plan file prevents the stale Approval Grant from being used and records an apply denial. |
+| [`Workflows/ExpiredApprovalTests.cs`](Workflows/ExpiredApprovalTests.cs) | 2 | Focused gateway service | A challenge whose `ExpiresAtUtc` is forced into the past is refused at approve time and does not issue an Approval Grant. |
 | [`Workflows/AlreadyAppliedPlanTests.cs`](Workflows/AlreadyAppliedPlanTests.cs) | 3 | HTTP MCP + approval browser + Kubernetes | Applying a plan twice succeeds the first time and is refused the second through the gateway surface. |
 | [`Workflows/DangerousManifestTests.cs`](Workflows/DangerousManifestTests.cs) | 4 | HTTP MCP request path | A manifest with `securityContext.privileged: true` is rejected by the policy validator at request time and never produces a pending plan. |
 | [`Workflows/ModifiedPendingPlanTests.cs`](Workflows/ModifiedPendingPlanTests.cs) | 5 | Focused gateway service + file tamper | Mutating the pending plan after the challenge is created but before approval is detected at approve time. |
 | [`Workflows/WrongUserApprovalTests.cs`](Workflows/WrongUserApprovalTests.cs) | 6 | Approval browser endpoint plus service probe | A challenge created by user A cannot be approved by user B; the endpoint test exercises antiforgery and cookie identity, the browser-session test simulates a second Keycloak user (demo2) with a real JWT, and the service test keeps direct same-subject coverage. |
 | [`Workflows/DryRunFailureTests.cs`](Workflows/DryRunFailureTests.cs) | 7 | HTTP MCP request/apply paths | A strict-validation dry-run failure at request time blocks plan creation; a pre-apply dry-run failure after browser approval blocks the mutation. |
-| [`Workflows/RbacMatrixTests.cs`](Workflows/RbacMatrixTests.cs) | RBAC | Direct server subprocess with read-only SA | A read-only `ServiceAccount` (no create/patch/delete verbs) cannot complete `apply_approved_plan` — the Kubernetes API returns 403 Forbidden, proving the gateway inherits its RBAC boundary from the kubeconfig. |
+| [`Workflows/RbacMatrixTests.cs`](Workflows/RbacMatrixTests.cs) | RBAC | Direct server subprocess with read-only SA | A read-only `ServiceAccount` (no create/patch/delete verbs) cannot complete `execute_approved_plan` — the Kubernetes API returns 403 Forbidden, proving the gateway inherits its RBAC boundary from the kubeconfig. |
 
 Each `Workflows/*Tests.cs` file is one workflow class with one or two `[Fact]`s, decorated with `[Trait("Category", "SafetyE2E")]` and `[Collection(SafetyE2ECollection.Name)]`. The shared fixture (`SafetyE2EFixture`) boots Keycloak once per assembly, creates HTTP MCP clients with real Keycloak JWTs, drives approval cookies through a test OAuth backchannel, and lazily spawns the McpServer subprocess on the first downstream tool call.
 
@@ -29,7 +29,7 @@ The suite mixes two testing tiers so every safety property has at least one auth
 
 | Tier | What it exercises | Tests using it | Description |
 |---|---|---|---|
-| **Full HTTP/browser/Kubernetes** | Real Keycloak JWTs at `/mcp` → gateway tool facade → approval challenge creation → browser approval page with antiforgery → browser POST → MCP apply → real Kubernetes mutation/refusal | `SmokeTests`, `FullApprovalFlowTests`, `PlanHashMismatchTests`, `AlreadyAppliedPlanTests`, `DangerousManifestTests`, `WrongUserApprovalTests` (endpoint), `DryRunFailureTests` | Real Keycloak-issued bearer tokens for MCP calls; simulated OAuth callback/cookie identity for browser approval endpoints. Covers the complete vertical stack. |
+| **Full HTTP/browser/Kubernetes** | Real Keycloak JWTs at `/mcp` → gateway tool facade → approval challenge creation → browser approval page with antiforgery → browser POST → MCP apply → real Kubernetes mutation/refusal | `SmokeTests`, `FullApprovalFlowTests`, `ReviewDigestMismatchTests`, `AlreadyAppliedPlanTests`, `DangerousManifestTests`, `WrongUserApprovalTests` (endpoint), `DryRunFailureTests` | Real Keycloak-issued bearer tokens for MCP calls; simulated OAuth callback/cookie identity for browser approval endpoints. Covers the complete vertical stack. |
 | **Focused service-level** | `GatewayApprovalService` directly, bypassing HTTP and JWT middleware | `ExpiredApprovalTests`, `ModifiedPendingPlanTests`, `WrongUserApprovalTests` (service-level) | Injects `ClaimsPrincipal` via `SetAuthenticatedSubject()` into `IHttpContextAccessor` to force clock/hash/principal edge cases without brittle per-test setup. The `ApproveChallengeAsync` code path under test is identical whether the principal came through JwtBearer middleware or was set directly. |
 | **Direct server subprocess** | Real McpServer with an alternate kubeconfig, bypassing the gateway | `RbacMatrixTests` | Spawns its own McpServer subprocess with a read-only `ServiceAccount` kubeconfig generated at test time. Proves that the server inherits the SA's RBAC boundary from the kubeconfig without gateway interference. |
 
@@ -152,7 +152,7 @@ The fixture reads `KUBECONFIG` first and falls back to `.kube/mcp-nginx-demo.con
 
 ### Step 5 — Deploy the demo Deployment the tests target
 
-Most workflow tests (`FullApprovalFlowTests`, `PlanHashMismatchTests`, `ExpiredApprovalTests`, `AlreadyAppliedPlanTests`, `ModifiedPendingPlanTests`, `WrongUserApprovalTests`, and one of the `DryRunFailureTests`) call `request_restart_deployment` with `name=nginx-demo`. That Deployment must exist in the namespace before tests run, otherwise the request-time `dryRun=All` will return 404 from the Kubernetes API and plan creation will fail before any safety property is exercised.
+Most workflow tests (`FullApprovalFlowTests`, `ReviewDigestMismatchTests`, `ExpiredApprovalTests`, `AlreadyAppliedPlanTests`, `ModifiedPendingPlanTests`, `WrongUserApprovalTests`, and one of the `DryRunFailureTests`) call `request_restart_deployment` with `name=nginx-demo`. That Deployment must exist in the namespace before tests run, otherwise the request-time `dryRun=All` will return 404 from the Kubernetes API and plan creation will fail before any safety property is exercised.
 
 Apply the repo's existing demo manifest:
 
@@ -279,7 +279,7 @@ The audit log is shared across all tests in one run (single approval root per fi
 INFRA_GATE_RUN_SAFETY_E2E=1 \
   dotnet test tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj \
     --no-build \
-    --filter "FullyQualifiedName~PlanHashMismatchTests"
+    --filter "FullyQualifiedName~ReviewDigestMismatchTests"
 ```
 
 ## CI considerations

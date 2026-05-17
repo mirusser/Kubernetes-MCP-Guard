@@ -1,6 +1,4 @@
 using System.Net;
-using InfraGate.Approvals;
-using InfraGate.Approvals.AuditPayloads;
 using k8s;
 using k8s.Autorest;
 
@@ -50,57 +48,6 @@ public sealed partial class K8sManager
             ? $"Replicas must be between 0 and {MaxReplicas}."
             : null;
     }
-
-    private static IEnumerable<string> DeploymentNames(K8sPlan plan)
-    {
-        return plan.Objects
-            .Where(K8sConventions.K8sResources.IsDeployment)
-            .Select(obj => obj.Name);
-    }
-
-    private static bool SameObjects(K8sObjectRef[] left, K8sObjectRef[] right)
-    {
-        static string Key(K8sObjectRef obj) => $"{obj.ApiVersion}/{obj.Kind}/{obj.Namespace}/{obj.Name}";
-
-        return left.Select(Key).Order(StringComparer.Ordinal)
-            .SequenceEqual(right.Select(Key).Order(StringComparer.Ordinal), StringComparer.Ordinal);
-    }
-
-    private Task WriteDryRunFailedAuditAsync(
-        string phase,
-        K8sPlan plan,
-        string message,
-        CancellationToken cancellationToken) =>
-        approvalStore.WriteAuditAsync(
-            ApprovalConventions.AuditEvents.DryRunFailed,
-            new DryRunFailedPayload(
-                phase,
-                plan.Id,
-                plan.Operation,
-                plan.Namespace,
-                plan.Objects.Select(FormatObjectRef).ToArray(),
-                message),
-            cancellationToken);
-
-    private Task WriteDiffFailedAuditAsync(
-        K8sPlan plan,
-        string message,
-        CancellationToken cancellationToken) =>
-        approvalStore.WriteAuditAsync(
-            ApprovalConventions.AuditEvents.DiffFailed,
-            new DiffFailedPayload(
-                plan.Id,
-                plan.Operation,
-                plan.Namespace,
-                plan.Objects.Select(FormatObjectRef).ToArray(),
-                message),
-            cancellationToken);
-
-    private static string FormatRequestDryRunRefusal(string message) =>
-        $"Server-side dry-run failed; no approval plan was created.{Environment.NewLine}{message}";
-
-    private static string FormatApplyDryRunRefusal(string message) =>
-        $"Server-side dry-run failed immediately before apply; refusing to mutate Kubernetes.{Environment.NewLine}{message}";
 
     private static bool IsNotFound(Exception ex)
     {
@@ -167,10 +114,4 @@ public sealed partial class K8sManager
         return false;
     }
 
-    private sealed record ApplyResult(bool Succeeded, string Message)
-    {
-        public static ApplyResult Success(string message) => new(true, message);
-
-        public static ApplyResult Failed(string message) => new(false, message);
-    }
 }

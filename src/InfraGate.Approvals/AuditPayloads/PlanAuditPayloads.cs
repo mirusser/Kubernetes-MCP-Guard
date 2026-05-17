@@ -19,6 +19,8 @@
 // parameter here is a breaking schema change — AuditPayloadsTests pins the
 // canonical field set per payload.
 
+using InfraGate.Approvals;
+
 namespace InfraGate.Approvals.AuditPayloads;
 
 public interface IPlanAuditPayload
@@ -30,14 +32,19 @@ public sealed record PlanRequestedPayload(
     string PlanId,
     string Operation,
     string Namespace,
-    string Hash) : IPlanAuditPayload;
-
-public sealed record PlanApprovedPayload(
-    string PlanId,
     string Hash,
-    string Source,
-    string? ApproverSubject,
-    string? ChallengeId) : IPlanAuditPayload;
+    ApprovalDigest IntentDigest,
+    ApprovalDigest ReviewDigest) : IPlanAuditPayload;
+
+public sealed record ApprovalGrantIssuedPayload(
+    string PlanId,
+    string GrantId,
+    string SourceChallengeId,
+    string RequesterSubject,
+    string ApproverSubject,
+    ApprovalDigest IntentDigest,
+    ApprovalDigest ReviewDigest,
+    DateTimeOffset ExpiresAtUtc) : IPlanAuditPayload;
 
 public sealed record PlanAppliedPayload(
     string PlanId,
@@ -59,11 +66,6 @@ public sealed record ApplyDriftDetectedPayload(
     string Operation,
     string Namespace,
     string Message) : IPlanAuditPayload;
-
-public sealed record ApprovalHashMismatchPayload(
-    string PlanId,
-    string ApprovedHash,
-    string ActualHash) : IPlanAuditPayload;
 
 public sealed record DryRunFailedPayload(
     string Phase,

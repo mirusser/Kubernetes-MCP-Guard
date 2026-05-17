@@ -37,8 +37,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - image: kubernetes-mcp-guard-devissuer
-            dockerfile: deploy/docker/devissuer.Dockerfile
           - image: kubernetes-mcp-guard-gateway
             dockerfile: deploy/docker/mcp-gateway.Dockerfile
 

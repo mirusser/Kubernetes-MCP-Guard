@@ -3,8 +3,11 @@ obj/
 .kube/
 .mcp-approvals/
 .mcp-guardrails/
+.mcp-dataprotection-keys/
+dataprotection-keys/
 TestResults/
 coverage-report/
+deploy/generated/*.env
 .sonarqube/
 actions-runner/
 .mcp.json

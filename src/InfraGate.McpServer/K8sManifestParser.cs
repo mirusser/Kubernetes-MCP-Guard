@@ -1,4 +1,4 @@
-using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using k8s;
 using k8s.Models;
 

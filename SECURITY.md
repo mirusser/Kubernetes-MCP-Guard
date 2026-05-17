@@ -33,4 +33,4 @@ Please allow reasonable time for investigation and a patch before public disclos
 
 The OAuth 2.1 / OIDC auth surface and MCP transport compliance are documented in [docs/MCP-compliance.md](docs/MCP-compliance.md). A full security model document covering hard boundaries, threat model, and non-goals is available at [docs/security-model.md](docs/security-model.md). The per-tool RBAC and scope matrix is at [docs/tool-permissions.md](docs/tool-permissions.md).
 
-The `InfraGate.DevIssuer` component is a development-only OAuth/OIDC issuer. It is not designed for production use and is not in scope for production security review.
+The bundled Keycloak realm is for local development only. It is not designed for production use and is not in scope for production security review.

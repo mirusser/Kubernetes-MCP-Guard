@@ -20,7 +20,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\InfraGate.Approvals\InfraGate.Approvals.csproj" />
+    <ProjectReference Include="..\InfraGate.KubernetesAdapter\InfraGate.KubernetesAdapter.csproj" />
     <ProjectReference Include="..\InfraGate.RuntimeSafety\InfraGate.RuntimeSafety.csproj" />
+    <ProjectReference Include="..\InfraGate.Observability\InfraGate.Observability.csproj" />
   </ItemGroup>
 
   <ItemGroup>

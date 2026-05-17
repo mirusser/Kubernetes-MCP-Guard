@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using InfraGate.Approvals;
 using InfraGate.McpGateway;
 
 namespace InfraGate.Safety.E2E.Tests.Workflows;
@@ -48,11 +49,11 @@ public sealed class DryRunFailureTests(SafetyE2EFixture fixture)
 
         await using var client = await fixture.CreateHttpMcpClientAsync();
         var response = await client.CallToolAsync(
-            McpGatewayConventions.ToolNames.RequestApplyManifest,
+            "request_apply_manifest",
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                [McpGatewayConventions.ToolArguments.Manifest] = manifest
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Manifest] = manifest
             });
 
         var pendingAfter = Directory.Exists(pendingDirectory)
@@ -77,30 +78,37 @@ public sealed class DryRunFailureTests(SafetyE2EFixture fixture)
 
         await using var client = await fixture.CreateHttpMcpClientAsync();
         var requestText = await client.CallToolAsync(
-            McpGatewayConventions.ToolNames.RequestRestartDeployment,
+            "request_restart_deployment",
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo"
             });
         var planId = SafetyE2EFixture.ParsePlanId(requestText);
         var pendingPath = fixture.ApprovalStore.GetPendingPath(planId);
 
         // Rewrite the planned target name to a deployment that does not exist, then
         // create and approve a browser challenge for the mutated hash. Result:
-        // GetApprovedPlanAsync succeeds, drift check sees the original Objects[]
-        // (still unchanged in the cluster), and the pre-apply dry-run patches a
-        // non-existent target -> 404 -> dry-run fails.
+        // Grant validation succeeds, drift check sees the original Objects[] (still
+        // unchanged in the cluster), and the pre-apply dry-run patches a non-existent
+        // target -> 404 -> dry-run fails.
         // String-based replace is too brittle because ApprovalStore writes pending plans
         // with WriteIndented = true (key/value separated by ": ", not ":").
         var pendingJson = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
         var root = JsonNode.Parse(pendingJson)
             ?? throw new InvalidOperationException("Pending plan JSON was empty.");
-        root["parameters"]!["name"] = "deployment-that-does-not-exist";
-        var rewritten = root.ToJsonString(new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        root["payload"]!["parameters"]!["name"] = "deployment-that-does-not-exist";
+
+        var rewriteOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
             WriteIndented = true
-        });
+        };
+        var envelope = JsonSerializer.Deserialize<PlanEnvelope>(root.ToJsonString(), rewriteOptions)
+            ?? throw new InvalidOperationException("Failed to deserialize modified pending plan.");
+        var newReviewDigest = PlanEnvelopeFactory.ComputeReviewDigest(envelope);
+        root["reviewDigest"] = JsonSerializer.SerializeToNode(newReviewDigest, rewriteOptions);
+
+        var rewritten = root.ToJsonString(rewriteOptions);
         await File.WriteAllTextAsync(pendingPath, rewritten, CancellationToken.None);
 
         var approvalRequired = await client.CallToolAsync(

@@ -1,23 +1,21 @@
 # InfraGate.McpServer
 
-`InfraGate.McpServer` is the stdio MCP server that owns the Kubernetes governance behavior. It exposes MCP tools, validates requested namespaces and manifest kinds, dry-run-validates approval plans, and applies approved plans through the Kubernetes .NET client.
+`InfraGate.McpServer` is the private stdio MCP server that owns direct Kubernetes reads, evidence collection, and raw execution tools. It validates requested namespaces and manifest kinds, runs Kubernetes dry-runs and diffs, and performs raw mutations through the Kubernetes .NET client when called by the gateway's Kubernetes domain adapter.
 
 ## Runtime Flow
 
-- `Program.cs` wires the generic host, stdio MCP transport, `K8SMcpOptions`, `ApprovalStore`, `IKubernetes`, and `K8sManager`.
+- `Program.cs` wires the generic host, stdio MCP transport, `K8SMcpOptions`, `IKubernetes`, and `K8sManager`.
 - `K8sTools.cs` is the MCP-facing tool surface. Tool names are external contracts and must stay aligned with `K8sConventions.ToolNames`.
-- `K8sManager.*.cs` contains the behavior behind those tools: status reads, bounded observability and diagnostics reads, request-plan creation, approved-plan application, rollout waits, and validation helpers.
+- `K8sManager.*.cs` contains the behavior behind those tools: status reads, bounded observability and diagnostics reads, evidence dry-runs, manifest diffs, raw execution, and validation helpers.
 - `K8sManifestParser.cs` accepts YAML/JSON manifests and allows only `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap`.
-- `ApprovalStore.cs` persists pending, approved, and applied plan files and writes approval audit events.
+- The server uses Kubernetes adapter evidence and policy records, but it does not create, approve, or apply approval plans.
 
 ## Important Contracts
 
-- Mutations are two-step: create a dry-run-validated pending plan, then call `apply_approved_plan` after the Gateway writes out-of-band approval.
-- The server repeats Kubernetes `dryRun=All` immediately before applying an approved plan; failure blocks the real write.
-- Approval is hash-bound. If a pending plan changes after approval, application is refused.
+- The server is plan-unaware. It exposes read-only evidence tools (`dry_run_*`, `diff_manifest`, `check_live_drift`) and raw Destructive execution tools (`apply_manifest`, `delete_manifest`, `scale_deployment`, `restart_deployment`, `set_deployment_image`).
+- Plan creation, digest binding, approval grants, pre-execution gates, and applied markers live in the gateway plus `InfraGate.Approvals` and `InfraGate.KubernetesAdapter`.
 - Observability tools are read-only and bounded. They expose Events, Pod logs, focused summaries, and diagnostics, but not Secret values, ConfigMap values, raw manifests, exec, attach, or port-forward.
 - Allowed namespaces come from `K8S_MCP_ALLOWED_NAMESPACES`; unsupported namespaces are rejected before Kubernetes API calls.
-- Approval storage defaults to `.mcp-approvals` and uses `pending/`, `approved/`, `applied/`, `challenges/`, and `audit.jsonl`.
 - Do not rename MCP tool methods or tool-name constants without updating clients, tests, and README examples.
 
 ## Settings

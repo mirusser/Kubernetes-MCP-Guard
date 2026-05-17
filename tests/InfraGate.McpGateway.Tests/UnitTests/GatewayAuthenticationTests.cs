@@ -140,7 +140,7 @@ public sealed class GatewayAuthenticationTests
     [Fact]
     public void AddGatewayAuthentication_UsesMetadataAddressOverride_WithPublicIssuerValidation()
     {
-        const string metadataAddress = "http://devissuer:3011/.well-known/openid-configuration";
+        const string metadataAddress = "http://issuer.internal/.well-known/openid-configuration";
         var options = new GatewayAuthOptions(
             Issuer,
             Resource,

@@ -1,5 +1,6 @@
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpServer;
-using InfraGate.McpServer.Policy;
+using InfraGate.KubernetesAdapter.Policy;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
 
@@ -35,7 +36,7 @@ public sealed class K8sPolicyValidatorTests
         Assert.True(result.IsDenied);
         Assert.Contains(result.Findings, f =>
             f.Severity == K8sPolicySeverity.Deny &&
-            f.Code == K8sConventions.PolicyCodes.DeploymentPrivilegedContainer);
+            f.Code == KubernetesAdapterConventions.PolicyCodes.DeploymentPrivilegedContainer);
     }
 
     [Fact]
@@ -43,7 +44,7 @@ public sealed class K8sPolicyValidatorTests
     {
         var result = Validate(SafeDeploymentManifest);
 
-        Assert.DoesNotContain(result.Findings, f => f.Code == K8sConventions.PolicyCodes.DeploymentPrivilegedContainer);
+        Assert.DoesNotContain(result.Findings, f => f.Code == KubernetesAdapterConventions.PolicyCodes.DeploymentPrivilegedContainer);
     }
 
     [Fact]
@@ -102,7 +103,7 @@ public sealed class K8sPolicyValidatorTests
         Assert.True(result.IsDenied);
         Assert.Contains(result.Findings, f =>
             f.Severity == K8sPolicySeverity.Deny &&
-            f.Code == K8sConventions.PolicyCodes.DeploymentHostPath);
+            f.Code == KubernetesAdapterConventions.PolicyCodes.DeploymentHostPath);
     }
 
     [Fact]
@@ -133,7 +134,7 @@ public sealed class K8sPolicyValidatorTests
 
         var result = Validate(manifest);
 
-        Assert.DoesNotContain(result.Findings, f => f.Code == K8sConventions.PolicyCodes.DeploymentHostPath);
+        Assert.DoesNotContain(result.Findings, f => f.Code == KubernetesAdapterConventions.PolicyCodes.DeploymentHostPath);
     }
 
     [Fact]
@@ -165,7 +166,7 @@ public sealed class K8sPolicyValidatorTests
         Assert.True(result.IsDenied);
         Assert.Contains(result.Findings, f =>
             f.Severity == K8sPolicySeverity.Deny &&
-            f.Code == K8sConventions.PolicyCodes.DeploymentHostNamespace);
+            f.Code == KubernetesAdapterConventions.PolicyCodes.DeploymentHostNamespace);
     }
 
     [Fact]
@@ -197,7 +198,7 @@ public sealed class K8sPolicyValidatorTests
         Assert.True(result.IsDenied);
         Assert.Contains(result.Findings, f =>
             f.Severity == K8sPolicySeverity.Deny &&
-            f.Code == K8sConventions.PolicyCodes.DeploymentHostNamespace);
+            f.Code == KubernetesAdapterConventions.PolicyCodes.DeploymentHostNamespace);
     }
 
     [Fact]
@@ -229,7 +230,7 @@ public sealed class K8sPolicyValidatorTests
         Assert.True(result.IsDenied);
         Assert.Contains(result.Findings, f =>
             f.Severity == K8sPolicySeverity.Deny &&
-            f.Code == K8sConventions.PolicyCodes.DeploymentHostNamespace);
+            f.Code == KubernetesAdapterConventions.PolicyCodes.DeploymentHostNamespace);
     }
 
     [Fact]
@@ -264,7 +265,7 @@ public sealed class K8sPolicyValidatorTests
         Assert.True(result.IsDenied);
         Assert.Contains(result.Findings, f =>
             f.Severity == K8sPolicySeverity.Deny &&
-            f.Code == K8sConventions.PolicyCodes.DeploymentAddedCapabilities);
+            f.Code == KubernetesAdapterConventions.PolicyCodes.DeploymentAddedCapabilities);
     }
 
     [Fact]
@@ -296,7 +297,7 @@ public sealed class K8sPolicyValidatorTests
 
         var result = Validate(manifest);
 
-        Assert.DoesNotContain(result.Findings, f => f.Code == K8sConventions.PolicyCodes.DeploymentAddedCapabilities);
+        Assert.DoesNotContain(result.Findings, f => f.Code == KubernetesAdapterConventions.PolicyCodes.DeploymentAddedCapabilities);
     }
 
     [Fact]
@@ -332,7 +333,7 @@ public sealed class K8sPolicyValidatorTests
         Assert.True(result.IsDenied);
         Assert.Contains(result.Findings, f =>
             f.Severity == K8sPolicySeverity.Deny &&
-            f.Code == K8sConventions.PolicyCodes.DeploymentPrivilegedContainer);
+            f.Code == KubernetesAdapterConventions.PolicyCodes.DeploymentPrivilegedContainer);
     }
 
     [Fact]
@@ -363,7 +364,7 @@ public sealed class K8sPolicyValidatorTests
         Assert.True(result.IsDenied);
         Assert.Contains(result.Findings, f =>
             f.Severity == K8sPolicySeverity.Deny &&
-            f.Code == K8sConventions.PolicyCodes.ImageLatestTag);
+            f.Code == KubernetesAdapterConventions.PolicyCodes.ImageLatestTag);
     }
 
     [Fact]
@@ -394,7 +395,7 @@ public sealed class K8sPolicyValidatorTests
         Assert.True(result.IsDenied);
         Assert.Contains(result.Findings, f =>
             f.Severity == K8sPolicySeverity.Deny &&
-            f.Code == K8sConventions.PolicyCodes.ImageLatestTag);
+            f.Code == KubernetesAdapterConventions.PolicyCodes.ImageLatestTag);
     }
 
     [Fact]
@@ -402,7 +403,7 @@ public sealed class K8sPolicyValidatorTests
     {
         var result = Validate(SafeDeploymentManifest);
 
-        Assert.DoesNotContain(result.Findings, f => f.Code == K8sConventions.PolicyCodes.ImageLatestTag);
+        Assert.DoesNotContain(result.Findings, f => f.Code == KubernetesAdapterConventions.PolicyCodes.ImageLatestTag);
     }
 
     [Fact]
@@ -427,7 +428,7 @@ public sealed class K8sPolicyValidatorTests
         Assert.True(result.IsDenied);
         Assert.Contains(result.Findings, f =>
             f.Severity == K8sPolicySeverity.Deny &&
-            f.Code == K8sConventions.PolicyCodes.ServiceLoadBalancer);
+            f.Code == KubernetesAdapterConventions.PolicyCodes.ServiceLoadBalancer);
     }
 
     [Fact]
@@ -453,7 +454,7 @@ public sealed class K8sPolicyValidatorTests
         Assert.True(result.IsDenied);
         Assert.Contains(result.Findings, f =>
             f.Severity == K8sPolicySeverity.Deny &&
-            f.Code == K8sConventions.PolicyCodes.ServiceNodePort);
+            f.Code == KubernetesAdapterConventions.PolicyCodes.ServiceNodePort);
     }
 
     [Fact]
@@ -477,8 +478,8 @@ public sealed class K8sPolicyValidatorTests
 
         Assert.False(result.IsDenied);
         Assert.DoesNotContain(result.Findings, f =>
-            f.Code == K8sConventions.PolicyCodes.ServiceLoadBalancer ||
-            f.Code == K8sConventions.PolicyCodes.ServiceNodePort);
+            f.Code == KubernetesAdapterConventions.PolicyCodes.ServiceLoadBalancer ||
+            f.Code == KubernetesAdapterConventions.PolicyCodes.ServiceNodePort);
     }
 
     [Fact]
@@ -501,8 +502,8 @@ public sealed class K8sPolicyValidatorTests
 
         Assert.False(result.IsDenied);
         Assert.DoesNotContain(result.Findings, f =>
-            f.Code == K8sConventions.PolicyCodes.ServiceLoadBalancer ||
-            f.Code == K8sConventions.PolicyCodes.ServiceNodePort);
+            f.Code == KubernetesAdapterConventions.PolicyCodes.ServiceLoadBalancer ||
+            f.Code == KubernetesAdapterConventions.PolicyCodes.ServiceNodePort);
     }
 
     [Fact]
@@ -523,7 +524,7 @@ public sealed class K8sPolicyValidatorTests
         Assert.False(result.IsDenied);
         Assert.Contains(result.Findings, f =>
             f.Severity == K8sPolicySeverity.Warning &&
-            f.Code == K8sConventions.PolicyCodes.ConfigMapSecretLikeKey);
+            f.Code == KubernetesAdapterConventions.PolicyCodes.ConfigMapSecretLikeKey);
     }
 
     [Fact]
@@ -580,7 +581,7 @@ public sealed class K8sPolicyValidatorTests
         var parsed = K8sManifestParser.ParseSupported(manifest, "demo");
         var result = K8sPolicyValidator.Validate(parsed.Objects, options);
 
-        Assert.DoesNotContain(result.Findings, f => f.Code == K8sConventions.PolicyCodes.DeploymentHostPath);
+        Assert.DoesNotContain(result.Findings, f => f.Code == KubernetesAdapterConventions.PolicyCodes.DeploymentHostPath);
     }
 
     [Fact]
@@ -609,7 +610,7 @@ public sealed class K8sPolicyValidatorTests
         var parsed = K8sManifestParser.ParseSupported(manifest, "demo");
         var result = K8sPolicyValidator.Validate(parsed.Objects, options);
 
-        Assert.DoesNotContain(result.Findings, f => f.Code == K8sConventions.PolicyCodes.ImageLatestTag);
+        Assert.DoesNotContain(result.Findings, f => f.Code == KubernetesAdapterConventions.PolicyCodes.ImageLatestTag);
     }
 
     private static K8sPolicyResult Validate(string manifest)

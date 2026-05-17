@@ -1,21 +1,20 @@
 # InfraGate.McpServer.Tests
 
-`InfraGate.McpServer.Tests` covers the stdio Kubernetes MCP server without requiring a live cluster by default. It focuses on plan creation, approval storage, manifest validation, option parsing, and the opt-in end-to-end Kubernetes path.
+`InfraGate.McpServer.Tests` covers the stdio Kubernetes MCP server without requiring a live cluster by default. It focuses on Kubernetes evidence tools, raw execution helpers, manifest validation, option parsing, adapter plan behavior, and the opt-in Kubernetes path.
 
 ## What It Covers
 
-- `ApprovalStoreTests.cs`: approval hash matching, denied unapproved plans, changed-plan protection, and server approval writes.
+- `ApprovalStoreTests.cs`: grant-bound approval, denied unapproved plans, opaque plan identifiers, old-format refusal, and legacy approved-directory absence.
 - `K8sManifestParserTests.cs`: supported Kubernetes manifests, namespace defaulting, unsupported kinds, missing names, and namespace mismatch rejection.
-- `K8sManagerApplyTests.cs`: approved plan application for scale, restart, delete not-found, pre-apply dry-run, legacy dry-run refusal, and mismatched manifest refusal.
 - `K8sManagerConfigTests.cs`: allowed namespace listing, sorting, empty configuration, and no K8s client dependency.
 - `K8sManagerObservabilityTests.cs`: bounded Events, Pod logs, focused resource summaries, and sensitive-resource rejection.
 - `K8sManagerDiagnosticsTests.cs`: bounded Deployment, Pod, and Service diagnostics without extra RBAC assumptions.
-- `K8sManagerRequestTests.cs`: request-plan formatting, namespace validation, replica bounds, request-time dry-run, approval guidance, and unapproved apply refusal.
 - `AuditPayloadsTests.cs`: serialisation shape for every approval-audit payload record — locks field names, ordering, and PlanId-vs-Id conventions.
-- `K8sManagerSetImageTests.cs`: Deployment image update planning, stale-plan refusal, and patch shape.
 - `K8SMcpOptionsTests.cs`: allowed namespace parsing defaults and comma-separated values.
-- `K8sToolsTests.cs`: MCP tool delegation and argument forwarding to K8sManager.
-- `McpServerIntegrationTests.cs`: opt-in stdio MCP client flow that reads demo Kubernetes resources and Events, then creates, approves, applies, updates images, scales, restarts, and deletes demo resources.
+- `K8sToolsTests.cs`: MCP tool delegation, argument forwarding to K8sManager, and plan-unaware live-drift evidence arguments.
+- `KubernetesPlanBuilderTests.cs`: Kubernetes adapter plan creation, freshness policy declarations, dry-run evidence, diff evidence, and policy refusal behavior.
+- `KubernetesPlanExecutorTests.cs`: Kubernetes adapter execution gates, drift blocking, pre-execution dry-run blocking, policy blocking, and raw execution dispatch.
+- `KubernetesPlanReviewTests.cs`: review evidence requirements for manifest plans and dry-run-only Deployment operations.
 
 ## Running Tests
 

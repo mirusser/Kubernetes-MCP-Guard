@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpServer;
 using InfraGate.McpServer.Diff;
 using k8s;
@@ -142,21 +143,13 @@ public sealed class K8sDiffServiceTests
             Host = "http://127.0.0.1:1",
             SkipTlsVerify = true
         });
-        var plan = new K8sPlan(
-            "plan-1",
-            "apply",
-            "demo",
-            DateTimeOffset.UtcNow,
-            "Apply ConfigMap.",
+        var drift = await K8sDiffService.FindDriftAsync(
+            client,
+            KubernetesAdapterConventions.PlanOperations.Apply,
             [],
-            [ConfigMapRef])
-        {
-            Diffs = []
-        };
+            CancellationToken.None);
 
-        var drift = await K8sDiffService.FindDriftAsync(client, plan, CancellationToken.None);
-
-        Assert.Equal("Plan 'plan-1' is missing recorded diff data. Re-request the plan.", drift);
+        Assert.Equal("Recorded diff data is empty.", drift);
     }
 
     private static string DeploymentJson(

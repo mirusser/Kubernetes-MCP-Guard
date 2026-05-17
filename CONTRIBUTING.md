@@ -32,13 +32,13 @@ For the local demo namespace and kubeconfig:
 For the containerized OAuth demo:
 
 ```bash
-docker compose -f deploy/mode-c/compose.yaml up --build
+docker compose -f deploy/local-oauth/compose.yaml up --build
 ```
 
 For Compose validation without starting services:
 
 ```bash
-docker compose -f deploy/mode-c/compose.yaml config
+docker compose -f deploy/local-oauth/compose.yaml config
 ```
 
 ## Verification
@@ -47,13 +47,13 @@ Run the narrowest useful checks for your change. For most code or contract chang
 
 ```bash
 dotnet build InfraGate.slnx
-dotnet test InfraGate.slnx --no-build
+dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak"
 ```
 
 For live Kubernetes coverage against the demo namespace:
 
 ```bash
-INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build
+INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak"
 INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build
 ```
 
@@ -73,7 +73,7 @@ MCP tools are external contracts. Before adding or changing one:
 - Do not add raw shell execution, `kubectl` passthrough, exec, attach, port-forward, namespace creation, RBAC manipulation, or Secret-value reads.
 - Preserve OAuth JWT enforcement at the HTTP gateway.
 - Preserve namespace allow-list checks and Kubernetes RBAC assumptions.
-- Keep mutation behavior plan-first: `request_*` creates a pending plan, and `apply_approved_plan` applies only after approval.
+- Keep mutation behavior plan-first: `request_*` creates a pending plan, and `execute_approved_plan` applies only after approval.
 - Preserve hash-bound approvals so a plan cannot change after approval.
 - Keep observability bounded, and avoid raw manifests or ConfigMap values in read responses.
 - Route model-visible reads through gateway guardrails and response sanitization.

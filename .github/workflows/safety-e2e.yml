@@ -44,6 +44,9 @@ jobs:
           dotnet restore InfraGate.slnx
           dotnet build InfraGate.slnx --configuration Release --no-restore
 
+      - name: Validate run profiles
+        run: dotnet run --project src/InfraGate.RunProfiles -- validate
+
       - name: Run Safety E2E tests
         env:
           INFRA_GATE_RUN_SAFETY_E2E: "1"

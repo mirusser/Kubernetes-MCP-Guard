@@ -1,14 +1,14 @@
 # Demo — Recover a Failing Deployment Through the Approval Gate
 
-This walkthrough exercises the full Kubernetes MCP Guard safety model end-to-end against a deliberately broken Deployment: read-only diagnosis, mutation proposal, hash-bound approval, exact-plan apply, verification, and audit inspection. Every change to the cluster goes through a `request_*` plan and an explicit approval before `apply_approved_plan` writes it. The production-grade controls behind this flow (RBAC boundary, JWT validation, threat model) will be documented in `docs/security-model.md` (planned in Epic 4); this doc is operational, not a security argument.
+This walkthrough exercises the full Kubernetes MCP Guard safety model end-to-end against a deliberately broken Deployment: read-only diagnosis, mutation proposal, hash-bound approval, exact-plan apply, verification, and audit inspection. Every change to the cluster goes through a `request_*` plan and an explicit approval before `execute_approved_plan` writes it. The production-grade controls behind this flow (RBAC boundary, JWT validation, threat model) will be documented in `docs/security-model.md` (planned in Epic 4); this doc is operational, not a security argument.
 
 The demo runs entirely against the local minikube cluster set up by the project's quickstart — no production credentials and no real OIDC provider required.
 
 ## Prerequisites
 
-- Gateway and Keycloak running per [README "Quick Start"](../README.md#-quick-start) (published images or build from source). The deprecated DevIssuer Mode C also works, but Mode D is the reference path.
+- Gateway and Keycloak running per [README "Quick Start"](../README.md#-quick-start) (published images or build from source).
 - `./scripts/create-demo-kubeconfig.sh --compose` already executed in this checkout (this provisions the `mcp-nginx-demo` namespace, RBAC, ServiceAccount, and the kubeconfig the gateway mounts).
-- An MCP client connected to `http://127.0.0.1:3001/mcp`. Codex CLI per the README is the reference client. Approval happens in the Gateway browser UI returned by `apply_approved_plan`.
+- An MCP client connected to `http://127.0.0.1:3001/mcp`. Codex CLI per the README is the reference client. Approval happens in the Gateway browser UI returned by `execute_approved_plan`.
 - `kubectl` available locally — only needed in [Step 1](#step-1--deploy-the-broken-workload) and [Step 8](#step-8--cleanup) to apply and remove the broken manifest directly. The fix is applied through the gateway.
 
 ## Step 1 — Deploy the broken workload
@@ -57,33 +57,23 @@ The same fix can be planned by submitting `examples/failing-deployment/fix.yaml`
 
 ## Step 4 — Approve the plan
 
-Call `apply_approved_plan(planId="<PlanId>")`. The Gateway returns an approval URL instead of applying immediately. Open that URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan and hash, and approve it.
+Call `execute_approved_plan(planId="<PlanId>")`. The Gateway returns an approval URL instead of applying immediately. Open that URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan, Intent Digest, and Review Digest, and approve it.
 
-**What you should see:** an approval page showing the `PlanId`, affected objects, requester, expiry, and plan hash. After approval, return to the MCP client and call `apply_approved_plan(planId="<PlanId>")` again.
+**What you should see:** an approval page showing the `PlanId`, affected objects, requester, expiry, Intent Digest, and Review Digest. After approval, the Gateway issues an Approval Grant, and the MCP client can call `execute_approved_plan(planId="<PlanId>")` to execute.
 
-### `scripts/approve-plan.sh` dev helper
-
-```bash
-./scripts/approve-plan.sh <PlanId>
-```
-
-The script reads `.mcp-approvals/pending/<PlanId>.json`, computes its SHA-256, and writes the hash to `.mcp-approvals/approved/<PlanId>.sha256`. It is useful for local development and direct-stdio experiments; the Gateway browser UI is the normal approval path.
-
-This is **not** a way to bypass approval — the file-system action *is* the approval. The hash is bound to the exact pending plan; any later edit to the pending JSON breaks the match (see Step 5).
-
-**What you should see:** `Approved <PlanId>` and the path to the approval file.
+Direct hash approval files do not authorize execution in the current grant-bound flow. The legacy `scripts/approve-plan.sh` helper has been removed.
 
 ## Step 5 — Apply
 
 ```text
-apply_approved_plan(planId = "<PlanId>")
+execute_approved_plan(planId = "<PlanId>")
 ```
 
-The server re-reads `pending/<PlanId>.json`, recomputes its hash, and compares it to `approved/<PlanId>.sha256`. On match, it applies the plan against the Kubernetes API.
+The server re-reads `pending/<PlanId>.json`, validates the Approval Grant and its Intent/Review Digest bindings, repeats Kubernetes dry-run, and applies the plan against the Kubernetes API only if every gate passes.
 
 **What you should see:** the tool returns the apply result describing the patched Deployment. Within seconds, Kubernetes pulls the new image and the Pods become Ready.
 
-If anything edits `pending/<PlanId>.json` between approval and apply, the recomputed hash no longer matches and the server refuses to apply, emitting an `approval_hash_mismatch` audit entry. This is the tamper-detection guarantee in action.
+If anything edits `pending/<PlanId>.json` between approval and apply, the recomputed Review Digest no longer matches and execution is refused, emitting an `apply_denied` audit entry. This is the tamper-detection guarantee in action.
 
 ## Step 6 — Verify recovery
 
@@ -95,11 +85,11 @@ Re-run the read-only tools from Step 2:
 
 ## Step 7 — Inspect the audit
 
-Two JSONL streams record the demo. Both live under volumes mounted by `deploy/mode-d/compose.yaml` and `deploy/mode-d/compose.release.yaml` (or the matching Mode C files if you intentionally run the deprecated DevIssuer fallback).
+Two JSONL streams record the demo. Both live under volumes mounted by `deploy/local-oauth/compose.yaml` and `deploy/local-oauth/compose.release.yaml`.
 
 ### Server-side (`.mcp-approvals/audit.jsonl`)
 
-Records the plan lifecycle: `plan_requested`, `plan_approved`, `plan_applied` (and on a tampered plan, `approval_hash_mismatch` + `apply_denied`). One entry shape:
+Records the plan lifecycle: `plan_requested`, `approval_challenge_created`, `approval_challenge_approved`, `grant_issued`, `plan_applied` (and on a tampered plan, `apply_denied`). One entry shape:
 
 ```json
 {"timestampUtc":"2026-05-03T12:34:56.789Z","eventName":"plan_applied","payload":{"planId":"20260503-a1b2c3d4","operation":"setImage","namespace":"mcp-nginx-demo","hash":"sha256:…"}}
@@ -121,13 +111,13 @@ You should be able to thread one `planId` through both streams and see the full 
 kubectl delete -f examples/failing-deployment/deployment.yaml -n mcp-nginx-demo
 ```
 
-The gateway-mediated equivalent is `request_delete_manifest` followed by `apply_approved_plan` — the demo uses `kubectl` here for symmetry with Step 1, since the workload was applied with `kubectl` to begin with. Either path works; pick the one that fits the story you want to tell.
+The gateway-mediated equivalent is `request_delete_manifest` followed by `execute_approved_plan` — the demo uses `kubectl` here for symmetry with Step 1, since the workload was applied with `kubectl` to begin with. Either path works; pick the one that fits the story you want to tell.
 
 ## Troubleshooting
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `apply_approved_plan` returns "plan not found" | The gateway and server must share the same `K8S_MCP_APPROVAL_ROOT`. The compose files mount `.mcp-approvals` into the gateway container; if you run a custom setup, point both gateway and downstream server at the same directory. |
-| `approval_hash_mismatch` audit entry, apply refused | `pending/<PlanId>.json` was edited between approval and apply (manually, or by re-running `request_*` and overwriting). Generate a fresh plan and approve that one. |
-| Approval URL opens but refuses approval | Sign in with the same OAuth subject that requested the plan, and request a fresh URL if the challenge expired or the plan hash changed. |
+| `execute_approved_plan` returns "plan not found" | The gateway and server must share the same `K8S_MCP_APPROVAL_ROOT`. The compose files mount `.mcp-approvals` into the gateway container; if you run a custom setup, point both gateway and downstream server at the same directory. |
+| Digest mismatch or grant mismatch, apply refused | `pending/<PlanId>.json` was edited between approval and apply (manually, or by re-running `request_*` and overwriting). Generate a fresh plan and approve that one. |
+| Approval URL opens but refuses approval | Sign in with the same OAuth subject that requested the plan, and request a fresh URL if the challenge expired or the pending-plan hash/digest binding changed. |
 | Pods stuck in `ImagePullBackOff` after Step 5 | The replica count is 2 and the rollout takes a few seconds; re-run `get_k8s_status`. If it persists, check `get_k8s_events` for a different pull error (e.g. registry rate limiting). |

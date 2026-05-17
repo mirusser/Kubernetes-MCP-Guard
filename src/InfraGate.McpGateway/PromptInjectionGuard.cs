@@ -14,15 +14,16 @@ public static partial class PromptInjectionGuard
         McpGatewayConventions.ToolNames.ApplyApprovedPlan +
         @"|request_[a-z_]+)\b.{0,80}\b(?:call|invoke|use|run|execute)\b";
 
-    private const string SupportedK8sResourcePattern = @"(?:apps\/v1|v1)\s+(?:Deployment|Service|ConfigMap)";
+    private const string ResourceReferencePattern =
+        @"(?:[A-Za-z0-9_.-]+\/)?[A-Za-z0-9_.-]+\s+[A-Za-z][A-Za-z0-9_.-]*(?:\s+\S+\/\S+|\/\S+)?";
 
     private const string OperationalLinePattern =
         @"^\s*(?:PlanId|Next step|Applied plan|Status|Operation|Namespace|Objects|API operations|Rollout|Current status):\b" +
         @"|^\s*Next step:\s+call " + McpGatewayConventions.ToolNames.ApplyApprovedPlan + @" with this PlanId\.\s*$" +
         @"|^\s*Call " + McpGatewayConventions.ToolNames.ApplyApprovedPlan + @"\b" +
-        @"|^\s*-\s+" + SupportedK8sResourcePattern + @"/\S+\b" +
-        @"|^\s*(?:Applied|Deleted|Scaled|Restarted)\s+" + SupportedK8sResourcePattern + @"\b" +
-        @"|^\s*(?:Deployment rollout|No rollout)\b";
+        @"|^\s*-\s+" + ResourceReferencePattern + @"\b" +
+        @"|^\s*(?:Applied|Deleted|Scaled|Restarted)\s+" + ResourceReferencePattern + @"\b" +
+        @"|^\s*(?:[A-Za-z][A-Za-z0-9_.-]*\s+rollout|No rollout)\b";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {

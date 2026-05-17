@@ -1,8 +1,6 @@
 using System.Text.Json;
-using InfraGate.Approvals;
 using k8s;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace InfraGate.McpServer;
 
@@ -19,14 +17,12 @@ public sealed partial class K8sManager
     };
 
     private readonly K8SMcpOptions options;
-    private readonly ApprovalStore approvalStore;
     private readonly IKubernetes client;
     private readonly ILogger<K8sManager> logger;
 
-    public K8sManager(K8SMcpOptions options, ApprovalStore approvalStore, IKubernetes client, ILogger<K8sManager> logger)
+    public K8sManager(K8SMcpOptions options, IKubernetes client, ILogger<K8sManager> logger)
     {
         this.options = options;
-        this.approvalStore = approvalStore;
         this.client = client;
         this.logger = logger;
     }

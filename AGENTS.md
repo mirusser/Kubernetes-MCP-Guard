@@ -92,6 +92,7 @@ Reusable skill definitions live in [.agents/skills/](.agents/skills/). Load the 
 - [writing-tests](.agents/skills/writing-tests/SKILL.md): adding or modifying tests — naming, project structure, InternalsVisibleTo setup for internal types, and verification.
 - [verify-readme-docs](.agents/skills/verify-readme-docs/SKILL.md): audit and minimally fix README files against actual code and tests.
 - [infragate-mcp-gateway](.agents/skills/infragate-mcp-gateway/SKILL.md): use the local InfraGate MCP gateway for Kubernetes inspection and guarded changes.
+- [review-mutation-approval-flow](.agents/skills/review-mutation-approval-flow/SKILL.md): review the MCP mutation-approval glossary, flow diagrams, relationship table, profile sketch, and related ADRs for consistency.
 
 ## Solution Map
 
@@ -104,10 +105,13 @@ Load only the project README you need:
   - [InfraGate.McpGateway](src/InfraGate.McpGateway/README.md): HTTP MCP gateway, downstream stdio client, guardrails, sanitization, and audit logging.
   - [InfraGate.McpGateway.Auth](src/InfraGate.McpGateway.Auth/README.md): OAuth JWT auth, MCP protected-resource metadata, and audit identity resolution.
   - [InfraGate.Approvals](src/InfraGate.Approvals/README.md): shared approval storage, challenge lifecycle, audit event conventions, and typed audit payloads.
-  - [InfraGate.DevIssuer](src/InfraGate.DevIssuer/README.md): localhost-only OAuth/OIDC-style issuer for development and Codex login testing.
+  - [InfraGate.KubernetesAdapter](src/InfraGate.KubernetesAdapter/README.md): Kubernetes-specific approval payload and evidence records used by the generic approval flow.
+  - [InfraGate.RuntimeSafety](src/InfraGate.RuntimeSafety/README.md): runtime mode resolution, production safety validation, and environment variable conventions.
+  - [InfraGate.Observability](src/InfraGate.Observability/README.md): shared Serilog structured logging configuration for the MCP Gateway and MCP Server.
 - Test projects:
   - [InfraGate.McpServer.Tests](tests/InfraGate.McpServer.Tests/README.md): server unit tests and opt-in Kubernetes integration coverage.
   - [InfraGate.McpGateway.Tests](tests/InfraGate.McpGateway.Tests/README.md): gateway auth, guardrail, sanitization, audit, and forwarding tests.
   - [InfraGate.McpGateway.KeycloakTests](tests/InfraGate.McpGateway.KeycloakTests/README.md): opt-in Keycloak Testcontainers integration tests covering real OIDC discovery, JWKS validation, and token acquisition through the gateway's JWT bearer pipeline.
-  - [InfraGate.DevIssuer.Tests](tests/InfraGate.DevIssuer.Tests/README.md): dev issuer and gateway OAuth compatibility tests.
+  - [InfraGate.RuntimeSafety.Tests](tests/InfraGate.RuntimeSafety.Tests/README.md): unit tests for runtime mode detection, production safety validation, and environment variable resolution.
+  - [InfraGate.Observability.Tests](tests/InfraGate.Observability.Tests/README.md): unit tests for console and file sink logging configuration.
   - [InfraGate.Safety.E2E.Tests](tests/InfraGate.Safety.E2E.Tests/README.md): opt-in end-to-end tests proving the seven approval-flow safety properties through real OAuth (Keycloak in a container), gateway TestHost, McpServer subprocess, and a developer-provided Kubernetes cluster.

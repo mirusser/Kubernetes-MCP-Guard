@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using k8s;
 using k8s.Autorest;
 
@@ -39,17 +40,18 @@ internal static class K8sDiffService
 
     public static async Task<string?> FindDriftAsync(
         IKubernetes client,
-        K8sPlan plan,
+        string operation,
+        IReadOnlyList<K8sPlanDiff> diffs,
         CancellationToken cancellationToken)
     {
-        if (plan.Diffs.Length == 0)
+        if (diffs.Count == 0)
         {
-            return $"Plan '{plan.Id}' is missing recorded diff data. Re-request the plan.";
+            return "Recorded diff data is empty.";
         }
 
-        foreach (var diff in plan.Diffs)
+        foreach (var diff in diffs)
         {
-            var liveJson = await ReadComparableLiveJsonAsync(client, plan.Operation, diff.Object, cancellationToken);
+            var liveJson = await ReadComparableLiveJsonAsync(client, operation, diff.Object, cancellationToken);
             var normalizedLiveJson = liveJson is null ? null : K8sObjectNormalizer.NormalizeJson(liveJson);
 
             if (SameJson(diff.LiveObjectJson, normalizedLiveJson))
@@ -57,7 +59,7 @@ internal static class K8sDiffService
                 continue;
             }
 
-            return $"Plan '{plan.Id}' no longer matches live Kubernetes state for {FormatObjectRef(diff.Object)}. Re-request the plan before applying.";
+            return $"Live Kubernetes state no longer matches recorded diff for {FormatObjectRef(diff.Object)}. Re-request the plan before applying.";
         }
 
         return null;
@@ -87,7 +89,7 @@ internal static class K8sDiffService
         K8sObjectRef obj,
         Dictionary<string, K8sPlanDryRunObject> dryRunByObject)
     {
-        if (string.Equals(operation, K8sConventions.PlanOperations.Delete, StringComparison.Ordinal))
+        if (string.Equals(operation, K8sConventions.MutationOperations.Delete, StringComparison.Ordinal))
         {
             return null;
         }
@@ -111,7 +113,7 @@ internal static class K8sDiffService
         {
             object liveObject = operation switch
             {
-                K8sConventions.PlanOperations.Scale => await client.AppsV1.ReadNamespacedDeploymentScaleAsync(
+                K8sConventions.MutationOperations.Scale => await client.AppsV1.ReadNamespacedDeploymentScaleAsync(
                     obj.Name,
                     obj.Namespace,
                     cancellationToken: cancellationToken),

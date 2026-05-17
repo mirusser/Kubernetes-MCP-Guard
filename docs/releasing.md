@@ -8,8 +8,8 @@ This file owns the release process for Kubernetes MCP Guard. Releases are marked
 2. Confirm integration tests pass (self-hosted runner, both `INFRA_GATE_RUN_INTEGRATION` and `INFRA_GATE_RUN_GATEWAY_INTEGRATION`).
 3. Confirm the Keycloak integration tests pass on `main` via the `keycloak-tests.yml` CI workflow (requires Docker on `ubuntu-latest`).
 4. Confirm `package-docker.yml` succeeds for the release tag.
-5. Confirm Docker Hub images are pushed (`mirusser/kubernetes-mcp-guard-gateway`, `mirusser/kubernetes-mcp-guard-devissuer`).
-6. Confirm GHCR images are pushed (`ghcr.io/mirusser/kubernetes-mcp-guard-gateway`, `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer`).
+5. Confirm the Docker Hub image is pushed (`mirusser/kubernetes-mcp-guard-gateway`).
+6. Confirm the GHCR image is pushed (`ghcr.io/mirusser/kubernetes-mcp-guard-gateway`).
 7. Confirm the production Docker deploy job completed, or intentionally skip it if the `production` GitHub Environment is not configured.
 8. Confirm GHCR packages are set to **public** if public pulls are intended; confirm Docker Hub repositories are public if intended.
 9. Confirm the GitHub Packages page links back to the GitHub repository and has a description.
@@ -19,7 +19,6 @@ This file owns the release process for Kubernetes MCP Guard. Releases are marked
 13. Verify quickstart commands (compose, README) reference the released tag.
 14. Verify no secrets, tokens, or live credentials are present in docs, logs, sample manifests, or example env files.
 15. Run the Keycloak published-image smoke test against the release tag before announcing.
-16. During the DevIssuer deprecation window, run the DevIssuer fallback smoke test when DevIssuer changed.
 
 ## Release Notes Template
 
@@ -35,12 +34,10 @@ This is an experimental release of Kubernetes MCP Guard.
 Docker Hub:
 
 - `mirusser/kubernetes-mcp-guard-gateway:VERSION`
-- `mirusser/kubernetes-mcp-guard-devissuer:VERSION`
 
 GitHub Container Registry:
 
 - `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:VERSION`
-- `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:VERSION`
 
 ### Status
 
@@ -65,16 +62,9 @@ Run the Keycloak published-image smoke test manually against the release tag bef
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
-TAG=vX.Y.Z ./scripts/smoke-test-keycloak-release.sh
-```
-
-The script boots `deploy/mode-d/compose.release.yaml` from GHCR, waits for Keycloak discovery and the gateway HTTP server, asserts the gateway returns a well-formed 401 auth challenge, acquires a real Keycloak token through `mcp-smoke-client`, confirms `/mcp` is not rejected with 401/403, then tears everything down. It exits non-zero and dumps logs on failure.
-
-The deprecated DevIssuer fallback smoke remains available while Mode C exists:
-
-```bash
-./scripts/create-demo-kubeconfig.sh --compose
 TAG=vX.Y.Z ./scripts/smoke-test-release.sh
 ```
+
+The script boots `deploy/local-oauth/compose.release.yaml` from GHCR, waits for Keycloak discovery and the gateway HTTP server, asserts the gateway returns a well-formed 401 auth challenge, acquires a real Keycloak token through `mcp-smoke-client`, confirms `/mcp` is not rejected with 401/403, then tears everything down. It exits non-zero and dumps logs on failure.
 
 A CI workflow (`release-smoke-test.yml`) is planned once a Kubernetes-in-CI path (kind) is in place; until then this step is manual.

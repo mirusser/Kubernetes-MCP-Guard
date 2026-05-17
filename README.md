@@ -25,7 +25,7 @@ Kubernetes-MCP-Guard is a .NET 10 gateway for the Model Context Protocol (MCP). 
 - **Browser-based HITL approval:** AI can propose a change, but only the authenticated human requester can approve or deny the final plan through the Gateway approval UI.
 - **Separated trust channels:** MCP clients receive an approval URL, while approval happens through `/approvals/*` with a browser OAuth cookie, anti-forgery checks, same-subject binding, and a short-lived challenge.
 - **Bounded Kubernetes access:** Namespace allow-lists, namespace-scoped RBAC, typed tools, and supported-kind checks keep the Kubernetes surface narrow.
-- **Auditable safety controls:** Prompt-injection guardrails, approval audit events, plan hashes, dry-runs, and drift checks make decisions traceable before and after execution.
+- **Auditable safety controls:** Prompt-injection guardrails, approval audit events, Intent/Review Digests, dry-runs, grants, and drift checks make decisions traceable before and after execution.
 
 ---
 
@@ -58,9 +58,9 @@ flowchart TB
     end
 
     subgraph Store["Shared approval store"]
-        Pending["pending plan<br/>dry-run + SHA-256 hash"]
-        Challenge["single-use challenge<br/>requester subject + TTL"]
-        Approved["approved hash<br/>applied marker"]
+        Pending["pending plan<br/>intent + review digests"]
+        Challenge["approval challenge<br/>requester subject + TTL"]
+        Approved["approval grant<br/>applied marker"]
         Pending --> Challenge
         Challenge --> Approved
     end
@@ -146,11 +146,11 @@ Every mutation passes through three independent checkpoints. Each one can block 
 
 | Phase | What happens | What can block it |
 |---|---|---|
-| **① Plan** | AI calls `request_*`; server runs a server-side dry-run and policy checks; computes a SHA-256 hash of the pending plan and stores it | Dry-run failure, policy violation (privileged containers, hostPath, dangerous caps, …) |
-| **② Approve** | Human opens the approval URL; browser renders the plan from the server-side file, not the AI's description; human clicks Approve or Deny | Challenge expired (default 15 min TTL), approver subject does not match requester, anti-forgery validation fails, or the plan hash changed after the URL was created |
-| **③ Execute** | AI calls `apply_approved_plan` again; server re-checks the approved hash, re-runs the dry-run, and checks live-state drift | Hash mismatch, no approved challenge on file, plan already applied, second dry-run failure, policy failure on re-validation, or live state drifted since approval |
+| **① Plan** | AI calls `request_*`; the gateway asks the Kubernetes adapter to gather server-side dry-run, policy, and diff evidence; the generic core stores a pending plan envelope with Intent and Review Digests | Dry-run failure, policy violation (privileged containers, hostPath, dangerous caps, …), or unsupported legacy plan format |
+| **② Approve** | Human opens the approval URL; browser renders the plan from the server-side file, not the AI's description; human clicks Approve or Deny; the gateway records a Challenge Outcome and issues an Approval Grant only for approval | Challenge expired (default 15 min TTL), approver subject does not match requester, anti-forgery validation fails, or the pending-plan hash/digest binding changed after the URL was created |
+| **③ Execute** | AI calls `execute_approved_plan` again; the gateway validates the Approval Grant, digest bindings, plan validity window, and reuse marker, then the Kubernetes adapter re-runs declared freshness checks before calling raw execution tools | Missing/expired/mismatched grant, digest mismatch, plan already applied, second dry-run failure, policy failure on re-validation, or live state drifted since approval |
 
-The hash from Phase ① is the integrity seal that links all three phases. If the plan changes before approval, the browser approval is refused. If it changes after approval but before execution, `apply_approved_plan` is refused. After a successful apply, the applied marker blocks reuse of the same plan.
+The Intent Digest binds the executable mutation intent, while the Review Digest binds the trusted browser review snapshot. If the plan changes before approval, the browser approval is refused. If it changes after approval but before execution, `execute_approved_plan` is refused. After a successful apply, the applied marker blocks reuse of the same Single-Execution Plan.
 
 ### 🛠️ Technical Architecture
 
@@ -158,17 +158,17 @@ The hash from Phase ① is the integrity seal that links all three phases. If th
 - **OAuth-aware clients:** The gateway publishes MCP protected-resource metadata and returns insufficient-scope challenges so MCP clients can discover the required resource and `mcp:tools` scope. Browser approval pages use an OAuth code flow and a Gateway cookie.
 - **Guarded model-visible data:** The gateway scans tool arguments and responses for prompt-injection patterns, warns or redacts suspicious content, and writes JSONL guardrail audit events with the resolved OAuth identity.
 - **Dry-run-first mutations:** `request_*` tools create pending plans only after Kubernetes `dryRun=All` succeeds. Browser approval renders the stored server-side plan, dry-run result, policy findings, and diff.
-- **Hash-bound execution:** Approved applies require the stored SHA-256 hash to match, re-run Kubernetes dry-run immediately before the write, re-check policy where relevant, detect live-state drift, and mark plans as applied.
+- **Digest-bound execution:** Approved applies require a valid Approval Grant bound to the Intent Digest and Review Digest. The Kubernetes adapter re-runs declared freshness checks, detects live-state drift when diff evidence exists, re-checks policy where relevant, and marks successful plans as applied.
 - **Narrow Kubernetes surface:** Runtime operations use the Kubernetes .NET client, namespace allow-lists, namespace-scoped RBAC, bounded read-only tools, and mutation support limited to `Deployment`, `Service`, `ConfigMap`, and narrow Deployment operations.
 
 ## 📦 Container Images
 
 Images are automatically built and scanned by the Docker workflow. Release tags publish versioned images, and the `dev` branch publishes moving `:dev` images for the self-hosted development deployment.
 
-| Registry | Gateway (Core) | Dev Issuer (deprecated fallback auth) |
-| --- | --- | --- |
-| GitHub (GHCR) | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>` | `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
-| Docker Hub | `mirusser/kubernetes-mcp-guard-gateway:<tag>` | `mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
+| Registry | Gateway |
+| --- | --- |
+| GitHub (GHCR) | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>` |
+| Docker Hub | `mirusser/kubernetes-mcp-guard-gateway:<tag>` |
 
 **Versioning:** Use specific tags (e.g., `:v0.1.0`) for production stability. The `:dev` tag tracks the development branch, and the `:latest` tag tracks the most recent stable release.
 
@@ -189,11 +189,12 @@ git clone https://github.com/mirusser/Kubernetes-MCP-Guard.git
 cd Kubernetes-MCP-Guard
 
 ./scripts/create-demo-kubeconfig.sh --compose
-TAG=latest docker compose -f deploy/mode-d/compose.release.yaml up
+TAG=latest docker compose --env-file deploy/local-oauth/release.env.example \
+  -f deploy/local-oauth/compose.release.yaml up
 ```
 
-Replace `latest` with a specific release tag (e.g. `v0.1.0`) for a stable run. Available tags are listed on the [Releases page](https://github.com/mirusser/Kubernetes-MCP-Guard/releases).
-This starts the Keycloak-backed local OAuth path. The older DevIssuer path remains available under `deploy/mode-c/` as a deprecated fallback while compatibility tests still cover it.
+The committed `deploy/local-oauth/release.env.example` provides the required configuration — no .NET SDK needed. Replace `latest` with a specific release tag (e.g. `v0.1.0`) for a stable run. Available tags are listed on the [Releases page](https://github.com/mirusser/Kubernetes-MCP-Guard/releases).
+This starts the Keycloak-backed local OAuth path.
 
 #### **Connect Codex CLI:**
 
@@ -238,7 +239,9 @@ claude
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
-docker compose -f deploy/mode-d/compose.yaml up --build
+./scripts/generate-env.sh local-compose
+docker compose --env-file deploy/generated/local-compose.env \
+  -f deploy/local-oauth/compose.yaml up --build
 ```
 
 Connect Codex the same way as Option 1.
@@ -278,7 +281,7 @@ Connect Codex the same way as Option 1.
 | `request_scale_deployment` | Dry-run and plan a replica count change |
 | `request_restart_deployment` | Dry-run and plan a rollout restart |
 | `request_set_deployment_image` | Dry-run and plan a container image update |
-| `apply_approved_plan` | Repeat dry-run, then apply an exact-hash-verified, user-approved plan |
+| `execute_approved_plan` | Repeat dry-run, then apply an exact-hash-verified, user-approved plan |
 
 ## 🎬 See It In Action 
 
@@ -291,7 +294,7 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 | .NET | .NET 10 |
 | Kubernetes | minikube / local cluster initially |
 | MCP transport | HTTP MCP endpoint at `/mcp` |
-| OIDC | Keycloak (primary local/dev path), DevIssuer (deprecated local fallback), external OIDC providers by configuration |
+| OIDC | Keycloak local/dev path, external OIDC providers by configuration |
 | Container registries | GHCR, Docker Hub |
 | Platforms | linux/amd64 initially |
 
@@ -309,7 +312,7 @@ End-to-end walkthrough of the approval-gated workflow against a deliberately bro
 - HTTP MCP gateway: [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md)
 - Gateway auth: [src/InfraGate.McpGateway.Auth/README.md](src/InfraGate.McpGateway.Auth/README.md)
 - Approval storage & audit: [src/InfraGate.Approvals/README.md](src/InfraGate.Approvals/README.md)
-- Deprecated local dev OAuth issuer: [src/InfraGate.DevIssuer/README.md](src/InfraGate.DevIssuer/README.md)
+- Kubernetes approval adapter: [src/InfraGate.KubernetesAdapter/README.md](src/InfraGate.KubernetesAdapter/README.md)
 
 <sub><em>**Naming note:** The public name is **Kubernetes MCP Guard**. The internal codename **InfraGate** appears in `.slnx`, project folders, env-var prefixes (`INFRA_GATE_*`), and Docker labels. They refer to the same project; the rename is gradual and does not change runtime behavior.</em></sub>
 

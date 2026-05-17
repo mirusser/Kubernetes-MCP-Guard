@@ -1,0 +1,86 @@
+# deploy/local-oauth/compose.yaml
+# Keycloak + MCP Gateway — local build.
+# Keycloak is auto-configured from deploy/keycloak/infra-gate-realm.json.
+#
+# Prerequisites: ./scripts/create-demo-kubeconfig.sh --compose
+#
+# Run:
+#   dotnet run --project src/InfraGate.RunProfiles -- generate local-compose \
+#     --set host.kubeconfigHostPath="$(pwd)/.kube/mcp-nginx-demo.compose.config" \
+#     --set host.approvalHostPath="$(pwd)/.mcp-approvals" \
+#     --set host.guardAuditHostPath="$(pwd)/.mcp-guardrails" \
+#     --set host.dataProtectionHostPath="$(pwd)/.mcp-dataprotection-keys" \
+#     --output deploy/generated/local-compose.env
+#   docker compose --env-file deploy/generated/local-compose.env \
+#     -f deploy/local-oauth/compose.yaml up --build
+#
+# Docker Hub alternate for the gateway image: mirusser/kubernetes-mcp-guard-gateway
+#
+# Network topology (production-like separation):
+#   keycloak    → compose-internal network only
+#   mcp-gateway → compose-internal network (→ keycloak) + minikube network (→ K8s API)
+# The minikube Docker network must exist before starting: `minikube start --driver=docker`
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6.1
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+    ports:
+      - "${KEYCLOAK_BIND_ADDRESS:-127.0.0.1}:${KEYCLOAK_PORT:-3010}:8080"
+    volumes:
+      - ../keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 10s
+
+  mcp-gateway:
+    image: ${INFRA_GATE_GATEWAY_IMAGE:-kubernetes-mcp-guard-gateway}
+    build:
+      context: ../..
+      dockerfile: deploy/docker/mcp-gateway.Dockerfile
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      INFRA_GATE_ENVIRONMENT: ${INFRA_GATE_ENVIRONMENT}
+      DOTNET_ENVIRONMENT: Development
+      ASPNETCORE_URLS: ${ASPNETCORE_URLS}
+      INFRA_GATE_OAUTH_AUTHORITY: ${INFRA_GATE_OAUTH_AUTHORITY}
+      INFRA_GATE_OAUTH_METADATA_ADDRESS: ${INFRA_GATE_OAUTH_METADATA_ADDRESS}
+      INFRA_GATE_OAUTH_RESOURCE: ${INFRA_GATE_OAUTH_RESOURCE}
+      INFRA_GATE_OAUTH_SCOPE: ${INFRA_GATE_OAUTH_SCOPE}
+      INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA: ${INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA}
+      INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID: ${INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID}
+      INFRA_GATE_APPROVAL_OAUTH_CALLBACK_PATH: ${INFRA_GATE_APPROVAL_OAUTH_CALLBACK_PATH}
+      INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT: ${INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT}
+      INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT: ${INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT}
+      INFRA_GATE_APPROVAL_BASE_URL: ${INFRA_GATE_APPROVAL_BASE_URL}
+      INFRA_GATE_DOWNSTREAM_ASSEMBLY: ${INFRA_GATE_DOWNSTREAM_ASSEMBLY}
+      INFRA_GATE_GUARD_AUDIT_ROOT: ${INFRA_GATE_GUARD_AUDIT_ROOT}
+      KUBECONFIG: ${KUBECONFIG}
+      K8S_MCP_APPROVAL_ROOT: ${K8S_MCP_APPROVAL_ROOT}
+      K8S_MCP_ALLOWED_NAMESPACES: ${K8S_MCP_ALLOWED_NAMESPACES}
+      K8S_MCP_LOG_PATH: /data/logs/mcp-server.log
+    volumes:
+      - ${INFRA_GATE_KUBECONFIG_HOST_PATH}:/run/kube/mcp-nginx-demo.compose.config:ro
+      - ${INFRA_GATE_APPROVAL_HOST_PATH}:/data/approvals
+      - ${INFRA_GATE_GUARD_AUDIT_HOST_PATH}:/data/guardrails
+      - ../../.mcp-logs:/data/logs
+      - ${INFRA_GATE_DATA_PROTECTION_HOST_PATH}:/data/dataprotection-keys
+    ports:
+      - "${INFRA_GATE_BIND_ADDRESS:-127.0.0.1}:${INFRA_GATE_BIND_PORT:-3001}:3001"
+    networks:
+      - default
+      - k8s
+
+networks:
+  default: {}
+  k8s:
+    external: true
+    name: minikube
