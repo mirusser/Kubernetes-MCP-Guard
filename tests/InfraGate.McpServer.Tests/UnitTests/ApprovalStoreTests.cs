@@ -1,3 +1,4 @@
+using System.Text.Json;
 using InfraGate.Approvals;
 using InfraGate.McpServer;
 
@@ -99,6 +100,147 @@ public sealed class ApprovalStoreTests
         Assert.False(pending.IsPending);
         Assert.Contains("old approval file format", pending.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Re-request", pending.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetGrantedPlanAsync_UnsafePlanId_ReturnsDenied()
+    {
+        var store = CreateStore();
+
+        var result = await store.GetGrantedPlanAsync("../etc/passwd", CancellationToken.None);
+
+        Assert.False(result.IsGranted);
+        Assert.Contains("unsupported characters", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetPendingPlanAsync_UnsafePlanId_ReturnsDenied()
+    {
+        var store = CreateStore();
+
+        var result = await store.GetPendingPlanAsync("../etc/passwd", CancellationToken.None);
+
+        Assert.False(result.IsPending);
+        Assert.Contains("unsupported characters", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetGrantAsync_UnsafePlanId_ReturnsNull()
+    {
+        var store = CreateStore();
+
+        var result = await store.GetGrantAsync("../etc/passwd", CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetGrantAsync_EmptyString_ReturnsNull()
+    {
+        var store = CreateStore();
+
+        var result = await store.GetGrantAsync("", CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetPendingPlanAsync_EnvelopeWithNullAdapterId_ReturnsReRequestMessage()
+    {
+        var store = CreateStore();
+        string planId = ApprovalStore.NewPlanId();
+        Directory.CreateDirectory(store.PendingDirectory);
+        var envelope = new PlanEnvelope
+        {
+            Id = planId,
+            AdapterId = null!,
+            Operation = "scale",
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+            ValidFromUtc = DateTimeOffset.UtcNow,
+            ValidUntilUtc = DateTimeOffset.UtcNow.AddMinutes(10),
+            Requester = new PlanRequester("test-subject", "test"),
+            ApprovalPolicy = new ApprovalPolicy { Type = ApprovalConventions.ApprovalPolicyTypes.SameSubject },
+            ExecutionReusePolicy = new ExecutionReusePolicy { Type = ApprovalConventions.ExecutionReusePolicyTypes.SingleExecution },
+            IntentDigest = ApprovalDigest.ComputeSha256("dummy.intent.v1", new { op = "scale" }),
+            ReviewDigest = ApprovalDigest.ComputeSha256("dummy.review.v1", new { renderer = "browser" }),
+            ReviewSurfaceContext = new ReviewSurfaceContext(ApprovalConventions.ReviewSurfaces.GatewayBrowser, "dummy-review-v1"),
+            Payload = JsonSerializer.SerializeToElement(new { name = "demo", replicas = "1" })
+        };
+        await File.WriteAllTextAsync(
+            store.GetPendingPath(planId),
+            JsonSerializer.Serialize(envelope),
+            CancellationToken.None);
+
+        var pending = await store.GetPendingPlanAsync(planId, CancellationToken.None);
+
+        Assert.False(pending.IsPending);
+        Assert.Contains("old approval file format", pending.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetPendingPlanAsync_EnvelopeWithMismatchedDigestAlgorithm_ReturnsReRequestMessage()
+    {
+        var store = CreateStore();
+        string planId = ApprovalStore.NewPlanId();
+        Directory.CreateDirectory(store.PendingDirectory);
+        var envelope = new PlanEnvelope
+        {
+            Id = planId,
+            AdapterId = "kubernetes",
+            Operation = "scale",
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+            ValidFromUtc = DateTimeOffset.UtcNow,
+            ValidUntilUtc = DateTimeOffset.UtcNow.AddMinutes(10),
+            Requester = new PlanRequester("test-subject", "test"),
+            ApprovalPolicy = new ApprovalPolicy { Type = ApprovalConventions.ApprovalPolicyTypes.SameSubject },
+            ExecutionReusePolicy = new ExecutionReusePolicy { Type = ApprovalConventions.ExecutionReusePolicyTypes.SingleExecution },
+            IntentDigest = new ApprovalDigest("md5", "dummy", "abc123"),
+            ReviewDigest = ApprovalDigest.ComputeSha256("dummy.review.v1", new { renderer = "browser" }),
+            ReviewSurfaceContext = new ReviewSurfaceContext(ApprovalConventions.ReviewSurfaces.GatewayBrowser, "dummy-review-v1"),
+            Payload = JsonSerializer.SerializeToElement(new { name = "demo", replicas = "1" })
+        };
+        await File.WriteAllTextAsync(
+            store.GetPendingPath(planId),
+            JsonSerializer.Serialize(envelope),
+            CancellationToken.None);
+
+        var pending = await store.GetPendingPlanAsync(planId, CancellationToken.None);
+
+        Assert.False(pending.IsPending);
+        Assert.Contains("old approval file format", pending.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task GetPendingPlanAsync_EnvelopeWithNullReviewSurface_ReturnsReRequestMessage()
+    {
+        var store = CreateStore();
+        string planId = ApprovalStore.NewPlanId();
+        Directory.CreateDirectory(store.PendingDirectory);
+        var envelope = new PlanEnvelope
+        {
+            Id = planId,
+            AdapterId = "kubernetes",
+            Operation = "scale",
+            CreatedAtUtc = DateTimeOffset.UtcNow,
+            ValidFromUtc = DateTimeOffset.UtcNow,
+            ValidUntilUtc = DateTimeOffset.UtcNow.AddMinutes(10),
+            Requester = new PlanRequester("test-subject", "test"),
+            ApprovalPolicy = new ApprovalPolicy { Type = ApprovalConventions.ApprovalPolicyTypes.SameSubject },
+            ExecutionReusePolicy = new ExecutionReusePolicy { Type = ApprovalConventions.ExecutionReusePolicyTypes.SingleExecution },
+            IntentDigest = ApprovalDigest.ComputeSha256("dummy.intent.v1", new { op = "scale" }),
+            ReviewDigest = ApprovalDigest.ComputeSha256("dummy.review.v1", new { renderer = "browser" }),
+            ReviewSurfaceContext = new ReviewSurfaceContext(null!, "dummy-review-v1"),
+            Payload = JsonSerializer.SerializeToElement(new { name = "demo", replicas = "1" })
+        };
+        await File.WriteAllTextAsync(
+            store.GetPendingPath(planId),
+            JsonSerializer.Serialize(envelope),
+            CancellationToken.None);
+
+        var pending = await store.GetPendingPlanAsync(planId, CancellationToken.None);
+
+        Assert.False(pending.IsPending);
+        Assert.Contains("old approval file format", pending.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private static ApprovalStore CreateStore()

@@ -276,6 +276,356 @@ public sealed class KubernetesPlanBuilderTests
         Assert.Contains(result.Envelope.FreshnessPolicy.Checks, c => c.Type == "kubernetes.pre-execute-dry-run");
     }
 
+    [Fact]
+    public async Task BuildAsync_ApplyManifest_MissingNamespace_ReturnsFailed()
+    {
+        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+
+        var result = await builder.BuildAsync(
+            "apply_manifest",
+            new Dictionary<string, object?> { ["manifest"] = "apiVersion: apps/v1" },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Missing required arguments", result.Message);
+    }
+
+    [Fact]
+    public async Task BuildAsync_DeleteManifest_MissingManifest_ReturnsFailed()
+    {
+        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+
+        var result = await builder.BuildAsync(
+            "delete_manifest",
+            new Dictionary<string, object?> { ["namespace"] = "demo" },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Missing required arguments", result.Message);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ScaleDeployment_MissingName_ReturnsFailed()
+    {
+        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["replicas"] = 3 },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Missing required arguments", result.Message);
+    }
+
+    [Fact]
+    public async Task BuildAsync_RestartDeployment_MissingName_ReturnsFailed()
+    {
+        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+
+        var result = await builder.BuildAsync(
+            "restart_deployment",
+            new Dictionary<string, object?> { ["namespace"] = "demo" },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Missing required arguments", result.Message);
+    }
+
+    [Fact]
+    public async Task BuildAsync_SetDeploymentImage_MissingContainer_ReturnsFailed()
+    {
+        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+
+        var result = await builder.BuildAsync(
+            "set_deployment_image",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["image"] = "nginx:1.25"
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Missing required arguments", result.Message);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ApplyManifest_WithJsonElementNamespace_Succeeds()
+    {
+        var dryRun = MakeDryRun("demo", "nginx");
+        var diff = MakeDiff("demo", "nginx");
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_apply_manifest", ApplyEvidenceJson(dryRun))
+            .With("diff_manifest", DiffJson([diff]));
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var namespaceElement = JsonSerializer.SerializeToElement("demo");
+        var manifestElement = JsonSerializer.SerializeToElement("apiVersion: apps/v1");
+
+        var result = await builder.BuildAsync(
+            "apply_manifest",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = namespaceElement,
+                ["manifest"] = manifestElement
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(result.Envelope);
+        Assert.Equal("apply", result.Envelope.Operation);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ScaleDeployment_WithLongReplicas_Succeeds()
+    {
+        var dryRun = MakeDryRun("demo", "nginx");
+        var diff = MakeDiff("demo", "nginx");
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_scale_deployment", DryRunJson(dryRun))
+            .With("diff_deployment", DiffJson([diff]));
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["replicas"] = 3L
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ScaleDeployment_WithDoubleReplicas_Succeeds()
+    {
+        var dryRun = MakeDryRun("demo", "nginx");
+        var diff = MakeDiff("demo", "nginx");
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_scale_deployment", DryRunJson(dryRun))
+            .With("diff_deployment", DiffJson([diff]));
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["replicas"] = 3.0d
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ScaleDeployment_WithStringReplicas_Succeeds()
+    {
+        var dryRun = MakeDryRun("demo", "nginx");
+        var diff = MakeDiff("demo", "nginx");
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_scale_deployment", DryRunJson(dryRun))
+            .With("diff_deployment", DiffJson([diff]));
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["replicas"] = "3"
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ScaleDeployment_WithJsonElementNumberReplicas_Succeeds()
+    {
+        var dryRun = MakeDryRun("demo", "nginx");
+        var diff = MakeDiff("demo", "nginx");
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_scale_deployment", DryRunJson(dryRun))
+            .With("diff_deployment", DiffJson([diff]));
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var replicasElement = JsonSerializer.SerializeToElement(3);
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["replicas"] = replicasElement
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ScaleDeployment_WithJsonElementStringReplicas_Succeeds()
+    {
+        var dryRun = MakeDryRun("demo", "nginx");
+        var diff = MakeDiff("demo", "nginx");
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_scale_deployment", DryRunJson(dryRun))
+            .With("diff_deployment", DiffJson([diff]));
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var replicasElement = JsonSerializer.SerializeToElement("3");
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["replicas"] = replicasElement
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ApplyManifest_EvidenceDeserializedAsNull_ReturnsFailed()
+    {
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_apply_manifest", "null");
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "apply_manifest",
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: apps/v1" },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("empty result", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ApplyManifest_DiffsDeserializedAsNull_ReturnsFailed()
+    {
+        var dryRun = MakeDryRun("demo", "nginx");
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_apply_manifest", ApplyEvidenceJson(dryRun))
+            .With("diff_manifest", "null");
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "apply_manifest",
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: apps/v1" },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("empty result", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task BuildAsync_DeleteManifest_DryRunDeserializedAsNull_ReturnsFailed()
+    {
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_delete_manifest", "null");
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "delete_manifest",
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: apps/v1" },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("dry-run failed", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task BuildAsync_DeleteManifest_DiffsDeserializedAsNull_ReturnsFailed()
+    {
+        var dryRun = MakeDryRun("demo", "nginx");
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_delete_manifest", DryRunJson(dryRun))
+            .With("diff_manifest", "null");
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "delete_manifest",
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: apps/v1" },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("empty result", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ScaleDeployment_DryRunDeserializedAsNull_ReturnsFailed()
+    {
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_scale_deployment", "null");
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["replicas"] = 3
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("dry-run failed", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ScaleDeployment_DiffsDeserializedAsNull_ReturnsFailed()
+    {
+        var dryRun = MakeDryRun("demo", "nginx");
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_scale_deployment", DryRunJson(dryRun))
+            .With("diff_deployment", "null");
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["replicas"] = 3
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Diff evidence failed", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class FakeToolCaller : IToolCaller
     {
         private readonly Dictionary<string, string> responses = new(StringComparer.Ordinal);

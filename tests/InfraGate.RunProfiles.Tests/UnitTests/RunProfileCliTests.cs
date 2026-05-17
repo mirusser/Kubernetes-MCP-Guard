@@ -806,6 +806,114 @@ public sealed class RunProfileCliTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_GenerateWithSetGatewayField_OverridesGatewayValue()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                gateway:
+                  aspnetcoreUrls: http://0.0.0.0:3001
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--output", outputPath,
+             "--set", "gateway.aspnetcoreUrls=http://0.0.0.0:9090"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        Assert.Contains("ASPNETCORE_URLS=http://0.0.0.0:9090", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetApprovalAuthorityField_OverridesValue()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                approvalAuthority:
+                  baseUrl: http://127.0.0.1:3001
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--output", outputPath,
+             "--set", "approvalAuthority.baseUrl=http://0.0.0.0:4000"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        Assert.Contains("INFRA_GATE_APPROVAL_BASE_URL=http://0.0.0.0:4000", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetGenericApprovalCoreField_OverridesValue()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-stdio:
+                kind: mcp-stdio
+                genericApprovalCore:
+                  approvalRoot: .mcp-approvals
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: .kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-stdio", "--config", configPath, "--output", outputPath,
+             "--set", "genericApprovalCore.approvalRoot=/custom/path"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        Assert.Contains("K8S_MCP_APPROVAL_ROOT=/custom/path", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_GenerateWithMalformedSet_ReturnsError()
     {
         string configPath = await WriteConfigAsync(
