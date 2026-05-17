@@ -65,17 +65,20 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         }
         catch (JsonException)
         {
-            return PlanBuildResult.Failed($"Evidence dry-run failed: {applyEvidenceJson}");
+            var message = $"Evidence dry-run failed: {applyEvidenceJson}";
+            return PlanBuildResult.Failed(message, DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message));
         }
 
         if (applyEvidence is null)
         {
-            return PlanBuildResult.Failed("Evidence dry-run returned an empty result.");
+            const string message = "Evidence dry-run returned an empty result.";
+            return PlanBuildResult.Failed(message, DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message));
         }
 
         if (applyEvidence.PolicyBlocked)
         {
-            return PlanBuildResult.Failed($"Manifest rejected by policy:{Environment.NewLine}{applyEvidence.PolicyRefusal}");
+            var message = $"Manifest rejected by policy:{Environment.NewLine}{applyEvidence.PolicyRefusal}";
+            return PlanBuildResult.Failed(message, DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message));
         }
 
         var diffJson = await toolCaller.CallAsync(
@@ -446,6 +449,17 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             return null;
         }
     }
+
+    private static PlanAudit DryRunAudit(string operation, string namespaceName, string message) =>
+        new(
+            ApprovalConventions.AuditEvents.DryRunFailed,
+            new InfraGate.Approvals.AuditPayloads.DryRunFailedPayload(
+                "request",
+                ApprovalStore.NewPlanId(),
+                operation,
+                namespaceName,
+                Array.Empty<string>(),
+                message));
 
     private static bool TryGetString(IReadOnlyDictionary<string, object?> args, string key, out string value)
     {

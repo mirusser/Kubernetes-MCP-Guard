@@ -100,24 +100,21 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
             return;
         }
 
-        const string requesterSubject = "safety-e2e-requester";
         const string otherSubject = "safety-e2e-other";
 
-        fixture.SetAuthenticatedSubject(requesterSubject);
+        await using var requesterClient = await fixture.CreateHttpMcpClientAsync();
+        var requestText = await requesterClient.CallToolAsync(
+            "request_restart_deployment",
+            new Dictionary<string, object?>
+            {
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo"
+            });
+        var planId = SafetyE2EFixture.ParsePlanId(requestText);
+        fixture.SetAuthenticatedSubject(requesterClient.Subject);
         string challengeId;
-        string planId;
         try
         {
-            var requestText = await fixture.DownstreamClient.CallToolAsync(
-                "request_restart_deployment",
-                new Dictionary<string, object?>
-                {
-                    [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
-                    [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo",
-                    ["requesterSubject"] = requesterSubject
-                },
-                CancellationToken.None);
-            planId = SafetyE2EFixture.ParsePlanId(requestText);
             var firstResult = await fixture.GetApprovalService().EnsureApprovedOrCreateChallengeAsync(planId, CancellationToken.None);
             Assert.False(firstResult.IsApproved);
             challengeId = ExtractChallengeId(firstResult.Message);

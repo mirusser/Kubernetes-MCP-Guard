@@ -27,7 +27,7 @@ using Testcontainers.Keycloak;
 
 namespace InfraGate.Safety.E2E.Tests;
 
-public sealed class SafetyE2EFixture : IAsyncLifetime
+public sealed partial class SafetyE2EFixture : IAsyncLifetime
 {
     public const string EnableEnvVar = "INFRA_GATE_RUN_SAFETY_E2E";
     public const string KubeconfigEnvVar = "KUBECONFIG";
@@ -392,10 +392,15 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
         };
     }
 
+    // PlanId is always a 32-char lowercase hex string (16 random bytes, hex-encoded).
+    // Extracting by format rather than by surrounding text avoids brittleness when response messages change.
+    [System.Text.RegularExpressions.GeneratedRegex(@"\b[0-9a-f]{32}\b", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex PlanIdPattern();
+
     public static string ParsePlanId(string text) =>
-        text.Split(Environment.NewLine)
-            .Single(line => line.StartsWith("PlanId:", StringComparison.Ordinal))
-            ["PlanId: ".Length..];
+        PlanIdPattern().Matches(text) is { Count: > 0 } matches
+            ? matches[0].Value
+            : throw new InvalidOperationException("Could not extract a PlanId from the text.");
 
     public static string ParseChallengeId(string text) =>
         text.Split(Environment.NewLine)

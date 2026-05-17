@@ -148,6 +148,11 @@ public sealed class GatewayToolDispatcher
                 identity.Subject,
                 planResult.Message);
 
+            if (planResult.Audit is { } audit)
+            {
+                await WritePlanAuditAsync(audit, mutationToolName, ct);
+            }
+
             var sanitized = await guardedRunner.SanitizeAndAuditResponseAsync(toolName, args, planResult.Message, ct);
             var errorText = requestHasFindings || sanitized.HasFindings
                 ? GuardedToolRunner.FormatWarningResponse(sanitized.Text)
@@ -202,10 +207,17 @@ public sealed class GatewayToolDispatcher
         var executeResult = await planExecutor.ExecuteAsync(granted.Envelope, ct);
         if (!executeResult.IsSuccessful)
         {
-            await approvalStore.WriteAuditAsync(
-                ApprovalConventions.AuditEvents.ApplyDenied,
-                new ApplyDeniedPayload(planId, executeResult.Message),
-                ct);
+            if (executeResult.Audit is { } audit)
+            {
+                await WritePlanAuditAsync(audit, planId, ct);
+            }
+            else
+            {
+                await approvalStore.WriteAuditAsync(
+                    ApprovalConventions.AuditEvents.ApplyDenied,
+                    new ApplyDeniedPayload(planId, executeResult.Message),
+                    ct);
+            }
 
             return ErrorResult(executeResult.Message);
         }
@@ -277,6 +289,21 @@ public sealed class GatewayToolDispatcher
             JsonValueKind.Array => element,
             _ => element
         };
+
+    private async Task WritePlanAuditAsync(PlanAudit audit, string context, CancellationToken ct)
+    {
+        try
+        {
+            await approvalStore.WriteAuditAsync(audit.EventName, audit.Payload, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Failed to write audit event {EventName} for {Context}.",
+                audit.EventName,
+                context);
+        }
+    }
 
     private static string GetNamespaceFromEnvelope(PlanEnvelope envelope)
     {

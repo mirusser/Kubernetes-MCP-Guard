@@ -27,7 +27,8 @@ public sealed class KubernetesPlanExecutor(IToolCaller toolCaller) : IDomainPlan
         var dryRunBlock = await RunPreExecuteDryRunAsync(plan, payload, ct);
         if (dryRunBlock is not null)
         {
-            return DomainPlanExecutionResult.Blocked(dryRunBlock);
+            var audit = DryRunFailedAudit(plan, dryRunBlock, payload);
+            return DomainPlanExecutionResult.Blocked(dryRunBlock, audit);
         }
 
         return await DispatchAsync(plan.Operation, payload, ct);
@@ -229,4 +230,15 @@ public sealed class KubernetesPlanExecutor(IToolCaller toolCaller) : IDomainPlan
 
     private static bool IsUnsupportedOperationMessage(string message) =>
         message.StartsWith("Unsupported operation ", StringComparison.Ordinal);
+
+    private static PlanAudit DryRunFailedAudit(KubernetesPlan plan, string message, KubernetesPlanPayload payload) =>
+        new(
+            ApprovalConventions.AuditEvents.DryRunFailed,
+            new InfraGate.Approvals.AuditPayloads.DryRunFailedPayload(
+                "pre-apply",
+                plan.Id,
+                plan.Operation,
+                payload.Namespace,
+                payload.Objects.Select(obj => $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}").ToArray(),
+                message));
 }
