@@ -37,7 +37,7 @@ These tools create pending plans. They run Kubernetes `dryRun=All` first, but th
 
 | MCP Tool | MCP Annotation | K8s Verbs | K8s Resources | Approval Required | Bounds / Notes |
 |---|---|---|---|---|---|
-| `apply_approved_plan` | `Destructive = true` | Depends on approved plan | Depends on approved plan | Yes | Through the gateway, requires out-of-band browser approval through a Single-Execution challenge URL; the gateway checks the approved challenge record and the server validates grant-bound digests and repeats `dryRun=All` before any Kubernetes write |
+| `execute_approved_plan` | `Destructive = true` | Depends on approved plan | Depends on approved plan | Yes | Through the gateway, requires out-of-band browser approval through a Single-Execution challenge URL; the gateway checks the approved challenge record and the server validates grant-bound digests and repeats `dryRun=All` before any Kubernetes write |
 
 Local direct-stdio server experiments must use an Approval Grant for execution authorization. The legacy `scripts/approve-plan.sh` has been removed; the grant-based flow is the only supported path.
 
@@ -53,4 +53,4 @@ Local direct-stdio server experiments must use an Approval Grant for execution a
 
 - Scope is a single flat `mcp:tools`; there is no `mcp:read` or `mcp:write` split today. If finer-grained scopes are added, update this matrix and [`src/InfraGate.McpGateway.Auth/README.md`](../src/InfraGate.McpGateway.Auth/README.md) together.
 - `get_allowed_namespaces` makes no Kubernetes API call. It reads in-process configuration, but it is still subject to gateway JWT and scope enforcement.
-- For plan mutation tools, Kubernetes dry-run failures block plan creation and write a `dry_run_failed` approval audit event. No Kubernetes write is persisted until `apply_approved_plan` is called and the user approves the plan.
+- For plan mutation tools, Kubernetes dry-run failures block plan creation and write a `dry_run_failed` approval audit event. No Kubernetes write is persisted until `execute_approved_plan` is called and the user approves the plan.

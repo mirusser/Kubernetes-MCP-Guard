@@ -112,7 +112,7 @@ The roadmap ([.agents/Plans/archive/security-roadmap.md §13](../.agents/Plans/a
    └── McpServer creates a PlanEnvelope with KubernetesPlanPayload, writes pending/<planId>.json
        Audit: plan_requested  (PlanRequestedPayload)
 
-2. AI client calls apply_approved_plan(planId)
+2. AI client calls execute_approved_plan(planId)
    └── McpServer asks ApprovalStore.GetGrantedPlanAsync
        └── No grants/<planId>.json exists yet
            Server returns "Refused: not approved" up to the Gateway
@@ -138,7 +138,7 @@ The roadmap ([.agents/Plans/archive/security-roadmap.md §13](../.agents/Plans/a
          Audit: approval_challenge_approved  (ApprovalChallengeApprovedPayload)
          Audit: grant_issued                  (ApprovalGrantIssuedPayload)
 
-5. AI client calls apply_approved_plan(planId) again
+5. AI client calls execute_approved_plan(planId) again
    └── ApprovalStore.GetGrantedPlanAsync now finds grants/<planId>.json
        Validates grant expiry, Intent Digest, Review Digest, and Single-Execution state
        McpServer reruns dryRun=All; must still succeed (pre-apply gate)

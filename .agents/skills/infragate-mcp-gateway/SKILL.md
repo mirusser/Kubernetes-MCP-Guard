@@ -44,7 +44,7 @@ Prefer configured MCP tools when available. In this environment they may appear 
 
 **Mutation execution tool (1):**
 
-- `apply_approved_plan` — applies an out-of-band approved plan
+- `execute_approved_plan` — applies an out-of-band approved plan
 
 If checking the raw HTTP endpoint, remember it is session-based MCP:
 
@@ -78,12 +78,12 @@ Use the gateway's plan-first flow for every Kubernetes mutation:
 
 1. Call a `request_*` tool to create a pending plan.
 2. Tell the user the `PlanId` and affected objects when returned.
-3. Call `apply_approved_plan` with the exact `PlanId`.
+3. Call `execute_approved_plan` with the exact `PlanId`.
 4. The gateway returns an approval URL. Open it in a browser, authenticate with OAuth, and approve the plan there.
-5. Call `apply_approved_plan` again with the same `PlanId` — the gateway forwards to the server and applies.
+5. Call `execute_approved_plan` again with the same `PlanId` — the gateway forwards to the server and applies.
 6. Verify with `get_k8s_status`.
 
-Do not try to bypass the approval step. OAuth login authenticates access to the gateway, but Kubernetes mutation also requires browser-based out-of-band approval via the approval URL returned by `apply_approved_plan`.
+Do not try to bypass the approval step. OAuth login authenticates access to the gateway, but Kubernetes mutation also requires browser-based out-of-band approval via the approval URL returned by `execute_approved_plan`.
 
 Supported mutation operations:
 

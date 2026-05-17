@@ -151,6 +151,19 @@ public static class K8sTools
         CancellationToken cancellationToken = default) =>
         manager.EvidenceCheckLiveDriftAsync(@namespace, operation, diffsJson, cancellationToken);
 
+    [McpServerTool(Name = K8sConventions.ToolNames.DiffDeployment, ReadOnly = true, OpenWorld = false)]
+    [Description("Computes a diff between live Kubernetes state and the proposed mutation of a Deployment. Returns JSON-serialized diff result.")]
+    public static Task<string> DiffDeployment(
+        K8sManager manager,
+        [Description("Allowed Kubernetes namespace.")] string @namespace,
+        [Description("Deployment name.")] string name,
+        [Description("The mutation operation type (scale, restart, set-image).")] string operation,
+        [Description("Replicas count (required for scale).")] int? replicas = null,
+        [Description("Container name (required for set-image).")] string? container = null,
+        [Description("Image reference (required for set-image).")] string? image = null,
+        CancellationToken cancellationToken = default) =>
+        manager.EvidenceDiffDeploymentAsync(@namespace, name, operation, replicas, container, image, cancellationToken);
+
     [McpServerTool(Name = K8sConventions.ToolNames.ApplyManifest, Destructive = true, OpenWorld = false)]
     [Description("Applies supported Kubernetes YAML or JSON manifests directly (no approval flow).")]
     public static Task<string> ApplyManifest(

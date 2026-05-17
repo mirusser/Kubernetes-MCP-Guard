@@ -51,7 +51,7 @@ sequenceDiagram
         Downstream->>Downstream: Write pending approval plan + audit entry
     end
 
-    opt apply_approved_plan requires approval
+    opt execute_approved_plan requires approval
         Gateway->>Gateway: Read pending plan + hash
         Gateway-->>Client: Approval URL
         Client-->>Gateway: Browser opens /approvals/{challengeId}

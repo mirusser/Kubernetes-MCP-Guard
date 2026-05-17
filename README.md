@@ -150,9 +150,9 @@ Every mutation passes through three independent checkpoints. Each one can block 
 |---|---|---|
 | **① Plan** | AI calls `request_*`; the gateway asks the Kubernetes adapter to gather server-side dry-run, policy, and diff evidence; the generic core stores a pending plan envelope with Intent and Review Digests | Dry-run failure, policy violation (privileged containers, hostPath, dangerous caps, …), or unsupported legacy plan format |
 | **② Approve** | Human opens the approval URL; browser renders the plan from the server-side file, not the AI's description; human clicks Approve or Deny; the gateway records a Challenge Outcome and issues an Approval Grant only for approval | Challenge expired (default 15 min TTL), approver subject does not match requester, anti-forgery validation fails, or the pending-plan hash/digest binding changed after the URL was created |
-| **③ Execute** | AI calls `apply_approved_plan` again; the gateway validates the Approval Grant, digest bindings, plan validity window, and reuse marker, then the Kubernetes adapter re-runs declared freshness checks before calling raw execution tools | Missing/expired/mismatched grant, digest mismatch, plan already applied, second dry-run failure, policy failure on re-validation, or live state drifted since approval |
+| **③ Execute** | AI calls `execute_approved_plan` again; the gateway validates the Approval Grant, digest bindings, plan validity window, and reuse marker, then the Kubernetes adapter re-runs declared freshness checks before calling raw execution tools | Missing/expired/mismatched grant, digest mismatch, plan already applied, second dry-run failure, policy failure on re-validation, or live state drifted since approval |
 
-The Intent Digest binds the executable mutation intent, while the Review Digest binds the trusted browser review snapshot. If the plan changes before approval, the browser approval is refused. If it changes after approval but before execution, `apply_approved_plan` is refused. After a successful apply, the applied marker blocks reuse of the same Single-Execution Plan.
+The Intent Digest binds the executable mutation intent, while the Review Digest binds the trusted browser review snapshot. If the plan changes before approval, the browser approval is refused. If it changes after approval but before execution, `execute_approved_plan` is refused. After a successful apply, the applied marker blocks reuse of the same Single-Execution Plan.
 
 ### 🛠️ Technical Architecture
 
@@ -283,7 +283,7 @@ Connect Codex the same way as Option 1.
 | `request_scale_deployment` | Dry-run and plan a replica count change |
 | `request_restart_deployment` | Dry-run and plan a rollout restart |
 | `request_set_deployment_image` | Dry-run and plan a container image update |
-| `apply_approved_plan` | Repeat dry-run, then apply an exact-hash-verified, user-approved plan |
+| `execute_approved_plan` | Repeat dry-run, then apply an exact-hash-verified, user-approved plan |
 
 ## 🎬 See It In Action 
 

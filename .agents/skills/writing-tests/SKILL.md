@@ -29,7 +29,7 @@ Follow `Method_State_ExpectedResult`:
 ```csharp
 Validate_PrivilegedContainer_IsDenied()
 RequestApplyManifestAsync_RejectsDisallowedNamespace()
-ApplyApprovedPlanAsync_RefusesPendingPlanWithoutApproval()
+ExecuteApprovedPlanAsync_RefusesPendingPlanWithoutApproval()
 ```
 
 ## InternalsVisibleTo

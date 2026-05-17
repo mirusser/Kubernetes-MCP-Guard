@@ -447,5 +447,5 @@ Restructure the codebase to align with ADR 0001 and ADR 0006. McpGateway becomes
 ## Open Questions
 
 - Should `DownstreamToolRegistry` refresh its tool cache if the McpServer restarts mid-session? (Current DownstreamMcpClient reconnects lazily — same behavior applies.)
-- Should `apply_approved_plan` be renamed (e.g., `execute_approved_plan`) to remove the Kubernetes-era naming? Out of scope for this plan; note as a follow-up.
+- `apply_approved_plan` renamed to `execute_approved_plan` (2026-05-17 remediation). Resolved.
 - **Gateway → Domain Adapter auth (deferred, do not include in this plan):** McpGateway ↔ McpServer communication will use Client Credentials / OIDC flow in a future phase. Currently the channel is stdio with no authentication. Any design decisions in this plan that touch `DownstreamMcpClient` or the transport layer must not assume the channel stays stdio or stays anonymous — leave the transport pluggable.

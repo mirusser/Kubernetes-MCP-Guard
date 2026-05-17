@@ -58,7 +58,7 @@ internal static class McpGatewayConventions
     public static class ToolNames
     {
         public const string RequestToolPrefix = "request_";
-        public const string ApplyApprovedPlan = "apply_approved_plan";
+        public const string ApplyApprovedPlan = "execute_approved_plan";
     }
 
     public static class ToolArguments

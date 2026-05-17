@@ -149,8 +149,10 @@ public sealed class KubernetesPlanBuilderTests
     public async Task BuildAsync_ScaleDeployment_HappyPath_ReturnsPlanWithEnvelope()
     {
         var dryRun = MakeDryRun("demo", "nginx");
+        var diff = MakeDiff("demo", "nginx");
         var toolCaller = new FakeToolCaller()
-            .With("dry_run_scale_deployment", DryRunJson(dryRun));
+            .With("dry_run_scale_deployment", DryRunJson(dryRun))
+            .With("diff_deployment", DiffJson([diff]));
         var builder = new KubernetesPlanBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
@@ -167,8 +169,10 @@ public sealed class KubernetesPlanBuilderTests
     public async Task BuildAsync_RestartDeployment_HappyPath_ReturnsPlanWithEnvelope()
     {
         var dryRun = MakeDryRun("demo", "nginx");
+        var diff = MakeDiff("demo", "nginx");
         var toolCaller = new FakeToolCaller()
-            .With("dry_run_restart_deployment", DryRunJson(dryRun));
+            .With("dry_run_restart_deployment", DryRunJson(dryRun))
+            .With("diff_deployment", DiffJson([diff]));
         var builder = new KubernetesPlanBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
@@ -185,8 +189,10 @@ public sealed class KubernetesPlanBuilderTests
     public async Task BuildAsync_SetDeploymentImage_HappyPath_ReturnsPlanWithEnvelope()
     {
         var dryRun = MakeDryRun("demo", "nginx");
+        var diff = MakeDiff("demo", "nginx");
         var toolCaller = new FakeToolCaller()
-            .With("dry_run_set_deployment_image", DryRunJson(dryRun));
+            .With("dry_run_set_deployment_image", DryRunJson(dryRun))
+            .With("diff_deployment", DiffJson([diff]));
         var builder = new KubernetesPlanBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
@@ -248,8 +254,10 @@ public sealed class KubernetesPlanBuilderTests
     public async Task BuildAsync_ScaleDeployment_FreshnessPolicyIncludesOnlyPreExecuteDryRun()
     {
         var dryRun = MakeDryRun("demo", "nginx");
+        var diff = MakeDiff("demo", "nginx");
         var toolCaller = new FakeToolCaller()
-            .With("dry_run_scale_deployment", DryRunJson(dryRun));
+            .With("dry_run_scale_deployment", DryRunJson(dryRun))
+            .With("diff_deployment", DiffJson([diff]));
         var builder = new KubernetesPlanBuilder(toolCaller);
 
         var result = await builder.BuildAsync(

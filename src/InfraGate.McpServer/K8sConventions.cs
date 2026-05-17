@@ -25,30 +25,13 @@ internal static class K8sConventions
         public const string LogPath = "K8S_MCP_LOG_PATH";
     }
 
-    public static class PlanOperations
+    public static class MutationOperations
     {
         public const string Apply = "apply";
         public const string Delete = "delete";
         public const string Scale = "scale";
         public const string Restart = "restart";
         public const string SetImage = "set-image";
-    }
-
-    public static class PlanParameters
-    {
-        public const string ObjectCount = "objectCount";
-        public const string Name = "name";
-        public const string Replicas = "replicas";
-        public const string RestartedAtUtc = "restartedAtUtc";
-        public const string Container = "container";
-        public const string CurrentImage = "currentImage";
-        public const string Image = "image";
-    }
-
-    public static class DryRunPhases
-    {
-        public const string Request = "request";
-        public const string Apply = "apply";
     }
 
     public static class DryRunStatuses
@@ -59,17 +42,6 @@ internal static class K8sConventions
     public static class DriftCheckResult
     {
         public const string NoDrift = "ok";
-    }
-
-    public static class PlanResponse
-    {
-        public const string PendingGatewayApproval = "pending_gateway_approval";
-        public const string PolicyPassed = "passed";
-        public const string PolicyNotApplicable = "not_applicable";
-        public const string PolicyPassedWithPrefix = "passed_with_";
-        public const string PolicyWarningSuffix = "_warning";
-        public const string PolicyWarningsSuffix = "_warnings";
-        public const string RiskMedium = "medium";
     }
 
     // Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
@@ -116,6 +88,7 @@ internal static class K8sConventions
         public const string DryRunSetDeploymentImage = "dry_run_set_deployment_image";
         public const string DiffManifest = "diff_manifest";
         public const string CheckLiveDrift = "check_live_drift";
+        public const string DiffDeployment = "diff_deployment";
 
         public const string ApplyManifest = "apply_manifest";
         public const string DeleteManifest = "delete_manifest";

@@ -5,7 +5,7 @@
 ## Runtime Flow
 
 - `Program.cs` configures the HTTP MCP server at `/mcp`, registers auth, approval endpoints, guardrails, the downstream client, and the Kubernetes adapter implementation of the generic plan seams.
-- `GatewayToolDispatcher.cs` dynamically forwards downstream ReadOnly tools, hides downstream Destructive tools, exposes `request_*` wrappers for plan creation, and owns `apply_approved_plan`.
+- `GatewayToolDispatcher.cs` dynamically forwards downstream ReadOnly tools, hides downstream Destructive tools, exposes `request_*` wrappers for plan creation, and owns `execute_approved_plan`.
 - `GatewayApprovalService.cs` and `GatewayApprovalEndpoints.cs` create short-lived approval URLs and render Kubernetes review evidence decoded through `InfraGate.KubernetesAdapter`; `ApprovalChallengeStore` lives in `InfraGate.Approvals`.
 - `GuardedToolRunner.cs` scans inbound arguments, calls the downstream stdio server, sanitizes risky model-visible output, and writes audit events.
 - `DownstreamMcpClient.cs` starts and reuses the downstream `InfraGate.McpServer` process via the Model Context Protocol client.

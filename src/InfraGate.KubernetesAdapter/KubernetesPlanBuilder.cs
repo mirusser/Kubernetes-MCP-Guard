@@ -226,9 +226,23 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             return PlanBuildResult.Failed($"Evidence dry-run failed: {dryRunJson}");
         }
 
-        var objects = dryRun.Objects.Length > 0
-            ? dryRun.Objects
-            : [];
+        var diffJson = await toolCaller.CallAsync(
+            KubernetesAdapterConventions.EvidenceTools.DiffDeployment,
+            new Dictionary<string, object?>
+            {
+                [KubernetesAdapterConventions.EvidenceArguments.Namespace] = namespaceName,
+                [KubernetesAdapterConventions.EvidenceArguments.Name] = name,
+                [KubernetesAdapterConventions.EvidenceArguments.Operation] =
+                    KubernetesAdapterConventions.PlanOperations.Scale,
+                [KubernetesAdapterConventions.EvidenceArguments.Replicas] = replicas
+            },
+            ct).ConfigureAwait(false);
+
+        var diffs = DeserializeDiffs(diffJson);
+        if (diffs is null)
+        {
+            return PlanBuildResult.Failed($"Diff evidence failed: {diffJson}");
+        }
 
         var deploymentRef = new K8sObjectRef("apps/v1", "Deployment", namespaceName, name);
         var payload = new KubernetesPlanPayload(
@@ -241,7 +255,8 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             },
             [deploymentRef])
         {
-            DryRun = dryRun
+            DryRun = dryRun,
+            Diffs = diffs
         };
 
         return BuildEnvelope(
@@ -277,6 +292,23 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             return PlanBuildResult.Failed($"Evidence dry-run failed: {dryRunJson}");
         }
 
+        var diffJson = await toolCaller.CallAsync(
+            KubernetesAdapterConventions.EvidenceTools.DiffDeployment,
+            new Dictionary<string, object?>
+            {
+                [KubernetesAdapterConventions.EvidenceArguments.Namespace] = namespaceName,
+                [KubernetesAdapterConventions.EvidenceArguments.Name] = name,
+                [KubernetesAdapterConventions.EvidenceArguments.Operation] =
+                    KubernetesAdapterConventions.PlanOperations.Restart
+            },
+            ct).ConfigureAwait(false);
+
+        var diffs = DeserializeDiffs(diffJson);
+        if (diffs is null)
+        {
+            return PlanBuildResult.Failed($"Diff evidence failed: {diffJson}");
+        }
+
         var restartedAtUtc = DateTimeOffset.UtcNow.ToString(ApprovalConventions.DateTimeFormats.RoundTrip);
         var deploymentRef = new K8sObjectRef("apps/v1", "Deployment", namespaceName, name);
         var payload = new KubernetesPlanPayload(
@@ -289,7 +321,8 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             },
             [deploymentRef])
         {
-            DryRun = dryRun
+            DryRun = dryRun,
+            Diffs = diffs
         };
 
         return BuildEnvelope(
@@ -329,6 +362,25 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             return PlanBuildResult.Failed($"Evidence dry-run failed: {dryRunJson}");
         }
 
+        var diffJson = await toolCaller.CallAsync(
+            KubernetesAdapterConventions.EvidenceTools.DiffDeployment,
+            new Dictionary<string, object?>
+            {
+                [KubernetesAdapterConventions.EvidenceArguments.Namespace] = namespaceName,
+                [KubernetesAdapterConventions.EvidenceArguments.Name] = name,
+                [KubernetesAdapterConventions.EvidenceArguments.Operation] =
+                    KubernetesAdapterConventions.PlanOperations.SetImage,
+                [KubernetesAdapterConventions.EvidenceArguments.Container] = container,
+                [KubernetesAdapterConventions.EvidenceArguments.Image] = image
+            },
+            ct).ConfigureAwait(false);
+
+        var diffs = DeserializeDiffs(diffJson);
+        if (diffs is null)
+        {
+            return PlanBuildResult.Failed($"Diff evidence failed: {diffJson}");
+        }
+
         var deploymentRef = new K8sObjectRef("apps/v1", "Deployment", namespaceName, name);
         var payload = new KubernetesPlanPayload(
             namespaceName,
@@ -341,7 +393,8 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             },
             [deploymentRef])
         {
-            DryRun = dryRun
+            DryRun = dryRun,
+            Diffs = diffs
         };
 
         return BuildEnvelope(
@@ -375,6 +428,18 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         try
         {
             return JsonSerializer.Deserialize<K8sPlanDryRun>(json, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static K8sPlanDiff[]? DeserializeDiffs(string json)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<K8sPlanDiff[]>(json, JsonOptions);
         }
         catch (JsonException)
         {

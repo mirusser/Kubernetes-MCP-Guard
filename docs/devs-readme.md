@@ -231,9 +231,9 @@ The HTTP gateway forwards read-only stdio tools as-is, hides raw destructive std
 - `request_scale_deployment(namespace, name, replicas)`
 - `request_restart_deployment(namespace, name)`
 - `request_set_deployment_image(namespace, name, container, image)`
-- `apply_approved_plan(planId)`
+- `execute_approved_plan(planId)`
 
-When calling the stdio server directly, use the read-only evidence tools (`dry_run_*`, `diff_manifest`, `check_live_drift`) or raw destructive tools (`apply_manifest`, `delete_manifest`, `scale_deployment`, `restart_deployment`, `set_deployment_image`). Direct stdio does not expose `request_*` or `apply_approved_plan`; those are gateway-owned.
+When calling the stdio server directly, use the read-only evidence tools (`dry_run_*`, `diff_manifest`, `check_live_drift`) or raw destructive tools (`apply_manifest`, `delete_manifest`, `scale_deployment`, `restart_deployment`, `set_deployment_image`). Direct stdio does not expose `request_*` or `execute_approved_plan`; those are gateway-owned.
 
 Logs and Events are untrusted Kubernetes workload/cluster output. The HTTP gateway sanitizes suspicious model-visible output before returning it; direct stdio use of `InfraGate.McpServer` bypasses that gateway guardrail layer.
 
@@ -242,10 +242,10 @@ Observability bounds: Events and diagnostics default to `limit = 50` and allow u
 Approval flow:
 
 1. Ask the HTTP gateway for a plan with `request_apply_manifest`, `request_scale_deployment`, etc. The Kubernetes adapter calls the downstream evidence tools first and stores the dry-run, policy, and diff evidence in the adapter payload inside the pending plan envelope.
-2. Call `apply_approved_plan` with the returned `PlanId`.
+2. Call `execute_approved_plan` with the returned `PlanId`.
 3. The Gateway returns an approval URL instead of applying.
 4. Open the URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan and dry-run status, and approve or deny it.
-5. Call `apply_approved_plan` again. The Gateway forwards only after an Approval Grant exists and still matches the pending plan's Intent Digest and Review Digest; the Kubernetes adapter repeats declared freshness checks immediately before the raw write.
+5. Call `execute_approved_plan` again. The Gateway forwards only after an Approval Grant exists and still matches the pending plan's Intent Digest and Review Digest; the Kubernetes adapter repeats declared freshness checks immediately before the raw write.
 
 The MCP client never submits approval content. Approval challenges are bound to the plan id, current pending-plan hash, requester subject, expected Intent Digest, expected Review Digest, expiry, and Single-Execution status.
 

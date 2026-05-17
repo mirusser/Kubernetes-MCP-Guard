@@ -327,11 +327,11 @@ Once running, the server exposes these tools:
 | `request_scale_deployment(namespace, name, replicas)` | Create a plan to scale a deployment |
 | `request_restart_deployment(namespace, name)` | Create a plan to restart a deployment |
 | `request_set_deployment_image(namespace, name, container, image)` | Create a plan to update a Deployment container image |
-| `apply_approved_plan(planId)` | Apply a previously approved plan |
+| `execute_approved_plan(planId)` | Apply a previously approved plan |
 
 Logs and Events are untrusted Kubernetes workload/cluster output. Prefer the HTTP gateway for model-visible diagnostics because it sanitizes suspicious output before returning it; direct stdio use bypasses that gateway guardrail layer.
 
-**Approval flow:** `request_*` → Kubernetes `dryRun=All` succeeds → returns `planId` → `apply_approved_plan(planId)` → Gateway returns approval URL → browser OAuth approval → call `apply_approved_plan(planId)` again → repeat dry-run → applied.
+**Approval flow:** `request_*` → Kubernetes `dryRun=All` succeeds → returns `planId` → `execute_approved_plan(planId)` → Gateway returns approval URL → browser OAuth approval → call `execute_approved_plan(planId)` again → repeat dry-run → applied.
 
 Allowed manifest kinds: `apps/v1 Deployment`, `v1 Service`, `v1 ConfigMap`.
 
@@ -425,7 +425,7 @@ The canonical environment variable, CI/CD, and release configuration reference i
 | Kubernetes API returns `Unauthorized` during integration tests | Stale or expired demo kubeconfig token | Re-run `./scripts/create-demo-kubeconfig.sh` for source tests, or `./scripts/create-demo-kubeconfig.sh --compose` for Compose flows |
 | Gateway returns `401 Unauthorized` | No `Authorization` header, invalid JWT, or no auth env vars set | Set OAuth vars and re-run MCP login |
 | `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA` error | Trying to reach HTTP issuer with HTTPS check | Set to `false` only for local development issuers such as the Keycloak demo |
-| `apply_approved_plan` refuses with hash mismatch | Plan changed after approval | Re-request the plan and re-approve |
+| `execute_approved_plan` refuses with hash mismatch | Plan changed after approval | Re-request the plan and re-approve |
 | Every MCP tool call returns `An error occurred invoking '<toolName>'` while gateway logs show `IsError = False` | The downstream MCP server failed during DI — usually because the gateway container (chiseled, UID 1654) cannot read the host-owned kubeconfig or write to `.mcp-approvals/` / `.mcp-guardrails/` | Re-run `./scripts/create-demo-kubeconfig.sh --compose`. The script grants the container UID an ACL on the kubeconfig file and on the persistence dirs (falling back to chmod 0644 only when `setfacl` is unavailable) |
 | `chmod: changing permissions of '.mcp-approvals/applied': Operation not permitted` on second run, and gateway logs show `UnauthorizedAccessException: Access to the path '/data/dataprotection-keys' is denied` | On first run the container (UID 1654) creates approval subdirectories with ownership 1654:1654 mode 770; on re-run `chmod -R` fails on those dirs before `setfacl` can execute, so the data-protection volume loses its ACL | Re-run `./scripts/create-demo-kubeconfig.sh --compose` after pulling the latest script — the fixed version pre-creates the approval subdirectories host-owned and uses `find -user` instead of `chmod -R` so container-created files are skipped |
 | `create-demo-kubeconfig.sh: line N: GATEWAY_APP_UID: unbound variable` | The script ran against an older copy that referenced `GATEWAY_APP_UID` without defining it locally | Pull the latest script — both constants are now declared at the top alongside the other configuration variables |

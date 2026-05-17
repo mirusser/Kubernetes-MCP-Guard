@@ -206,7 +206,7 @@ public sealed partial class K8sManager
         {
             var diffs = await K8sDiffService.BuildDiffsAsync(
                 client,
-                K8sConventions.PlanOperations.Apply,
+                K8sConventions.MutationOperations.Apply,
                 parsed.ObjectRefs,
                 dryRunResult.DryRun.Objects,
                 cancellationToken);
@@ -217,6 +217,59 @@ public sealed partial class K8sManager
         {
             logger.LogError(ex, "Diff generation failed for manifest in namespace {Namespace}", namespaceName);
             return FormatApiException("Diff generation failed", ex);
+        }
+    }
+
+    public async Task<string> EvidenceDiffDeploymentAsync(
+        string namespaceName,
+        string name,
+        string operation,
+        int? replicas,
+        string? container,
+        string? image,
+        CancellationToken cancellationToken)
+    {
+        var validation = ValidateNamespace(namespaceName);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        try
+        {
+            DryRunResult dryRunResult = operation switch
+            {
+                K8sConventions.MutationOperations.Scale
+                    => await DryRunScaleDeploymentAsync(namespaceName, name, replicas ?? 1, cancellationToken),
+                K8sConventions.MutationOperations.Restart
+                    => await DryRunRestartDeploymentAsync(
+                        namespaceName, name,
+                        DateTimeOffset.UtcNow.ToString(ApprovalConventions.DateTimeFormats.RoundTrip),
+                        cancellationToken),
+                K8sConventions.MutationOperations.SetImage
+                    => await DryRunSetDeploymentImageAsync(namespaceName, name, container ?? string.Empty, image ?? string.Empty, cancellationToken),
+                _ => throw new InvalidOperationException($"Unsupported operation '{operation}' for deployment diff.")
+            };
+
+            if (!dryRunResult.Succeeded || dryRunResult.DryRun is null)
+            {
+                return dryRunResult.Message;
+            }
+
+            var obj = K8sConventions.K8sResources.DeploymentRef(namespaceName, name);
+            var diffs = await K8sDiffService.BuildDiffsAsync(
+                client,
+                operation,
+                [obj],
+                dryRunResult.DryRun.Objects,
+                cancellationToken).ConfigureAwait(false);
+
+            return JsonSerializer.Serialize(diffs, JsonOptions);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Deployment diff generation failed for {Namespace}/{Name}", namespaceName, name);
+            return FormatApiException("Deployment diff generation failed", ex);
         }
     }
 }

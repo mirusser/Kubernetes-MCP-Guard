@@ -73,7 +73,7 @@ MCP tools are external contracts. Before adding or changing one:
 - Do not add raw shell execution, `kubectl` passthrough, exec, attach, port-forward, namespace creation, RBAC manipulation, or Secret-value reads.
 - Preserve OAuth JWT enforcement at the HTTP gateway.
 - Preserve namespace allow-list checks and Kubernetes RBAC assumptions.
-- Keep mutation behavior plan-first: `request_*` creates a pending plan, and `apply_approved_plan` applies only after approval.
+- Keep mutation behavior plan-first: `request_*` creates a pending plan, and `execute_approved_plan` applies only after approval.
 - Preserve hash-bound approvals so a plan cannot change after approval.
 - Keep observability bounded, and avoid raw manifests or ConfigMap values in read responses.
 - Route model-visible reads through gateway guardrails and response sanitization.

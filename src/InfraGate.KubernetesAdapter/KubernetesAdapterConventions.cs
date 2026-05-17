@@ -37,6 +37,7 @@ public static class KubernetesAdapterConventions
         public const string DryRunRestartDeployment = "dry_run_restart_deployment";
         public const string DryRunSetDeploymentImage = "dry_run_set_deployment_image";
         public const string DiffManifest = "diff_manifest";
+        public const string DiffDeployment = "diff_deployment";
         public const string CheckLiveDrift = "check_live_drift";
     }
 

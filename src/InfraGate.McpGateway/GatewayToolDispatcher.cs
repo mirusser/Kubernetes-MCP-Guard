@@ -161,7 +161,7 @@ public sealed class GatewayToolDispatcher
             planResult.TargetNamespace,
             ct);
 
-        var message = $"Approval plan '{planResult.PlanId}' created. To execute, submit with apply_approved_plan(planId=\"{planResult.PlanId}\").";
+        var message = $"Approval plan '{planResult.PlanId}' created. To execute, submit with execute_approved_plan(planId=\"{planResult.PlanId}\").";
         if (requestHasFindings)
         {
             message = GuardedToolRunner.FormatWarningResponse(message);

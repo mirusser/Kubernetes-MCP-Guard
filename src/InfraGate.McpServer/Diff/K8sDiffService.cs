@@ -89,7 +89,7 @@ internal static class K8sDiffService
         K8sObjectRef obj,
         Dictionary<string, K8sPlanDryRunObject> dryRunByObject)
     {
-        if (string.Equals(operation, K8sConventions.PlanOperations.Delete, StringComparison.Ordinal))
+        if (string.Equals(operation, K8sConventions.MutationOperations.Delete, StringComparison.Ordinal))
         {
             return null;
         }
@@ -113,7 +113,7 @@ internal static class K8sDiffService
         {
             object liveObject = operation switch
             {
-                K8sConventions.PlanOperations.Scale => await client.AppsV1.ReadNamespacedDeploymentScaleAsync(
+                K8sConventions.MutationOperations.Scale => await client.AppsV1.ReadNamespacedDeploymentScaleAsync(
                     obj.Name,
                     obj.Namespace,
                     cancellationToken: cancellationToken),

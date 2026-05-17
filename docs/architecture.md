@@ -227,10 +227,10 @@ sequenceDiagram
     participant GW as Gateway :3001
     participant Store as ApprovalStore
 
-    Note over User,Store: Step 2: first apply_approved_plan call creates an out-of-band challenge
+    Note over User,Store: Step 2: first execute_approved_plan call creates an out-of-band challenge
 
     User->>Client: apply approved plan
-    Client->>GW: POST /mcp -> apply_approved_plan(planId)<br/>JSON-RPC + JWT Bearer
+    Client->>GW: POST /mcp -> execute_approved_plan(planId)<br/>JSON-RPC + JWT Bearer
     GW->>GW: validate JWT + scope
     GW->>Store: read pending plan + current hash
     GW->>GW: create approval challenge<br/>bound to planId + Intent Digest + Review Digest + requester subject + expiry
@@ -272,14 +272,14 @@ sequenceDiagram
     participant Store as ApprovalStore
     participant K8s as Kubernetes API
 
-    Note over User,K8s: Step 3: retry apply_approved_plan after browser approval
+    Note over User,K8s: Step 3: retry execute_approved_plan after browser approval
 
     User->>Client: retry apply approved plan
-    Client->>GW: POST /mcp -> apply_approved_plan(planId)<br/>JSON-RPC + JWT Bearer
+    Client->>GW: POST /mcp -> execute_approved_plan(planId)<br/>JSON-RPC + JWT Bearer
     GW->>GW: validate JWT + scope
     GW->>Store: validate Approval Grant for planId + subject
     alt gateway grant and subject checks pass
-        GW->>Svr: forward apply_approved_plan(planId)<br/>(no token)
+        GW->>Svr: forward execute_approved_plan(planId)<br/>(no token)
         Svr->>Store: read pending plan + Approval Grant
         Svr->>Store: validate grant expiry + Intent/Review Digests
         Svr->>K8s: repeat dry-run<br/>(dryRun=All)
@@ -311,7 +311,7 @@ flowchart LR
     Plan["request_* plan"] --> PlanAudit["K8S_MCP_APPROVAL_ROOT/audit.jsonl<br/>plan_requested"]
     Challenge["approval challenge"] --> ChallengeAudit["K8S_MCP_APPROVAL_ROOT/audit.jsonl<br/>approval_challenge_*"]
     Approve["approve / deny / expire / reject"] --> ChallengeAudit
-    Apply["apply_approved_plan"] --> ApplyAudit["K8S_MCP_APPROVAL_ROOT/audit.jsonl<br/>plan_applied / apply_denied / apply_failed"]
+    Apply["execute_approved_plan"] --> ApplyAudit["K8S_MCP_APPROVAL_ROOT/audit.jsonl<br/>plan_applied / apply_denied / apply_failed"]
 ```
 
 Guardrail audit and approval audit are separate streams. Guardrail audit records model-visible prompt-injection findings and response redaction actions. Approval audit records plan, challenge, approval, denial, expiry, hash mismatch, and apply events under `K8S_MCP_APPROVAL_ROOT/audit.jsonl`.
