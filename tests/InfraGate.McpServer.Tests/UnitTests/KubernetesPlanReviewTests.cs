@@ -22,13 +22,29 @@ public sealed class KubernetesPlanReviewTests
     }
 
     [Fact]
-    public void HasReviewEvidence_WithoutDiffs_ReturnsFalse()
+    public void HasReviewEvidence_DeploymentOperationWithoutDiffs_ReturnsTrue()
     {
         var plan = Materialize(WithPlan(payload => payload with
         {
             DryRun = CreateDryRun(),
             Diffs = []
         }));
+
+        var review = (IPlanReview)plan;
+
+        Assert.True(review.HasReviewEvidence);
+    }
+
+    [Fact]
+    public void HasReviewEvidence_ManifestOperationWithoutDiffs_ReturnsFalse()
+    {
+        var plan = Materialize(WithPlan(
+            payload => payload with
+            {
+                DryRun = CreateDryRun(),
+                Diffs = []
+            },
+            KubernetesAdapterConventions.PlanOperations.Apply));
 
         var review = (IPlanReview)plan;
 
@@ -82,7 +98,9 @@ public sealed class KubernetesPlanReviewTests
     private static KubernetesPlan Materialize(PlanEnvelope<KubernetesPlanPayload> envelope) =>
         KubernetesApprovalAdapter.Materialize(envelope);
 
-    private static PlanEnvelope<KubernetesPlanPayload> WithPlan(Func<KubernetesPlanPayload, KubernetesPlanPayload> configure)
+    private static PlanEnvelope<KubernetesPlanPayload> WithPlan(
+        Func<KubernetesPlanPayload, KubernetesPlanPayload> configure,
+        string operation = KubernetesAdapterConventions.PlanOperations.Scale)
     {
         var payload = configure(new KubernetesPlanPayload(
             "mcp-ns",
@@ -92,7 +110,7 @@ public sealed class KubernetesPlanReviewTests
 
         return KubernetesApprovalAdapter.CreateEnvelope(
             "plan-xyz",
-            "scale",
+            operation,
             FixedTime,
             new PlanRequester("requester", "test"),
             payload);

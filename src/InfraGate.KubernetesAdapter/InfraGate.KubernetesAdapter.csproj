@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="KubernetesClient" Version="19.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\InfraGate.Approvals\InfraGate.Approvals.csproj" />
   </ItemGroup>
 

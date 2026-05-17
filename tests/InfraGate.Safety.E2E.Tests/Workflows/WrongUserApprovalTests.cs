@@ -25,11 +25,11 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
         await using var client = await fixture.CreateHttpMcpClientAsync();
         var requestText = await client.CallToolAsync(
-            McpGatewayConventions.ToolNames.RequestRestartDeployment,
+            "request_restart_deployment",
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo"
             });
         var planId = SafetyE2EFixture.ParsePlanId(requestText);
         var approvalRequired = await client.CallToolAsync(
@@ -109,11 +109,11 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
         try
         {
             var requestText = await fixture.DownstreamClient.CallToolAsync(
-                McpGatewayConventions.ToolNames.RequestRestartDeployment,
+                "request_restart_deployment",
                 new Dictionary<string, object?>
                 {
-                    [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                    [McpGatewayConventions.ToolArguments.Name] = "nginx-demo",
+                    [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                    [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo",
                     ["requesterSubject"] = requesterSubject
                 },
                 CancellationToken.None);
@@ -156,11 +156,11 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
         await using var client = await fixture.CreateHttpMcpClientAsync();
         var requestText = await client.CallToolAsync(
-            McpGatewayConventions.ToolNames.RequestRestartDeployment,
+            "request_restart_deployment",
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo"
             });
         var planId = SafetyE2EFixture.ParsePlanId(requestText);
         var approvalRequired = await client.CallToolAsync(
@@ -223,11 +223,11 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
         await using var client = await fixture.CreateHttpMcpClientAsync();
         var requestText = await client.CallToolAsync(
-            McpGatewayConventions.ToolNames.RequestRestartDeployment,
+            "request_restart_deployment",
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo"
             });
         var planId = SafetyE2EFixture.ParsePlanId(requestText);
         var approvalRequired = await client.CallToolAsync(

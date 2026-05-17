@@ -20,7 +20,8 @@ public static class KubernetesApprovalAdapter
         DateTimeOffset createdAtUtc,
         PlanRequester requester,
         KubernetesPlanPayload payload,
-        ReviewSurfaceContext? reviewSurfaceContext = null)
+        ReviewSurfaceContext? reviewSurfaceContext = null,
+        FreshnessPolicy? freshnessPolicy = null)
     {
         var intentDigest = ComputeIntentDigest(operation, payload);
 
@@ -32,7 +33,8 @@ public static class KubernetesApprovalAdapter
             requester,
             intentDigest,
             reviewSurfaceContext ?? DefaultReviewSurfaceContext,
-            payload);
+            payload,
+            freshnessPolicy);
     }
 
     public static PlanEnvelope<KubernetesPlanPayload> WithPayload(
@@ -45,7 +47,8 @@ public static class KubernetesApprovalAdapter
             envelope.CreatedAtUtc,
             envelope.Requester,
             payload,
-            envelope.ReviewSurfaceContext);
+            envelope.ReviewSurfaceContext,
+            envelope.FreshnessPolicy);
     }
 
     public static KubernetesPlan Materialize(PlanEnvelope<KubernetesPlanPayload> envelope) =>
@@ -65,6 +68,7 @@ public static class KubernetesApprovalAdapter
             envelope.Requester,
             envelope.ApprovalPolicy,
             envelope.ExecutionReusePolicy,
+            envelope.FreshnessPolicy,
             envelope.ReviewSurfaceContext,
             envelope.IntentDigest,
             envelope.ReviewDigest,

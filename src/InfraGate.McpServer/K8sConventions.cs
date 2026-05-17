@@ -56,6 +56,11 @@ internal static class K8sConventions
         public const string Succeeded = "succeeded";
     }
 
+    public static class DriftCheckResult
+    {
+        public const string NoDrift = "ok";
+    }
+
     public static class PlanResponse
     {
         public const string PendingGatewayApproval = "pending_gateway_approval";
@@ -77,7 +82,6 @@ internal static class K8sConventions
 
     public static class ToolArguments
     {
-        public const string PlanId = "planId";
         public const string PodName = "podName";
         public const string Container = "container";
         public const string TailLines = "tailLines";
@@ -87,6 +91,11 @@ internal static class K8sConventions
         public const string FieldSelector = "fieldSelector";
         public const string Limit = "limit";
         public const string Image = "image";
+        public const string Manifest = "manifest";
+        public const string Namespace = "namespace";
+        public const string Replicas = "replicas";
+        public const string Operation = "operation";
+        public const string DiffsJson = "diffsJson";
     }
 
     public static class ToolNames
@@ -98,25 +107,21 @@ internal static class K8sConventions
         public const string GetDeploymentDiagnostics = "get_deployment_diagnostics";
         public const string GetPodDiagnostics = "get_pod_diagnostics";
         public const string GetServiceDiagnostics = "get_service_diagnostics";
-        public const string RequestApplyManifest = "request_apply_manifest";
-        public const string RequestDeleteManifest = "request_delete_manifest";
-        public const string RequestScaleDeployment = "request_scale_deployment";
-        public const string RequestRestartDeployment = "request_restart_deployment";
-        public const string RequestSetDeploymentImage = "request_set_deployment_image";
-        public const string ApplyApprovedPlan = "apply_approved_plan";
         public const string GetAllowedNamespaces = "get_allowed_namespaces";
-    }
 
-    public static class PolicyCodes
-    {
-        public const string DeploymentPrivilegedContainer = "DEPLOYMENT_PRIVILEGED_CONTAINER";
-        public const string DeploymentHostPath = "DEPLOYMENT_HOST_PATH";
-        public const string DeploymentHostNamespace = "DEPLOYMENT_HOST_NAMESPACE";
-        public const string DeploymentAddedCapabilities = "DEPLOYMENT_ADDED_CAPABILITIES";
-        public const string ImageLatestTag = "IMAGE_LATEST_TAG";
-        public const string ServiceLoadBalancer = "SERVICE_LOAD_BALANCER";
-        public const string ServiceNodePort = "SERVICE_NODE_PORT";
-        public const string ConfigMapSecretLikeKey = "CONFIG_MAP_SECRET_LIKE_KEY";
+        public const string DryRunApplyManifest = "dry_run_apply_manifest";
+        public const string DryRunDeleteManifest = "dry_run_delete_manifest";
+        public const string DryRunScaleDeployment = "dry_run_scale_deployment";
+        public const string DryRunRestartDeployment = "dry_run_restart_deployment";
+        public const string DryRunSetDeploymentImage = "dry_run_set_deployment_image";
+        public const string DiffManifest = "diff_manifest";
+        public const string CheckLiveDrift = "check_live_drift";
+
+        public const string ApplyManifest = "apply_manifest";
+        public const string DeleteManifest = "delete_manifest";
+        public const string ScaleDeployment = "scale_deployment";
+        public const string RestartDeployment = "restart_deployment";
+        public const string SetDeploymentImage = "set_deployment_image";
     }
 
     public static class LabelSelectorOperators

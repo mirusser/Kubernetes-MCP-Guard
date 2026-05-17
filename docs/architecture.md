@@ -157,7 +157,7 @@ sequenceDiagram
 
     Note over GW: Prompt-injection guardrails
     GW->>GW: GuardedToolRunner scans request arguments
-    Note over GW: K8sGatewayTools delegates to GuardedToolRunner<br/>ignore-instructions / reveal-prompts<br/>tool-use / secret-exfiltration<br/>authority-override
+    Note over GW: GatewayToolDispatcher delegates read-only calls to GuardedToolRunner<br/>ignore-instructions / reveal-prompts<br/>tool-use / secret-exfiltration<br/>authority-override
 
     Note over GW,Svr: Token passthrough prevention
     GW->>Svr: forward tool call<br/>(StdioClientTransport, no token)

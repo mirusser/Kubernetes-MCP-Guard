@@ -17,11 +17,11 @@ public sealed class FullApprovalFlowTests(SafetyE2EFixture fixture)
 
         await using var client = await fixture.CreateHttpMcpClientAsync();
         var requestText = await client.CallToolAsync(
-            McpGatewayConventions.ToolNames.RequestRestartDeployment,
+            "request_restart_deployment",
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo"
             });
         var planId = SafetyE2EFixture.ParsePlanId(requestText);
 

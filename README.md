@@ -148,9 +148,9 @@ Every mutation passes through three independent checkpoints. Each one can block 
 
 | Phase | What happens | What can block it |
 |---|---|---|
-| **① Plan** | AI calls `request_*`; server runs a server-side dry-run and policy checks; computes an Intent Digest and Review Digest for the pending plan envelope | Dry-run failure, policy violation (privileged containers, hostPath, dangerous caps, …), or legacy approval file format |
+| **① Plan** | AI calls `request_*`; the gateway asks the Kubernetes adapter to gather server-side dry-run, policy, and diff evidence; the generic core stores a pending plan envelope with Intent and Review Digests | Dry-run failure, policy violation (privileged containers, hostPath, dangerous caps, …), or unsupported legacy plan format |
 | **② Approve** | Human opens the approval URL; browser renders the plan from the server-side file, not the AI's description; human clicks Approve or Deny; the gateway records a Challenge Outcome and issues an Approval Grant only for approval | Challenge expired (default 15 min TTL), approver subject does not match requester, anti-forgery validation fails, or the pending-plan hash/digest binding changed after the URL was created |
-| **③ Execute** | AI calls `apply_approved_plan` again; server validates the Approval Grant, digest bindings, plan validity window, reuse marker, re-runs the dry-run, and checks live-state drift | Missing/expired/mismatched grant, digest mismatch, plan already applied, second dry-run failure, policy failure on re-validation, or live state drifted since approval |
+| **③ Execute** | AI calls `apply_approved_plan` again; the gateway validates the Approval Grant, digest bindings, plan validity window, and reuse marker, then the Kubernetes adapter re-runs declared freshness checks before calling raw execution tools | Missing/expired/mismatched grant, digest mismatch, plan already applied, second dry-run failure, policy failure on re-validation, or live state drifted since approval |
 
 The Intent Digest binds the executable mutation intent, while the Review Digest binds the trusted browser review snapshot. If the plan changes before approval, the browser approval is refused. If it changes after approval but before execution, `apply_approved_plan` is refused. After a successful apply, the applied marker blocks reuse of the same Single-Execution Plan.
 
@@ -160,7 +160,7 @@ The Intent Digest binds the executable mutation intent, while the Review Digest 
 - **OAuth-aware clients:** The gateway publishes MCP protected-resource metadata and returns insufficient-scope challenges so MCP clients can discover the required resource and `mcp:tools` scope. Browser approval pages use an OAuth code flow and a Gateway cookie.
 - **Guarded model-visible data:** The gateway scans tool arguments and responses for prompt-injection patterns, warns or redacts suspicious content, and writes JSONL guardrail audit events with the resolved OAuth identity.
 - **Dry-run-first mutations:** `request_*` tools create pending plans only after Kubernetes `dryRun=All` succeeds. Browser approval renders the stored server-side plan, dry-run result, policy findings, and diff.
-- **Digest-bound execution:** Approved applies require a valid Approval Grant bound to the Intent Digest and Review Digest, re-run Kubernetes dry-run immediately before the write, re-check policy where relevant, detect live-state drift, and mark plans as applied.
+- **Digest-bound execution:** Approved applies require a valid Approval Grant bound to the Intent Digest and Review Digest. The Kubernetes adapter re-runs declared freshness checks, detects live-state drift when diff evidence exists, re-checks policy where relevant, and marks successful plans as applied.
 - **Narrow Kubernetes surface:** Runtime operations use the Kubernetes .NET client, namespace allow-lists, namespace-scoped RBAC, bounded read-only tools, and mutation support limited to `Deployment`, `Service`, `ConfigMap`, and narrow Deployment operations.
 
 ## 📦 Container Images

@@ -18,11 +18,11 @@ public sealed class ModifiedPendingPlanTests(SafetyE2EFixture fixture)
         try
         {
             var requestText = await fixture.DownstreamClient.CallToolAsync(
-                McpGatewayConventions.ToolNames.RequestRestartDeployment,
+                "request_restart_deployment",
                 new Dictionary<string, object?>
                 {
-                    [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                    [McpGatewayConventions.ToolArguments.Name] = "nginx-demo",
+                    [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                    [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo",
                     ["requesterSubject"] = "safety-e2e-user"
                 },
                 CancellationToken.None);

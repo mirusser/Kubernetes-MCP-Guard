@@ -1,6 +1,6 @@
 # K8s Policy Validator
 
-Static analysis that blocks dangerous Kubernetes manifests before a plan is created and again at apply time.
+Static analysis that blocks dangerous Kubernetes manifests before a plan is created and again immediately before apply-manifest execution.
 
 ---
 
@@ -9,8 +9,8 @@ Static analysis that blocks dangerous Kubernetes manifests before a plan is crea
 The Kubernetes API allows manifests that are syntactically valid but operationally dangerous — privileged containers, host-path volumes, NodePort services, and so on. Kind allow-listing (enforced by `K8sManifestParser`) is the first gate; the policy validator is the second.
 
 Policy runs twice:
-1. **At plan creation** (`RequestApplyManifestAsync`) — gives early feedback to the model and prevents plans containing unsafe manifests.
-2. **At apply time** (`ApplyManifestPlanAsync`) — closes the tamper vector. A pending-plan file that has been edited to remove a policy-violating object after creation is caught here.
+1. **At plan creation** (`KubernetesPlanBuilder` via `dry_run_apply_manifest`) — gives early feedback to the model and prevents plans containing unsafe manifests.
+2. **At execution time** (`KubernetesPlanExecutor` via the pre-execution `dry_run_apply_manifest`) — closes the tamper vector. A pending-plan file that has been edited after creation is caught before any raw `apply_manifest` call.
 
 Delete plans are intentionally not policy-checked; a delete manifest identifies what to remove, not what to run.
 
@@ -24,10 +24,10 @@ K8sPolicySeverity     — Deny | Warning
 K8sPolicyFinding      — one finding: Severity, Code, ObjectRef, Message
 K8sPolicyResult       — list of findings + IsDenied + FormatRefusal() + FormatWarnings()
 K8sPolicyValidator    — static entry point: Validate(objects, options) -> K8sPolicyResult
-K8sConventions.PolicyCodes — string constants for each rule code
+KubernetesAdapterConventions.PolicyCodes — string constants for each rule code
 ```
 
-All types are `internal` to `InfraGate.McpServer`.
+The validator and records live in `InfraGate.KubernetesAdapter.Policy`; policy code constants live in `InfraGate.KubernetesAdapter`.
 
 ---
 
@@ -36,24 +36,21 @@ All types are `internal` to `InfraGate.McpServer`.
 ### Plan creation
 
 ```
-RequestApplyManifestAsync
+KubernetesPlanBuilder.BuildAsync("apply_manifest", ...)
   -> ValidateNamespace
   -> K8sManifestParser.ParseSupported          // kind allow-list
   -> K8sPolicyValidator.Validate               // policy check
   -> if IsDenied: return refusal text to model
-  -> CreatePlan
-  -> CreateAndFormatPlanAsync                  // returns compact policy summary; stores detailed findings in the plan
+  -> Build PlanEnvelope                        // stores detailed findings in the Kubernetes adapter payload
 ```
 
 ### Apply
 
 ```
-ApplyManifestPlanAsync
-  -> K8sManifestParser.ParseSupported          // re-parse from stored manifest
-  -> SameObjects check                         // tamper check on object refs
-  -> K8sPolicyValidator.Validate               // re-run policy
-  -> if IsDenied: return ApplyResult.Failed
-  -> ApplyObjectAsync (per object)
+KubernetesPlanExecutor.ExecuteAsync
+  -> dry_run_apply_manifest                    // re-runs parser, policy, and server-side dry-run
+  -> if policy-blocked: return blocked execution result
+  -> apply_manifest                            // raw execution tool, after generic and domain gates pass
 ```
 
 ---
@@ -219,7 +216,7 @@ data:
 ## Extending the Validator
 
 1. Add a new `bool` property to `K8sPolicyOptions` (default `true` for Deny, `true` for Warning).
-2. Add a new `const string` to `K8sConventions.PolicyCodes`.
+2. Add a new `const string` to `KubernetesAdapterConventions.PolicyCodes`.
 3. Add the check to the appropriate `Validate*` private method in `K8sPolicyValidator` (or create a new one for a new object type).
 4. Add a test in `K8sPolicyValidatorTests` following the `Validate_State_ExpectedResult` naming pattern, using an inline YAML manifest constant.
 

@@ -14,7 +14,8 @@
 
 ## Important Contracts
 
-- The approval root directory (`K8S_MCP_APPROVAL_ROOT`) is shared between the gateway and the downstream server. Every write goes through this directory.
+- The approval root directory (`K8S_MCP_APPROVAL_ROOT`) is the gateway-owned durable approval store for pending plans, grants, applied markers, challenges, and audit events.
+- `IDomainPlanBuilder`, `IDomainPlanExecutor`, `IToolCaller`, `PlanBuildResult`, and `DomainPlanExecutionResult` define the generic seams between the approval core and a domain adapter.
 - Pending plan files are generic envelopes. Domain-specific mutation intent and review evidence live inside the adapter payload; Kubernetes payload types live in `InfraGate.KubernetesAdapter`.
 - Audit events use names from `ApprovalConventions.AuditEvents`. Payloads are typed `IPlanAuditPayload` or `IChallengeAuditPayload` records; their JSON keys under `JsonSerializerDefaults.Web` are the contract.
 - Hash and digest comparison uses `FixedTimeStringComparer` where stored integrity values are compared.

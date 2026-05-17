@@ -4,6 +4,7 @@ obj/
 .mcp-approvals/
 .mcp-guardrails/
 .mcp-dataprotection-keys/
+dataprotection-keys/
 TestResults/
 coverage-report/
 deploy/generated/*.env

@@ -6,7 +6,7 @@ namespace InfraGate.McpGateway;
 
 public sealed partial class GuardedToolRunner
 {
-    private const string Warning =
+    internal const string Warning =
         "Guardrail warning: Potential prompt-injection content was detected. Model-visible high-risk text was redacted where applicable.";
 
     private readonly IDownstreamMcpClient downstream;
@@ -39,21 +39,7 @@ public sealed partial class GuardedToolRunner
         IReadOnlyDictionary<string, object?> arguments,
         CancellationToken cancellationToken)
     {
-        var auditIdentity = GetAuditIdentity();
-        var requestScan = PromptInjectionGuard.ScanArguments(arguments);
-        if (requestScan.HasFindings)
-        {
-            await auditStore.WriteAsync(
-                new GuardrailAuditEvent(
-                    toolName,
-                    McpGatewayConventions.GuardrailAudit.RequestDirection,
-                    McpGatewayConventions.GuardrailAudit.WarnAction,
-                    requestScan.Categories,
-                    ExtractPlanId(arguments, null),
-                    auditIdentity.Subject,
-                    auditIdentity.AuthenticationType),
-                cancellationToken);
-        }
+        bool requestHasFindings = await AuditRequestAsync(toolName, arguments, cancellationToken);
 
         string downstreamText;
         try
@@ -65,9 +51,49 @@ public sealed partial class GuardedToolRunner
             logger.LogError(ex, "Downstream call to '{ToolName}' threw an exception", toolName);
             return $"Tool call failed: {ex.GetType().Name}: {ex.Message}";
         }
-        var response = PromptInjectionGuard.SanitizeResponse(downstreamText);
+        var response = await SanitizeAndAuditResponseAsync(toolName, arguments, downstreamText, cancellationToken);
+
+        return !requestHasFindings && !response.HasFindings
+            ? response.Text
+            : FormatWarningResponse(response.Text);
+    }
+
+    internal async Task<bool> AuditRequestAsync(
+        string toolName,
+        IReadOnlyDictionary<string, object?> arguments,
+        CancellationToken cancellationToken)
+    {
+        var requestScan = PromptInjectionGuard.ScanArguments(arguments);
+        if (!requestScan.HasFindings)
+        {
+            return false;
+        }
+
+        var auditIdentity = GetAuditIdentity();
+        await auditStore.WriteAsync(
+            new GuardrailAuditEvent(
+                toolName,
+                McpGatewayConventions.GuardrailAudit.RequestDirection,
+                McpGatewayConventions.GuardrailAudit.WarnAction,
+                requestScan.Categories,
+                ExtractPlanId(arguments, null),
+                auditIdentity.Subject,
+                auditIdentity.AuthenticationType),
+            cancellationToken);
+
+        return true;
+    }
+
+    internal async Task<ResponseSanitizationResult> SanitizeAndAuditResponseAsync(
+        string toolName,
+        IReadOnlyDictionary<string, object?> arguments,
+        string responseText,
+        CancellationToken cancellationToken)
+    {
+        var response = PromptInjectionGuard.SanitizeResponse(responseText);
         if (response.HasFindings || response.ManifestRedacted)
         {
+            var auditIdentity = GetAuditIdentity();
             await auditStore.WriteAsync(
                 new GuardrailAuditEvent(
                     toolName,
@@ -84,33 +110,11 @@ public sealed partial class GuardedToolRunner
                 cancellationToken);
         }
 
-        if (!requestScan.HasFindings && !response.HasFindings)
-        {
-            return response.Text;
-        }
-
-        return $"{Warning}{Environment.NewLine}{Environment.NewLine}{response.Text}";
+        return response;
     }
 
-    public Task<string> CallWithRequesterAsync(
-        string toolName,
-        IReadOnlyDictionary<string, object?> arguments,
-        CancellationToken cancellationToken)
-    {
-        var auditIdentity = GetAuditIdentity();
-        if (string.IsNullOrWhiteSpace(auditIdentity.Subject))
-        {
-            return Task.FromResult("Refused: mutation plan creation requires an authenticated OAuth subject.");
-        }
-
-        var downstreamArguments = new Dictionary<string, object?>(arguments)
-        {
-            [McpGatewayConventions.ToolArguments.RequesterSubject] = auditIdentity.Subject,
-            [McpGatewayConventions.ToolArguments.RequesterAuthenticationType] = auditIdentity.AuthenticationType
-        };
-
-        return CallAsync(toolName, downstreamArguments, cancellationToken);
-    }
+    internal static string FormatWarningResponse(string text) =>
+        $"{Warning}{Environment.NewLine}{Environment.NewLine}{text}";
 
     private AuditIdentity GetAuditIdentity()
     {

@@ -10,8 +10,10 @@ public static class PlanEnvelopeFactory
         PlanRequester requester,
         ApprovalDigest intentDigest,
         ReviewSurfaceContext reviewSurfaceContext,
-        TPayload payload)
+        TPayload payload,
+        FreshnessPolicy? freshnessPolicy = null)
     {
+        var resolvedFreshnessPolicy = freshnessPolicy ?? FreshnessPolicy.Empty;
         var validityWindow = new PlanValidityWindow(
             createdAtUtc,
             createdAtUtc.Add(ApprovalConventions.PlanValidity.DefaultWindow));
@@ -27,6 +29,7 @@ public static class PlanEnvelopeFactory
             requester,
             approvalPolicy,
             executionReusePolicy,
+            resolvedFreshnessPolicy,
             reviewSurfaceContext,
             intentDigest,
             payload);
@@ -45,7 +48,10 @@ public static class PlanEnvelopeFactory
             reviewSurfaceContext,
             intentDigest,
             reviewDigest,
-            payload);
+            payload)
+        {
+            FreshnessPolicy = resolvedFreshnessPolicy
+        };
     }
 
     public static ApprovalDigest ComputeReviewDigest(PlanEnvelope envelope) =>
@@ -59,6 +65,7 @@ public static class PlanEnvelopeFactory
             envelope.Requester,
             envelope.ApprovalPolicy,
             envelope.ExecutionReusePolicy,
+            envelope.FreshnessPolicy,
             envelope.ReviewSurfaceContext,
             envelope.IntentDigest,
             envelope.Payload);
@@ -73,6 +80,7 @@ public static class PlanEnvelopeFactory
         PlanRequester requester,
         ApprovalPolicy approvalPolicy,
         ExecutionReusePolicy executionReusePolicy,
+        FreshnessPolicy freshnessPolicy,
         ReviewSurfaceContext reviewSurfaceContext,
         ApprovalDigest intentDigest,
         TPayload payload)
@@ -91,6 +99,7 @@ public static class PlanEnvelopeFactory
                 requester,
                 approvalPolicy,
                 executionReusePolicy,
+                freshnessPolicy,
                 reviewSurfaceContext,
                 intentDigest,
                 payload

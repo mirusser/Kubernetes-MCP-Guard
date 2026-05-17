@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
@@ -18,6 +19,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
+using ModelContextProtocol.Server;
 using Testcontainers.Keycloak;
 
 #pragma warning disable ASPDEPR004
@@ -489,6 +491,11 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
                 services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
                 services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
                 services.AddSingleton<GatewayApprovalService>();
+                services.AddSingleton<IDomainPlanBuilder, KubernetesPlanBuilder>();
+                services.AddSingleton<IDomainPlanExecutor, KubernetesPlanExecutor>();
+                services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
+                services.AddSingleton<DownstreamToolRegistry>();
+                services.AddSingleton<GatewayToolDispatcher>();
                 services.AddHttpContextAccessor();
                 services.AddLogging();
                 services.AddAntiforgery();
@@ -500,7 +507,10 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
                 services
                     .AddMcpServer()
                     .WithHttpTransport()
-                    .WithToolsFromAssembly(typeof(K8sGatewayTools).Assembly);
+                    .WithListToolsHandler((RequestContext<ListToolsRequestParams> request, CancellationToken ct) =>
+                        new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<GatewayToolDispatcher>().ListToolsAsync(request.Params, ct)))
+                    .WithCallToolHandler((RequestContext<CallToolRequestParams> request, CancellationToken ct) =>
+                        new ValueTask<CallToolResult>(request.Services!.GetRequiredService<GatewayToolDispatcher>().CallToolAsync(request.Params, ct)));
             })
             .Configure(app =>
             {

@@ -94,6 +94,13 @@ public static class ApprovalConventions
         public const string Rejected = "rejected";
     }
 
+    public static class PolicySeverities
+    {
+        public const string Information = "Information";
+        public const string Warning = "Warning";
+        public const string Error = "Error";
+    }
+
     public static class DiffChangeTypes
     {
         public const string Create = "create";

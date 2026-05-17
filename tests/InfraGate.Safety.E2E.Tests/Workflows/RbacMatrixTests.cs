@@ -47,11 +47,11 @@ public sealed class RbacMatrixTests(SafetyE2EFixture fixture)
 
         var requestText = await CallTextAsync(
             client,
-            McpGatewayConventions.ToolNames.RequestRestartDeployment,
+            "request_restart_deployment",
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo"
             });
 
         Assert.Contains("PlanId:", requestText, StringComparison.Ordinal);

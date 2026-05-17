@@ -216,7 +216,7 @@ Use this shape for a local stdio MCP client:
 
 ### Available MCP tools
 
-The HTTP gateway exposes the same tool names and arguments as the stdio server:
+The HTTP gateway forwards read-only stdio tools as-is, hides raw destructive stdio tools, and generates approval-plan wrappers for each destructive tool:
 
 - `get_allowed_namespaces()`
 - `get_k8s_status(namespace, labelSelector = null)`
@@ -233,7 +233,7 @@ The HTTP gateway exposes the same tool names and arguments as the stdio server:
 - `request_set_deployment_image(namespace, name, container, image)`
 - `apply_approved_plan(planId)`
 
-When calling the stdio server directly, mutation request tools also require `requesterSubject` and may include `requesterAuthenticationType`. The HTTP Gateway keeps the public tool arguments above unchanged and injects those requester fields from the authenticated OAuth identity.
+When calling the stdio server directly, use the read-only evidence tools (`dry_run_*`, `diff_manifest`, `check_live_drift`) or raw destructive tools (`apply_manifest`, `delete_manifest`, `scale_deployment`, `restart_deployment`, `set_deployment_image`). Direct stdio does not expose `request_*` or `apply_approved_plan`; those are gateway-owned.
 
 Logs and Events are untrusted Kubernetes workload/cluster output. The HTTP gateway sanitizes suspicious model-visible output before returning it; direct stdio use of `InfraGate.McpServer` bypasses that gateway guardrail layer.
 
@@ -241,15 +241,15 @@ Observability bounds: Events and diagnostics default to `limit = 50` and allow u
 
 Approval flow:
 
-1. Ask the MCP server for a plan with `request_apply_manifest`, `request_scale_deployment`, etc. The server runs Kubernetes `dryRun=All` first and stores the dry-run result in the Kubernetes adapter payload inside the pending plan envelope.
+1. Ask the HTTP gateway for a plan with `request_apply_manifest`, `request_scale_deployment`, etc. The Kubernetes adapter calls the downstream evidence tools first and stores the dry-run, policy, and diff evidence in the adapter payload inside the pending plan envelope.
 2. Call `apply_approved_plan` with the returned `PlanId`.
 3. The Gateway returns an approval URL instead of applying.
 4. Open the URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan and dry-run status, and approve or deny it.
-5. Call `apply_approved_plan` again. The Gateway forwards only after an Approval Grant exists and still matches the pending plan's Intent Digest and Review Digest; the server repeats dry-run immediately before the real write.
+5. Call `apply_approved_plan` again. The Gateway forwards only after an Approval Grant exists and still matches the pending plan's Intent Digest and Review Digest; the Kubernetes adapter repeats declared freshness checks immediately before the raw write.
 
 The MCP client never submits approval content. Approval challenges are bound to the plan id, current pending-plan hash, requester subject, expected Intent Digest, expected Review Digest, expiry, and Single-Execution status.
 
-Approval grants are stored under `.mcp-approvals/grants/` and bind the requester, approver, source challenge, Intent Digest, Review Digest, approval policy, reuse policy, and plan validity expiry. Old raw pending-plan files must be re-requested after the envelope-format change. If the pending plan changes after approval, the grant no longer matches and the MCP server refuses to apply it. Audit events are written under `.mcp-approvals/audit.jsonl`.
+Approval grants are stored under `.mcp-approvals/grants/` and bind the requester, approver, source challenge, Intent Digest, Review Digest, approval policy, reuse policy, and plan validity expiry. Old raw pending-plan files must be re-requested after the envelope-format change. If the pending plan changes after approval, the grant no longer matches and the gateway refuses to apply it. Audit events are written under `.mcp-approvals/audit.jsonl`.
 
 ### Verification
 

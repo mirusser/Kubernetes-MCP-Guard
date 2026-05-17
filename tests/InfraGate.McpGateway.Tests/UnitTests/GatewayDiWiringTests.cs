@@ -102,6 +102,9 @@ public sealed class GatewayDiWiringTests
             IReadOnlyDictionary<string, object?> arguments,
             CancellationToken cancellationToken) =>
             Task.FromResult("{}");
+
+        public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DownstreamTool>>([]);
     }
 
     private sealed class NullAuditStore : IGuardrailAuditStore

@@ -17,6 +17,7 @@ public sealed record PlanEnvelope
         PlanRequester requester,
         ApprovalPolicy approvalPolicy,
         ExecutionReusePolicy executionReusePolicy,
+        FreshnessPolicy freshnessPolicy,
         ReviewSurfaceContext reviewSurfaceContext,
         ApprovalDigest intentDigest,
         ApprovalDigest reviewDigest,
@@ -32,6 +33,7 @@ public sealed record PlanEnvelope
         Requester = requester;
         ApprovalPolicy = approvalPolicy;
         ExecutionReusePolicy = executionReusePolicy;
+        FreshnessPolicy = freshnessPolicy;
         ReviewSurfaceContext = reviewSurfaceContext;
         IntentDigest = intentDigest;
         ReviewDigest = reviewDigest;
@@ -57,6 +59,8 @@ public sealed record PlanEnvelope
     public ApprovalPolicy ApprovalPolicy { get; init; } = new();
 
     public ExecutionReusePolicy ExecutionReusePolicy { get; init; } = new();
+
+    public FreshnessPolicy FreshnessPolicy { get; init; } = FreshnessPolicy.Empty;
 
     public ReviewSurfaceContext ReviewSurfaceContext { get; init; } = new(string.Empty, string.Empty);
 

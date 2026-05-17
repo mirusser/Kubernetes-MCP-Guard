@@ -1,4 +1,3 @@
-using InfraGate.Approvals;
 using InfraGate.McpServer;
 using k8s;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,8 +22,6 @@ if (!string.IsNullOrWhiteSpace(mcpOptions.LogPath))
 
 mcpOptions.ValidateProductionSafety();
 builder.Services.AddSingleton(mcpOptions);
-builder.Services.AddSingleton(new ApprovalStoreOptions(mcpOptions.ApprovalRoot));
-builder.Services.AddSingleton<ApprovalStore>();
 builder.Services.AddSingleton<IKubernetes>(_ =>
 {
     var config = new KubernetesConfigProvider(mcpOptions).Create();

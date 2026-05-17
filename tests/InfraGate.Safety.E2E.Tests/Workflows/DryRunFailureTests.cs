@@ -49,11 +49,11 @@ public sealed class DryRunFailureTests(SafetyE2EFixture fixture)
 
         await using var client = await fixture.CreateHttpMcpClientAsync();
         var response = await client.CallToolAsync(
-            McpGatewayConventions.ToolNames.RequestApplyManifest,
+            "request_apply_manifest",
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                [McpGatewayConventions.ToolArguments.Manifest] = manifest
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Manifest] = manifest
             });
 
         var pendingAfter = Directory.Exists(pendingDirectory)
@@ -78,11 +78,11 @@ public sealed class DryRunFailureTests(SafetyE2EFixture fixture)
 
         await using var client = await fixture.CreateHttpMcpClientAsync();
         var requestText = await client.CallToolAsync(
-            McpGatewayConventions.ToolNames.RequestRestartDeployment,
+            "request_restart_deployment",
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo"
             });
         var planId = SafetyE2EFixture.ParsePlanId(requestText);
         var pendingPath = fixture.ApprovalStore.GetPendingPath(planId);

@@ -84,76 +84,118 @@ public static class K8sTools
         CancellationToken cancellationToken = default) =>
         manager.GetServiceDiagnosticsAsync(@namespace, name, limit, cancellationToken);
 
-    [McpServerTool(Name = K8sConventions.ToolNames.RequestApplyManifest, Destructive = false, OpenWorld = false)]
-    [Description("Creates a pending approval plan to server-side apply supported Kubernetes YAML or JSON manifests.")]
-    public static Task<string> RequestApplyManifest(
+    [McpServerTool(Name = K8sConventions.ToolNames.DryRunApplyManifest, ReadOnly = true, OpenWorld = false)]
+    [Description("Server-side dry-run of applying supported Kubernetes YAML or JSON manifests. Returns JSON-serialized dry-run result.")]
+    public static Task<string> DryRunApplyManifest(
         K8sManager manager,
         [Description("Allowed Kubernetes namespace for the manifest.")] string @namespace,
         [Description("Multi-document YAML or JSON containing Deployments, Services, or ConfigMaps.")] string manifest,
-        [Description("Authenticated subject that requested this approval plan.")] string? requesterSubject = null,
-        [Description("Authentication type used by the requester.")] string? requesterAuthenticationType = null,
         CancellationToken cancellationToken = default) =>
-        manager.RequestApplyManifestAsync(@namespace, manifest, requesterSubject, requesterAuthenticationType, cancellationToken);
+        manager.EvidenceDryRunApplyManifestAsync(@namespace, manifest, cancellationToken);
 
-    [McpServerTool(Name = K8sConventions.ToolNames.RequestDeleteManifest, Destructive = false, OpenWorld = false)]
-    [Description("Creates a pending approval plan to delete each supported Kubernetes object named in a manifest.")]
-    public static Task<string> RequestDeleteManifest(
+    [McpServerTool(Name = K8sConventions.ToolNames.DryRunDeleteManifest, ReadOnly = true, OpenWorld = false)]
+    [Description("Server-side dry-run of deleting Kubernetes objects named in a manifest. Returns JSON-serialized dry-run result.")]
+    public static Task<string> DryRunDeleteManifest(
         K8sManager manager,
         [Description("Allowed Kubernetes namespace for the manifest.")] string @namespace,
         [Description("Multi-document YAML or JSON naming Deployments, Services, or ConfigMaps to delete.")] string manifest,
-        [Description("Authenticated subject that requested this approval plan.")] string? requesterSubject = null,
-        [Description("Authentication type used by the requester.")] string? requesterAuthenticationType = null,
         CancellationToken cancellationToken = default) =>
-        manager.RequestDeleteManifestAsync(@namespace, manifest, requesterSubject, requesterAuthenticationType, cancellationToken);
+        manager.EvidenceDryRunDeleteManifestAsync(@namespace, manifest, cancellationToken);
 
-    [McpServerTool(Name = K8sConventions.ToolNames.RequestScaleDeployment, Destructive = false, OpenWorld = false)]
-    [Description("Creates a pending approval plan to scale a Deployment in an allowed namespace.")]
-    public static Task<string> RequestScaleDeployment(
+    [McpServerTool(Name = K8sConventions.ToolNames.DryRunScaleDeployment, ReadOnly = true, OpenWorld = false)]
+    [Description("Server-side dry-run of scaling a Deployment. Returns JSON-serialized dry-run result.")]
+    public static Task<string> DryRunScaleDeployment(
         K8sManager manager,
         [Description("Allowed Kubernetes namespace.")] string @namespace,
         [Description("Deployment name.")] string name,
         [Description("Number of replicas, from 0 to 5.")] int replicas,
-        [Description("Authenticated subject that requested this approval plan.")] string? requesterSubject = null,
-        [Description("Authentication type used by the requester.")] string? requesterAuthenticationType = null,
         CancellationToken cancellationToken = default) =>
-        manager.RequestScaleDeploymentAsync(@namespace, name, replicas, requesterSubject, requesterAuthenticationType, cancellationToken);
+        manager.EvidenceDryRunScaleDeploymentAsync(@namespace, name, replicas, cancellationToken);
 
-    [McpServerTool(Name = K8sConventions.ToolNames.RequestRestartDeployment, Destructive = false, OpenWorld = false)]
-    [Description("Creates a pending approval plan to restart a Deployment in an allowed namespace.")]
-    public static Task<string> RequestRestartDeployment(
+    [McpServerTool(Name = K8sConventions.ToolNames.DryRunRestartDeployment, ReadOnly = true, OpenWorld = false)]
+    [Description("Server-side dry-run of restarting a Deployment. Returns JSON-serialized dry-run result.")]
+    public static Task<string> DryRunRestartDeployment(
         K8sManager manager,
         [Description("Allowed Kubernetes namespace.")] string @namespace,
         [Description("Deployment name.")] string name,
-        [Description("Authenticated subject that requested this approval plan.")] string? requesterSubject = null,
-        [Description("Authentication type used by the requester.")] string? requesterAuthenticationType = null,
         CancellationToken cancellationToken = default) =>
-        manager.RequestRestartDeploymentAsync(@namespace, name, requesterSubject, requesterAuthenticationType, cancellationToken);
+        manager.EvidenceDryRunRestartDeploymentAsync(@namespace, name, cancellationToken);
 
-    [McpServerTool(Name = K8sConventions.ToolNames.RequestSetDeploymentImage, Destructive = false, OpenWorld = false)]
-    [Description("Creates a pending approval plan to update one Deployment container image in an allowed namespace.")]
-    public static Task<string> RequestSetDeploymentImage(
+    [McpServerTool(Name = K8sConventions.ToolNames.DryRunSetDeploymentImage, ReadOnly = true, OpenWorld = false)]
+    [Description("Server-side dry-run of updating a Deployment container image. Returns JSON-serialized dry-run result.")]
+    public static Task<string> DryRunSetDeploymentImage(
         K8sManager manager,
         [Description("Allowed Kubernetes namespace.")] string @namespace,
         [Description("Deployment name.")] string name,
         [Description("Container name.")] string container,
         [Description("Target container image.")] string image,
-        [Description("Authenticated subject that requested this approval plan.")] string? requesterSubject = null,
-        [Description("Authentication type used by the requester.")] string? requesterAuthenticationType = null,
         CancellationToken cancellationToken = default) =>
-        manager.RequestSetDeploymentImageAsync(
-            @namespace,
-            name,
-            container,
-            image,
-            requesterSubject,
-            requesterAuthenticationType,
-            cancellationToken);
+        manager.EvidenceDryRunSetDeploymentImageAsync(@namespace, name, container, image, cancellationToken);
 
-    [McpServerTool(Name = K8sConventions.ToolNames.ApplyApprovedPlan, Destructive = true, OpenWorld = false)]
-    [Description("Applies a pending Kubernetes plan that was already approved out-of-band.")]
-    public static Task<string> ApplyApprovedPlan(
+    [McpServerTool(Name = K8sConventions.ToolNames.DiffManifest, ReadOnly = true, OpenWorld = false)]
+    [Description("Computes a diff between live Kubernetes state and the proposed application of a manifest. Returns JSON-serialized diff result.")]
+    public static Task<string> DiffManifest(
         K8sManager manager,
-        [Description("PlanId returned by one of the request_* tools.")] string planId,
+        [Description("Allowed Kubernetes namespace for the manifest.")] string @namespace,
+        [Description("Multi-document YAML or JSON containing Deployments, Services, or ConfigMaps.")] string manifest,
         CancellationToken cancellationToken = default) =>
-        manager.ApplyApprovedPlanAsync(planId, cancellationToken);
+        manager.EvidenceDiffManifestAsync(@namespace, manifest, cancellationToken);
+
+    [McpServerTool(Name = K8sConventions.ToolNames.CheckLiveDrift, ReadOnly = true, OpenWorld = false)]
+    [Description("Checks whether live Kubernetes state has drifted from the recorded plan diffs. Returns 'ok' if no drift, or a description of detected drift.")]
+    public static Task<string> CheckLiveDrift(
+        K8sManager manager,
+        [Description("Allowed Kubernetes namespace.")] string @namespace,
+        [Description("The mutation operation type (e.g. apply, delete, scale).")] string operation,
+        [Description("JSON-serialized array of K8sPlanDiff recorded at plan creation time.")] string diffsJson,
+        CancellationToken cancellationToken = default) =>
+        manager.EvidenceCheckLiveDriftAsync(@namespace, operation, diffsJson, cancellationToken);
+
+    [McpServerTool(Name = K8sConventions.ToolNames.ApplyManifest, Destructive = true, OpenWorld = false)]
+    [Description("Applies supported Kubernetes YAML or JSON manifests directly (no approval flow).")]
+    public static Task<string> ApplyManifest(
+        K8sManager manager,
+        [Description("Allowed Kubernetes namespace for the manifest.")] string @namespace,
+        [Description("Multi-document YAML or JSON containing Deployments, Services, or ConfigMaps.")] string manifest,
+        CancellationToken cancellationToken = default) =>
+        manager.ExecuteApplyManifestAsync(@namespace, manifest, cancellationToken);
+
+    [McpServerTool(Name = K8sConventions.ToolNames.DeleteManifest, Destructive = true, OpenWorld = false)]
+    [Description("Deletes each supported Kubernetes object named in a manifest directly (no approval flow).")]
+    public static Task<string> DeleteManifest(
+        K8sManager manager,
+        [Description("Allowed Kubernetes namespace for the manifest.")] string @namespace,
+        [Description("Multi-document YAML or JSON identifying objects to delete.")] string manifest,
+        CancellationToken cancellationToken = default) =>
+        manager.ExecuteDeleteManifestAsync(@namespace, manifest, cancellationToken);
+
+    [McpServerTool(Name = K8sConventions.ToolNames.ScaleDeployment, Destructive = true, OpenWorld = false)]
+    [Description("Scales a Deployment to the specified replica count directly (no approval flow).")]
+    public static Task<string> ScaleDeployment(
+        K8sManager manager,
+        [Description("Allowed Kubernetes namespace.")] string @namespace,
+        [Description("Deployment name.")] string name,
+        [Description("Number of replicas (0–5).")] int replicas,
+        CancellationToken cancellationToken = default) =>
+        manager.ExecuteScaleDeploymentAsync(@namespace, name, replicas, cancellationToken);
+
+    [McpServerTool(Name = K8sConventions.ToolNames.RestartDeployment, Destructive = true, OpenWorld = false)]
+    [Description("Performs a rolling restart of a Deployment directly (no approval flow).")]
+    public static Task<string> RestartDeployment(
+        K8sManager manager,
+        [Description("Allowed Kubernetes namespace.")] string @namespace,
+        [Description("Deployment name.")] string name,
+        CancellationToken cancellationToken = default) =>
+        manager.ExecuteRestartDeploymentAsync(@namespace, name, cancellationToken);
+
+    [McpServerTool(Name = K8sConventions.ToolNames.SetDeploymentImage, Destructive = true, OpenWorld = false)]
+    [Description("Updates a container image in a Deployment directly (no approval flow).")]
+    public static Task<string> SetDeploymentImage(
+        K8sManager manager,
+        [Description("Allowed Kubernetes namespace.")] string @namespace,
+        [Description("Deployment name.")] string name,
+        [Description("Container name within the Deployment.")] string container,
+        [Description("New container image reference.")] string image,
+        CancellationToken cancellationToken = default) =>
+        manager.ExecuteSetDeploymentImageAsync(@namespace, name, container, image, cancellationToken);
 }

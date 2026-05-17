@@ -1,10 +1,10 @@
 using k8s;
 using k8s.Models;
 
-namespace InfraGate.McpServer.Policy;
+namespace InfraGate.KubernetesAdapter.Policy;
 
 // Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
-internal static class K8sPolicyValidator
+public static class K8sPolicyValidator
 {
     private static readonly string[] SecretLikeKeys =
     [
@@ -67,19 +67,19 @@ internal static class K8sPolicyValidator
     {
         if (options.DenyHostNetwork && podSpec.HostNetwork == true)
         {
-            findings.Add(Deny(K8sConventions.PolicyCodes.DeploymentHostNamespace, objRef,
+            findings.Add(Deny(KubernetesAdapterConventions.PolicyCodes.DeploymentHostNamespace, objRef,
                 "hostNetwork is not allowed."));
         }
 
         if (options.DenyHostPid && podSpec.HostPID == true)
         {
-            findings.Add(Deny(K8sConventions.PolicyCodes.DeploymentHostNamespace, objRef,
+            findings.Add(Deny(KubernetesAdapterConventions.PolicyCodes.DeploymentHostNamespace, objRef,
                 "hostPID is not allowed."));
         }
 
         if (options.DenyHostIpc && podSpec.HostIPC == true)
         {
-            findings.Add(Deny(K8sConventions.PolicyCodes.DeploymentHostNamespace, objRef,
+            findings.Add(Deny(KubernetesAdapterConventions.PolicyCodes.DeploymentHostNamespace, objRef,
                 "hostIPC is not allowed."));
         }
     }
@@ -97,7 +97,7 @@ internal static class K8sPolicyValidator
 
         foreach (var volume in (podSpec.Volumes ?? []).Where(v => v.HostPath is not null))
         {
-            findings.Add(Deny(K8sConventions.PolicyCodes.DeploymentHostPath, objRef,
+            findings.Add(Deny(KubernetesAdapterConventions.PolicyCodes.DeploymentHostPath, objRef,
                 $"Volume '{volume.Name}' uses hostPath, which is not allowed."));
         }
     }
@@ -121,7 +121,7 @@ internal static class K8sPolicyValidator
     {
         if (options.DenyPrivilegedContainers && container.SecurityContext?.Privileged == true)
         {
-            findings.Add(Deny(K8sConventions.PolicyCodes.DeploymentPrivilegedContainer, objRef,
+            findings.Add(Deny(KubernetesAdapterConventions.PolicyCodes.DeploymentPrivilegedContainer, objRef,
                 $"Container '{container.Name}' is privileged, which is not allowed."));
         }
     }
@@ -136,7 +136,7 @@ internal static class K8sPolicyValidator
         if (options.DenyAddedCapabilities && capabilities?.Count > 0)
         {
             var caps = string.Join(", ", capabilities);
-            findings.Add(Deny(K8sConventions.PolicyCodes.DeploymentAddedCapabilities, objRef,
+            findings.Add(Deny(KubernetesAdapterConventions.PolicyCodes.DeploymentAddedCapabilities, objRef,
                 $"Container '{container.Name}' adds Linux capabilities [{caps}], which is not allowed."));
         }
     }
@@ -155,7 +155,7 @@ internal static class K8sPolicyValidator
         var image = container.Image;
         if (string.IsNullOrEmpty(image) || !image.Contains(':') || image.EndsWith(":latest", StringComparison.Ordinal))
         {
-            findings.Add(Deny(K8sConventions.PolicyCodes.ImageLatestTag, objRef,
+            findings.Add(Deny(KubernetesAdapterConventions.PolicyCodes.ImageLatestTag, objRef,
                 $"Container '{container.Name}' uses image '{image}' which resolves to latest. Pin to a specific tag."));
         }
     }
@@ -171,14 +171,14 @@ internal static class K8sPolicyValidator
         if (options.DenyServiceTypeLoadBalancer &&
             string.Equals(type, "LoadBalancer", StringComparison.Ordinal))
         {
-            findings.Add(Deny(K8sConventions.PolicyCodes.ServiceLoadBalancer, objRef,
+            findings.Add(Deny(KubernetesAdapterConventions.PolicyCodes.ServiceLoadBalancer, objRef,
                 "Service type LoadBalancer is not allowed."));
         }
 
         if (options.DenyServiceTypeNodePort &&
             string.Equals(type, "NodePort", StringComparison.Ordinal))
         {
-            findings.Add(Deny(K8sConventions.PolicyCodes.ServiceNodePort, objRef,
+            findings.Add(Deny(KubernetesAdapterConventions.PolicyCodes.ServiceNodePort, objRef,
                 "Service type NodePort is not allowed."));
         }
     }
@@ -196,7 +196,7 @@ internal static class K8sPolicyValidator
         var objRef = ObjectRef(configMap);
         foreach (var key in configMap.Data.Keys.Where(IsSecretLikeKey))
         {
-            findings.Add(Warn(K8sConventions.PolicyCodes.ConfigMapSecretLikeKey, objRef,
+            findings.Add(Warn(KubernetesAdapterConventions.PolicyCodes.ConfigMapSecretLikeKey, objRef,
                 $"Key '{key}' looks like a secret. Use a Secret resource instead."));
         }
     }

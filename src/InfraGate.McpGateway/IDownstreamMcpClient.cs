@@ -6,4 +6,6 @@ public interface IDownstreamMcpClient
         string toolName,
         IReadOnlyDictionary<string, object?> arguments,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken);
 }

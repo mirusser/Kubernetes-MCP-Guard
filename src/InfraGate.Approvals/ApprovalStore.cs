@@ -64,6 +64,32 @@ public sealed class ApprovalStore
         return new ApprovalPlanResult(ToUntypedEnvelope(envelope), pendingPath, hash);
     }
 
+    public async Task<ApprovalPlanResult> CreatePlanAsync(
+        PlanEnvelope envelope,
+        string targetNamespace,
+        CancellationToken cancellationToken)
+    {
+        EnsureDirectories();
+
+        var pendingPath = GetPendingPath(envelope.Id);
+        var json = JsonSerializer.Serialize(envelope, jsonOptions);
+        await File.WriteAllTextAsync(pendingPath, json, cancellationToken);
+
+        var hash = await ComputeSha256Async(pendingPath, cancellationToken);
+        await WriteAuditAsync(
+            ApprovalConventions.AuditEvents.PlanRequested,
+            new PlanRequestedPayload(
+                envelope.Id,
+                envelope.Operation,
+                targetNamespace,
+                hash,
+                envelope.IntentDigest,
+                envelope.ReviewDigest),
+            cancellationToken);
+
+        return new ApprovalPlanResult(envelope, pendingPath, hash);
+    }
+
     public async Task<GrantedPlanResult> GetGrantedPlanAsync(string planId, CancellationToken cancellationToken)
     {
         if (!IsSafePlanId(planId))
@@ -407,6 +433,7 @@ public sealed class ApprovalStore
             envelope.Requester,
             envelope.ApprovalPolicy,
             envelope.ExecutionReusePolicy,
+            envelope.FreshnessPolicy,
             envelope.ReviewSurfaceContext,
             envelope.IntentDigest,
             envelope.ReviewDigest,

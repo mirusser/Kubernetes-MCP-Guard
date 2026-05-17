@@ -1,3 +1,4 @@
+using InfraGate.Approvals;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
@@ -5,7 +6,7 @@ using ModelContextProtocol.Protocol;
 
 namespace InfraGate.McpGateway;
 
-public sealed class DownstreamMcpClient : IDownstreamMcpClient, IAsyncDisposable
+public sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, IAsyncDisposable
 {
     private readonly McpGatewayOptions options;
     private readonly ILogger<DownstreamMcpClient> logger;
@@ -36,9 +37,8 @@ public sealed class DownstreamMcpClient : IDownstreamMcpClient, IAsyncDisposable
 
             if (result.IsError == true)
             {
-                logger.LogError("Downstream tool '{ToolName}' returned IsError=true. Namespace={Namespace}, Args={ArgKeys}: {Text}",
+                logger.LogError("Downstream tool '{ToolName}' returned IsError=true. Args={ArgKeys}: {Text}",
                     toolName,
-                    GetArgument(arguments, McpGatewayConventions.ToolArguments.Namespace),
                     string.Join(",", arguments.Keys),
                     text);
             }
@@ -51,6 +51,26 @@ public sealed class DownstreamMcpClient : IDownstreamMcpClient, IAsyncDisposable
         }
     }
 
+    public async Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken)
+    {
+        var mcpClient = await GetClientAsync(cancellationToken);
+        var tools = await mcpClient.ListToolsAsync(cancellationToken: cancellationToken);
+        return tools
+            .Select(t => new DownstreamTool(
+                t.Name,
+                t.Description ?? string.Empty,
+                t.ProtocolTool.Annotations?.ReadOnlyHint ?? false,
+                t.ProtocolTool.Annotations?.DestructiveHint ?? false,
+                t.JsonSchema))
+            .ToList();
+    }
+
+    Task<string> IToolCaller.CallAsync(
+        string toolName,
+        IReadOnlyDictionary<string, object?> arguments,
+        CancellationToken ct) =>
+        CallToolAsync(toolName, arguments, ct);
+
     public async ValueTask DisposeAsync()
     {
         if (client is not null)
@@ -61,9 +81,6 @@ public sealed class DownstreamMcpClient : IDownstreamMcpClient, IAsyncDisposable
         clientLock.Dispose();
         callLock.Dispose();
     }
-
-    private static string? GetArgument(IReadOnlyDictionary<string, object?> arguments, string key) =>
-        arguments.TryGetValue(key, out var value) ? value?.ToString() : null;
 
     private async Task<McpClient> GetClientAsync(CancellationToken cancellationToken)
     {

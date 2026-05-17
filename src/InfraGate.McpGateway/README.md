@@ -1,11 +1,11 @@
 # InfraGate.McpGateway
 
-`InfraGate.McpGateway` is the local HTTP MCP endpoint that fronts the stdio Kubernetes MCP server. It adds authentication, prompt-injection guardrails, response sanitization, out-of-band plan approval, and guardrail audit logging while preserving the same Kubernetes tool names and arguments exposed by `InfraGate.McpServer`.
+`InfraGate.McpGateway` is the local HTTP MCP endpoint and generic approval core that fronts a private stdio domain server. It adds authentication, prompt-injection guardrails, response sanitization, out-of-band plan approval, and guardrail audit logging. Kubernetes-specific plan building and execution gates are delegated to `InfraGate.KubernetesAdapter`.
 
 ## Runtime Flow
 
-- `Program.cs` configures the HTTP MCP server at `/mcp`, registers auth, approval endpoints, guardrails, the downstream client, and the gateway tool facade.
-- `K8sGatewayTools.cs` exposes the same public MCP tools as before, injects requester metadata for downstream mutation-plan creation, and delegates to `GuardedToolRunner`.
+- `Program.cs` configures the HTTP MCP server at `/mcp`, registers auth, approval endpoints, guardrails, the downstream client, and the Kubernetes adapter implementation of the generic plan seams.
+- `GatewayToolDispatcher.cs` dynamically forwards downstream ReadOnly tools, hides downstream Destructive tools, exposes `request_*` wrappers for plan creation, and owns `apply_approved_plan`.
 - `GatewayApprovalService.cs` and `GatewayApprovalEndpoints.cs` create short-lived approval URLs and render Kubernetes review evidence decoded through `InfraGate.KubernetesAdapter`; `ApprovalChallengeStore` lives in `InfraGate.Approvals`.
 - `GuardedToolRunner.cs` scans inbound arguments, calls the downstream stdio server, sanitizes risky model-visible output, and writes audit events.
 - `DownstreamMcpClient.cs` starts and reuses the downstream `InfraGate.McpServer` process via the Model Context Protocol client.
@@ -15,7 +15,7 @@
 
 ## Important Contracts
 
-- Gateway public tool names and argument names must stay stable for clients. Downstream stdio request tools additionally receive requester metadata injected by the gateway.
+- Gateway public read-only tool names and generated `request_*` wrappers must stay stable for clients. Raw downstream Destructive tools are not exposed through the gateway and must only be reached by the domain executor after approval gates pass.
 - Logs and Events are untrusted Kubernetes output; keep observability reads routed through `GuardedToolRunner` so response sanitization still applies.
 - Suspicious input is warned and audited, but still forwarded to the downstream server.
 - Suspicious response text and echoed manifest blocks are redacted before returning to the MCP client.
@@ -23,7 +23,7 @@
 - OAuth access tokens are terminated at the gateway. The downstream stdio server receives tool calls, not bearer tokens.
 - The gateway binds approval challenges to the requester stored in the generic plan envelope; a different authenticated subject must request a fresh plan.
 - Approval is browser-based and out-of-band: MCP clients receive an approval URL but cannot submit approval content through MCP.
-- Browser approval pages render the stored Kubernetes server-side dry-run status, Intent Digest, and Review Digest, and refuse legacy pending plans without envelope payloads, dry-run data, or diff data.
+- Browser approval pages render the stored Kubernetes server-side dry-run status, Intent Digest, Review Digest, and adapter review evidence. Manifest plans require diff evidence; narrow Deployment operations may be dry-run-only.
 - Approval challenges are bound to plan id, intent/review digests, requester subject, expiry, and Single-Execution status. The gateway recomputes the plan file's intent and review digests at challenge creation and approval time to detect drift between the stored plan and the challenge bindings. Approved challenges issue Approval Grants consumed by execution.
 - Guardrail audit entries must not include bearer tokens or raw credentials.
 
