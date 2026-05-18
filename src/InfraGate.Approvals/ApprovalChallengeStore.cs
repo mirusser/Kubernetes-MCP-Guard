@@ -100,6 +100,40 @@ public sealed class ApprovalChallengeStore
         return null;
     }
 
+    public async Task<ApprovalChallenge?> FindPendingAsync(
+        string planId,
+        string pendingPlanHash,
+        string subject,
+        ApprovalDigest intentDigest,
+        ApprovalDigest reviewDigest,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(intentDigest);
+        ArgumentNullException.ThrowIfNull(reviewDigest);
+
+        if (!Directory.Exists(ChallengeDirectory))
+        {
+            return null;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var path in Directory.EnumerateFiles(
+                     ChallengeDirectory,
+                     "*" + ApprovalConventions.Storage.JsonExtension))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var json = await File.ReadAllTextAsync(path, cancellationToken);
+            var challenge = JsonSerializer.Deserialize<ApprovalChallenge>(json, jsonOptions);
+            if (challenge is not null &&
+                IsPendingForSubject(challenge, planId, pendingPlanHash, subject, intentDigest, reviewDigest, now))
+            {
+                return challenge;
+            }
+        }
+
+        return null;
+    }
+
     public async Task SaveAsync(ApprovalChallenge challenge, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(ChallengeDirectory);
@@ -148,4 +182,27 @@ public sealed class ApprovalChallengeStore
                string.Equals(challenge.RequesterSubject, subject, StringComparison.Ordinal) &&
                string.Equals(challenge.ApproverSubject, subject, StringComparison.Ordinal);
     }
+
+    private static bool IsPendingForSubject(
+        ApprovalChallenge challenge,
+        string planId,
+        string pendingPlanHash,
+        string subject,
+        ApprovalDigest intentDigest,
+        ApprovalDigest reviewDigest,
+        DateTimeOffset now)
+    {
+        return string.Equals(challenge.Status, ApprovalConventions.ChallengeStatuses.Pending, StringComparison.Ordinal) &&
+               challenge.ExpiresAtUtc > now &&
+               string.Equals(challenge.PlanId, planId, StringComparison.Ordinal) &&
+               FixedTimeStringComparer.Equals(challenge.PendingPlanHash, pendingPlanHash) &&
+               string.Equals(challenge.RequesterSubject, subject, StringComparison.Ordinal) &&
+               SameDigest(challenge.IntentDigest, intentDigest) &&
+               SameDigest(challenge.ReviewDigest, reviewDigest);
+    }
+
+    private static bool SameDigest(ApprovalDigest left, ApprovalDigest right) =>
+        string.Equals(left.Algorithm, right.Algorithm, StringComparison.Ordinal) &&
+        string.Equals(left.Canonicalization, right.Canonicalization, StringComparison.Ordinal) &&
+        FixedTimeStringComparer.Equals(left.Value, right.Value);
 }

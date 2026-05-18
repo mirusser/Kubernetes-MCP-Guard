@@ -1,5 +1,6 @@
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter.Policy;
 
 namespace InfraGate.KubernetesAdapter;
 
@@ -388,6 +389,17 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             !TryGetString(arguments, KubernetesAdapterConventions.EvidenceArguments.Image, out var image))
         {
             return PlanBuildResult.Failed("Missing required arguments: namespace, name, container, and image.");
+        }
+
+        var policyResult = K8sPolicyValidator.ValidateSetDeploymentImage(
+            namespaceName,
+            name,
+            container,
+            image,
+            K8sPolicyOptions.Default);
+        if (policyResult.IsDenied)
+        {
+            return PlanBuildResult.Failed($"Set deployment image rejected by policy:{Environment.NewLine}{policyResult.FormatRefusal()}");
         }
 
         var dryRunJson = await toolCaller.CallAsync(

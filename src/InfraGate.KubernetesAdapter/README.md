@@ -6,8 +6,8 @@
 
 - `KubernetesPlanPayload.cs` models the Kubernetes mutation intent and review evidence stored inside a generic approval envelope.
 - `KubernetesApprovalAdapter.cs` creates Kubernetes envelopes, derives evidence artifact summaries for Review Digest binding, and decodes generic envelopes back into Kubernetes review/apply plans.
-- `KubernetesPlanBuilder.cs` implements `IDomainPlanBuilder` by calling downstream evidence tools, building the adapter payload, and returning the target namespace for generic audit storage.
-- `KubernetesPlanExecutor.cs` implements `IDomainPlanExecutor` by separating adapter-owned pre-execution checks from raw downstream mutation calls. The generic approval gate calls the pre-execution method before execution.
+- `KubernetesPlanBuilder.cs` implements `IDomainPlanBuilder` by applying parameter-level Kubernetes policy checks, calling downstream evidence tools, building the adapter payload, and returning the target namespace for generic audit storage.
+- `KubernetesPlanExecutor.cs` implements `IDomainPlanExecutor` by separating adapter-owned pre-execution checks from raw downstream mutation calls. It publishes `pre_execution.checked` after successful adapter checks and `execution.started` immediately before mutation dispatch.
 - `K8sObjectRef.cs`, dry-run, diff, and policy-finding records define Kubernetes evidence rendered during review and consumed during apply.
 - `Policy/` contains the Kubernetes manifest policy validator and rule documentation.
 

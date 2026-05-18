@@ -63,6 +63,9 @@ public static class ApprovalConventions
     public static class AuditEvents
     {
         public const string PlanRequested = "plan.created";
+        public const string PreExecutionGrantValidated = "pre_execution.grant.validated";
+        public const string PreExecutionChecked = "pre_execution.checked";
+        public const string ExecutionStarted = "execution.started";
         public const string PlanApplied = "execution.succeeded";
         public const string ApplyDenied = "execution.blocked";
         public const string ApplyFailed = "execution.failed";

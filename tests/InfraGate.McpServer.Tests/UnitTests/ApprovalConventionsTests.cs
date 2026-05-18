@@ -8,6 +8,9 @@ public sealed class ApprovalConventionsTests
     public void AuditEvents_TargetSpineValues_ArePinned()
     {
         Assert.Equal("plan.created", ApprovalConventions.AuditEvents.PlanRequested);
+        Assert.Equal("pre_execution.grant.validated", ApprovalConventions.AuditEvents.PreExecutionGrantValidated);
+        Assert.Equal("pre_execution.checked", ApprovalConventions.AuditEvents.PreExecutionChecked);
+        Assert.Equal("execution.started", ApprovalConventions.AuditEvents.ExecutionStarted);
         Assert.Equal("execution.succeeded", ApprovalConventions.AuditEvents.PlanApplied);
         Assert.Equal("execution.blocked", ApprovalConventions.AuditEvents.ApplyDenied);
         Assert.Equal("execution.failed", ApprovalConventions.AuditEvents.ApplyFailed);

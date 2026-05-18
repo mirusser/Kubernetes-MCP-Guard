@@ -17,6 +17,7 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton(CreateOptions());
         services.AddSingleton(new ApprovalStoreOptions(Path.Combine(Path.GetTempPath(), "di-wiring-test", Guid.NewGuid().ToString("N"))));
         services.AddSingleton<ApprovalStore>();
+        services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
         services.AddSingleton<ApprovalChallengeStore>();
         services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
         services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
@@ -55,6 +56,7 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton<GuardedToolRunner>();
         services.AddSingleton(new ApprovalStoreOptions(Path.Combine(Path.GetTempPath(), "di-wiring-test", Guid.NewGuid().ToString("N"))));
         services.AddSingleton<ApprovalStore>();
+        services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
         services.AddSingleton<ApprovalChallengeStore>();
         services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
         services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();

@@ -47,13 +47,15 @@ Every concept, relationship, and flow described in `CONTEXT.md`, `mutation-appro
 
 ## Partially Implemented / Gaps
 
-### 1. `execution.started` audit event — MISSING (High)
+### 1. `execution.started` audit event — RESOLVED 2026-05-18 (High)
 
 **Profile says** (mutation-approval-profile.md:160): `- `execution.started`` is a required audit spine event.
 
-**What's implemented**: The `ApprovalConventions.AuditEvents` class has 12 events but **no `execution.started` constant**. The audit flow goes: pre-execution gates -> `ExecuteAsync()` -> success writes `execution.succeeded` / failure writes `execution.failed`. There is no "execution started" event written before `ExecuteAsync()`.
+**Original implementation gap**: The `ApprovalConventions.AuditEvents` class had 12 events but **no `execution.started` constant**. The audit flow went: pre-execution gates -> `ExecuteAsync()` -> success writes `execution.succeeded` / failure writes `execution.failed`. There was no "execution started" event written before `ExecuteAsync()`.
 
-**Location**: `GatewayToolDispatcher.cs:214-264` -- execution proceeds directly to `planExecutor.ExecuteAsync()` without writing a `execution.started` audit event.
+**Original location**: `GatewayToolDispatcher.cs:214-264` proceeded directly to `planExecutor.ExecuteAsync()` without writing a `execution.started` audit event. The implemented boundary is now inside `KubernetesPlanExecutor.ExecuteAsync()`, where the adapter publishes `execution.started` immediately before raw mutation dispatch.
+
+**Remediation note (2026-05-18)**: Implemented through `IApprovalAuditPublisher`. `ApprovalPreExecutionGate` now emits `pre_execution.grant.validated`, `KubernetesPlanExecutor.CheckPreExecutionAsync()` emits `pre_execution.checked` after adapter checks pass, and `KubernetesPlanExecutor.ExecuteAsync()` emits `execution.started` immediately before raw mutation dispatch. Grant identifiers and digest proof stay in the pre-execution grant event; `execution.started` carries generic execution bindings plus nested Kubernetes adapter context.
 
 ---
 
@@ -69,30 +71,32 @@ Every concept, relationship, and flow described in `CONTEXT.md`, `mutation-appro
 
 ---
 
-### 3. Domain Policy Checks NOT re-verified during Pre-Execution Gates -- GAP (High)
+### 3. Domain Policy Checks NOT re-verified during Pre-Execution Gates -- RESOLVED FOR APPLY AND SET-IMAGE 2026-05-18 (High)
 
 **Profile says** (mutation-approval-flow.md:193): The pre-execution gate flow explicitly includes `domain[Run required Domain Policy Checks]` as a separate gate step after freshness checks.
 
-**What's implemented**: `KubernetesPlanExecutor.CheckPreExecutionAsync()` only runs:
+**Original finding**: `KubernetesPlanExecutor.CheckPreExecutionAsync()` appeared to only run:
 1. `CheckLiveDriftAsync()` (freshness: live drift)
 2. `RunPreExecuteDryRunAsync()` (freshness: pre-execute dry-run)
 
-It does **NOT** re-run domain policy checks. Policy checks in the Kubernetes adapter happen during **plan building** (in `KubernetesPlanBuilder`, the dry-run evidence call returns `PolicyBlocked`/`PolicyFindings`), but they are not re-verified immediately before execution.
+The sharper code reading showed that apply-manifest policy is already rechecked by the pre-execution dry-run evidence path: `dry_run_apply_manifest` returns `K8sApplyEvidence.PolicyBlocked`, and `KubernetesPlanExecutor.CheckApplyDryRunAsync()` blocks when it is true. The concrete gap was `set_deployment_image`, whose policy-relevant image tag is carried as parameters rather than as a full manifest.
 
-**Implication**: If Kubernetes admission policies change between plan creation and execution (e.g., a new OPA constraint), the execution could succeed even though it would now violate policy. The profile mandates re-checking domain policy at pre-execution time.
+**Remediation note (2026-05-18)**: `K8sPolicyValidator.ValidateSetDeploymentImage()` now rejects implicit/latest image tags. `KubernetesPlanBuilder` applies that check before evidence collection, and `KubernetesPlanExecutor.CheckPreExecutionAsync()` applies it again before pre-execution dry-run.
 
 ---
 
-### 4. Multiple concurrent Approval Challenges per Plan -- PARTIALLY IMPLEMENTED (Low)
+### 4. Multiple concurrent Approval Challenges per Plan -- RESOLVED 2026-05-18 (Low)
 
 **Profile says** (CONTEXT.md:203): "A Plan Envelope may produce one or more Approval Challenges" and (mutation-approval-flow.md:158): "A new challenge may be created for the same plan envelope only while the plan validity window and approval policy allow it."
 
-**What's implemented**: `GatewayApprovalService.EnsureApprovedOrCreateChallengeAsync()` creates a new challenge if no grant exists. The `FindApprovedAsync()` scans all challenges for an approved one. However:
+**Original implementation gap**: `GatewayApprovalService.EnsureApprovedOrCreateChallengeAsync()` created a new challenge if no grant existed. The `FindApprovedAsync()` scanned all challenges for an approved one. However:
 - There is **no prevention of multiple concurrent pending challenges** for the same plan
 - If a challenge was already created and is still pending, calling `execute_approved_plan` again will create a **second** pending challenge
 - No deduplication logic exists
 
 **Implication**: A clumsy AI agent could create dozens of pending challenges for the same plan, cluttering the challenge store and creating confusion.
+
+**Remediation note (2026-05-18)**: `ApprovalChallengeStore.FindPendingAsync()` now finds still-pending, unexpired challenges for the same plan, pending-plan hash, requester, intent digest, and review digest. `GatewayApprovalService.EnsureApprovedOrCreateChallengeAsync()` reuses the existing approval URL when that lookup matches; expired or terminal challenges do not block creation of a new challenge.
 
 ---
 
@@ -150,10 +154,10 @@ The `KubernetesPlanReviewRenderer` renders the plan in HTML for the human approv
 
 | # | Gap | Severity | Profile Requirement | Code Reality |
 |---|---|---|---|---|
-| 1 | `execution.started` audit event | Missing | Required audit spine event | Never emitted |
+| 1 | `execution.started` audit event | Resolved 2026-05-18 | Required audit spine event | Emitted by KubernetesPlanExecutor before mutation dispatch |
 | 2 | Redacted Evidence population | Never used | Adapter should populate when hiding sensitive data | Always passes empty dict |
-| 3 | Domain Policy re-check in pre-execution gates | Missing | Must re-verify domain policy before execution | Only freshness checks run |
-| 4 | Multiple concurrent challenge deduplication | Partial | Allows multiple challenges | Creates duplicates silently |
+| 3 | Domain Policy re-check in pre-execution gates | Resolved for apply and set-image 2026-05-18 | Must re-verify domain policy before execution | Apply policy rechecked through dry-run evidence; set-image image tag checked directly |
+| 4 | Multiple concurrent challenge deduplication | Resolved 2026-05-18 | Allows multiple challenges | Matching still-pending challenges are reused |
 | 5 | Reusable Plans | Documented future | Explicitly deferred | Not implemented (by design) |
 | 6 | Delegated/Multi-party Approval | Documented future | Explicitly deferred | Not implemented (by design) |
 | 7 | AuthorizationCheck as distinct type | Implicit only | Separate concept from ApprovalPolicy | No typed representation |
@@ -164,10 +168,10 @@ The `KubernetesPlanReviewRenderer` renders the plan in HTML for the human approv
 
 ## Remediation Priority
 
-1. **Add `execution.started` audit event** at the beginning of `HandleApplyApprovedPlanAsync()` in `GatewayToolDispatcher.cs`, right after pre-execution gates pass and before `ExecuteAsync()`.
+1. **Add `execution.started` audit event** — completed 2026-05-18. The event is emitted by `KubernetesPlanExecutor.ExecuteAsync()` immediately before mutation dispatch.
 
-2. **Re-run domain policy checks during pre-execution** in `KubernetesPlanExecutor.CheckPreExecutionAsync()`. Re-evaluate `K8sPolicyValidator` against the current Kubernetes state if possible, or at minimum re-validate the manifest against current admission policies.
+2. **Re-run domain policy checks during pre-execution** — completed for apply and set-image 2026-05-18. Apply policy rechecks through dry-run evidence; set-image checks parameter-level image-tag policy.
 
 3. **Populate RedactionMetadata** (if/when redacted evidence becomes a real use case) in `KubernetesApprovalAdapter.BuildEvidenceArtifacts()`.
 
-4. **Deduplicate pending challenges** in `GatewayApprovalService.EnsureApprovedOrCreateChallengeAsync()` -- check for existing pending challenge before creating a new one.
+4. **Deduplicate pending challenges** — completed 2026-05-18. `GatewayApprovalService.EnsureApprovedOrCreateChallengeAsync()` checks for an existing matching pending challenge before creating a new one.

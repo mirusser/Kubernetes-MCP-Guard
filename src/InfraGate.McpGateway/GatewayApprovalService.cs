@@ -99,6 +99,21 @@ public sealed class GatewayApprovalService
             return ApprovalGateResult.RequiresApproval($"Refused: {pendingRefusal}");
         }
 
+        var existingChallenge = await challengeStore.FindPendingAsync(
+            planId,
+            pending.Hash,
+            requester.Subject,
+            pending.Envelope.IntentDigest,
+            pending.Envelope.ReviewDigest,
+            cancellationToken);
+        if (existingChallenge is not null)
+        {
+            return ApprovalGateResult.RequiresApproval(planReviewRenderer.RenderApprovalRequiredMessage(
+                pendingPlan,
+                CreateApprovalUrl(existingChallenge.Id),
+                existingChallenge.ExpiresAtUtc));
+        }
+
         var challenge = await challengeStore.CreateAsync(
             planId,
             pending.Hash,

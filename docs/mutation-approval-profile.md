@@ -157,6 +157,8 @@ The profile requires a generic audit spine that proves the lifecycle:
 - `challenge.rejected`
 - `challenge.canceled`
 - `grant.issued`
+- `pre_execution.grant.validated`
+- `pre_execution.checked`
 - `execution.started`
 - `execution.blocked`
 - `execution.failed`
@@ -164,7 +166,7 @@ The profile requires a generic audit spine that proves the lifecycle:
 
 Terminal challenge events record challenge outcomes. `grant.issued` exists only when the approval authority issues or references durable execution authorization for an approved challenge.
 
-Generic audit events should carry plan identifier, intent digest, review digest, requester, approver when relevant, approval policy, grant identifier when relevant, timestamps, and event result. Domain adapters may attach adapter audit payloads such as Kubernetes object references, namespaces, dry-run summaries, drift messages, and policy findings.
+Generic audit events should carry plan identifier, intent digest, review digest, requester, approver when relevant, approval policy, grant identifier when relevant, timestamps, and event result. Grant and digest proof is recorded at the pre-execution gate boundary. `execution.started` records the adapter execution attempt and should not repeat approval-grant proof. Domain adapters may attach nested adapter audit payloads such as Kubernetes object references, namespaces, dry-run summaries, drift messages, and policy findings.
 
 ## Kubernetes Adapter Boundary
 
@@ -198,5 +200,7 @@ The current implementation already proves several important properties:
 - applied plans cannot be applied again
 - Kubernetes dry-run and drift checks gate execution
 - audit events use the dot-separated Audit Spine event names
+- successful generic grant validation and successful adapter pre-execution checks are audited before execution starts
+- Kubernetes execution start audit records adapter execution context through a nested adapter payload
 
-The ADR 0001 implementation now separates generic plan-envelope storage from Kubernetes-specific mutation intent and review evidence, adds Intent Digest and Review Digest binding, records Challenge Outcomes, issues durable Approval Grants for execution, and binds review evidence through digest-bound Evidence Artifact summaries. Remaining drift from the target profile includes fuller generic policy/freshness modeling and richer adapter audit payloads.
+The ADR 0001 implementation now separates generic plan-envelope storage from Kubernetes-specific mutation intent and review evidence, adds Intent Digest and Review Digest binding, records Challenge Outcomes, issues durable Approval Grants for execution, audits pre-execution and execution-start boundaries, and binds review evidence through digest-bound Evidence Artifact summaries. Remaining drift from the target profile includes fuller generic policy/freshness modeling.

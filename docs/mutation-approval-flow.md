@@ -125,13 +125,19 @@ sequenceDiagram
     Authority->>Authority: Issue or reference Approval Grant
     Client->>Executor: Request execution for planId
     Executor->>Core: Evaluate Pre-Execution Gates
+    Core->>Core: Audit pre_execution.grant.validated
     Core->>Adapter: Verify freshness and domain policy checks
     Adapter-->>Core: Checks pass
+    Adapter-->>Core: Adapter audit payload for pre_execution.checked
     Core-->>Executor: Gates pass
+    Core->>Core: Audit pre_execution.checked
     Executor->>Adapter: Execute Mutation Intent
+    Adapter-->>Core: Audit execution.started with adapter payload
     Adapter-->>Core: Execution result and adapter audit payload
     Core->>Core: Record audit events
 ```
+
+The gate audit split is intentional: `pre_execution.grant.validated` records generic approval-grant proof, `pre_execution.checked` records the adapter-owned freshness and domain-policy check result, and `execution.started` records the adapter execution attempt without grant identifiers or approval digests.
 
 ## Non-Approved Flow
 
@@ -195,6 +201,8 @@ flowchart TD
 ```
 
 Execution is approval-bound only if the grant and every required gate pass immediately before mutation.
+
+For Kubernetes today, apply-manifest policy is rechecked by the pre-execution server-side dry-run evidence path. Set-image policy is checked directly by the Kubernetes adapter before dry-run because the image tag is carried as operation parameters rather than as a full manifest.
 
 ## Scenarios To Verify
 

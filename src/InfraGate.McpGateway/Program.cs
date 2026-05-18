@@ -36,6 +36,7 @@ builder.Services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
 builder.Services.AddSingleton<GuardedToolRunner>();
 builder.Services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
 builder.Services.AddSingleton<ApprovalStore>();
+builder.Services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
 builder.Services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
 builder.Services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
 builder.Services.AddSingleton<ApprovalChallengeStore>();

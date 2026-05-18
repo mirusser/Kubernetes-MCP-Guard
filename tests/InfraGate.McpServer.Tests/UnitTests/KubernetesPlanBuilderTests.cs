@@ -211,6 +211,31 @@ public sealed class KubernetesPlanBuilderTests
         Assert.Equal("set-image", result.Envelope!.Operation);
     }
 
+    [Theory]
+    [InlineData("nginx")]
+    [InlineData("nginx:latest")]
+    public async Task BuildAsync_SetDeploymentImage_LatestImageTag_ReturnsPolicyFailureWithoutDryRun(string image)
+    {
+        var toolCaller = new FakeToolCaller();
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "set_deployment_image",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["container"] = "nginx",
+                ["image"] = image
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(KubernetesAdapterConventions.PolicyCodes.ImageLatestTag, result.Message);
+        Assert.Empty(toolCaller.CalledTools);
+    }
+
     [Fact]
     public async Task BuildAsync_UnsupportedTool_ReturnsFailed()
     {

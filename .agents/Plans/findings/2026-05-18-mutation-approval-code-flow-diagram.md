@@ -72,10 +72,12 @@ flowchart TD
         A6["✅ challenge.expired"]
         A7["✅ challenge.canceled"]
         A8["✅ grant.issued"]
-        A9["❌ execution.started"]
-        A10["✅ execution.blocked"]
-        A11["✅ execution.failed"]
-        A12["✅ execution.succeeded"]
+        A9["✅ pre_execution.grant.validated"]
+        A10["✅ pre_execution.checked"]
+        A11["✅ execution.started"]
+        A12["✅ execution.blocked"]
+        A13["✅ execution.failed"]
+        A14["✅ execution.succeeded"]
     end
 
     %% ─── FLOW: Plan Creation ───
@@ -146,21 +148,23 @@ flowchart TD
     Dispatcher -->|"20️⃣ preExecutionGate.EvaluateAsync()"| PreExecGate
     PreExecGate -->|"21️⃣ approvalStore.GetGrantedPlanAsync()\n ValidateGrant():\n  ✅ plan validity window (ValidFromUtc..ValidUntilUtc)\n  ✅ grant not expired\n  ✅ intent digest matches\n  ✅ review digest matches\n  ✅ approval policy matches (same-subject check)\n  ✅ execution reuse policy matches\n  ✅ review digest recomputed and verified"| Store
     Store -->|"grant valid"| PreExecGate
+    PreExecGate -->|"writes"| A9
     PreExecGate -->|"22️⃣ planExecutor.CheckPreExecutionAsync()"| PlanExecutor
     PlanExecutor -->|"KubernetesApprovalAdapter.Decode()\n (verify intent digest + evidence artifacts)"| K8sApprovalAdapter
     PlanExecutor -->|"23️⃣ ✅ CheckLiveDriftAsync()\n (call check_live_drift)"| EvidenceTools
     PlanExecutor -->|"24️⃣ ✅ RunPreExecuteDryRunAsync()\n (call domain dry-run)"| EvidenceTools
-    PlanExecutor -->|"25️⃣ ❌ Domain Policy Checks NOT re-run\n (policy only checked during plan BUILD,\n not at pre-execution time)"| PlanExecutor
+    PlanExecutor -->|"25️⃣ ✅ Domain Policy Checks re-run\n (apply via dry-run evidence;\n set-image via parameter policy)"| PlanExecutor
+    PlanExecutor -->|"writes"| A10
     PreExecGate -->|"gates passed"| Dispatcher
 
     %% ─── FLOW: Execution ───
-    Dispatcher -->|"26️⃣ ❌ execution.started audit NOT written"| Dispatcher
     Dispatcher -->|"27️⃣ planExecutor.ExecuteAsync()"| PlanExecutor
+    PlanExecutor -->|"26️⃣ ✅ execution.started audit emitted\n before raw mutation dispatch"| A11
     PlanExecutor -->|"28️⃣ DispatchAsync() → call mutation tool\n (apply_manifest | delete_manifest |\n  scale_deployment | restart_deployment |\n  set_deployment_image)"| MutationTools
     MutationTools -->|"result"| PlanExecutor
     PlanExecutor -->|"success"| Dispatcher
     Dispatcher -->|"29️⃣ approvalStore.MarkAppliedAsync()\n (mark plan as applied, prevent replay)"| Store
-    Store -->|"writes"| A12
+    Store -->|"writes"| A14
 
     PlanExecutor -->|"failure"| Dispatcher
     Dispatcher -->|"write ApplyFailed audit"| A11
@@ -208,13 +212,13 @@ flowchart TD
     Drift -->|"❌ drift detected"| BlockedDrift["DomainPlanExecutionResult.Blocked()\n audit: execution.blocked (drift)"]
     Drift -->|"✅ no drift"| DryRun{"RunPreExecuteDryRunAsync()\n line 75: domain-specific dry-run tool"}
     DryRun -->|"❌ dry-run fails or policy blocks"| BlockedDryRun["DomainPlanExecutionResult.Blocked()\n audit: execution.blocked (dry-run)"]
-    DryRun -->|"✅ dry-run passes"| MissingCheck["❌ Domain Policy Checks NOT re-verified here\n (K8sPolicyValidator runs during plan BUILD only,\n not re-evaluated at pre-execution time)"]
+    DryRun -->|"✅ dry-run passes"| PolicyCheck["✅ Domain Policy Checks\n apply policy via dry-run evidence\n set-image policy via K8sPolicyValidator"]
 
-    MissingCheck --> Passed["DomainPlanExecutionResult.Success()\n 'Pre-execution checks passed.'"]
+    PolicyCheck --> Passed["DomainPlanExecutionResult.Success()\n 'Pre-execution checks passed.'"]
 
     Passed --> FinalGate["PreExecutionGateResult.Passed()"]
 
-    style MissingCheck fill:#ff6b6b,stroke:#cc0000,color:#fff
+    style PolicyCheck fill:#c8e6c9,stroke:#2e7d32,color:#000
     style Blocked1 fill:#ff6b6b,stroke:#cc0000,color:#fff
     style BlockedDrift fill:#ff6b6b,stroke:#cc0000,color:#fff
     style BlockedDryRun fill:#ff6b6b,stroke:#cc0000,color:#fff
@@ -236,10 +240,12 @@ flowchart LR
         S6["6. challenge.expired\n ✅ Approvals/ApprovalConventions.cs:75"]
         S7["7. challenge.canceled\n ✅ Approvals/ApprovalConventions.cs:77"]
         S8["8. grant.issued\n ✅ Approvals/ApprovalConventions.cs:78"]
-        S9["9. execution.started\n ❌ NO CONSTANT EXISTS\n ❌ NEVER WRITTEN"]
-        S10["10. execution.blocked\n ✅ Approvals/ApprovalConventions.cs:67,69,70,71\n (4 constants all map to execution.blocked)"]
-        S11["11. execution.failed\n ✅ Approvals/ApprovalConventions.cs:68"]
-        S12["12. execution.succeeded\n ✅ Approvals/ApprovalConventions.cs:66"]
+        S9["9. pre_execution.grant.validated\n ✅ emitted by ApprovalPreExecutionGate"]
+        S10["10. pre_execution.checked\n ✅ emitted by KubernetesPlanExecutor.CheckPreExecutionAsync"]
+        S11["11. execution.started\n ✅ emitted by KubernetesPlanExecutor.ExecuteAsync"]
+        S12["12. execution.blocked\n ✅ Approvals/ApprovalConventions.cs\n (blocked constants map to execution.blocked)"]
+        S13["13. execution.failed\n ✅ Approvals/ApprovalConventions.cs"]
+        S14["14. execution.succeeded\n ✅ Approvals/ApprovalConventions.cs"]
     end
 
     style S9 fill:#ff6b6b,stroke:#cc0000,color:#fff
@@ -345,10 +351,10 @@ flowchart TD
 
 | # | Gap | Where in flow | Severity |
 |---|---|---|---|
-| 1 | `execution.started` audit never written | Step 26 in main diagram (after gates pass, before ExecuteAsync) | 🔴 Missing |
+| 1 | `execution.started` audit never written | Step 26 in main diagram (after gates pass, before ExecuteAsync) | ✅ Resolved 2026-05-18 |
 | 2 | RedactionMetadata always `[]` | Step 6 (evidence artifact creation in K8sApprovalAdapter) | 🟡 Inert |
-| 3 | Domain Policy Checks not re-run at pre-execution | Step 25 in main diagram (KubernetesPlanExecutor.CheckPreExecutionAsync) | 🔴 Missing |
-| 4 | No dedup of concurrent pending challenges | Step 12 (EnsureApprovedOrCreateChallengeAsync) | 🟡 Partial |
+| 3 | Domain Policy Checks not re-run at pre-execution | Step 25 in main diagram (KubernetesPlanExecutor.CheckPreExecutionAsync) | ✅ Resolved for apply and set-image 2026-05-18 |
+| 4 | No dedup of concurrent pending challenges | Step 12 (EnsureApprovedOrCreateChallengeAsync) | ✅ Resolved 2026-05-18 |
 | 5 | Reusable plans not implemented | ExecutionReusePolicy only has SingleExecution | 🔮 Future |
 | 6 | Delegated/Multi-party approval not implemented | ApprovalPolicy only has SameSubject | 🔮 Future |
 | 7 | AuthorizationCheck has no distinct type | Implicit via OAuth JWT pipeline, no Code type | 🟡 Implicit |

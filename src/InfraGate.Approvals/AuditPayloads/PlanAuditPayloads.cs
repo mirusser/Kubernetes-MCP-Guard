@@ -2,7 +2,7 @@
 //
 // Why one file with multiple records: this is a deliberate, documented deviation
 // from .agents/skills/code-standards/SKILL.md's "one meaningful top-level type per
-// file". These 9 records together define a single cohesive schema; they evolve as
+// file". These records together define a single cohesive schema; they evolve as
 // one unit, are referenced together by audit consumers, and splitting them into 9
 // files would obscure the schema rather than clarify it.
 //
@@ -21,6 +21,7 @@
 // canonical field set per payload.
 
 using InfraGate.Approvals;
+using System.Text.Json;
 
 namespace InfraGate.Approvals.AuditPayloads;
 
@@ -36,6 +37,30 @@ public sealed record PlanRequestedPayload(
     string Hash,
     ApprovalDigest IntentDigest,
     ApprovalDigest ReviewDigest) : IPlanAuditPayload;
+
+public sealed record PreExecutionGrantValidatedPayload(
+    string PlanId,
+    string GrantId,
+    string SourceChallengeId,
+    string RequesterSubject,
+    string ApproverSubject,
+    ApprovalDigest IntentDigest,
+    ApprovalDigest ReviewDigest,
+    ApprovalPolicy ApprovalPolicy,
+    ExecutionReusePolicy ExecutionReusePolicy,
+    DateTimeOffset ExpiresAtUtc) : IPlanAuditPayload;
+
+public sealed record PreExecutionCheckedPayload(
+    string PlanId,
+    string Operation,
+    string AdapterId,
+    JsonElement AdapterPayload) : IPlanAuditPayload;
+
+public sealed record ExecutionStartedPayload(
+    string PlanId,
+    string Operation,
+    string AdapterId,
+    JsonElement AdapterPayload) : IPlanAuditPayload;
 
 public sealed record ApprovalGrantIssuedPayload(
     string PlanId,

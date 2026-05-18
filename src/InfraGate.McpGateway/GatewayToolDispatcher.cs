@@ -27,6 +27,7 @@ public sealed class GatewayToolDispatcher
         IDomainPlanExecutor planExecutor,
         GatewayApprovalService approvals,
         ApprovalStore approvalStore,
+        IApprovalAuditPublisher auditPublisher,
         IHttpContextAccessor httpContextAccessor,
         ILogger<GatewayToolDispatcher> logger)
     {
@@ -36,7 +37,7 @@ public sealed class GatewayToolDispatcher
         this.planExecutor = planExecutor;
         this.approvals = approvals;
         this.approvalStore = approvalStore;
-        preExecutionGate = new ApprovalPreExecutionGate(approvalStore);
+        preExecutionGate = new ApprovalPreExecutionGate(approvalStore, auditPublisher);
         this.httpContextAccessor = httpContextAccessor;
         this.logger = logger;
     }

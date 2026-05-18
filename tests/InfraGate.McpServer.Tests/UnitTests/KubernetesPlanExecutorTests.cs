@@ -1,5 +1,6 @@
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.Approvals.AuditPayloads;
 using InfraGate.KubernetesAdapter;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
@@ -95,6 +96,37 @@ public sealed class KubernetesPlanExecutorTests
                 freshnessPolicy: freshnessPolicy));
     }
 
+    private static PlanEnvelope BuildSetImageEnvelope(string image, string ns = "demo", string name = "nginx")
+    {
+        var payload = new KubernetesPlanPayload(
+            ns,
+            $"Update deployment {name} image.",
+            new Dictionary<string, string>
+            {
+                [KubernetesAdapterConventions.PlanParameters.Name] = name,
+                [KubernetesAdapterConventions.PlanParameters.Container] = "nginx",
+                [KubernetesAdapterConventions.PlanParameters.Image] = image
+            },
+            [new K8sObjectRef("apps/v1", "Deployment", ns, name)])
+        {
+            DryRun = MakeDryRun(ns, name)
+        };
+
+        var freshnessPolicy = new FreshnessPolicy(
+        [
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun, new Dictionary<string, string>())
+        ]);
+
+        return KubernetesApprovalAdapter.ToEnvelope(
+            KubernetesApprovalAdapter.CreateEnvelope(
+                ApprovalStore.NewPlanId(),
+                KubernetesAdapterConventions.PlanOperations.SetImage,
+                DateTimeOffset.UtcNow,
+                TestRequester,
+                payload,
+                freshnessPolicy: freshnessPolicy));
+    }
+
     [Fact]
     public async Task ExecuteAsync_ApplyManifest_HappyPath_DispatchesToApplyTool()
     {
@@ -132,6 +164,29 @@ public sealed class KubernetesPlanExecutorTests
         Assert.True(result.IsSuccessful);
         Assert.Equal("Scaled to 3 replicas.", result.Message);
         Assert.Contains(KubernetesAdapterConventions.MutationTools.ScaleDeployment, toolCaller.CalledTools);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ScaleDeployment_PublishesExecutionStartedBeforeMutation()
+    {
+        var envelope = BuildScaleEnvelope();
+        var toolCaller = new FakeToolCaller()
+            .With(KubernetesAdapterConventions.MutationTools.ScaleDeployment, "Scaled to 3 replicas.");
+        var publisher = new RecordingApprovalAuditPublisher(() => toolCaller.CalledTools.ToArray());
+
+        var executor = new KubernetesPlanExecutor(toolCaller, publisher);
+        var result = await executor.ExecuteAsync(envelope, CancellationToken.None);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Contains(KubernetesAdapterConventions.MutationTools.ScaleDeployment, toolCaller.CalledTools);
+        var audit = Assert.Single(publisher.Events);
+        Assert.Equal(ApprovalConventions.AuditEvents.ExecutionStarted, audit.EventName);
+        var payload = Assert.IsType<ExecutionStartedPayload>(audit.Payload);
+        Assert.Equal(envelope.Id, payload.PlanId);
+        Assert.Equal(KubernetesAdapterConventions.PlanOperations.Scale, payload.Operation);
+        Assert.Equal(KubernetesAdapterConventions.AdapterId, payload.AdapterId);
+        Assert.Equal("demo", payload.AdapterPayload.GetProperty("namespaceName").GetString());
+        Assert.DoesNotContain(KubernetesAdapterConventions.MutationTools.ScaleDeployment, publisher.CalledToolsAtPublish);
     }
 
     [Fact]
@@ -195,6 +250,66 @@ public sealed class KubernetesPlanExecutorTests
         Assert.DoesNotContain(KubernetesAdapterConventions.MutationTools.ApplyManifest, toolCaller.CalledTools);
     }
 
+    [Theory]
+    [InlineData("nginx")]
+    [InlineData("nginx:latest")]
+    public async Task CheckPreExecutionAsync_SetDeploymentImageLatestImageTag_BlocksWithoutDryRun(string image)
+    {
+        var envelope = BuildSetImageEnvelope(image);
+        var dryRun = MakeDryRun("demo", "nginx");
+
+        var toolCaller = new FakeToolCaller()
+            .With(KubernetesAdapterConventions.EvidenceTools.DryRunSetDeploymentImage, DryRunJson(dryRun));
+
+        var executor = new KubernetesPlanExecutor(toolCaller);
+        var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Contains(KubernetesAdapterConventions.PolicyCodes.ImageLatestTag, result.Message);
+        Assert.NotNull(result.Audit);
+        Assert.Equal(ApprovalConventions.AuditEvents.ApplyDenied, result.Audit.EventName);
+        Assert.DoesNotContain(KubernetesAdapterConventions.EvidenceTools.DryRunSetDeploymentImage, toolCaller.CalledTools);
+    }
+
+    [Fact]
+    public async Task CheckPreExecutionAsync_SetDeploymentImagePinnedImageTag_RunsDryRun()
+    {
+        var envelope = BuildSetImageEnvelope("nginx:1.25");
+        var dryRun = MakeDryRun("demo", "nginx");
+
+        var toolCaller = new FakeToolCaller()
+            .With(KubernetesAdapterConventions.EvidenceTools.DryRunSetDeploymentImage, DryRunJson(dryRun));
+
+        var executor = new KubernetesPlanExecutor(toolCaller);
+        var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Contains(KubernetesAdapterConventions.EvidenceTools.DryRunSetDeploymentImage, toolCaller.CalledTools);
+    }
+
+    [Fact]
+    public async Task CheckPreExecutionAsync_PassingChecks_PublishesPreExecutionCheckedAudit()
+    {
+        var dryRun = MakeDryRun("demo", "nginx");
+        var envelope = BuildScaleEnvelope();
+        var publisher = new RecordingApprovalAuditPublisher();
+
+        var toolCaller = new FakeToolCaller()
+            .With(KubernetesAdapterConventions.EvidenceTools.DryRunScaleDeployment, DryRunJson(dryRun));
+
+        var executor = new KubernetesPlanExecutor(toolCaller, publisher);
+        var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
+
+        Assert.True(result.IsSuccessful);
+        var audit = Assert.Single(publisher.Events);
+        Assert.Equal(ApprovalConventions.AuditEvents.PreExecutionChecked, audit.EventName);
+        var payload = Assert.IsType<PreExecutionCheckedPayload>(audit.Payload);
+        Assert.Equal(envelope.Id, payload.PlanId);
+        Assert.Equal(KubernetesAdapterConventions.PlanOperations.Scale, payload.Operation);
+        Assert.Equal(KubernetesAdapterConventions.AdapterId, payload.AdapterId);
+        Assert.Equal("demo", payload.AdapterPayload.GetProperty("namespaceName").GetString());
+    }
+
     [Fact]
     public async Task ExecuteAsync_DecodeFailure_ReturnsError()
     {
@@ -224,6 +339,20 @@ public sealed class KubernetesPlanExecutorTests
         {
             CalledTools.Add(toolName);
             return Task.FromResult(responses.TryGetValue(toolName, out var response) ? response : string.Empty);
+        }
+    }
+
+    private sealed class RecordingApprovalAuditPublisher(Func<string[]>? captureCalledTools = null) : IApprovalAuditPublisher
+    {
+        public List<PlanAudit> Events { get; } = [];
+
+        public string[] CalledToolsAtPublish { get; private set; } = [];
+
+        public Task PublishAsync(PlanAudit audit, CancellationToken cancellationToken)
+        {
+            CalledToolsAtPublish = captureCalledTools?.Invoke() ?? [];
+            Events.Add(audit);
+            return Task.CompletedTask;
         }
     }
 }

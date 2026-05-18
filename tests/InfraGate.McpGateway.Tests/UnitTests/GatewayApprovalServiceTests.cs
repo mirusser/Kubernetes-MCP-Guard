@@ -29,6 +29,42 @@ public sealed class GatewayApprovalServiceTests
     }
 
     [Fact]
+    public async Task EnsureApprovedOrCreateChallengeAsync_MatchingPendingChallenge_ReturnsExistingApprovalUrl()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+
+        var first = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+        var second = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+
+        Assert.False(first.IsApproved);
+        Assert.False(second.IsApproved);
+        Assert.Equal(ApprovalUrl(first.Message), ApprovalUrl(second.Message));
+        Assert.Single(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
+    }
+
+    [Fact]
+    public async Task EnsureApprovedOrCreateChallengeAsync_ExpiredPendingChallenge_ReturnsNewApprovalUrl()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var first = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+        string firstChallengeId = ApprovalUrl(first.Message)
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Last();
+        var challenge = await context.Challenges.GetAsync(firstChallengeId, CancellationToken.None);
+        await context.Challenges.SaveAsync(
+            challenge! with { ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1) },
+            CancellationToken.None);
+
+        var second = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+
+        Assert.False(second.IsApproved);
+        Assert.NotEqual(ApprovalUrl(first.Message), ApprovalUrl(second.Message));
+        Assert.Equal(2, Directory.EnumerateFiles(context.Store.ChallengesDirectory).Count());
+    }
+
+    [Fact]
     public async Task EnsureApprovedOrCreateChallengeAsync_NoAuthenticatedUser_ReturnsRefusal()
     {
         var context = CreateContext();
@@ -513,12 +549,17 @@ public sealed class GatewayApprovalServiceTests
     {
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(planId, CancellationToken.None);
 
-        return result.Message
-            .Split(Environment.NewLine)
-            .Single(line => line.StartsWith("Approval URL:", StringComparison.Ordinal))
+        return ApprovalUrl(result.Message)
             .Split('/', StringSplitOptions.RemoveEmptyEntries)
             .Last();
     }
+
+    private static string ApprovalUrl(string message) =>
+        message
+            .Split(Environment.NewLine)
+            .Single(line => line.StartsWith("Approval URL:", StringComparison.Ordinal))
+            .Substring("Approval URL:".Length)
+            .Trim();
 
     private static async Task<string> CreateStoredChallengeAsync(TestContext context, string planId, string pendingPlanHash)
     {

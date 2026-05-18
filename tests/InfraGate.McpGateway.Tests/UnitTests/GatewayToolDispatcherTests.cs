@@ -90,6 +90,32 @@ public sealed class GatewayToolDispatcherTests
     }
 
     [Fact]
+    public async Task CallToolAsync_ApprovedPlanPassingPreExecutionGate_WritesGrantValidatedAudit()
+    {
+        var executor = new FakeDomainPlanExecutor(
+            DomainPlanExecutionResult.Success("Applied successfully.", "mcp-nginx-demo"),
+            DomainPlanExecutionResult.Success("Pre-execution checks passed.", null));
+        var context = CreateContext(executor);
+        var envelope = await CreateGrantedPlanAsync(context.Store);
+
+        await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+                Arguments = new Dictionary<string, JsonElement>
+                {
+                    [McpGatewayConventions.ToolArguments.PlanId] = JsonSerializer.SerializeToElement(envelope.Id)
+                }
+            },
+            CancellationToken.None);
+
+        string audit = await File.ReadAllTextAsync(context.Store.AuditPath, CancellationToken.None);
+
+        Assert.Contains($@"""eventName"": ""{ApprovalConventions.AuditEvents.PreExecutionGrantValidated}""", audit);
+        Assert.Contains($@"""planId"": ""{envelope.Id}""", audit);
+    }
+
+    [Fact]
     public async Task CallToolAsync_ApprovedPlanExecutionThrows_WritesExecutionFailedAudit()
     {
         var context = CreateContext(new ThrowingDomainPlanExecutor());
@@ -189,6 +215,7 @@ public sealed class GatewayToolDispatcherTests
                 planExecutor,
                 approvals,
                 store,
+                new ApprovalStoreAuditPublisher(store),
                 httpContextAccessor,
                 NullLogger<GatewayToolDispatcher>.Instance),
             store,
