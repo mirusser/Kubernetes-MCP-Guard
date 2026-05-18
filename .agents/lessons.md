@@ -20,3 +20,7 @@
 [dotnet-build] Don't add MSBuild workaround files before clearing generated bin/obj state after project graph changes — clean generated outputs and retest the exact command first. (cause: stale generated build state)
 [docs] Don't treat mutation-approval profile docs as current-state docs — use them as directional target-state and make implementation catch up. (cause: docs direction correction)
 [approval-core] Don't delete generic policy-check hooks just because concrete checks are adapter-owned — keep a base contract in Generic Approval Core and concrete policy checks in Domain Adapters. (cause: domain policy ownership correction)
+[audit] Don't make execution lifecycle audit events purely generic when the Domain Adapter starts the actual execution — include generic bindings plus adapter-owned execution context. (cause: execution ownership boundary)
+[audit] Don't make Domain Adapters persist the Audit Trail directly — let adapters emit adapter audit payloads/events and let the generic audit trail save them. (cause: audit persistence ownership)
+[audit] Don't overload execution.started with approval-grant validation data — audit grant and pre-execution gate validation at the gate boundary, then keep execution.started focused on the adapter execution attempt. (cause: lifecycle boundary clarity)
+[audit] Don't make generic audit payload contracts know adapter payload schemas — keep the generic slot flexible while Domain Adapters use strong types before serialization. (cause: adapter payload boundary)
