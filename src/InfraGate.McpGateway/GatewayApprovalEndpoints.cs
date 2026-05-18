@@ -18,7 +18,7 @@ internal static class GatewayApprovalEndpoints
                 McpGatewayConventions.Approvals.ChallengeRoute,
                 async (
                     string challengeId,
-                    GatewayApprovalService approvals,
+                    IGatewayApprovalService approvals,
                     [FromServices] IPlanReviewRenderer renderer,
                     HttpContext context,
                     IAntiforgery antiforgery,
@@ -37,7 +37,7 @@ internal static class GatewayApprovalEndpoints
                 McpGatewayConventions.Approvals.ApproveRoute,
                 async (
                     string challengeId,
-                    GatewayApprovalService approvals,
+                    IGatewayApprovalService approvals,
                     HttpContext context,
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
@@ -57,7 +57,7 @@ internal static class GatewayApprovalEndpoints
                 McpGatewayConventions.Approvals.DenyRoute,
                 async (
                     string challengeId,
-                    GatewayApprovalService approvals,
+                    IGatewayApprovalService approvals,
                     HttpContext context,
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
@@ -77,7 +77,7 @@ internal static class GatewayApprovalEndpoints
                 McpGatewayConventions.Approvals.CancelRoute,
                 async (
                     string challengeId,
-                    GatewayApprovalService approvals,
+                    IGatewayApprovalService approvals,
                     HttpContext context,
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>

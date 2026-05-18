@@ -5,8 +5,8 @@
 ## Runtime Flow
 
 - `Program.cs` configures the HTTP MCP server at `/mcp`, registers auth, approval endpoints, guardrails, the downstream client, and the Kubernetes adapter implementation of the generic plan seams.
-- `GatewayToolDispatcher.cs` dynamically forwards downstream ReadOnly tools, hides downstream Destructive tools, exposes `request_*` wrappers for plan creation, owns `execute_approved_plan`, and calls the generic pre-execution gate before adapter execution.
-- `GatewayApprovalService.cs` and `GatewayApprovalEndpoints.cs` create or reuse short-lived approval URLs and render Kubernetes review evidence decoded through `InfraGate.KubernetesAdapter`; `ApprovalChallengeStore` lives in `InfraGate.Approvals`.
+- `IGatewayToolDispatcher.cs` / `GatewayToolDispatcher.cs` dynamically forward downstream ReadOnly tools, hide downstream Destructive tools, expose `request_*` wrappers for plan creation, own `execute_approved_plan`, and call the generic pre-execution gate before adapter execution.
+- `IGatewayApprovalService.cs`, `GatewayApprovalService.cs`, and `GatewayApprovalEndpoints.cs` create or reuse short-lived approval URLs and render Kubernetes review evidence decoded through `InfraGate.KubernetesAdapter`; `IApprovalChallengeStore` lives in `InfraGate.Approvals`.
 - `GuardedToolRunner.cs` scans inbound arguments, calls the downstream stdio server, sanitizes risky model-visible output, and writes audit events.
 - `DownstreamMcpClient.cs` starts and reuses the downstream `InfraGate.McpServer` process via the Model Context Protocol client.
 - `PromptInjectionGuard*.cs` contains argument scanning, response redaction, operational-line allow-listing, and regex patterns.

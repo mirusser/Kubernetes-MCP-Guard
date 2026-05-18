@@ -2,8 +2,9 @@
 set -uo pipefail
 
 # run-tests.sh — Auto-detect available infrastructure and run all possible test tiers.
-# Skips tiers that need Docker or Kubernetes if those aren't available.
-# Reports what ran, what passed, and what was skipped.
+# Regenerates the test kubeconfig with a fresh 24h SA token before running
+# K8s-dependent tiers. Skips tiers that need Docker or Kubernetes if those
+# aren't available. Reports what ran, what passed, and what was skipped.
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -37,6 +38,39 @@ else
     echo -e "  ${RED}✗${NC} .NET 10 SDK not found (found: $(dotnet --version 2>/dev/null || echo 'none'))"
 fi
 
+if ! $DOTNET_OK; then
+    echo ""
+    echo -e "${RED}.NET 10 SDK is required. Install it and retry.${NC}"
+    exit 1
+fi
+
+if docker info &>/dev/null; then
+    echo -e "  ${GREEN}✓${NC} Docker available"
+    DOCKER_OK=true
+else
+    echo -e "  ${YELLOW}−${NC} Docker not available — skipping Keycloak and Safety E2E tiers"
+fi
+
+# ────────────────── Kubeconfig regeneration ──────────────────
+
+# Always regenerate the test kubeconfig so credentials never expire.
+# This creates a fresh 24h SA token and applies RBAC if needed.
+KUBECONFIG_REGENERATED=false
+echo ""
+echo -e "${CYAN}Regenerating test kubeconfig...${NC}"
+
+if "${SCRIPT_DIR}/create-demo-kubeconfig.sh" >/dev/null 2>&1; then
+    echo -e "  ${GREEN}✓${NC} Kubeconfig regenerated"
+    KUBECONFIG_REGENERATED=true
+else
+    echo -e "  ${YELLOW}−${NC} Could not regenerate kubeconfig (cluster unreachable or kubectl unavailable)"
+fi
+
+if $DOCKER_OK && $KUBECONFIG_REGENERATED; then
+    "${SCRIPT_DIR}/create-demo-kubeconfig.sh" --compose >/dev/null 2>&1 || true
+    echo -e "  ${GREEN}✓${NC} Compose kubeconfig regenerated"
+fi
+
 # Derive the test kubeconfig path from the run profile so it stays in sync with
 # deploy/run-profiles.yaml rather than being hardcoded here.
 PROFILE_KUBECONFIG=""
@@ -54,13 +88,6 @@ if $DOTNET_OK; then
 fi
 KUBECONFIG_FILE="${KUBECONFIG:-${PROFILE_KUBECONFIG:-${REPO_ROOT}/.kube/mcp-nginx-demo.config}}"
 
-if docker info &>/dev/null; then
-    echo -e "  ${GREEN}✓${NC} Docker available"
-    DOCKER_OK=true
-else
-    echo -e "  ${YELLOW}−${NC} Docker not available — skipping Keycloak and Safety E2E tiers"
-fi
-
 DETECT_KUBECONFIG=""
 if [ -f "$KUBECONFIG_FILE" ] && kubectl --kubeconfig "$KUBECONFIG_FILE" -n mcp-nginx-demo get deployment &>/dev/null; then
     DETECT_KUBECONFIG="$KUBECONFIG_FILE"
@@ -73,13 +100,11 @@ if [ -n "$DETECT_KUBECONFIG" ]; then
     KUBECONFIG_FILE="$DETECT_KUBECONFIG"
     K8S_OK=true
 else
-    echo -e "  ${YELLOW}−${NC} K8s cluster not reachable — skipping integration and Safety E2E tiers"
-fi
-
-if ! $DOTNET_OK; then
-    echo ""
-    echo -e "${RED}.NET 10 SDK is required. Install it and retry.${NC}"
-    exit 1
+    if $KUBECONFIG_REGENERATED; then
+        echo -e "  ${YELLOW}−${NC} K8s cluster reachable for admin but SA token access failed — skipping integration and Safety E2E tiers"
+    else
+        echo -e "  ${YELLOW}−${NC} K8s cluster not reachable — skipping integration and Safety E2E tiers"
+    fi
 fi
 
 echo ""

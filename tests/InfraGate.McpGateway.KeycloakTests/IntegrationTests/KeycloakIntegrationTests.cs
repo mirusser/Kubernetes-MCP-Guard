@@ -901,14 +901,16 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                 services.AddSingleton<ApprovalStore>();
                 services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
                 services.AddSingleton<ApprovalChallengeStore>();
+                services.AddSingleton<IApprovalChallengeStore>(sp => sp.GetRequiredService<ApprovalChallengeStore>());
                 services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
                 services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
-                services.AddSingleton<GatewayApprovalService>();
+                services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
+                services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
                 services.AddSingleton<IDomainPlanBuilder, KubernetesPlanBuilder>();
                 services.AddSingleton<IDomainPlanExecutor, KubernetesPlanExecutor>();
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
                 services.AddSingleton<DownstreamToolRegistry>();
-                services.AddSingleton<GatewayToolDispatcher>();
+                services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
                 services.AddHttpContextAccessor();
                 services.AddLogging();
                 services.AddAntiforgery();
@@ -924,9 +926,9 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                     .AddMcpServer()
                     .WithHttpTransport()
                     .WithListToolsHandler((RequestContext<ListToolsRequestParams> request, CancellationToken ct) =>
-                        new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<GatewayToolDispatcher>().ListToolsAsync(request.Params, ct)))
+                        new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().ListToolsAsync(request.Params, ct)))
                     .WithCallToolHandler((RequestContext<CallToolRequestParams> request, CancellationToken ct) =>
-                        new ValueTask<CallToolResult>(request.Services!.GetRequiredService<GatewayToolDispatcher>().CallToolAsync(request.Params, ct)));
+                        new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct)));
             })
             .Configure(app =>
             {

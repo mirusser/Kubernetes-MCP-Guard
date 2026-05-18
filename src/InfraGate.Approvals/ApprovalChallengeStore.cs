@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace InfraGate.Approvals;
 
-public sealed class ApprovalChallengeStore
+public sealed class ApprovalChallengeStore : IApprovalChallengeStore
 {
     private const int ChallengeIdByteCount = 32;
 

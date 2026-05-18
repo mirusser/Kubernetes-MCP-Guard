@@ -39,13 +39,14 @@ builder.Services.AddSingleton<ApprovalStore>();
 builder.Services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
 builder.Services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
 builder.Services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
-builder.Services.AddSingleton<ApprovalChallengeStore>();
-builder.Services.AddSingleton<GatewayApprovalService>();
+builder.Services.AddSingleton<IApprovalChallengeStore, ApprovalChallengeStore>();
+builder.Services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
+builder.Services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
 builder.Services.AddSingleton<IDomainPlanBuilder, KubernetesPlanBuilder>();
 builder.Services.AddSingleton<IDomainPlanExecutor, KubernetesPlanExecutor>();
 builder.Services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
 builder.Services.AddSingleton<DownstreamToolRegistry>();
-builder.Services.AddSingleton<GatewayToolDispatcher>();
+builder.Services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddAntiforgery();
 builder.Services.AddGatewayAuthentication(options.Auth);
@@ -54,9 +55,9 @@ builder.Services
     .AddMcpServer()
     .WithHttpTransport()
     .WithListToolsHandler((RequestContext<ListToolsRequestParams> request, CancellationToken ct) =>
-        new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<GatewayToolDispatcher>().ListToolsAsync(request.Params, ct)))
+        new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().ListToolsAsync(request.Params, ct)))
     .WithCallToolHandler((RequestContext<CallToolRequestParams> request, CancellationToken ct) =>
-        new ValueTask<CallToolResult>(request.Services!.GetRequiredService<GatewayToolDispatcher>().CallToolAsync(request.Params, ct)));
+        new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct)));
 
 var app = builder.Build();
 

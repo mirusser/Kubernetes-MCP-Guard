@@ -5,10 +5,10 @@ using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpGateway;
 
-public sealed class GatewayApprovalService
+public sealed class GatewayApprovalService : IGatewayApprovalService
 {
     private readonly ApprovalStore approvalStore;
-    private readonly ApprovalChallengeStore challengeStore;
+    private readonly IApprovalChallengeStore challengeStore;
     private readonly IPlanReviewAdapter planReviewAdapter;
     private readonly IPlanReviewRenderer planReviewRenderer;
     private readonly McpGatewayOptions options;
@@ -17,7 +17,7 @@ public sealed class GatewayApprovalService
 
     public GatewayApprovalService(
         ApprovalStore approvalStore,
-        ApprovalChallengeStore challengeStore,
+        IApprovalChallengeStore challengeStore,
         IPlanReviewAdapter planReviewAdapter,
         IPlanReviewRenderer planReviewRenderer,
         McpGatewayOptions options,

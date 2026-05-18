@@ -4,7 +4,7 @@ namespace InfraGate.Approvals;
 
 public sealed class ApprovalPreExecutionGate(
     ApprovalStore approvalStore,
-    IApprovalAuditPublisher? auditPublisher = null)
+    IApprovalAuditPublisher? auditPublisher = null) : IApprovalPreExecutionGate
 {
     private readonly IApprovalAuditPublisher auditPublisher = auditPublisher ?? NoOpApprovalAuditPublisher.Instance;
 

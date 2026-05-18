@@ -18,15 +18,15 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton(new ApprovalStoreOptions(Path.Combine(Path.GetTempPath(), "di-wiring-test", Guid.NewGuid().ToString("N"))));
         services.AddSingleton<ApprovalStore>();
         services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
-        services.AddSingleton<ApprovalChallengeStore>();
+        services.AddSingleton<IApprovalChallengeStore, ApprovalChallengeStore>();
         services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
         services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
-        services.AddSingleton<GatewayApprovalService>();
+        services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
         services.AddHttpContextAccessor();
         services.AddLogging();
 
         using var provider = services.BuildServiceProvider();
-        var resolved = provider.GetRequiredService<GatewayApprovalService>();
+        var resolved = provider.GetRequiredService<IGatewayApprovalService>();
 
         Assert.NotNull(resolved);
     }
@@ -57,10 +57,16 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton(new ApprovalStoreOptions(Path.Combine(Path.GetTempPath(), "di-wiring-test", Guid.NewGuid().ToString("N"))));
         services.AddSingleton<ApprovalStore>();
         services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
-        services.AddSingleton<ApprovalChallengeStore>();
+        services.AddSingleton<IApprovalChallengeStore, ApprovalChallengeStore>();
         services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
         services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
-        services.AddSingleton<GatewayApprovalService>();
+        services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
+        services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
+        services.AddSingleton<IDomainPlanBuilder, KubernetesPlanBuilder>();
+        services.AddSingleton<IDomainPlanExecutor, KubernetesPlanExecutor>();
+        services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
+        services.AddSingleton<DownstreamToolRegistry>();
+        services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
         services.AddHttpContextAccessor();
         services.AddDataProtection()
             .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetTempPath(), "di-wiring-dp", Guid.NewGuid().ToString("N"))))
@@ -69,10 +75,12 @@ public sealed class GatewayDiWiringTests
 
         using var provider = services.BuildServiceProvider();
 
-        Assert.NotNull(provider.GetRequiredService<GatewayApprovalService>());
+        Assert.NotNull(provider.GetRequiredService<IGatewayApprovalService>());
         Assert.NotNull(provider.GetRequiredService<GuardedToolRunner>());
         Assert.NotNull(provider.GetRequiredService<ApprovalStore>());
-        Assert.NotNull(provider.GetRequiredService<ApprovalChallengeStore>());
+        Assert.NotNull(provider.GetRequiredService<IApprovalChallengeStore>());
+        Assert.NotNull(provider.GetRequiredService<IApprovalPreExecutionGate>());
+        Assert.NotNull(provider.GetRequiredService<IGatewayToolDispatcher>());
     }
 
     private static McpGatewayOptions CreateOptions()
@@ -97,13 +105,19 @@ public sealed class GatewayDiWiringTests
             ApprovalChallengeTtl: McpGatewayOptions.DefaultApprovalChallengeTtl);
     }
 
-    private sealed class NullDownstreamClient : IDownstreamMcpClient
+    private sealed class NullDownstreamClient : IDownstreamMcpClient, IToolCaller
     {
         public Task<string> CallToolAsync(
             string toolName,
             IReadOnlyDictionary<string, object?> arguments,
             CancellationToken cancellationToken) =>
             Task.FromResult("{}");
+
+        public Task<string> CallAsync(
+            string toolName,
+            IReadOnlyDictionary<string, object?> arguments,
+            CancellationToken ct) =>
+            CallToolAsync(toolName, arguments, ct);
 
         public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<DownstreamTool>>([]);

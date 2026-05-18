@@ -215,7 +215,7 @@ public sealed class GatewayToolDispatcherTests
                 planExecutor,
                 approvals,
                 store,
-                new ApprovalStoreAuditPublisher(store),
+                new ApprovalPreExecutionGate(store, new ApprovalStoreAuditPublisher(store)),
                 httpContextAccessor,
                 NullLogger<GatewayToolDispatcher>.Instance),
             store,
@@ -340,7 +340,7 @@ public sealed class GatewayToolDispatcherTests
     }
 
     private sealed record TestContext(
-        GatewayToolDispatcher Dispatcher,
+        IGatewayToolDispatcher Dispatcher,
         ApprovalStore Store,
         FakeDownstream Downstream);
 }

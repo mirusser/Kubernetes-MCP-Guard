@@ -8,15 +8,15 @@ using ModelContextProtocol.Server;
 
 namespace InfraGate.McpGateway;
 
-public sealed class GatewayToolDispatcher
+public sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 {
     private readonly DownstreamToolRegistry registry;
     private readonly GuardedToolRunner guardedRunner;
     private readonly IDomainPlanBuilder planBuilder;
     private readonly IDomainPlanExecutor planExecutor;
-    private readonly GatewayApprovalService approvals;
+    private readonly IGatewayApprovalService approvals;
     private readonly ApprovalStore approvalStore;
-    private readonly ApprovalPreExecutionGate preExecutionGate;
+    private readonly IApprovalPreExecutionGate preExecutionGate;
     private readonly IHttpContextAccessor httpContextAccessor;
     private readonly ILogger<GatewayToolDispatcher> logger;
 
@@ -25,9 +25,9 @@ public sealed class GatewayToolDispatcher
         GuardedToolRunner guardedRunner,
         IDomainPlanBuilder planBuilder,
         IDomainPlanExecutor planExecutor,
-        GatewayApprovalService approvals,
+        IGatewayApprovalService approvals,
         ApprovalStore approvalStore,
-        IApprovalAuditPublisher auditPublisher,
+        IApprovalPreExecutionGate preExecutionGate,
         IHttpContextAccessor httpContextAccessor,
         ILogger<GatewayToolDispatcher> logger)
     {
@@ -37,7 +37,7 @@ public sealed class GatewayToolDispatcher
         this.planExecutor = planExecutor;
         this.approvals = approvals;
         this.approvalStore = approvalStore;
-        preExecutionGate = new ApprovalPreExecutionGate(approvalStore, auditPublisher);
+        this.preExecutionGate = preExecutionGate;
         this.httpContextAccessor = httpContextAccessor;
         this.logger = logger;
     }

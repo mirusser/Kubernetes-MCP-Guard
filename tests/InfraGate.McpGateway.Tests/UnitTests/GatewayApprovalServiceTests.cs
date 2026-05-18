@@ -657,7 +657,7 @@ public sealed class GatewayApprovalServiceTests
         new(ApprovalConventions.Digests.Sha256, "test.canonicalization.v1", value);
 
     private sealed record TestContext(
-        GatewayApprovalService Service,
+        IGatewayApprovalService Service,
         ApprovalStore Store,
         ApprovalChallengeStore Challenges,
         HttpContextAccessor HttpContextAccessor,
