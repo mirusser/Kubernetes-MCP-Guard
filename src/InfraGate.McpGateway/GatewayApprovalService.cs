@@ -46,10 +46,10 @@ public sealed class GatewayApprovalService
         var granted = await approvalStore.GetGrantedPlanAsync(planId, cancellationToken);
         if (granted.IsGranted && granted.Envelope is not null && granted.Grant is not null)
         {
-            var decoded = planReviewAdapter.TryDecodeForReview(granted.Envelope);
+            var decoded = planReviewAdapter.TryDecodeForReview(granted.Envelope, out var decodeError);
             if (decoded is null)
             {
-                var message = $"Plan '{planId}' could not be decoded by the approval adapter.";
+                var message = decodeError ?? $"Plan '{planId}' could not be decoded by the approval adapter.";
                 await WriteApplyDeniedAuditAsync(planId, message, cancellationToken);
 
                 return ApprovalGateResult.RequiresApproval($"Refused: {message}");
@@ -82,10 +82,10 @@ public sealed class GatewayApprovalService
             return ApprovalGateResult.RequiresApproval($"Refused: {pending.Message}");
         }
 
-        var pendingPlan = planReviewAdapter.TryDecodeForReview(pending.Envelope);
+        var pendingPlan = planReviewAdapter.TryDecodeForReview(pending.Envelope, out var pendingError);
         if (pendingPlan is null)
         {
-            return ApprovalGateResult.RequiresApproval($"Refused: Plan '{planId}' could not be decoded by the approval adapter.");
+            return ApprovalGateResult.RequiresApproval($"Refused: {pendingError ?? $"Plan '{planId}' could not be decoded by the approval adapter."}");
         }
 
         if (!SameSubject(pendingPlan.Envelope.Requester.Subject, requester.Subject))
@@ -412,16 +412,17 @@ public sealed class GatewayApprovalService
             return ChallengeValidation.Invalid(message, challenge);
         }
 
-        var decoded = planReviewAdapter.TryDecodeForReview(pending.Envelope);
+        var decoded = planReviewAdapter.TryDecodeForReview(pending.Envelope, out var decodeError);
         if (decoded is null)
         {
+            var errorMessage = decodeError ?? "Plan could not be decoded by the approval adapter.";
             await WriteChallengeRejectedAuditAsync(
                 challenge,
                 approver.Subject,
-                "Plan could not be decoded by the approval adapter.",
+                errorMessage,
                 cancellationToken);
 
-            return ChallengeValidation.Invalid("Plan could not be decoded by the approval adapter.", challenge);
+            return ChallengeValidation.Invalid(errorMessage, challenge);
         }
 
         if (!SameSubject(challenge.RequesterSubject, decoded.Envelope.Requester.Subject))

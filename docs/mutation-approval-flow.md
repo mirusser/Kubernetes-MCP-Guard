@@ -137,8 +137,6 @@ sequenceDiagram
     Core->>Core: Record audit events
 ```
 
-The gate audit split is intentional: `pre_execution.grant.validated` records generic approval-grant proof, `pre_execution.checked` records the adapter-owned freshness and domain-policy check result, and `execution.started` records the adapter execution attempt without grant identifiers or approval digests.
-
 ## Non-Approved Flow
 
 ```mermaid
