@@ -40,6 +40,7 @@ public sealed class GatewayToolDispatcherTests
     public async Task CallToolAsync_ApprovedPlanBlockedByExecutor_DoesNotMarkApplied()
     {
         var executor = new FakeDomainPlanExecutor(
+            DomainPlanExecutionResult.Success("unused", null),
             DomainPlanExecutionResult.Blocked("Plan cannot be executed: live Kubernetes state has drifted."));
         var context = CreateContext(executor);
         var envelope = await CreateGrantedPlanAsync(context.Store);
@@ -58,7 +59,58 @@ public sealed class GatewayToolDispatcherTests
         Assert.True(result.IsError);
         Assert.Contains("drifted", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
         Assert.False(File.Exists(context.Store.GetAppliedPath(envelope.Id)));
-        Assert.Single(executor.Calls);
+        Assert.Empty(executor.ExecuteCalls);
+        Assert.Single(executor.PreExecutionCalls);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_ApprovedPlanPassingPreExecutionGate_ExecutesPlan()
+    {
+        var executor = new FakeDomainPlanExecutor(
+            DomainPlanExecutionResult.Success("Applied successfully.", "mcp-nginx-demo"),
+            DomainPlanExecutionResult.Success("Pre-execution checks passed.", null));
+        var context = CreateContext(executor);
+        var envelope = await CreateGrantedPlanAsync(context.Store);
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+                Arguments = new Dictionary<string, JsonElement>
+                {
+                    [McpGatewayConventions.ToolArguments.PlanId] = JsonSerializer.SerializeToElement(envelope.Id)
+                }
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError is not true);
+        Assert.Single(executor.PreExecutionCalls);
+        Assert.Single(executor.ExecuteCalls);
+        Assert.True(File.Exists(context.Store.GetAppliedPath(envelope.Id)));
+    }
+
+    [Fact]
+    public async Task CallToolAsync_ApprovedPlanExecutionThrows_WritesExecutionFailedAudit()
+    {
+        var context = CreateContext(new ThrowingDomainPlanExecutor());
+        var envelope = await CreateGrantedPlanAsync(context.Store);
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+                Arguments = new Dictionary<string, JsonElement>
+                {
+                    [McpGatewayConventions.ToolArguments.PlanId] = JsonSerializer.SerializeToElement(envelope.Id)
+                }
+            },
+            CancellationToken.None);
+        string audit = await File.ReadAllTextAsync(context.Store.AuditPath);
+
+        Assert.True(result.IsError);
+        Assert.Contains("execution failed", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+        Assert.Contains($@"""eventName"": ""{ApprovalConventions.AuditEvents.ApplyFailed}""", audit);
+        Assert.False(File.Exists(context.Store.GetAppliedPath(envelope.Id)));
     }
 
     [Fact]
@@ -224,15 +276,34 @@ public sealed class GatewayToolDispatcherTests
             Task.FromResult(result);
     }
 
-    private sealed class FakeDomainPlanExecutor(DomainPlanExecutionResult result) : IDomainPlanExecutor
+    private sealed class FakeDomainPlanExecutor(
+        DomainPlanExecutionResult executeResult,
+        DomainPlanExecutionResult? preExecutionResult = null) : IDomainPlanExecutor
     {
-        public List<string> Calls { get; } = [];
+        public List<string> ExecuteCalls { get; } = [];
+
+        public List<string> PreExecutionCalls { get; } = [];
+
+        public Task<DomainPlanExecutionResult> CheckPreExecutionAsync(PlanEnvelope envelope, CancellationToken ct)
+        {
+            PreExecutionCalls.Add(envelope.Id);
+            return Task.FromResult(preExecutionResult ?? DomainPlanExecutionResult.Success("Pre-execution checks passed.", null));
+        }
 
         public Task<DomainPlanExecutionResult> ExecuteAsync(PlanEnvelope envelope, CancellationToken ct)
         {
-            Calls.Add(envelope.Id);
-            return Task.FromResult(result);
+            ExecuteCalls.Add(envelope.Id);
+            return Task.FromResult(executeResult);
         }
+    }
+
+    private sealed class ThrowingDomainPlanExecutor : IDomainPlanExecutor
+    {
+        public Task<DomainPlanExecutionResult> CheckPreExecutionAsync(PlanEnvelope envelope, CancellationToken ct) =>
+            Task.FromResult(DomainPlanExecutionResult.Success("Pre-execution checks passed.", null));
+
+        public Task<DomainPlanExecutionResult> ExecuteAsync(PlanEnvelope envelope, CancellationToken ct) =>
+            throw new InvalidOperationException("downstream mutation failed");
     }
 
     private sealed class InMemoryAuditStore : IGuardrailAuditStore

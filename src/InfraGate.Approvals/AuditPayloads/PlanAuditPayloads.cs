@@ -8,7 +8,8 @@
 //
 // Why marker interface, not abstract base record: positional record inheritance
 // makes the base's positional parameters serialise first, which would reorder
-// every JSON payload (e.g. dry_run_failed currently emits "phase" first). The
+// every JSON payload (e.g. execution.blocked dry-run payloads emit "phase"
+// first). The
 // IPlanAuditPayload interface enforces the canonical "planId" field's presence at
 // compile time without dictating serialisation order. Field order on disk stays
 // identical to today's anonymous-type output.

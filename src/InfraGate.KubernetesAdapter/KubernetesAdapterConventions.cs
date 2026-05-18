@@ -7,6 +7,9 @@ public static class KubernetesAdapterConventions
     public static class Canonicalizations
     {
         public const string IntentV1 = "infra-gate.kubernetes.intent.v1";
+        public const string DryRunEvidenceV1 = "infra-gate.kubernetes.evidence.dry-run.v1";
+        public const string DiffEvidenceV1 = "infra-gate.kubernetes.evidence.diff.v1";
+        public const string PolicyFindingsEvidenceV1 = "infra-gate.kubernetes.evidence.policy-findings.v1";
     }
 
     public static class ReviewRenderers
@@ -18,6 +21,13 @@ public static class KubernetesAdapterConventions
     {
         public const string LiveDrift = "kubernetes.live-drift";
         public const string PreExecuteDryRun = "kubernetes.pre-execute-dry-run";
+    }
+
+    public static class EvidenceArtifactTypes
+    {
+        public const string DryRun = "kubernetes.dry-run";
+        public const string Diff = "kubernetes.diff";
+        public const string PolicyFindings = "kubernetes.policy-findings";
     }
 
     public static class MutationTools

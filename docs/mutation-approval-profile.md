@@ -191,9 +191,12 @@ The current implementation already proves several important properties:
 - browser approval is out of band from MCP tool calls
 - approval is bound to requester identity
 - challenge TTL is enforced
+- requester cancellation records a terminal canceled Challenge Outcome without issuing an Approval Grant
 - approved execution is bound to Intent Digest and Review Digest through Approval Grants
+- the Review Digest includes generic evidence artifact summaries derived by the Kubernetes adapter
+- generic pre-execution gate orchestration validates grants and delegates Kubernetes freshness/domain checks before mutation
 - applied plans cannot be applied again
 - Kubernetes dry-run and drift checks gate execution
-- audit events record approval-flow transitions
+- audit events use the dot-separated Audit Spine event names
 
-The ADR 0001 implementation now separates generic plan-envelope storage from Kubernetes-specific mutation intent and review evidence, adds Intent Digest and Review Digest binding, records Challenge Outcomes, and issues durable Approval Grants for execution. Remaining drift from the target profile includes fuller generic policy/freshness modeling and richer adapter audit payloads.
+The ADR 0001 implementation now separates generic plan-envelope storage from Kubernetes-specific mutation intent and review evidence, adds Intent Digest and Review Digest binding, records Challenge Outcomes, issues durable Approval Grants for execution, and binds review evidence through digest-bound Evidence Artifact summaries. Remaining drift from the target profile includes fuller generic policy/freshness modeling and richer adapter audit payloads.

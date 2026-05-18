@@ -7,7 +7,7 @@ public sealed class KubernetesPlanExecutor(IToolCaller toolCaller) : IDomainPlan
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public async Task<DomainPlanExecutionResult> ExecuteAsync(PlanEnvelope envelope, CancellationToken ct)
+    public async Task<DomainPlanExecutionResult> CheckPreExecutionAsync(PlanEnvelope envelope, CancellationToken ct)
     {
         var decodeResult = KubernetesApprovalAdapter.Decode(envelope);
         if (!decodeResult.Succeeded || decodeResult.Plan is null)
@@ -21,7 +21,8 @@ public sealed class KubernetesPlanExecutor(IToolCaller toolCaller) : IDomainPlan
         var driftBlock = await CheckLiveDriftAsync(plan, payload, ct);
         if (driftBlock is not null)
         {
-            return DomainPlanExecutionResult.Blocked(driftBlock);
+            var audit = ApplyDriftDetectedAudit(plan, driftBlock, payload);
+            return DomainPlanExecutionResult.Blocked(driftBlock, audit);
         }
 
         var dryRunBlock = await RunPreExecuteDryRunAsync(plan, payload, ct);
@@ -30,6 +31,20 @@ public sealed class KubernetesPlanExecutor(IToolCaller toolCaller) : IDomainPlan
             var audit = DryRunFailedAudit(plan, dryRunBlock, payload);
             return DomainPlanExecutionResult.Blocked(dryRunBlock, audit);
         }
+
+        return DomainPlanExecutionResult.Success("Pre-execution checks passed.", payload.Namespace);
+    }
+
+    public async Task<DomainPlanExecutionResult> ExecuteAsync(PlanEnvelope envelope, CancellationToken ct)
+    {
+        var decodeResult = KubernetesApprovalAdapter.Decode(envelope);
+        if (!decodeResult.Succeeded || decodeResult.Plan is null)
+        {
+            return DomainPlanExecutionResult.Blocked(decodeResult.Message);
+        }
+
+        var plan = decodeResult.Plan;
+        var payload = plan.Payload;
 
         return await DispatchAsync(plan.Operation, payload, ct);
     }
@@ -240,5 +255,14 @@ public sealed class KubernetesPlanExecutor(IToolCaller toolCaller) : IDomainPlan
                 plan.Operation,
                 payload.Namespace,
                 payload.Objects.Select(obj => $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}").ToArray(),
+                message));
+
+    private static PlanAudit ApplyDriftDetectedAudit(KubernetesPlan plan, string message, KubernetesPlanPayload payload) =>
+        new(
+            ApprovalConventions.AuditEvents.ApplyDriftDetected,
+            new InfraGate.Approvals.AuditPayloads.ApplyDriftDetectedPayload(
+                plan.Id,
+                plan.Operation,
+                payload.Namespace,
                 message));
 }

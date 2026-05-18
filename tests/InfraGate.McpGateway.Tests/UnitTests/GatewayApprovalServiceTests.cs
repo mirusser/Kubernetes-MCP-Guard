@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json.Nodes;
 using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
@@ -162,7 +163,7 @@ public sealed class GatewayApprovalServiceTests
         Assert.False(result.IsApproved);
         Assert.Contains("review digest", result.Message, StringComparison.OrdinalIgnoreCase);
         string audit = await File.ReadAllTextAsync(context.Store.AuditPath, CancellationToken.None);
-        Assert.Contains("\"eventName\": \"apply_denied\"", audit);
+        Assert.Contains($@"""eventName"": ""{ApprovalConventions.AuditEvents.ApplyDenied}""", audit);
         Assert.Contains($"\"planId\": \"{plan.Id}\"", audit);
         Assert.Contains("review digest no longer matches", audit);
     }
@@ -398,6 +399,57 @@ public sealed class GatewayApprovalServiceTests
         Assert.Equal(ApprovalConventions.ChallengeOutcomeStatuses.Rejected, challenge?.Outcome?.Status);
     }
 
+    [Fact]
+    public async Task CancelChallengeAsync_SameSubject_CancelsWithoutGrantAndWritesAudit()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+
+        var result = await context.Service.CancelChallengeAsync(challengeId, CancellationToken.None);
+        var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
+        string audit = await File.ReadAllTextAsync(context.Store.AuditPath, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(ApprovalConventions.ChallengeStatuses.Canceled, challenge?.Status);
+        Assert.Equal(ApprovalConventions.ChallengeOutcomeStatuses.Canceled, challenge?.Outcome?.Status);
+        Assert.Equal(Subject, challenge?.Outcome?.ActorSubject);
+        Assert.Null(challenge?.Outcome?.GrantId);
+        Assert.False(File.Exists(context.Store.GetGrantPath(plan.Id)));
+        Assert.Contains($@"""eventName"": ""{ApprovalConventions.AuditEvents.ApprovalChallengeCanceled}""", audit);
+    }
+
+    [Fact]
+    public async Task CancelChallengeAsync_AlreadyCanceled_RejectsReuse()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+
+        var canceled = await context.Service.CancelChallengeAsync(challengeId, CancellationToken.None);
+        var reused = await context.Service.CancelChallengeAsync(challengeId, CancellationToken.None);
+
+        Assert.True(canceled.Succeeded);
+        Assert.False(reused.Succeeded);
+        Assert.Contains("already canceled", reused.Message);
+    }
+
+    [Fact]
+    public async Task ApproveChallengeAsync_CanceledChallenge_Rejects()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+
+        var canceled = await context.Service.CancelChallengeAsync(challengeId, CancellationToken.None);
+        var approved = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
+
+        Assert.True(canceled.Succeeded);
+        Assert.False(approved.Succeeded);
+        Assert.Contains("already canceled", approved.Message);
+        Assert.False(File.Exists(context.Store.GetGrantPath(plan.Id)));
+    }
+
     private static async Task<KubernetesPlan> CreatePendingPlanAsync(
         ApprovalStore store,
         bool includeDryRun = true,
@@ -488,10 +540,13 @@ public sealed class GatewayApprovalServiceTests
     {
         string pendingPath = store.GetPendingPath(planId);
         string json = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
-        await File.WriteAllTextAsync(
-            pendingPath,
-            json.Replace("/spec/replicas", "/spec/template/spec/containers/0/image", StringComparison.Ordinal),
-            CancellationToken.None);
+        var root = JsonNode.Parse(json)?.AsObject()
+            ?? throw new InvalidOperationException("Pending plan did not parse as a JSON object.");
+        var digest = root["evidenceArtifacts"]?[0]?["digest"]?.AsObject()
+            ?? throw new InvalidOperationException("Pending plan did not contain an evidence artifact digest.");
+        digest["value"] = "tampered-review-evidence";
+
+        await File.WriteAllTextAsync(pendingPath, root.ToJsonString(), CancellationToken.None);
     }
 
     private static string LegacyApprovedPath(ApprovalStore store, string planId) =>

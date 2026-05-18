@@ -135,7 +135,7 @@ public sealed class KubernetesPlanExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_DriftDetected_BlocksExecution()
+    public async Task CheckPreExecutionAsync_DriftDetected_BlocksExecution()
     {
         var diff = MakeDiff("demo", "nginx");
         var envelope = BuildApplyEnvelope([diff]);
@@ -144,15 +144,17 @@ public sealed class KubernetesPlanExecutorTests
             .With(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift, "Replica count changed from 2 to 4.");
 
         var executor = new KubernetesPlanExecutor(toolCaller);
-        var result = await executor.ExecuteAsync(envelope, CancellationToken.None);
+        var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
         Assert.Contains("drift", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(result.Audit);
+        Assert.Equal(ApprovalConventions.AuditEvents.ApplyDriftDetected, result.Audit.EventName);
         Assert.DoesNotContain(KubernetesAdapterConventions.MutationTools.ApplyManifest, toolCaller.CalledTools);
     }
 
     [Fact]
-    public async Task ExecuteAsync_PreExecuteDryRunFails_BlocksExecution()
+    public async Task CheckPreExecutionAsync_PreExecuteDryRunFails_BlocksExecution()
     {
         var diff = MakeDiff("demo", "nginx");
         var envelope = BuildApplyEnvelope([diff]);
@@ -162,15 +164,17 @@ public sealed class KubernetesPlanExecutorTests
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest, "Server-side dry-run failed: webhook rejected");
 
         var executor = new KubernetesPlanExecutor(toolCaller);
-        var result = await executor.ExecuteAsync(envelope, CancellationToken.None);
+        var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
         Assert.Contains("dry-run", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(result.Audit);
+        Assert.Equal(ApprovalConventions.AuditEvents.DryRunFailed, result.Audit.EventName);
         Assert.DoesNotContain(KubernetesAdapterConventions.MutationTools.ApplyManifest, toolCaller.CalledTools);
     }
 
     [Fact]
-    public async Task ExecuteAsync_PolicyBlockedAtExecution_BlocksExecution()
+    public async Task CheckPreExecutionAsync_PolicyBlockedAtExecution_BlocksExecution()
     {
         var diff = MakeDiff("demo", "nginx");
         var envelope = BuildApplyEnvelope([diff]);
@@ -184,7 +188,7 @@ public sealed class KubernetesPlanExecutorTests
                     JsonOptions));
 
         var executor = new KubernetesPlanExecutor(toolCaller);
-        var result = await executor.ExecuteAsync(envelope, CancellationToken.None);
+        var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
         Assert.Contains("policy", result.Message, StringComparison.OrdinalIgnoreCase);

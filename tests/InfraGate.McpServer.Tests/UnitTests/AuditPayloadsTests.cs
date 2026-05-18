@@ -65,6 +65,9 @@ public sealed class AuditPayloadsTests
         data.Add(
             new ApprovalChallengeRejectedPayload("ch-1", "plan-1", "deadbeef", "user", "approver", "subject mismatch"),
             new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "approverSubject", "reason" });
+        data.Add(
+            new ApprovalChallengeCanceledPayload("ch-1", "plan-1", "deadbeef", "user", "user", expiresAt),
+            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "actorSubject", "decidedAt" });
         return data;
     }
 

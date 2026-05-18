@@ -12,6 +12,7 @@ public sealed record PlanEnvelope<TPayload>(
     ApprovalPolicy ApprovalPolicy,
     ExecutionReusePolicy ExecutionReusePolicy,
     ReviewSurfaceContext ReviewSurfaceContext,
+    EvidenceArtifactSummary[] EvidenceArtifacts,
     ApprovalDigest IntentDigest,
     ApprovalDigest ReviewDigest,
     TPayload Payload)

@@ -11,9 +11,11 @@ public static class PlanEnvelopeFactory
         ApprovalDigest intentDigest,
         ReviewSurfaceContext reviewSurfaceContext,
         TPayload payload,
-        FreshnessPolicy? freshnessPolicy = null)
+        FreshnessPolicy? freshnessPolicy = null,
+        IReadOnlyList<EvidenceArtifactSummary>? evidenceArtifacts = null)
     {
         var resolvedFreshnessPolicy = freshnessPolicy ?? FreshnessPolicy.Empty;
+        var resolvedEvidenceArtifacts = evidenceArtifacts?.ToArray() ?? [];
         var validityWindow = new PlanValidityWindow(
             createdAtUtc,
             createdAtUtc.Add(ApprovalConventions.PlanValidity.DefaultWindow));
@@ -31,8 +33,8 @@ public static class PlanEnvelopeFactory
             executionReusePolicy,
             resolvedFreshnessPolicy,
             reviewSurfaceContext,
-            intentDigest,
-            payload);
+            resolvedEvidenceArtifacts,
+            intentDigest);
 
         return new PlanEnvelope<TPayload>(
             id,
@@ -46,6 +48,7 @@ public static class PlanEnvelopeFactory
             approvalPolicy,
             executionReusePolicy,
             reviewSurfaceContext,
+            resolvedEvidenceArtifacts,
             intentDigest,
             reviewDigest,
             payload)
@@ -67,10 +70,10 @@ public static class PlanEnvelopeFactory
             envelope.ExecutionReusePolicy,
             envelope.FreshnessPolicy,
             envelope.ReviewSurfaceContext,
-            envelope.IntentDigest,
-            envelope.Payload);
+            envelope.EvidenceArtifacts,
+            envelope.IntentDigest);
 
-    private static ApprovalDigest ComputeReviewDigest<TPayload>(
+    private static ApprovalDigest ComputeReviewDigest(
         string id,
         string profile,
         string adapterId,
@@ -82,8 +85,8 @@ public static class PlanEnvelopeFactory
         ExecutionReusePolicy executionReusePolicy,
         FreshnessPolicy freshnessPolicy,
         ReviewSurfaceContext reviewSurfaceContext,
-        ApprovalDigest intentDigest,
-        TPayload payload)
+        IReadOnlyList<EvidenceArtifactSummary> evidenceArtifacts,
+        ApprovalDigest intentDigest)
     {
         return ApprovalDigest.ComputeSha256(
             ApprovalConventions.Canonicalizations.ProfileReviewV1,
@@ -101,8 +104,8 @@ public static class PlanEnvelopeFactory
                 executionReusePolicy,
                 freshnessPolicy,
                 reviewSurfaceContext,
-                intentDigest,
-                payload
+                evidenceArtifacts,
+                intentDigest
             });
     }
 }

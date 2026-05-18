@@ -523,6 +523,8 @@ public sealed class KubernetesPlanBuilderTests
 
         Assert.False(result.Succeeded);
         Assert.Contains("empty result", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(result.Audit);
+        Assert.Equal(ApprovalConventions.AuditEvents.DiffFailed, result.Audit.EventName);
     }
 
     [Fact]
@@ -542,6 +544,8 @@ public sealed class KubernetesPlanBuilderTests
 
         Assert.False(result.Succeeded);
         Assert.Contains("empty result", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(result.Audit);
+        Assert.Equal(ApprovalConventions.AuditEvents.DiffFailed, result.Audit.EventName);
     }
 
     [Fact]
@@ -624,6 +628,8 @@ public sealed class KubernetesPlanBuilderTests
 
         Assert.False(result.Succeeded);
         Assert.Contains("Diff evidence failed", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.NotNull(result.Audit);
+        Assert.Equal(ApprovalConventions.AuditEvents.DiffFailed, result.Audit.EventName);
     }
 
     private sealed class FakeToolCaller : IToolCaller

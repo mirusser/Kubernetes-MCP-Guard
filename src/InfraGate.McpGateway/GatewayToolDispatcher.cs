@@ -16,6 +16,7 @@ public sealed class GatewayToolDispatcher
     private readonly IDomainPlanExecutor planExecutor;
     private readonly GatewayApprovalService approvals;
     private readonly ApprovalStore approvalStore;
+    private readonly ApprovalPreExecutionGate preExecutionGate;
     private readonly IHttpContextAccessor httpContextAccessor;
     private readonly ILogger<GatewayToolDispatcher> logger;
 
@@ -35,6 +36,7 @@ public sealed class GatewayToolDispatcher
         this.planExecutor = planExecutor;
         this.approvals = approvals;
         this.approvalStore = approvalStore;
+        preExecutionGate = new ApprovalPreExecutionGate(approvalStore);
         this.httpContextAccessor = httpContextAccessor;
         this.logger = logger;
     }
@@ -198,13 +200,40 @@ public sealed class GatewayToolDispatcher
                 : new CallToolResult { Content = [new TextContentBlock { Text = gate.Message }] };
         }
 
-        var granted = await approvalStore.GetGrantedPlanAsync(planId, ct);
-        if (!granted.IsGranted || granted.Envelope is null || granted.Grant is null)
+        var preExecution = await preExecutionGate.EvaluateAsync(planId, planExecutor, ct);
+        if (!preExecution.IsPassed || preExecution.Envelope is null || preExecution.Grant is null)
         {
-            return ErrorResult(granted.Message);
+            if (preExecution.Audit is { } audit)
+            {
+                await WritePlanAuditAsync(audit, planId, ct);
+            }
+
+            return ErrorResult(preExecution.Message);
         }
 
-        var executeResult = await planExecutor.ExecuteAsync(granted.Envelope, ct);
+        DomainPlanExecutionResult executeResult;
+        try
+        {
+            executeResult = await planExecutor.ExecuteAsync(preExecution.Envelope, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            var message = $"Plan '{planId}' execution failed: {ex.Message}";
+            await WritePlanAuditAsync(
+                new PlanAudit(
+                    ApprovalConventions.AuditEvents.ApplyFailed,
+                    new ApplyFailedPayload(
+                        planId,
+                        preExecution.Envelope.Operation,
+                        message)),
+                planId,
+                ct);
+
+            logger.LogWarning(ex, "Approved plan {PlanId} execution failed.", planId);
+
+            return ErrorResult(message);
+        }
+
         if (!executeResult.IsSuccessful)
         {
             if (executeResult.Audit is { } audit)
@@ -223,9 +252,9 @@ public sealed class GatewayToolDispatcher
         }
 
         await approvalStore.MarkAppliedAsync(
-            granted.Envelope,
-            executeResult.TargetNamespace ?? GetNamespaceFromEnvelope(granted.Envelope),
-            granted.Grant,
+            preExecution.Envelope,
+            executeResult.TargetNamespace ?? GetNamespaceFromEnvelope(preExecution.Envelope),
+            preExecution.Grant,
             ct);
 
         return new CallToolResult

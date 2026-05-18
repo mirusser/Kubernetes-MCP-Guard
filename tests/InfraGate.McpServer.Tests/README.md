@@ -13,7 +13,7 @@
 - `K8SMcpOptionsTests.cs`: allowed namespace parsing defaults and comma-separated values.
 - `K8sToolsTests.cs`: MCP tool delegation, argument forwarding to K8sManager, and plan-unaware live-drift evidence arguments.
 - `KubernetesPlanBuilderTests.cs`: Kubernetes adapter plan creation, freshness policy declarations, dry-run evidence, diff evidence, and policy refusal behavior.
-- `KubernetesPlanExecutorTests.cs`: Kubernetes adapter execution gates, drift blocking, pre-execution dry-run blocking, policy blocking, and raw execution dispatch.
+- `KubernetesPlanExecutorTests.cs`: Kubernetes adapter pre-execution checks, drift blocking, pre-execution dry-run blocking, policy blocking, and raw execution dispatch.
 - `KubernetesPlanReviewTests.cs`: review evidence requirements for manifest plans and dry-run-only Deployment operations.
 
 ## Running Tests

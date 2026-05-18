@@ -69,11 +69,11 @@ Direct hash approval files do not authorize execution in the current grant-bound
 execute_approved_plan(planId = "<PlanId>")
 ```
 
-The server re-reads `pending/<PlanId>.json`, validates the Approval Grant and its Intent/Review Digest bindings, repeats Kubernetes dry-run, and applies the plan against the Kubernetes API only if every gate passes.
+The gateway re-reads `pending/<PlanId>.json`, validates the Approval Grant and its Intent/Review Digest bindings, asks the Kubernetes adapter to repeat Kubernetes dry-run, and applies the plan against the Kubernetes API only if every gate passes.
 
 **What you should see:** the tool returns the apply result describing the patched Deployment. Within seconds, Kubernetes pulls the new image and the Pods become Ready.
 
-If anything edits `pending/<PlanId>.json` between approval and apply, the recomputed Review Digest no longer matches and execution is refused, emitting an `apply_denied` audit entry. This is the tamper-detection guarantee in action.
+If anything edits `pending/<PlanId>.json` between approval and apply, the digest or evidence-artifact binding no longer matches and execution is refused, emitting an `execution.blocked` audit entry. This is the tamper-detection guarantee in action.
 
 ## Step 6 — Verify recovery
 
@@ -89,10 +89,10 @@ Two JSONL streams record the demo. Both live under volumes mounted by `deploy/lo
 
 ### Server-side (`.mcp-approvals/audit.jsonl`)
 
-Records the plan lifecycle: `plan_requested`, `approval_challenge_created`, `approval_challenge_approved`, `grant_issued`, `plan_applied` (and on a tampered plan, `apply_denied`). One entry shape:
+Records the plan lifecycle: `plan.created`, `challenge.created`, `challenge.approved`, `grant.issued`, `execution.succeeded` (and on a tampered plan, `execution.blocked`). One entry shape:
 
 ```json
-{"timestampUtc":"2026-05-03T12:34:56.789Z","eventName":"plan_applied","payload":{"planId":"20260503-a1b2c3d4","operation":"setImage","namespace":"mcp-nginx-demo","hash":"sha256:…"}}
+{"timestampUtc":"2026-05-03T12:34:56.789Z","eventName":"execution.succeeded","payload":{"planId":"20260503-a1b2c3d4","operation":"setImage","namespace":"mcp-nginx-demo","hash":"sha256:…"}}
 ```
 
 ### Gateway-side (`.mcp-guardrails/audit.jsonl`)

@@ -18,3 +18,5 @@
 [docs] Don't keep validating complex lifecycle language with prose alone — add diagrams, relationship tables, and scenario flows once terminology gets dense. (cause: context loss during glossary review)
 [skills] Don't let specialist repo skills bypass repository orientation — point them to repo-onboarding when broader context or current docs matter. (cause: skill dependency correction)
 [dotnet-build] Don't add MSBuild workaround files before clearing generated bin/obj state after project graph changes — clean generated outputs and retest the exact command first. (cause: stale generated build state)
+[docs] Don't treat mutation-approval profile docs as current-state docs — use them as directional target-state and make implementation catch up. (cause: docs direction correction)
+[approval-core] Don't delete generic policy-check hooks just because concrete checks are adapter-owned — keep a base contract in Generic Approval Core and concrete policy checks in Domain Adapters. (cause: domain policy ownership correction)

@@ -51,6 +51,7 @@ internal static class McpGatewayConventions
         public const string ChallengeRoute = "/approvals/{challengeId}";
         public const string ApproveRoute = "/approvals/{challengeId}/approve";
         public const string DenyRoute = "/approvals/{challengeId}/deny";
+        public const string CancelRoute = "/approvals/{challengeId}/cancel";
         public const string LoginPath = "/approvals/login";
         public const string RequestVerificationToken = "__RequestVerificationToken";
     }

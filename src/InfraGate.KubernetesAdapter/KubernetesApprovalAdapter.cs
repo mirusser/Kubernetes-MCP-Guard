@@ -34,7 +34,8 @@ public static class KubernetesApprovalAdapter
             intentDigest,
             reviewSurfaceContext ?? DefaultReviewSurfaceContext,
             payload,
-            freshnessPolicy);
+            freshnessPolicy,
+            BuildEvidenceArtifacts(payload));
     }
 
     public static PlanEnvelope<KubernetesPlanPayload> WithPayload(
@@ -70,6 +71,7 @@ public static class KubernetesApprovalAdapter
             envelope.ExecutionReusePolicy,
             envelope.FreshnessPolicy,
             envelope.ReviewSurfaceContext,
+            envelope.EvidenceArtifacts,
             envelope.IntentDigest,
             envelope.ReviewDigest,
             payload);
@@ -94,9 +96,26 @@ public static class KubernetesApprovalAdapter
                 $"Plan '{envelope.Id}' Kubernetes payload could not be read: {ex.Message}");
         }
 
-        return payload is null
-            ? KubernetesPlanDecodeResult.Failed($"Plan '{envelope.Id}' Kubernetes payload could not be read.")
-            : KubernetesPlanDecodeResult.Success(new KubernetesPlan(envelope, payload));
+        if (payload is null)
+        {
+            return KubernetesPlanDecodeResult.Failed($"Plan '{envelope.Id}' Kubernetes payload could not be read.");
+        }
+
+        var expectedIntentDigest = ComputeIntentDigest(envelope.Operation, payload);
+        if (envelope.IntentDigest != expectedIntentDigest)
+        {
+            return KubernetesPlanDecodeResult.Failed(
+                $"Plan '{envelope.Id}' Kubernetes intent digest no longer matches the payload.");
+        }
+
+        var expectedArtifacts = BuildEvidenceArtifacts(payload);
+        if (!SameEvidenceArtifacts(envelope.EvidenceArtifacts, expectedArtifacts))
+        {
+            return KubernetesPlanDecodeResult.Failed(
+                $"Plan '{envelope.Id}' Kubernetes evidence artifact summaries no longer match the payload.");
+        }
+
+        return KubernetesPlanDecodeResult.Success(new KubernetesPlan(envelope, payload));
     }
 
     private static ApprovalDigest ComputeIntentDigest(string operation, KubernetesPlanPayload payload)
@@ -111,5 +130,94 @@ public static class KubernetesApprovalAdapter
                 payload.Objects,
                 payload.Manifest
             });
+    }
+
+    private static EvidenceArtifactSummary[] BuildEvidenceArtifacts(KubernetesPlanPayload payload)
+    {
+        var artifacts = new List<EvidenceArtifactSummary>();
+
+        if (payload.DryRun is not null)
+        {
+            artifacts.Add(new EvidenceArtifactSummary(
+                KubernetesAdapterConventions.EvidenceArtifactTypes.DryRun,
+                ApprovalDigest.ComputeSha256(
+                    KubernetesAdapterConventions.Canonicalizations.DryRunEvidenceV1,
+                    payload.DryRun),
+                "payload.dryRun",
+                []));
+        }
+
+        if (payload.Diffs.Length > 0)
+        {
+            artifacts.Add(new EvidenceArtifactSummary(
+                KubernetesAdapterConventions.EvidenceArtifactTypes.Diff,
+                ApprovalDigest.ComputeSha256(
+                    KubernetesAdapterConventions.Canonicalizations.DiffEvidenceV1,
+                    payload.Diffs),
+                "payload.diffs",
+                []));
+        }
+
+        artifacts.Add(new EvidenceArtifactSummary(
+            KubernetesAdapterConventions.EvidenceArtifactTypes.PolicyFindings,
+            ApprovalDigest.ComputeSha256(
+                KubernetesAdapterConventions.Canonicalizations.PolicyFindingsEvidenceV1,
+                payload.PolicyFindings),
+            "payload.policyFindings",
+            []));
+
+        return artifacts.ToArray();
+    }
+
+    private static bool SameEvidenceArtifacts(
+        IReadOnlyList<EvidenceArtifactSummary> left,
+        IReadOnlyList<EvidenceArtifactSummary> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < left.Count; i++)
+        {
+            if (!SameEvidenceArtifact(left[i], right[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool SameEvidenceArtifact(EvidenceArtifactSummary left, EvidenceArtifactSummary right)
+    {
+        return string.Equals(left.Type, right.Type, StringComparison.Ordinal) &&
+               string.Equals(left.Reference, right.Reference, StringComparison.Ordinal) &&
+               left.Digest == right.Digest &&
+               SameMetadata(left.RedactionMetadata, right.RedactionMetadata);
+    }
+
+    private static bool SameMetadata(
+        IReadOnlyDictionary<string, string>? left,
+        IReadOnlyDictionary<string, string>? right)
+    {
+        left ??= new Dictionary<string, string>();
+        right ??= new Dictionary<string, string>();
+
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        foreach (var (key, value) in left)
+        {
+            if (!right.TryGetValue(key, out var rightValue) ||
+                !string.Equals(value, rightValue, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

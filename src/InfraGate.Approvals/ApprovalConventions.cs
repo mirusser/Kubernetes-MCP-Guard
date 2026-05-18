@@ -62,19 +62,20 @@ public static class ApprovalConventions
 
     public static class AuditEvents
     {
-        public const string PlanRequested = "plan_requested";
-        public const string PlanApplied = "plan_applied";
-        public const string ApplyDenied = "apply_denied";
-        public const string ApplyFailed = "apply_failed";
-        public const string DryRunFailed = "dry_run_failed";
-        public const string DiffFailed = "diff_failed";
-        public const string ApplyDriftDetected = "apply_drift_detected";
-        public const string ApprovalChallengeCreated = "approval_challenge_created";
-        public const string ApprovalChallengeApproved = "approval_challenge_approved";
-        public const string ApprovalChallengeDenied = "approval_challenge_denied";
-        public const string ApprovalChallengeExpired = "approval_challenge_expired";
-        public const string ApprovalChallengeRejected = "approval_challenge_rejected";
-        public const string GrantIssued = "grant_issued";
+        public const string PlanRequested = "plan.created";
+        public const string PlanApplied = "execution.succeeded";
+        public const string ApplyDenied = "execution.blocked";
+        public const string ApplyFailed = "execution.failed";
+        public const string DryRunFailed = "execution.blocked";
+        public const string DiffFailed = "execution.blocked";
+        public const string ApplyDriftDetected = "execution.blocked";
+        public const string ApprovalChallengeCreated = "challenge.created";
+        public const string ApprovalChallengeApproved = "challenge.approved";
+        public const string ApprovalChallengeDenied = "challenge.denied";
+        public const string ApprovalChallengeExpired = "challenge.expired";
+        public const string ApprovalChallengeRejected = "challenge.rejected";
+        public const string ApprovalChallengeCanceled = "challenge.canceled";
+        public const string GrantIssued = "grant.issued";
     }
 
     public static class ChallengeStatuses
@@ -84,6 +85,7 @@ public static class ApprovalConventions
         public const string Denied = "denied";
         public const string Expired = "expired";
         public const string Rejected = "rejected";
+        public const string Canceled = "canceled";
     }
 
     public static class ChallengeOutcomeStatuses
@@ -92,6 +94,7 @@ public static class ApprovalConventions
         public const string Denied = "denied";
         public const string Expired = "expired";
         public const string Rejected = "rejected";
+        public const string Canceled = "canceled";
     }
 
     public static class PolicySeverities
