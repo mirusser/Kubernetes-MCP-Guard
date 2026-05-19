@@ -2,13 +2,14 @@
 //
 // Why one file with multiple records: this is a deliberate, documented deviation
 // from .agents/skills/code-standards/SKILL.md's "one meaningful top-level type per
-// file". These 9 records together define a single cohesive schema; they evolve as
+// file". These records together define a single cohesive schema; they evolve as
 // one unit, are referenced together by audit consumers, and splitting them into 9
 // files would obscure the schema rather than clarify it.
 //
 // Why marker interface, not abstract base record: positional record inheritance
 // makes the base's positional parameters serialise first, which would reorder
-// every JSON payload (e.g. dry_run_failed currently emits "phase" first). The
+// every JSON payload (e.g. execution.blocked dry-run payloads emit "phase"
+// first). The
 // IPlanAuditPayload interface enforces the canonical "planId" field's presence at
 // compile time without dictating serialisation order. Field order on disk stays
 // identical to today's anonymous-type output.
@@ -18,6 +19,9 @@
 // letter, so the C# parameter "PlanId" serialises as "planId". Renaming any
 // parameter here is a breaking schema change — AuditPayloadsTests pins the
 // canonical field set per payload.
+
+using InfraGate.Approvals;
+using System.Text.Json;
 
 namespace InfraGate.Approvals.AuditPayloads;
 
@@ -30,14 +34,43 @@ public sealed record PlanRequestedPayload(
     string PlanId,
     string Operation,
     string Namespace,
-    string Hash) : IPlanAuditPayload;
-
-public sealed record PlanApprovedPayload(
-    string PlanId,
     string Hash,
-    string Source,
-    string? ApproverSubject,
-    string? ChallengeId) : IPlanAuditPayload;
+    ApprovalDigest IntentDigest,
+    ApprovalDigest ReviewDigest) : IPlanAuditPayload;
+
+public sealed record PreExecutionGrantValidatedPayload(
+    string PlanId,
+    string GrantId,
+    string SourceChallengeId,
+    string RequesterSubject,
+    string ApproverSubject,
+    ApprovalDigest IntentDigest,
+    ApprovalDigest ReviewDigest,
+    ApprovalPolicy ApprovalPolicy,
+    ExecutionReusePolicy ExecutionReusePolicy,
+    DateTimeOffset ExpiresAtUtc) : IPlanAuditPayload;
+
+public sealed record PreExecutionCheckedPayload(
+    string PlanId,
+    string Operation,
+    string AdapterId,
+    JsonElement AdapterPayload) : IPlanAuditPayload;
+
+public sealed record ExecutionStartedPayload(
+    string PlanId,
+    string Operation,
+    string AdapterId,
+    JsonElement AdapterPayload) : IPlanAuditPayload;
+
+public sealed record ApprovalGrantIssuedPayload(
+    string PlanId,
+    string GrantId,
+    string SourceChallengeId,
+    string RequesterSubject,
+    string ApproverSubject,
+    ApprovalDigest IntentDigest,
+    ApprovalDigest ReviewDigest,
+    DateTimeOffset ExpiresAtUtc) : IPlanAuditPayload;
 
 public sealed record PlanAppliedPayload(
     string PlanId,
@@ -59,11 +92,6 @@ public sealed record ApplyDriftDetectedPayload(
     string Operation,
     string Namespace,
     string Message) : IPlanAuditPayload;
-
-public sealed record ApprovalHashMismatchPayload(
-    string PlanId,
-    string ApprovedHash,
-    string ActualHash) : IPlanAuditPayload;
 
 public sealed record DryRunFailedPayload(
     string Phase,

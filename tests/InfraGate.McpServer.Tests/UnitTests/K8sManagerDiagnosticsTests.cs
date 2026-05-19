@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
-using InfraGate.Approvals;
 using InfraGate.McpServer;
 using k8s;
 
@@ -254,7 +253,7 @@ public sealed class K8sManagerDiagnosticsTests
                 SkipTlsVerify = true
             });
 
-        return new ManagerContext(new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client!, NullLogger<K8sManager>.Instance), root);
+        return new ManagerContext(new K8sManager(options, client!, NullLogger<K8sManager>.Instance), root);
     }
 
     private static string DeploymentJson(string image) =>

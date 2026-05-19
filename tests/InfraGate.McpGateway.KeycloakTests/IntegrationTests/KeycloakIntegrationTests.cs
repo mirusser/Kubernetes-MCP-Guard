@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using Microsoft.AspNetCore.Authentication.OAuth;
@@ -13,6 +14,9 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
+using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
+using ModelContextProtocol.Server;
 using Testcontainers.Keycloak;
 
 #pragma warning disable ASPDEPR004
@@ -200,13 +204,16 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             approvalOAuthBackchannel: new KeycloakTokenBackchannel(TokenEndpoint()));
         var approvalStore = server.Services.GetRequiredService<ApprovalStore>();
         var challengeStore = server.Services.GetRequiredService<ApprovalChallengeStore>();
-        var planResult = await approvalStore.CreatePlanAsync(CreateApprovalPlan(), CancellationToken.None);
+        var plan = CreateApprovalPlan();
+        var planResult = await approvalStore.CreatePlanAsync(plan, "mcp-nginx-demo", CancellationToken.None);
         var challenge = await challengeStore.CreateAsync(
-            planResult.Plan.Id,
+            planResult.Envelope.Id,
             planResult.Hash,
             DemoUsername,
             GatewayAuthConventions.Audit.OAuthAuthenticationType,
             McpGatewayOptions.DefaultApprovalChallengeTtl,
+            planResult.Envelope.IntentDigest,
+            planResult.Envelope.ReviewDigest,
             CancellationToken.None);
         using var browser = await CreateAuthenticatedApprovalBrowserAsync(server, challenge.Id);
 
@@ -420,7 +427,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                ?? throw new InvalidOperationException($"Keycloak user '{username}' did not contain id.");
     }
 
-    private async Task FollowImpersonationRedirectAsync(
+    private static async Task FollowImpersonationRedirectAsync(
         HttpClient browser,
         HttpResponseMessage impersonation,
         CancellationToken cancellationToken)
@@ -516,7 +523,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         return query[KeycloakParameters.Code].ToString();
     }
 
-    private async Task<HttpResponseMessage> SubmitLoginFormAsync(
+    private static async Task<HttpResponseMessage> SubmitLoginFormAsync(
         HttpClient browser,
         string authUri,
         string loginPage,
@@ -726,15 +733,12 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             $"Expected DCR policy rejection, got {(int)response.StatusCode} {response.StatusCode}.");
     }
 
-    private static K8sPlan CreateApprovalPlan()
+    private static PlanEnvelope<KubernetesPlanPayload> CreateApprovalPlan()
     {
         var objects = new[] { new K8sObjectRef("apps/v1", "Deployment", "mcp-nginx-demo", "nginx-demo") };
 
-        return new K8sPlan(
-            ApprovalStore.NewPlanId(),
-            "scale",
+        var payload = new KubernetesPlanPayload(
             "mcp-nginx-demo",
-            DateTimeOffset.UtcNow,
             "Scale nginx-demo deployment.",
             new Dictionary<string, string>
             {
@@ -746,6 +750,13 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             DryRun = CreateDryRun(objects),
             Diffs = CreateDiffs(objects)
         };
+
+        return KubernetesApprovalAdapter.CreateEnvelope(
+            ApprovalStore.NewPlanId(),
+            "scale",
+            DateTimeOffset.UtcNow,
+            new PlanRequester(DemoUsername, GatewayAuthConventions.Audit.OAuthAuthenticationType),
+            payload);
     }
 
     private static K8sPlanDryRun CreateDryRun(IReadOnlyList<K8sObjectRef> objects) =>
@@ -888,9 +899,18 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                 services.AddSingleton<GuardedToolRunner>();
                 services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
                 services.AddSingleton<ApprovalStore>();
+                services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
                 services.AddSingleton<ApprovalChallengeStore>();
-                services.AddSingleton<GatewayApprovalService>();
+                services.AddSingleton<IApprovalChallengeStore>(sp => sp.GetRequiredService<ApprovalChallengeStore>());
+                services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
+                services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
+                services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
+                services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
+                services.AddKubernetesAdapter();
+                services.AddSingleton<DownstreamToolRegistry>();
+                services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
                 services.AddHttpContextAccessor();
+                services.AddLogging();
                 services.AddAntiforgery();
                 services.AddGatewayAuthentication(options.Auth);
                 if (approvalOAuthBackchannel is not null)
@@ -903,7 +923,10 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                 services
                     .AddMcpServer()
                     .WithHttpTransport()
-                    .WithToolsFromAssembly(typeof(K8sGatewayTools).Assembly);
+                    .WithListToolsHandler((RequestContext<ListToolsRequestParams> request, CancellationToken ct) =>
+                        new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().ListToolsAsync(request.Params, ct)))
+                    .WithCallToolHandler((RequestContext<CallToolRequestParams> request, CancellationToken ct) =>
+                        new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct)));
             })
             .Configure(app =>
             {
@@ -932,6 +955,9 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             IReadOnlyDictionary<string, object?> arguments,
             CancellationToken cancellationToken) =>
             Task.FromResult("{}");
+
+        public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DownstreamTool>>([]);
     }
 
     private sealed class KeycloakTokenBackchannel(string tokenEndpoint) : HttpMessageHandler

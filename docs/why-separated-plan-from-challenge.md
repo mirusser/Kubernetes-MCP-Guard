@@ -1,4 +1,4 @@
-# Knowledge memo: why this repo separates `K8sPlan` from `ApprovalChallenge`
+# Knowledge memo: why this repo separates plan envelopes from `ApprovalChallenge`
 
 ## Context
 
@@ -8,13 +8,18 @@ Why there are two distinct concepts — a plan and an approval challenge — whe
 
 ## The two records, side by side
 
-[K8sPlan](../src/InfraGate.Approvals/K8sPlan.cs) — the **mutation request**:
+[PlanEnvelope](../src/InfraGate.Approvals/PlanEnvelope.cs) plus the Kubernetes adapter payload — the **mutation request**:
 
 ```text
 Id                string         (e.g. 20260511172300-000e8c5c)
+AdapterId         string         (kubernetes)
 Operation         string         (apply | delete | scale | restart | set-image)
-Namespace         string
 CreatedAtUtc      DateTimeOffset
+Requester         PlanRequester
+Payload           KubernetesPlanPayload
+
+KubernetesPlanPayload:
+Namespace         string
 Description       string
 Parameters        Dictionary<string,string>
 Objects           K8sObjectRef[]
@@ -28,8 +33,8 @@ PolicyFindings    K8sPlanPolicyFinding[]
 
 ```text
 Id                            string         (challenge id ≠ plan id)
-PlanId                        string         (points at the K8sPlan)
-PlanHash                      string         (SHA-256 of pending plan JSON when ticket was issued)
+PlanId                        string         (points at the PlanEnvelope)
+PendingPlanHash               string         (SHA-256 of pending plan JSON when ticket was issued)
 RequesterSubject              string         (OAuth sub of the AI/client side)
 RequesterAuthenticationType   string?
 CreatedAtUtc                  DateTimeOffset
@@ -43,9 +48,9 @@ They live in different stores on disk ([ApprovalConventions.Storage](../src/Infr
 
 ```text
 <approval-root>/
-  pending/<planId>.json         ← the K8sPlan
+  pending/<planId>.json         ← the PlanEnvelope
   challenges/<challengeId>.json ← the ApprovalChallenge
-  approved/<planId>.sha256      ← hash file written after a challenge approves
+  grants/<planId>.json          ← Approval Grant issued after an approved challenge
   applied/<planId>.json         ← post-execution record
   audit.jsonl                   ← every state transition
 ```
@@ -68,7 +73,7 @@ Five concrete reasons, each visible in the code:
 ### 1. Different lifetimes
 
 - A plan lives from creation (request_*) through `applied/` (or denial/cleanup). Days, potentially.
-- A challenge has a hard 15-minute TTL by default ([`McpGatewayOptions.DefaultApprovalChallengeTtl`](../src/InfraGate.McpGateway/McpGatewayOptions.cs#L22)) and is single-use. If it expires, the plan is still valid — you just need a new challenge.
+- A challenge has a hard 15-minute TTL by default ([`McpGatewayOptions.DefaultApprovalChallengeTtl`](../src/InfraGate.McpGateway/McpGatewayOptions.cs#L22)) and is a Single-Execution challenge. If it expires, the plan is still valid — you just need a new challenge.
 
 If they were one record, the TTL on the challenge side would either over-constrain the plan or under-constrain the approval window.
 
@@ -78,19 +83,19 @@ If a user lets a challenge expire or denies it, [`EnsureApprovedOrCreateChalleng
 
 ### 3. Two different security questions
 
-The plan answers: *"Is this change valid and policy-compliant?"* — driven by [`K8sPolicyValidator`](../src/InfraGate.McpServer/Policy/K8sPolicyValidator.cs), the dry-run, and the manifest parser. None of that involves a user.
+The plan answers: *"Is this change valid and policy-compliant?"* — driven by [`K8sPolicyValidator`](../src/InfraGate.KubernetesAdapter/Policy/K8sPolicyValidator.cs), the dry-run, and the manifest parser. None of that involves a user.
 
 The challenge answers: *"Did the right human, while still authorized, click Approve?"* — driven by [`GatewayApprovalService.ApproveChallengeAsync`](../src/InfraGate.McpGateway/GatewayApprovalService.cs) checking:
 - The approver's `sub` claim equals `RequesterSubject` (same-subject mode).
 - `ExpiresAtUtc` is still in the future.
 - The challenge's `Status` is still `pending`.
-- The challenge's stored `PlanHash` still matches the live pending file hash (drift detection).
+- The challenge's stored `PendingPlanHash` still matches the live pending file hash (drift detection).
 
 Splitting the records makes it impossible for one concern to silently mutate the other.
 
 ### 4. Hash binding, decoupled from approval mechanics
 
-When a challenge is created, it snapshots the current `PlanHash`. If the pending plan file changes between challenge creation and the approve click, the hash comparison in [GatewayApprovalService.cs](../src/InfraGate.McpGateway/GatewayApprovalService.cs) detects it and refuses approval ("The pending plan changed after this approval URL was created."). This is the safety property proved by [`ModifiedPendingPlanTests`](../tests/InfraGate.Safety.E2E.Tests/Workflows/ModifiedPendingPlanTests.cs) and [`ApproveChallengeAsync_PlanHashDrift_Rejects`](../tests/InfraGate.McpGateway.Tests/UnitTests/GatewayApprovalServiceTests.cs).
+When a challenge is created, it snapshots the current `PendingPlanHash`. If the pending plan file changes between challenge creation and the approve click, the hash comparison in [GatewayApprovalService.cs](../src/InfraGate.McpGateway/GatewayApprovalService.cs) detects it and refuses approval ("The pending plan changed after this approval URL was created."). This is the safety property proved by [`ModifiedPendingPlanTests`](../tests/InfraGate.Safety.E2E.Tests/Workflows/ModifiedPendingPlanTests.cs) and [`ApproveChallengeAsync_PendingPlanHashDrift_Rejects`](../tests/InfraGate.McpGateway.Tests/UnitTests/GatewayApprovalServiceTests.cs).
 
 If the plan and challenge were one record, there would be no "before" snapshot to compare against.
 
@@ -104,16 +109,16 @@ The roadmap ([.agents/Plans/archive/security-roadmap.md §13](../.agents/Plans/a
 
 ```text
 1. AI client calls request_apply_manifest (or scale/restart/setImage/delete)
-   └── McpServer creates K8sPlan, writes pending/<planId>.json
-       Audit: plan_requested  (PlanRequestedPayload)
+   └── Gateway asks the Kubernetes adapter to create a PlanEnvelope with KubernetesPlanPayload, then writes pending/<planId>.json
+       Audit: plan.created  (PlanRequestedPayload)
 
-2. AI client calls apply_approved_plan(planId)
-   └── McpServer asks ApprovalStore.GetApprovedPlanAsync
-       └── No approved/<planId>.sha256 exists yet
-           Server returns "Refused: not approved" up to the Gateway
+2. AI client calls execute_approved_plan(planId)
+   └── Gateway asks ApprovalStore.GetGrantedPlanAsync
+       └── No grants/<planId>.json exists yet
+           Gateway sees "Refused: not approved"
        Gateway's EnsureApprovedOrCreateChallengeAsync sees no challenge either
            Creates ApprovalChallenge, writes challenges/<challengeId>.json
-           Audit: approval_challenge_created  (ApprovalChallengeCreatedPayload)
+           Audit: challenge.created  (ApprovalChallengeCreatedPayload)
            Returns approval URL to the AI client
 
 3. Human opens approval URL in a browser (separate OAuth session)
@@ -125,19 +130,21 @@ The roadmap ([.agents/Plans/archive/security-roadmap.md §13](../.agents/Plans/a
    └── POST /approvals/{challengeId}/approve  (antiforgery-protected)
        GatewayApprovalService.ApproveChallengeAsync:
          - Compares HTTP user's `sub` to challenge.RequesterSubject
-         - Compares challenge.PlanHash to current pending file hash
+         - Compares challenge.PendingPlanHash to current pending file hash
+         - Verifies the expected Intent Digest and Review Digest still match
          - Marks challenge Status=approved, sets ApproverSubject + DecidedAtUtc
-         - Calls ApprovalStore.ApprovePendingPlanAsync
-             which writes approved/<planId>.sha256
-         Audit: approval_challenge_approved  (ApprovalChallengeApprovedPayload)
-         Audit: plan_approved                 (PlanApprovedPayload)
+         - Calls ApprovalStore.CreateGrantAsync
+             which writes grants/<planId>.json
+         Audit: challenge.approved  (ApprovalChallengeApprovedPayload)
+         Audit: grant.issued        (ApprovalGrantIssuedPayload)
 
-5. AI client calls apply_approved_plan(planId) again
-   └── ApprovalStore.GetApprovedPlanAsync now finds approved/<planId>.sha256
-       Recomputes pending hash; must still match (drift check)
-       McpServer reruns dryRun=All; must still succeed (pre-apply gate)
-       Then mutates Kubernetes; moves to applied/<planId>.json
-       Audit: plan_applied  (PlanAppliedPayload)
+5. AI client calls execute_approved_plan(planId) again
+   └── ApprovalStore.GetGrantedPlanAsync now finds grants/<planId>.json
+       Validates grant expiry, Intent Digest, Review Digest, and Single-Execution state
+       Gateway validates generic pre-execution gates
+       Kubernetes adapter reruns dryRun=All; must still succeed (pre-execution gate)
+       Then mutates Kubernetes; gateway writes applied/<planId>.json
+       Audit: execution.succeeded  (PlanAppliedPayload)
 ```
 
 The plan threads through every step from 1 to 5. The challenge only matters for steps 2 to 4 — it is *gone* (well, marked consumed) before any real Kubernetes mutation happens.
@@ -146,14 +153,14 @@ The plan threads through every step from 1 to 5. The challenge only matters for 
 
 ## TL;DR
 
-| | Plan (`K8sPlan`) | Challenge (`ApprovalChallenge`) |
+| | Plan envelope + Kubernetes payload | Challenge (`ApprovalChallenge`) |
 |---|---|---|
 | **Conceptual role** | The change being requested | Permission to approve that change |
-| **Lifetime** | Long (until applied/cleaned up) | 15 min, single-use |
+| **Lifetime** | Long (until applied/cleaned up) | 15 min, Single-Execution |
 | **Identifies** | A mutation | An approval attempt |
-| **Bound to** | A namespace + objects | A requester subject + plan hash + clock |
+| **Bound to** | A namespace + objects + Intent/Review Digests | A requester subject + pending-plan hash + clock |
 | **Holds** | Manifest, diff, dry-run, policy findings | Identities, timestamps, status |
 | **Stored at** | `pending/<planId>.json` → `applied/<planId>.json` | `challenges/<challengeId>.json` |
 | **Multiplicity** | 1 per intent | Many possible per plan (retries) |
 
-If you imagine OAuth: `K8sPlan` is the resource, `ApprovalChallenge` is the authorization-code grant. Different lifecycles for different reasons.
+If you imagine OAuth: the plan envelope is the resource, `ApprovalChallenge` is the authorization-code grant. Different lifecycles for different reasons.

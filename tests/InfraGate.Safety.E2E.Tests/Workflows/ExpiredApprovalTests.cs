@@ -14,18 +14,18 @@ public sealed class ExpiredApprovalTests(SafetyE2EFixture fixture)
             return;
         }
 
-        fixture.SetAuthenticatedSubject("safety-e2e-user");
+        await using var client = await fixture.CreateHttpMcpClientAsync();
+        var requestText = await client.CallToolAsync(
+            "request_restart_deployment",
+            new Dictionary<string, object?>
+            {
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo"
+            });
+        var planId = SafetyE2EFixture.ParsePlanId(requestText);
+        fixture.SetAuthenticatedSubject(client.Subject);
         try
         {
-            var requestText = await fixture.DownstreamClient.CallToolAsync(
-                McpGatewayConventions.ToolNames.RequestRestartDeployment,
-                new Dictionary<string, object?>
-                {
-                    [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                    [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
-                },
-                CancellationToken.None);
-            var planId = SafetyE2EFixture.ParsePlanId(requestText);
             var approvals = fixture.GetApprovalService();
 
             // Create a challenge for the pending plan, then force it into the past.
@@ -44,7 +44,7 @@ public sealed class ExpiredApprovalTests(SafetyE2EFixture fixture)
             Assert.False(approveResult.Succeeded);
             Assert.Contains("expired", approveResult.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(ApprovalConventions.ChallengeStatuses.Expired, afterChallenge?.Status);
-            Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+            Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
 
             var auditEvents = await fixture.ReadAuditEventsAsync();
             Assert.Contains(auditEvents, evt =>

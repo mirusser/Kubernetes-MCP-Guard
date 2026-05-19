@@ -44,11 +44,11 @@ public sealed class DangerousManifestTests(SafetyE2EFixture fixture)
 
         await using var client = await fixture.CreateHttpMcpClientAsync();
         var response = await client.CallToolAsync(
-            McpGatewayConventions.ToolNames.RequestApplyManifest,
+            "request_apply_manifest",
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                [McpGatewayConventions.ToolArguments.Manifest] = manifest
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Manifest] = manifest
             });
 
         var pendingAfter = Directory.Exists(pendingDirectory)

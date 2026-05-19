@@ -1,5 +1,5 @@
-using InfraGate.Approvals;
 using InfraGate.McpServer;
+using InfraGate.Observability;
 using k8s;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -11,20 +11,15 @@ var builder = Host.CreateApplicationBuilder(args);
 
 var mcpOptions = K8SMcpOptions.FromEnvironment();
 
-builder.Logging.AddConsole(options =>
+builder.AddInfraGateObservability(opt => 
 {
-    options.LogToStandardErrorThreshold = LogLevel.Trace;
+    opt.WriteToConsole = true;
+    opt.ConsoleToStandardError = true;
+    opt.FilePath = mcpOptions.LogPath;
 });
-
-if (!string.IsNullOrWhiteSpace(mcpOptions.LogPath))
-{
-    builder.Logging.AddProvider(new StreamWriterLoggerProvider(mcpOptions.LogPath));
-}
 
 mcpOptions.ValidateProductionSafety();
 builder.Services.AddSingleton(mcpOptions);
-builder.Services.AddSingleton(new ApprovalStoreOptions(mcpOptions.ApprovalRoot));
-builder.Services.AddSingleton<ApprovalStore>();
 builder.Services.AddSingleton<IKubernetes>(_ =>
 {
     var config = new KubernetesConfigProvider(mcpOptions).Create();
@@ -57,10 +52,13 @@ var app = builder.Build();
 
 var appLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("InfraGate.McpServer");
 var k8sOptions = app.Services.GetRequiredService<K8SMcpOptions>();
-appLogger.LogInformation(
-    "InfraGate MCP Server started. KubeConfig={KubeConfig}, AllowedNamespaces={AllowedNamespaces}",
-    k8sOptions.KubeConfig ?? "(default)",
-    string.Join(",", k8sOptions.AllowedNamespaces.Order(StringComparer.Ordinal)));
+if (appLogger.IsEnabled(LogLevel.Information))
+{
+    appLogger.LogInformation(
+        "InfraGate MCP Server started. KubeConfig={KubeConfig}, AllowedNamespaces={AllowedNamespaces}",
+        k8sOptions.KubeConfig ?? "(default)",
+        string.Join(",", k8sOptions.AllowedNamespaces.Order(StringComparer.Ordinal)));
+}
 
 using (var probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
 {
@@ -68,6 +66,7 @@ using (var probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
     {
         var k8sClient = app.Services.GetRequiredService<IKubernetes>();
         var version = await k8sClient.Version.GetCodeAsync(probeCts.Token);
+        // Justification: CA1873 — log argument is a simple string property access. Negligible evaluation cost.
         appLogger.LogInformation(
             "Kubernetes connectivity OK — server version: {GitVersion}",
             version.GitVersion);

@@ -3,6 +3,8 @@
 .kube/
 .mcp-approvals/
 .mcp-guardrails/
+.mcp-dataprotection-keys/
+.mcp-logs/
 TestResults/
 coverage-report/
 **/bin/

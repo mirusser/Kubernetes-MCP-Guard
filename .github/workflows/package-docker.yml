@@ -37,8 +37,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - image: kubernetes-mcp-guard-devissuer
-            dockerfile: deploy/docker/devissuer.Dockerfile
           - image: kubernetes-mcp-guard-gateway
             dockerfile: deploy/docker/mcp-gateway.Dockerfile
 
@@ -113,7 +111,7 @@ jobs:
 
       - name: Upload Trivy SARIF results
         if: always()
-        uses: github/codeql-action/upload-sarif@e46ed2cbd01164d986452f91f178727624ae40d7  # v4.35.3
+        uses: github/codeql-action/upload-sarif@v4.35.5
         with:
           sarif_file: trivy-${{ matrix.image }}.sarif
           category: trivy-${{ matrix.image }}

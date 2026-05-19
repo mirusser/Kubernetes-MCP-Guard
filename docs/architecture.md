@@ -1,6 +1,6 @@
 # Architecture
 
-This document is the consolidated system map for Kubernetes MCP Guard. It focuses on components and request flows; detailed protocol, security, tool-permission, and configuration references live in:
+This document is the consolidated system map for InfraGate. It focuses on components and request flows; detailed protocol, security, tool-permission, and configuration references live in:
 
 - [docs/MCP-compliance.md](MCP-compliance.md) for MCP transport, OAuth 2.1, PKCE, protected-resource metadata, and RFC 8707 details.
 - [docs/security-model.md](security-model.md) for hard boundaries, threat model, non-goals, and production warnings.
@@ -11,7 +11,7 @@ This document is the consolidated system map for Kubernetes MCP Guard. It focuse
 
 ```mermaid
 ---
-title: Kubernetes MCP Guard Components
+title: InfraGate Components
 ---
 flowchart TB
     Client["MCP client<br/>Codex / Open WebUI / LibreChat"]
@@ -28,32 +28,40 @@ flowchart TB
     end
 
     subgraph DevAuth["Local identity provider"]
-        Keycloak["Keycloak<br/>primary local/test OIDC issuer"]
-        DevIssuer["InfraGate.DevIssuer<br/>deprecated fallback issuer"]
+        Keycloak["Keycloak<br/>local/test OIDC issuer"]
+    end
+
+    subgraph GenericCore["Generic Approval Core"]
+        ApprovalStore["InfraGate.Approvals<br/>plan envelopes, challenges, grants, audit spine"]
+        Pending["pending/*.json<br/>Plan Envelope"]
+        Grants["grants/*.json<br/>Approval Grant"]
+        Applied["applied/*.json"]
+        Challenges["challenges/*.json<br/>Approval Challenge / Challenge Outcome"]
+        ApprovalAudit["audit.jsonl<br/>approval events"]
+        ApprovalStore --> Pending
+        ApprovalStore --> Grants
+        ApprovalStore --> Applied
+        ApprovalStore --> Challenges
+        ApprovalStore --> ApprovalAudit
+    end
+
+    subgraph K8sAdapter["Kubernetes Adapter"]
+        Adapter["InfraGate.KubernetesAdapter<br/>mutation intent, evidence, intent canonicalization"]
+        Payload["KubernetesPlanPayload<br/>namespace, objects, diff, dry-run, policy findings"]
+        Adapter --> Payload
     end
 
     subgraph ServerRuntime["Kubernetes MCP server"]
         Server["InfraGate.McpServer<br/>private stdio subprocess"]
         Tools["K8sTools<br/>typed MCP tool surface"]
-        Manager["K8sManager<br/>namespace validation, observability, plans, apply"]
+        Manager["K8sManager<br/>namespace validation, observability, evidence, raw apply"]
         Parser["K8sManifestParser<br/>Deployment / Service / ConfigMap allow-list"]
         Server --> Tools --> Manager
         Manager --> Parser
     end
 
-    subgraph Storage["Local durable storage"]
-        ApprovalStore["ApprovalStore<br/>K8S_MCP_APPROVAL_ROOT"]
-        Pending["pending/*.json"]
-        Approved["approved/*.sha256"]
-        Applied["applied/*.json"]
-        Challenges["challenges/*.json"]
-        ApprovalAudit["audit.jsonl<br/>approval events"]
+    subgraph GuardrailStore["Guardrail audit"]
         GuardAudit[".mcp-guardrails/audit.jsonl<br/>guardrail events"]
-        ApprovalStore --> Pending
-        ApprovalStore --> Approved
-        ApprovalStore --> Applied
-        ApprovalStore --> Challenges
-        ApprovalStore --> ApprovalAudit
     end
 
     subgraph Kubernetes["Kubernetes boundary"]
@@ -69,11 +77,15 @@ flowchart TB
     Auth -. "JWKS / issuer metadata" .-> Keycloak
     Downstream -->|"stdio, no bearer token"| Server
     Guardrails --> GuardAudit
-    Manager --> ApprovalStore
+    Gateway -->|"plan builder + executor seams"| Adapter
+    Adapter -->|"calls evidence/raw mutation tools"| Downstream
+    Gateway -->|"persists + loads"| ApprovalStore
     Manager -->|"KubernetesClient"| RBAC
 ```
 
-In source mode, the gateway launches the server project as a private stdio subprocess. In container mode, the `mcp-gateway` image contains the published server assembly and starts it through `dotnet /app/server/InfraGate.McpServer.dll`. Keycloak Mode D is the primary local/test identity provider. DevIssuer is retained only as a deprecated local fallback; production deployments use an external OIDC issuer.
+In source mode, the gateway launches the server project as a private stdio subprocess. In container mode, the `mcp-gateway` image contains the published server assembly and starts it through `dotnet /app/server/InfraGate.McpServer.dll`. Keycloak is the local/test identity provider. Production deployments use an external OIDC issuer.
+
+The Generic Approval Core (`InfraGate.Approvals`) owns plan envelopes, approval challenges, challenge outcomes, approval grants, the audit spine, and generic pre-execution gate orchestration independent of any target system. The Kubernetes Adapter (`InfraGate.KubernetesAdapter`) owns Kubernetes mutation intents, evidence artifacts (diffs, dry-run results, policy findings), intent-digest canonicalization, and adapter-owned freshness/domain policy checks. The gateway composes the adapter through generic seams, persists generic envelopes in the approval store, and calls the private stdio server only for Kubernetes evidence and raw mutation tools.
 
 ## OAuth Login And MCP Authorization
 
@@ -146,7 +158,7 @@ sequenceDiagram
 
     Note over GW: Prompt-injection guardrails
     GW->>GW: GuardedToolRunner scans request arguments
-    Note over GW: K8sGatewayTools delegates to GuardedToolRunner<br/>ignore-instructions / reveal-prompts<br/>tool-use / secret-exfiltration<br/>authority-override
+    Note over GW: GatewayToolDispatcher delegates read-only calls to GuardedToolRunner<br/>ignore-instructions / reveal-prompts<br/>tool-use / secret-exfiltration<br/>authority-override
 
     Note over GW,Svr: Token passthrough prevention
     GW->>Svr: forward tool call<br/>(StdioClientTransport, no token)
@@ -177,6 +189,7 @@ sequenceDiagram
     actor User
     participant Client as MCP Client
     participant GW as Gateway :3001
+    participant Adapter as Kubernetes Adapter
     participant Svr as MCP Server (stdio subprocess)
     participant Store as ApprovalStore
     participant K8s as Kubernetes API
@@ -188,16 +201,17 @@ sequenceDiagram
 
     GW->>GW: validate JWT + scope
     GW->>GW: GuardedToolRunner scans args
-    GW->>Svr: forward tool call<br/>(StdioClientTransport, no token)
+    GW->>Adapter: build Kubernetes Plan Envelope
+    Adapter->>Svr: call evidence tools<br/>(StdioClientTransport, no token)
 
-    Note over Svr: Plan creation
+    Note over Svr: Evidence collection
     Svr->>Svr: validate namespace, name, replicas, or manifest kind
     Svr->>Svr: K8sManifestParser allows Deployment / Service / ConfigMap
     Svr->>K8s: dry-run against K8s API<br/>(dryRun=All, strict field validation)
-    Svr->>Store: write pending plan with dry-run result<br/>+ compute SHA-256 hash
-    Store-->>Svr: PlanId + pending path + plan hash
-    Note over Svr,Store: K8sManager.Request*<br/>ApprovalStore (.mcp-approvals/pending/)
-    Svr-->>GW: PlanId + plan summary<br/>(dry-run result, affected resources)
+    Svr-->>Adapter: dry-run, diff, and policy evidence
+    Adapter-->>GW: Plan Envelope + target namespace
+    GW->>Store: write pending plan with evidence summaries<br/>+ Intent/Review Digest binding
+    Store-->>GW: PlanId + pending path + Plan Envelope
 
     GW->>GW: sanitize response, audit if needed
     GW-->>Client: pending plan details + next step
@@ -216,31 +230,31 @@ sequenceDiagram
     participant GW as Gateway :3001
     participant Store as ApprovalStore
 
-    Note over User,Store: Step 2: first apply_approved_plan call creates an out-of-band challenge
+    Note over User,Store: Step 2: first execute_approved_plan call creates an out-of-band challenge
 
     User->>Client: apply approved plan
-    Client->>GW: POST /mcp -> apply_approved_plan(planId)<br/>JSON-RPC + JWT Bearer
+    Client->>GW: POST /mcp -> execute_approved_plan(planId)<br/>JSON-RPC + JWT Bearer
     GW->>GW: validate JWT + scope
     GW->>Store: read pending plan + current hash
-    GW->>GW: create single-use challenge<br/>bound to planId + hash + requester subject + expiry
-    GW->>Store: write challenge file<br/>+ approval_challenge_created audit event
-    GW-->>Client: approval required<br/>PlanId + plan hash + approval URL
+    GW->>GW: create approval challenge<br/>bound to planId + Intent Digest + Review Digest + requester subject + expiry
+    GW->>Store: write challenge file<br/>+ challenge.created audit event
+    GW-->>Client: approval required<br/>PlanId + Intent/Review Digests + approval URL
 
     User->>Browser: open approval URL
     Browser->>GW: GET /approvals/{challengeId}
     GW->>GW: require approval OAuth cookie<br/>or redirect to /approvals/login
     GW->>GW: validate same authenticated subject<br/>+ challenge status + expiry
     GW->>Store: read actual pending plan from disk
-    GW-->>Browser: render Gateway-owned approval page<br/>PlanId + hash + objects + dry-run status + expiry
+    GW-->>Browser: render Gateway-owned approval page<br/>PlanId + Intent/Review Digests + objects + dry-run status + expiry
 
     User->>Browser: approve or deny
     Browser->>GW: POST /approvals/{challengeId}/approve<br/>or /deny with anti-forgery token
-    GW->>Store: recompute pending plan SHA-256
-    alt hash still matches
-        GW->>Store: write approved hash<br/>+ approval_challenge_approved audit event
+    GW->>Store: recompute Intent Digest and Review Digest
+    alt bindings still match
+        GW->>Store: record Challenge Outcome<br/>+ issue Approval Grant
         GW-->>Browser: approval recorded
-    else hash changed
-        GW->>Store: write approval_hash_mismatch / rejected audit
+    else pending plan changed
+        GW->>Store: write rejected audit
         GW-->>Browser: approval failed
     end
 ```
@@ -261,29 +275,27 @@ sequenceDiagram
     participant Store as ApprovalStore
     participant K8s as Kubernetes API
 
-    Note over User,K8s: Step 3: retry apply_approved_plan after browser approval
+    Note over User,K8s: Step 3: retry execute_approved_plan after browser approval
 
     User->>Client: retry apply approved plan
-    Client->>GW: POST /mcp -> apply_approved_plan(planId)<br/>JSON-RPC + JWT Bearer
+    Client->>GW: POST /mcp -> execute_approved_plan(planId)<br/>JSON-RPC + JWT Bearer
     GW->>GW: validate JWT + scope
-    GW->>Store: find approved challenge for planId + subject
-    GW->>Store: validate approved hash exists and matches
-    GW->>Svr: forward apply_approved_plan(planId)<br/>(no token)
-
-    Svr->>Store: read pending plan + approved hash
-    Svr->>Store: recompute pending plan SHA-256
-    alt hash still matches
-        Svr->>K8s: repeat dry-run<br/>(dryRun=All)
-        Svr->>K8s: apply mutation<br/>(server-side apply / patch / delete)
+    GW->>Store: validate Approval Grant for planId + subject
+    alt gateway grant and subject checks pass
+        GW->>Store: read pending plan + Approval Grant
+        GW->>Store: validate grant expiry + Intent/Review Digests
+        GW->>Svr: repeat dry-run through adapter<br/>(dryRun=All)
+        GW->>Svr: call raw mutation tool<br/>(server-side apply / patch / delete)
+        Svr->>K8s: apply mutation
         K8s-->>Svr: Kubernetes API response
-        Svr->>Store: write applied plan<br/>+ plan_applied audit event
+        GW->>Store: write applied plan<br/>+ execution.succeeded audit event
         Svr-->>GW: apply result + current status
-    else hash changed
-        Svr->>Store: write approval_hash_mismatch audit event
-        Svr-->>GW: refused
+    else grant, subject, or digest validation fails
+        GW->>Store: write execution.blocked audit event
+        GW->>GW: format refusal
     end
 
-    GW->>GW: sanitize response, GuardrailAuditStore.Append if needed
+    GW->>GW: sanitize downstream response if present, GuardrailAuditStore.Append if needed
     GW-->>Client: success or refusal
 ```
 
@@ -299,10 +311,10 @@ flowchart LR
     Guard -->|"suspicious input"| GuardAudit[".mcp-guardrails/audit.jsonl"]
     Sanitizer -->|"suspicious or redacted output"| GuardAudit
 
-    Plan["request_* plan"] --> PlanAudit["K8S_MCP_APPROVAL_ROOT/audit.jsonl<br/>plan_requested"]
-    Challenge["approval challenge"] --> ChallengeAudit["K8S_MCP_APPROVAL_ROOT/audit.jsonl<br/>approval_challenge_*"]
+    Plan["request_* plan"] --> PlanAudit["K8S_MCP_APPROVAL_ROOT/audit.jsonl<br/>plan.created"]
+    Challenge["approval challenge"] --> ChallengeAudit["K8S_MCP_APPROVAL_ROOT/audit.jsonl<br/>challenge.*"]
     Approve["approve / deny / expire / reject"] --> ChallengeAudit
-    Apply["apply_approved_plan"] --> ApplyAudit["K8S_MCP_APPROVAL_ROOT/audit.jsonl<br/>plan_applied / apply_denied / apply_failed"]
+    Apply["execute_approved_plan"] --> ApplyAudit["K8S_MCP_APPROVAL_ROOT/audit.jsonl<br/>execution.succeeded / execution.blocked / execution.failed"]
 ```
 
 Guardrail audit and approval audit are separate streams. Guardrail audit records model-visible prompt-injection findings and response redaction actions. Approval audit records plan, challenge, approval, denial, expiry, hash mismatch, and apply events under `K8S_MCP_APPROVAL_ROOT/audit.jsonl`.
@@ -312,6 +324,5 @@ Guardrail audit and approval audit are separate streams. Guardrail audit records
 | Runtime image | GHCR | Docker Hub | Contains |
 | --- | --- | --- | --- |
 | Gateway | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>` | `mirusser/kubernetes-mcp-guard-gateway:<tag>` | `InfraGate.McpGateway`, `InfraGate.McpGateway.Auth`, `InfraGate.Approvals`, and published downstream server assembly at `/app/server/InfraGate.McpServer.dll` |
-| DevIssuer | `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:<tag>` | `mirusser/kubernetes-mcp-guard-devissuer:<tag>` | Deprecated `InfraGate.DevIssuer` fallback OAuth/OIDC issuer |
 
-Mode D local/demo Compose builds or pulls the gateway image and starts Keycloak from `quay.io/keycloak/keycloak:26.6.1`; Mode C still builds/pulls DevIssuer during the deprecation window. The deployment Compose files under `deploy/compose/` deploy the gateway image only; development uses the local Keycloak setup script, while production uses a real OIDC provider. Tags and CI/CD settings are owned by [docs/configuration.md](configuration.md) and the release process docs.
+The local/demo Compose path builds or pulls the gateway image and starts Keycloak from `quay.io/keycloak/keycloak:26.6.1`. The deployment Compose files under `deploy/compose/` deploy the gateway image only; development uses the local Keycloak setup script, while production uses a real OIDC provider. Tags and CI/CD settings are owned by [docs/configuration.md](configuration.md) and the release process docs.

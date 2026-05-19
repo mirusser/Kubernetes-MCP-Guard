@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="InfraGate.McpGateway.Tests" />
+    <InternalsVisibleTo Include="InfraGate.McpGateway.KeycloakTests" />
+    <InternalsVisibleTo Include="InfraGate.McpServer.Tests" />
+    <InternalsVisibleTo Include="InfraGate.Safety.E2E.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="KubernetesClient" Version="19.0.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\InfraGate.Approvals\InfraGate.Approvals.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
-using InfraGate.Approvals;
 using InfraGate.McpServer;
 using k8s;
 
@@ -312,6 +311,197 @@ public sealed class K8sManagerObservabilityTests
         Assert.Contains("Pod log read failed", result);
     }
 
+    [Fact]
+    public async Task GetResourceAsync_DeploymentWithNullMetadata_ReturnsSummary()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/apis/apps/v1/namespaces/demo/deployments/demo" => TestResponse.Json("""
+                                                                                    {
+                                                                                      "apiVersion": "apps/v1",
+                                                                                      "kind": "Deployment"
+                                                                                    }
+                                                                                    """),
+            _ => TestResponse.Json("{}")
+        });
+        var manager = CreateManager(api);
+
+        var result = await manager.GetResourceAsync("demo", "Deployment", "demo", CancellationToken.None);
+
+        Assert.Contains("Deployment", result);
+    }
+
+    [Fact]
+    public async Task GetResourceAsync_ReplicaSetWithNullSpec_ReturnsSummary()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/apis/apps/v1/namespaces/demo/replicasets/demo-rs" => TestResponse.Json("""
+                                                                                      {
+                                                                                        "apiVersion": "apps/v1",
+                                                                                        "kind": "ReplicaSet"
+                                                                                      }
+                                                                                      """),
+            _ => TestResponse.Json("{}")
+        });
+        var manager = CreateManager(api);
+
+        var result = await manager.GetResourceAsync("demo", "ReplicaSet", "demo-rs", CancellationToken.None);
+
+        Assert.Contains("ReplicaSet", result);
+    }
+
+    [Fact]
+    public async Task GetResourceAsync_PodWithNullStatus_ReturnsSummary()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/api/v1/namespaces/demo/pods/demo-pod" => TestResponse.Json("""
+                                                                          {
+                                                                            "apiVersion": "v1",
+                                                                            "kind": "Pod"
+                                                                          }
+                                                                          """),
+            _ => TestResponse.Json("{}")
+        });
+        var manager = CreateManager(api);
+
+        var result = await manager.GetResourceAsync("demo", "Pod", "demo-pod", CancellationToken.None);
+
+        Assert.Contains("Pod", result);
+    }
+
+    [Fact]
+    public async Task GetResourceAsync_ServiceWithNullSpec_ReturnsSummary()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/api/v1/namespaces/demo/services/demo-svc" => TestResponse.Json("""
+                                                                              {
+                                                                                "apiVersion": "v1",
+                                                                                "kind": "Service"
+                                                                              }
+                                                                              """),
+            _ => TestResponse.Json("{}")
+        });
+        var manager = CreateManager(api);
+
+        var result = await manager.GetResourceAsync("demo", "Service", "demo-svc", CancellationToken.None);
+
+        Assert.Contains("Service", result);
+    }
+
+    [Fact]
+    public async Task GetResourceAsync_ConfigMap_ReturnsSummary()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/api/v1/namespaces/demo/configmaps/demo-cm" => TestResponse.Json("""
+                                                                               {
+                                                                                 "apiVersion": "v1",
+                                                                                 "kind": "ConfigMap",
+                                                                                 "metadata": { "name": "demo-cm", "namespace": "demo" },
+                                                                                 "data": { "key1": "value1" }
+                                                                               }
+                                                                               """),
+            _ => TestResponse.Json("{}")
+        });
+        var manager = CreateManager(api);
+
+        var result = await manager.GetResourceAsync("demo", "ConfigMap", "demo-cm", CancellationToken.None);
+
+        Assert.Contains("ConfigMap", result);
+    }
+
+    [Fact]
+    public async Task GetEventsAsync_ReturnsEventSummaryWithNullRegarding()
+    {
+        await using var api = new TestKubernetesApi(_ => TestResponse.Json("""
+                                                                            {
+                                                                              "apiVersion": "events.k8s.io/v1",
+                                                                              "kind": "EventList",
+                                                                              "items": [
+                                                                                {
+                                                                                  "metadata": { "name": "demo-event" },
+                                                                                  "type": "Warning",
+                                                                                  "reason": "Failed",
+                                                                                  "note": "Something went wrong",
+                                                                                  "eventTime": "2026-01-01T00:00:00Z"
+                                                                                }
+                                                                              ]
+                                                                            }
+                                                                            """));
+        var manager = CreateManager(api);
+
+        var result = await manager.GetEventsAsync("demo", null, null, 50, CancellationToken.None);
+
+        Assert.Contains("demo-event", result);
+    }
+
+    [Fact]
+    public async Task GetResourceAsync_PodWithContainerStates_ReturnsSummary()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/api/v1/namespaces/demo/pods/demo-pod" => TestResponse.Json("""
+                                                                          {
+                                                                            "apiVersion": "v1",
+                                                                            "kind": "Pod",
+                                                                            "metadata": { "name": "demo-pod", "namespace": "demo" },
+                                                                            "status": {
+                                                                              "phase": "Running",
+                                                                              "containerStatuses": [
+                                                                                {
+                                                                                  "name": "waiting-container",
+                                                                                  "ready": false,
+                                                                                  "restartCount": 2,
+                                                                                  "state": {
+                                                                                    "waiting": { "reason": "CrashLoopBackOff" }
+                                                                                  }
+                                                                                },
+                                                                                {
+                                                                                  "name": "terminated-container",
+                                                                                  "ready": false,
+                                                                                  "restartCount": 1,
+                                                                                  "state": {
+                                                                                    "terminated": { "exitCode": 1, "reason": "Error" }
+                                                                                  }
+                                                                                }
+                                                                              ]
+                                                                            }
+                                                                          }
+                                                                          """),
+            _ => TestResponse.Json("{}")
+        });
+        var manager = CreateManager(api);
+
+        var result = await manager.GetResourceAsync("demo", "Pod", "demo-pod", CancellationToken.None);
+
+        Assert.Contains("CrashLoopBackOff", result);
+        Assert.Contains("Error", result);
+    }
+
+    [Fact]
+    public async Task GetResourceAsync_ConfigMapWithNullData_ReturnsSummary()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/api/v1/namespaces/demo/configmaps/demo-cm" => TestResponse.Json("""
+                                                                               {
+                                                                                 "apiVersion": "v1",
+                                                                                 "kind": "ConfigMap",
+                                                                                 "metadata": { "name": "demo-cm", "namespace": "demo" }
+                                                                               }
+                                                                               """),
+            _ => TestResponse.Json("{}")
+        });
+        var manager = CreateManager(api);
+
+        var result = await manager.GetResourceAsync("demo", "ConfigMap", "demo-cm", CancellationToken.None);
+
+        Assert.Contains("ConfigMap", result);
+    }
+
     private static K8sManager CreateManager(TestKubernetesApi? api = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
@@ -326,7 +516,7 @@ public sealed class K8sManagerObservabilityTests
                 SkipTlsVerify = true
             });
 
-        return new K8sManager(options, new ApprovalStore(new ApprovalStoreOptions(root)), client!, NullLogger<K8sManager>.Instance);
+        return new K8sManager(options, client!, NullLogger<K8sManager>.Instance);
     }
 
     private static string StatusJson(string reason, int code) =>

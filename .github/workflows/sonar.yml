@@ -61,6 +61,30 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: dotnet tool run dotnet-sonarscanner end /d:sonar.token="$SONAR_TOKEN"
 
+      - name: Wait for SonarCloud CE task
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+        run: |
+          AUTH="$SONAR_TOKEN:"
+          BASE="https://sonarcloud.io/api"
+          deadline=$((SECONDS + 120))
+          while true; do
+            status=$(curl -sf -u "$AUTH" \
+              "$BASE/ce/component?component=$SONAR_PROJECT_KEY" | jq -r '.current.status // "MISSING"')
+            case "$status" in
+              SUCCESS) break;;
+              FAILED|CANCELED) echo "::error::SonarCloud CE task $status" >&2; exit 1;;
+              MISSING)  echo "::warning::CE task not found, proceeding" >&2; break;;
+              *)        echo "CE task status: $status (waiting...)";;
+            esac
+            if [ $SECONDS -ge $deadline ]; then
+              echo "::warning::CE task still $status after 120s, proceeding anyway" >&2
+              break
+            fi
+            sleep 5
+          done
+
       - name: Export SonarCloud report
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

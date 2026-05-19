@@ -4,6 +4,8 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.RuntimeSafety;
@@ -17,6 +19,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
+using ModelContextProtocol.Server;
 using Testcontainers.Keycloak;
 
 #pragma warning disable ASPDEPR004
@@ -24,7 +27,7 @@ using Testcontainers.Keycloak;
 
 namespace InfraGate.Safety.E2E.Tests;
 
-public sealed class SafetyE2EFixture : IAsyncLifetime
+public sealed partial class SafetyE2EFixture : IAsyncLifetime
 {
     public const string EnableEnvVar = "INFRA_GATE_RUN_SAFETY_E2E";
     public const string KubeconfigEnvVar = "KUBECONFIG";
@@ -225,8 +228,8 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
                ?? throw new InvalidOperationException("Token response did not contain access_token.");
     }
 
-    public GatewayApprovalService GetApprovalService() =>
-        gatewayServer?.Services.GetRequiredService<GatewayApprovalService>()
+    public IGatewayApprovalService GetApprovalService() =>
+        gatewayServer?.Services.GetRequiredService<IGatewayApprovalService>()
         ?? throw new InvalidOperationException("Fixture is not initialised.");
 
     public async Task<HttpClient> CreateAuthenticatedApprovalBrowserAsync(
@@ -389,10 +392,15 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
         };
     }
 
+    // PlanId is always a 32-char lowercase hex string (16 random bytes, hex-encoded).
+    // Extracting by format rather than by surrounding text avoids brittleness when response messages change.
+    [System.Text.RegularExpressions.GeneratedRegex(@"\b[0-9a-f]{32}\b", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex PlanIdPattern();
+
     public static string ParsePlanId(string text) =>
-        text.Split(Environment.NewLine)
-            .Single(line => line.StartsWith("PlanId:", StringComparison.Ordinal))
-            ["PlanId: ".Length..];
+        PlanIdPattern().Matches(text) is { Count: > 0 } matches
+            ? matches[0].Value
+            : throw new InvalidOperationException("Could not extract a PlanId from the text.");
 
     public static string ParseChallengeId(string text) =>
         text.Split(Environment.NewLine)
@@ -484,9 +492,18 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
                 services.AddSingleton<GuardedToolRunner>();
                 services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
                 services.AddSingleton<ApprovalStore>();
+                services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
                 services.AddSingleton<ApprovalChallengeStore>();
-                services.AddSingleton<GatewayApprovalService>();
+                services.AddSingleton<IApprovalChallengeStore>(sp => sp.GetRequiredService<ApprovalChallengeStore>());
+                services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
+                services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
+                services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
+                services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
+                services.AddKubernetesAdapter();
+                services.AddSingleton<DownstreamToolRegistry>();
+                services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
                 services.AddHttpContextAccessor();
+                services.AddLogging();
                 services.AddAntiforgery();
                 services.AddGatewayAuthentication(options.Auth);
                 services.PostConfigure<OAuthOptions>(GatewayAuthConventions.Schemes.ApprovalOAuth, oauthOptions =>
@@ -496,7 +513,10 @@ public sealed class SafetyE2EFixture : IAsyncLifetime
                 services
                     .AddMcpServer()
                     .WithHttpTransport()
-                    .WithToolsFromAssembly(typeof(K8sGatewayTools).Assembly);
+                    .WithListToolsHandler((RequestContext<ListToolsRequestParams> request, CancellationToken ct) =>
+                        new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().ListToolsAsync(request.Params, ct)))
+                    .WithCallToolHandler((RequestContext<CallToolRequestParams> request, CancellationToken ct) =>
+                        new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct)));
             })
             .Configure(app =>
             {

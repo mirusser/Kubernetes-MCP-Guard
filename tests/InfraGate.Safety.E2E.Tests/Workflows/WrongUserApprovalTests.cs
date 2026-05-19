@@ -1,3 +1,5 @@
+using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 
 namespace InfraGate.Safety.E2E.Tests.Workflows;
@@ -23,11 +25,11 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
         await using var client = await fixture.CreateHttpMcpClientAsync();
         var requestText = await client.CallToolAsync(
-            McpGatewayConventions.ToolNames.RequestRestartDeployment,
+            "request_restart_deployment",
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo"
             });
         var planId = SafetyE2EFixture.ParsePlanId(requestText);
         var approvalRequired = await client.CallToolAsync(
@@ -38,18 +40,34 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
             });
         var originalChallengeId = SafetyE2EFixture.ParseChallengeId(approvalRequired);
 
+        var pending = await fixture.ApprovalStore.GetPendingPlanAsync(planId, CancellationToken.None);
         var pendingHash = await ApprovalStore.ComputeSha256Async(
             fixture.ApprovalStore.GetPendingPath(planId),
             CancellationToken.None);
-        var tokenChallenge = await fixture.ChallengeStore.CreateAsync(
-            planId,
-            pendingHash,
+
+        // Create a second plan with otherSubject as requester so the approval page
+        // renders correctly (passes the requester-envelope consistency check) and we
+        // can extract a valid antiforgery token.
+        var otherPayload = CreateRestartPayload();
+        var otherPlan = KubernetesApprovalAdapter.CreateEnvelope(
+            ApprovalStore.NewPlanId(),
+            "restart",
+            DateTimeOffset.UtcNow,
+            new PlanRequester(otherSubject, "test"),
+            otherPayload);
+        var otherPlanResult = await fixture.ApprovalStore.CreatePlanAsync(otherPlan, fixture.Namespace, CancellationToken.None);
+        var otherChallenge = await fixture.ChallengeStore.CreateAsync(
+            otherPlanResult.Envelope.Id,
+            otherPlanResult.Hash,
             otherSubject,
             requesterAuthenticationType: "test",
             ttl: TimeSpan.FromMinutes(5),
+            intentDigest: otherPlanResult.Envelope.IntentDigest,
+            reviewDigest: otherPlanResult.Envelope.ReviewDigest,
             cancellationToken: CancellationToken.None);
-        using var browser = await fixture.CreateAuthenticatedApprovalBrowserAsync(tokenChallenge.Id, otherSubject);
-        var tokenPage = await browser.GetAsync($"/approvals/{tokenChallenge.Id}");
+
+        using var browser = await fixture.CreateAuthenticatedApprovalBrowserAsync(otherChallenge.Id, otherSubject);
+        var tokenPage = await browser.GetAsync($"/approvals/{otherChallenge.Id}");
         tokenPage.EnsureSuccessStatusCode();
         var tokenPageText = await tokenPage.Content.ReadAsStringAsync();
         SafetyE2EFixture.AddResponseCookies(browser, tokenPage);
@@ -62,7 +80,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
         Assert.Contains("Approval Failed", result, StringComparison.Ordinal);
         Assert.Contains("same authenticated subject", result, StringComparison.OrdinalIgnoreCase);
-        Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+        Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
         Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, originalChallenge?.Status);
 
         var auditEvents = await fixture.ReadAuditEventsAsync();
@@ -82,23 +100,21 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
             return;
         }
 
-        const string requesterSubject = "safety-e2e-requester";
         const string otherSubject = "safety-e2e-other";
 
-        fixture.SetAuthenticatedSubject(requesterSubject);
+        await using var requesterClient = await fixture.CreateHttpMcpClientAsync();
+        var requestText = await requesterClient.CallToolAsync(
+            "request_restart_deployment",
+            new Dictionary<string, object?>
+            {
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo"
+            });
+        var planId = SafetyE2EFixture.ParsePlanId(requestText);
+        fixture.SetAuthenticatedSubject(requesterClient.Subject);
         string challengeId;
-        string planId;
         try
         {
-            var requestText = await fixture.DownstreamClient.CallToolAsync(
-                McpGatewayConventions.ToolNames.RequestRestartDeployment,
-                new Dictionary<string, object?>
-                {
-                    [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                    [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
-                },
-                CancellationToken.None);
-            planId = SafetyE2EFixture.ParsePlanId(requestText);
             var firstResult = await fixture.GetApprovalService().EnsureApprovedOrCreateChallengeAsync(planId, CancellationToken.None);
             Assert.False(firstResult.IsApproved);
             challengeId = ExtractChallengeId(firstResult.Message);
@@ -116,7 +132,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
             Assert.False(result.Succeeded);
             Assert.Contains("same authenticated subject", result.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+            Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
             Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
         }
         finally
@@ -137,11 +153,11 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
         await using var client = await fixture.CreateHttpMcpClientAsync();
         var requestText = await client.CallToolAsync(
-            McpGatewayConventions.ToolNames.RequestRestartDeployment,
+            "request_restart_deployment",
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo"
             });
         var planId = SafetyE2EFixture.ParsePlanId(requestText);
         var approvalRequired = await client.CallToolAsync(
@@ -152,18 +168,26 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
             });
         var originalChallengeId = SafetyE2EFixture.ParseChallengeId(approvalRequired);
 
-        var pendingHash = await ApprovalStore.ComputeSha256Async(
-            fixture.ApprovalStore.GetPendingPath(planId),
-            CancellationToken.None);
-        var tokenChallenge = await fixture.ChallengeStore.CreateAsync(
-            planId,
-            pendingHash,
+        var otherPayload = CreateRestartPayload();
+        var otherPlan = KubernetesApprovalAdapter.CreateEnvelope(
+            ApprovalStore.NewPlanId(),
+            "restart",
+            DateTimeOffset.UtcNow,
+            new PlanRequester(otherSubject, "test"),
+            otherPayload);
+        var otherPlanResult = await fixture.ApprovalStore.CreatePlanAsync(otherPlan, fixture.Namespace, CancellationToken.None);
+        var otherChallenge = await fixture.ChallengeStore.CreateAsync(
+            otherPlanResult.Envelope.Id,
+            otherPlanResult.Hash,
             otherSubject,
             requesterAuthenticationType: "test",
             ttl: TimeSpan.FromMinutes(5),
+            intentDigest: otherPlanResult.Envelope.IntentDigest,
+            reviewDigest: otherPlanResult.Envelope.ReviewDigest,
             cancellationToken: CancellationToken.None);
-        using var browser = await fixture.CreateAuthenticatedApprovalBrowserAsync(tokenChallenge.Id, otherSubject);
-        var tokenPage = await browser.GetAsync($"/approvals/{tokenChallenge.Id}");
+
+        using var browser = await fixture.CreateAuthenticatedApprovalBrowserAsync(otherChallenge.Id, otherSubject);
+        var tokenPage = await browser.GetAsync($"/approvals/{otherChallenge.Id}");
         tokenPage.EnsureSuccessStatusCode();
         var tokenPageText = await tokenPage.Content.ReadAsStringAsync();
         SafetyE2EFixture.AddResponseCookies(browser, tokenPage);
@@ -176,7 +200,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
         Assert.Contains("Approval Failed", result, StringComparison.Ordinal);
         Assert.Contains("same authenticated subject", result, StringComparison.OrdinalIgnoreCase);
-        Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+        Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
         Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, originalChallenge?.Status);
 
         var auditEvents = await fixture.ReadAuditEventsAsync();
@@ -196,11 +220,11 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
         await using var client = await fixture.CreateHttpMcpClientAsync();
         var requestText = await client.CallToolAsync(
-            McpGatewayConventions.ToolNames.RequestRestartDeployment,
+            "request_restart_deployment",
             new Dictionary<string, object?>
             {
-                [McpGatewayConventions.ToolArguments.Namespace] = fixture.Namespace,
-                [McpGatewayConventions.ToolArguments.Name] = "nginx-demo"
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = fixture.Namespace,
+                [KubernetesAdapterConventions.ToolArguments.Name] = "nginx-demo"
             });
         var planId = SafetyE2EFixture.ParsePlanId(requestText);
         var approvalRequired = await client.CallToolAsync(
@@ -220,7 +244,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
             Assert.False(result.Succeeded);
             Assert.Contains("same authenticated subject", result.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.False(File.Exists(fixture.ApprovalStore.GetApprovedPath(planId)));
+            Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
             Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
         }
         finally
@@ -235,4 +259,39 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
             .Single(line => line.StartsWith("Approval URL:", StringComparison.Ordinal))
             .Split('/', StringSplitOptions.RemoveEmptyEntries)
             .Last();
+
+    private static KubernetesPlanPayload CreateRestartPayload()
+    {
+        var objects = new[] { new K8sObjectRef("apps/v1", "Deployment", "mcp-nginx-demo", "nginx-demo") };
+
+        return new KubernetesPlanPayload(
+            "mcp-nginx-demo",
+            "Restart nginx-demo deployment.",
+            new Dictionary<string, string>
+            {
+                ["name"] = "nginx-demo",
+                ["restartedAtUtc"] = DateTimeOffset.UtcNow.ToString("O")
+            },
+            objects)
+        {
+            DryRun = new K8sPlanDryRun(
+                "succeeded",
+                DateTimeOffset.UtcNow,
+                objects.Select(obj => new K8sPlanDryRunObject(
+                    $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}",
+                    "{}")).ToArray(),
+                [],
+                "Server-side dry-run succeeded."),
+            Diffs = objects.Select(obj => new K8sPlanDiff(
+                obj,
+                ApprovalConventions.DiffChangeTypes.Update,
+                $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name} will be restarted.",
+                "--- live\n+++ proposed\n spec:\n+  restartAt: ...\n",
+                "{}",
+                "{}",
+                [],
+                [],
+                ["spec.restartAt"])).ToArray()
+        };
+    }
 }

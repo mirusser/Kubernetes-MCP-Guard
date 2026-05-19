@@ -1,9 +1,14 @@
-# 🛡️ Kubernetes MCP Guard 
+# 🛡️ Kubernetes MCP Guard
 
-**Bridging the gap between AI Agents and Production Infrastructure with a Security-First Gateway.**
+**A security-first bridge between AI agents and Kubernetes, with out of band Human-in-the-Loop (HITL) approval for every gateway-exposed mutation.**
 
-**A Kubernetes MCP gateway with Human-in-the-Loop (HITL) approval for AI-driven operations with OAuth and guardrails**
+An *experimental* .NET 10 MCP gateway for AI-assisted Kubernetes operations. 
 
+Agents can inspect a narrow cluster surface and propose changes, but writes are staged as server-side dry-run plans and execute only after an OAuth-authenticated human approves the exact review snapshot in a separate browser session.
+
+<sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments rather than production-certified infrastructure.</em></sub>
+
+<sub><em>Kubernetes MCP Guard is internally named **InfraGate**, </em></sub>
 
 [![Unit Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/unit-tests.yml)
 [![Integration Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml)
@@ -11,195 +16,190 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=mirusser_Kubernetes-MCP-Guard&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=mirusser_Kubernetes-MCP-Guard)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=mirusser_Kubernetes-MCP-Guard&metric=coverage)](https://sonarcloud.io/summary/new_code?id=mirusser_Kubernetes-MCP-Guard)
 
-<sub>![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?style=flat-square&logo=dotnet) ![Kubernetes](https://img.shields.io/badge/Kubernetes-Cloud--Native-326ce5?style=flat-square&logo=kubernetes) ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ed?style=flat-square&logo=docker) ![AI/LLM](https://img.shields.io/badge/AI/LLM-MCP%20Ready-black?style=flat-square&logo=openai)</sub>
+<sub>![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?style=flat-square&logo=dotnet) ![Kubernetes](https://img.shields.io/badge/Kubernetes-Cloud--Native-326ce5?style=flat-square&logo=kubernetes) ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ed?style=flat-square&logo=docker) ![MCP](https://img.shields.io/badge/MCP-HTTP%20Gateway-black?style=flat-square)</sub>
 
+## 🎯 What It Demonstrates
 
-## 🎯 The Problem
-Giving AI agents direct access to Kubernetes is risky. Without a safety layer, an LLM hallucination, prompt injection, or overbroad credential could turn a suggestion into an unsafe cluster change.
+Kubernetes MCP Guard explores a practical safety pattern for AI-assisted operations:
 
-## 🚀 The Solution
-Kubernetes-MCP-Guard is a .NET 10 gateway for the Model Context Protocol (MCP). AI agents can inspect bounded Kubernetes state and request changes, but mutations are staged as dry-run plans and require an OAuth-authenticated human to approve the exact Gateway-rendered plan in a separate browser session before anything is applied.
+- **Plan before mutate:** every gateway-exposed write starts as a `request_*` plan built from Kubernetes server-side dry-run evidence.
+- **Separate review channel:** the MCP client receives an approval URL, while approval happens through `/approvals/*` in a browser OAuth session.
+- **Digest-bound approval:** execution is bound to an Intent Digest for the executable mutation and a Review Digest for the human-reviewed snapshot.
+- **Durable grant model:** an approved Approval Challenge records a Challenge Outcome and issues an Approval Grant consumed by pre-execution gates.
+- **Narrow Kubernetes scope:** namespace allow-lists, namespace-scoped RBAC, supported-kind checks, and bounded read tools keep the operational surface small.
+- **Auditable controls:** guardrail and approval events are written as JSONL streams with identity, digest, grant, and execution context.
 
-## 💎 Key Business Value
+The repository also separates the generic approval lifecycle from the Kubernetes adapter, so the core language is not tied to one infrastructure domain. 
 
-- **Browser-based HITL approval:** AI can propose a change, but only the authenticated human requester can approve or deny the final plan through the Gateway approval UI.
-- **Separated trust channels:** MCP clients receive an approval URL, while approval happens through `/approvals/*` with a browser OAuth cookie, anti-forgery checks, same-subject binding, and a short-lived challenge.
-- **Bounded Kubernetes access:** Namespace allow-lists, namespace-scoped RBAC, typed tools, and supported-kind checks keep the Kubernetes surface narrow.
-- **Auditable safety controls:** Prompt-injection guardrails, approval audit events, plan hashes, dry-runs, and drift checks make decisions traceable before and after execution.
+<sub><em>See [CONTEXT.md](CONTEXT.md), [docs/mutation-approval-profile.md](docs/mutation-approval-profile.md), [docs/mutation-approval-flow.md](docs/mutation-approval-flow.md).</em></sub>
 
----
+## 🎬 Demo
 
-## Demo
+https://github.com/user-attachments/assets/7f43c34f-6516-4141-ad26-e488112d8afd
 
-[![Demo video](assets/demo-preview.png)](assets/demo-github.mp4)
+The walkthrough in [docs/demo-failing-deployment.md](docs/demo-failing-deployment.md) shows the full flow against a deliberately broken Deployment: diagnose, request a plan, approve in the browser, execute, verify, and inspect audit logs.
 
-[Open demo video](https://raw.githubusercontent.com/mirusser/Kubernetes-MCP-Guard/main/assets/demo-github.mp4)
-
----
-
-## 🗺️ System Architecture
-
-The following diagram shows the two trust channels: the AI-facing MCP path and the browser-based HITL approval path. The MCP client can request and retry a plan, but approval is handled by the Gateway UI through a separate human browser session.
+## 🗺️ Architecture
 
 ```mermaid
 ---
-title: Kubernetes-MCP-Guard Flow
+title: Kubernetes MCP Guard Runtime
 ---
 flowchart TB
-    Client["MCP client<br/>Codex / Claude Code / Open WebUI"]
-    Browser["Human browser<br/>/approvals/* approval UI"]
+    Client["MCP client<br/>Codex / Claude Code"]
+    Browser["Human browser<br/>approval UI"]
 
     subgraph Gateway["HTTP MCP Gateway"]
-        Auth["OAuth JWT auth<br/>scope checks"]
-        Guardrails["Prompt-injection guardrails<br/>response sanitization"]
+        Auth["OAuth JWT validation<br/>scope checks"]
+        Guardrails["Prompt-injection scan<br/>response sanitization"]
         ApprovalUI["Browser approval endpoints<br/>OAuth cookie + anti-forgery"]
-        Audit["JSONL audit logs"]
-        Auth --> Guardrails
-        Guardrails --> Audit
-        ApprovalUI --> Audit
+        Dispatcher["Gateway tool dispatcher"]
+        Auth --> Dispatcher
+        Dispatcher --> Guardrails
+        ApprovalUI --> Dispatcher
     end
 
-    subgraph Store["Shared approval store"]
-        Pending["pending plan<br/>dry-run + SHA-256 hash"]
-        Challenge["single-use challenge<br/>requester subject + TTL"]
-        Approved["approved hash<br/>applied marker"]
-        Pending --> Challenge
-        Challenge --> Approved
+    subgraph Core["Generic Approval Flow"]
+        direction LR
+        Envelope["Plan Envelope<br/>Intent + Review Digests"]
+        Challenge["Approval Challenge<br/>TTL + requester binding"]
+        Grant["Approval Grant<br/>single-execution default"]
+        Gates["pre-execution gates"]
+        Audit["approval audit.jsonl"]
+        Envelope --> Challenge
+        Challenge --> Grant
+        Grant --> Gates
+        Challenge --> Audit
+        Gates --> Audit
     end
 
-    subgraph Server["Kubernetes MCP Server (stdio)"]
-        Tools["Typed Kubernetes tools"]
-        ReadOnly["Bounded read-only observability"]
-        Plans["Dry-run mutation plans"]
-        Apply["Exact approved apply"]
-        Tools --> ReadOnly
-        Tools --> Plans
-        Tools --> Apply
+    subgraph Adapter["Kubernetes Adapter"]
+        Intent["Mutation Intent"]
+        Evidence["dry-run / diff / policy evidence"]
+        Freshness["freshness + domain policy checks"]
+        Intent --> Evidence
+        Evidence --> Freshness
     end
 
-    subgraph Kubernetes["Kubernetes boundary"]
-        RBAC["Namespace-scoped RBAC"]
+    subgraph Server["Kubernetes MCP Server"]
+        Tools["typed MCP tools"]
+        Reads["bounded observability"]
+        Mutations["raw Kubernetes mutations<br/>called only after approval gates"]
+        Tools --> Reads
+        Tools --> Mutations
+    end
+
+    subgraph K8s["Kubernetes Boundary"]
+        RBAC["namespace-scoped RBAC"]
         API["Kubernetes API"]
         RBAC --> API
     end
 
-    Client -->|"/mcp + JWT"| Auth
-    Guardrails -->|"stdio, no token passthrough (*yet)"| Tools
-    Plans --> Pending
-    Client -.->|"approval URL shown to user"| Browser
-    Browser -->|"/approvals/* + OAuth cookie"| ApprovalUI
+    Client -->|"/mcp + OAuth JWT"| Auth
+    Dispatcher --> Adapter
+    Adapter --> Server
+    Dispatcher --> Envelope
     ApprovalUI --> Challenge
-    Approved --> Apply
-    ReadOnly --> RBAC
-    Apply --> RBAC
+    Gates --> Freshness
+    Client -.->|"approval URL"| Browser
+    Browser -->|"/approvals/*"| ApprovalUI
+    Reads --> RBAC
+    Mutations --> RBAC
 ```
 
+Full request-flow diagrams live in [docs/architecture.md](docs/architecture.md).
 
-### 🔐 How Approval-Gated Mutations Work
+## 🔐 Approval Flow
 
-The diagram below shows what happens when an AI agent tries to change your cluster. The key point: **the AI cannot approve its own requests**. Approval happens in your browser through a separate OAuth-authenticated session bound to the same subject that requested the plan.
-
-```mermaid
----
-title: Out-of-Band Approval Flow
----
-flowchart TB
-    classDef ai      fill:#e8f0fe,stroke:#4285f4,color:#1a1a2e,font-size:13px
-    classDef browser fill:#e6f4ea,stroke:#34a853,color:#1a1a2e,font-size:13px
-    classDef gate    fill:#fff3e0,stroke:#fb8c00,color:#1a1a2e,font-size:13px
-    classDef k8s     fill:#fce4ec,stroke:#e53935,color:#1a1a2e,font-size:13px
-
-    subgraph AI["① AI / MCP Channel"]
-        direction TB
-        A1["🤖 AI agent requests a change, for example scale deployment to 3 replicas"]
-        A2["Gateway validates identity; server dry-runs and creates a pending plan locked with a SHA-256 hash"]
-        A3["⛔ AI receives only an approval URL<br/>It cannot approve on your behalf"]
-        A4["AI calls apply again once human has approved"]
-    end
-
-    subgraph OOB["② Your Browser - separate login, separate session"]
-        direction TB
-        B1["🔗 You open the approval URL in your browser"]
-        B2["You log in with OAuth independent of the AI session"]
-        B3["Browser shows the real plan rendered by the Gateway from disk, not by the AI"]
-        B4["You review: operation, namespace, affected objects, expiry time"]
-        B5["✅ You click Approve  or  ❌ Deny"]
-    end
-
-    K8s["☸️ Kubernetes change is applied only after approval, a second dry-run, and drift checks"]
-
-    A1 --> A2 --> A3
-    A3 -.->|"URL shown to AI, opened by you"| B1
-    B1 --> B2 --> B3 --> B4 --> B5
-    B5 -->|"Approval recorded with identity binding"| A4
-    A4 --> K8s
-
-    class A1,A2,A3,A4 ai
-    class B1,B2,B3,B4,B5 browser
-    class K8s k8s
-```
-
-<sub><em>Even if the AI agent is compromised, it cannot self-approve. Approval must come from your browser session, a channel the AI does not control.</em></sub>
-<sub><em>Simplified architectural graph. Full version [here](docs/architecture.md)</em></sub>
-
-#### The Three Security Gates
-
-Every mutation passes through three independent checkpoints. Each one can block execution regardless of whether the others passed:
+The central safety property is that approval is necessary but not sufficient. A human approval creates execution authorization, but execution still has to pass the pre-execution gates immediately before Kubernetes is mutated.
 
 | Phase | What happens | What can block it |
-|---|---|---|
-| **① Plan** | AI calls `request_*`; server runs a server-side dry-run and policy checks; computes a SHA-256 hash of the pending plan and stores it | Dry-run failure, policy violation (privileged containers, hostPath, dangerous caps, …) |
-| **② Approve** | Human opens the approval URL; browser renders the plan from the server-side file, not the AI's description; human clicks Approve or Deny | Challenge expired (default 15 min TTL), approver subject does not match requester, anti-forgery validation fails, or the plan hash changed after the URL was created |
-| **③ Execute** | AI calls `apply_approved_plan` again; server re-checks the approved hash, re-runs the dry-run, and checks live-state drift | Hash mismatch, no approved challenge on file, plan already applied, second dry-run failure, policy failure on re-validation, or live state drifted since approval |
-
-The hash from Phase ① is the integrity seal that links all three phases. If the plan changes before approval, the browser approval is refused. If it changes after approval but before execution, `apply_approved_plan` is refused. After a successful apply, the applied marker blocks reuse of the same plan.
-
-### 🛠️ Technical Architecture
-
-- **MCP gateway boundary:** The HTTP gateway exposes `/mcp`, validates OAuth JWT issuer, audience, lifetime, signature, and scope, then forwards tool calls to a private stdio Kubernetes MCP server without passing bearer tokens downstream.
-- **OAuth-aware clients:** The gateway publishes MCP protected-resource metadata and returns insufficient-scope challenges so MCP clients can discover the required resource and `mcp:tools` scope. Browser approval pages use an OAuth code flow and a Gateway cookie.
-- **Guarded model-visible data:** The gateway scans tool arguments and responses for prompt-injection patterns, warns or redacts suspicious content, and writes JSONL guardrail audit events with the resolved OAuth identity.
-- **Dry-run-first mutations:** `request_*` tools create pending plans only after Kubernetes `dryRun=All` succeeds. Browser approval renders the stored server-side plan, dry-run result, policy findings, and diff.
-- **Hash-bound execution:** Approved applies require the stored SHA-256 hash to match, re-run Kubernetes dry-run immediately before the write, re-check policy where relevant, detect live-state drift, and mark plans as applied.
-- **Narrow Kubernetes surface:** Runtime operations use the Kubernetes .NET client, namespace allow-lists, namespace-scoped RBAC, bounded read-only tools, and mutation support limited to `Deployment`, `Service`, `ConfigMap`, and narrow Deployment operations.
-
-## 📦 Container Images
-
-Images are automatically built and scanned by the Docker workflow. Release tags publish versioned images, and the `dev` branch publishes moving `:dev` images for the self-hosted development deployment.
-
-| Registry | Gateway (Core) | Dev Issuer (deprecated fallback auth) |
 | --- | --- | --- |
-| GitHub (GHCR) | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>` | `ghcr.io/mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
-| Docker Hub | `mirusser/kubernetes-mcp-guard-gateway:<tag>` | `mirusser/kubernetes-mcp-guard-devissuer:<tag>` |
+| **Plan** | The MCP client calls `request_*`; the Kubernetes adapter gathers dry-run, diff, and policy evidence; the generic core stores a Plan Envelope with Intent and Review Digests. | Namespace rejection, manifest allow-list rejection, dry-run failure, domain policy denial, unsupported legacy plan format. |
+| **Approve** | The client calls `execute_approved_plan`; the gateway creates or reuses a short-lived Approval Challenge and returns a browser URL. The browser renders the stored review snapshot, not model-supplied approval text. | Expired challenge, wrong authenticated subject, anti-forgery failure, changed digest binding, denied/rejected/canceled Challenge Outcome. |
+| **Execute** | After approval, the client retries `execute_approved_plan`; the gateway validates the Approval Grant, digests, validity window, reuse policy, freshness checks, and domain policy checks before the adapter writes. | Missing/expired/mismatched grant, digest mismatch, already-applied Single-Execution Plan, second dry-run failure, policy failure, live-state drift. |
 
-**Versioning:** Use specific tags (e.g., `:v0.1.0`) for production stability. The `:dev` tag tracks the development branch, and the `:latest` tag tracks the most recent stable release.
+<sub><em>Current implementation notes are tracked in [docs/mutation-approval-profile.md#current-repository-fit](docs/mutation-approval-profile.md#current-repository-fit). Remaining profile work is intentionally documented as future direction, not as shipped standard behavior.</em></sub>
 
-Example pull:
-``` bash
-docker pull ghcr.io/mirusser/kubernetes-mcp-guard-gateway:latest
-```
+
+## 🧰 Current Capabilities
+
+### 🛡️ Gateway Protections
+
+| Layer | Current behavior |
+| --- | --- |
+| MCP transport | HTTP MCP endpoint at `/mcp` using Streamable HTTP. |
+| Authentication | OAuth JWT validation for MCP calls; browser OAuth cookie for approval pages. |
+| OAuth discovery | Protected-resource metadata and insufficient-scope challenges for MCP clients. |
+| Approval authority | Browser approval endpoints under `/approvals/*` with same-subject binding and anti-forgery checks. |
+| Guardrails | Warn on suspicious request patterns and redact suspicious response content before it returns to the MCP client. |
+| Audit | Separate JSONL streams for guardrail findings and approval lifecycle events. |
+
+### 🔎 Read-Only Observability
+
+| Tool | Purpose |
+| --- | --- |
+| `get_allowed_namespaces` | Return the namespace allow-list configured for the server. |
+| `get_k8s_status` | Summarize Deployments, Services, ConfigMaps, Pods, and ReplicaSets in a namespace. |
+| `get_k8s_events` | Read bounded `events.k8s.io/v1` diagnostics. |
+| `get_pod_logs` | Read bounded Pod logs with tail-line and byte caps. |
+| `get_k8s_resource` | Return a focused resource summary without Secret values, ConfigMap data, or raw manifests. |
+| `get_deployment_diagnostics` | Inspect Deployment health, related Pods, ReplicaSets, and Events. |
+| `get_pod_diagnostics` | Inspect Pod status, conditions, container state, and Events. |
+| `get_service_diagnostics` | Inspect Service endpoints, backing Pods, and Events. |
+
+### ✅ Approval-Gated Mutations
+
+| Tool | Purpose |
+| --- | --- |
+| `request_apply_manifest` | Dry-run and plan server-side apply for `Deployment`, `Service`, or `ConfigMap`. |
+| `request_delete_manifest` | Dry-run and plan deletion for supported manifest kinds. |
+| `request_scale_deployment` | Dry-run and plan a Deployment replica-count change. |
+| `request_restart_deployment` | Dry-run and plan a Deployment rollout restart. |
+| `request_set_deployment_image` | Dry-run and plan a Deployment container image update. |
+| `execute_approved_plan` | Create the browser approval challenge or execute an approved, digest-bound plan after gates pass. |
+
+Direct Kubernetes mutation tools exist inside the private server surface for the adapter executor. The HTTP gateway exposes `request_*` wrappers plus `execute_approved_plan` instead of exposing raw destructive tools to MCP clients.
 
 ## ⚡ Quick Start
 
-### Option 1 — Run from published images (no build required)
+### 📦 Run Published Images
 
-**Prerequisites:** [Docker Compose v2](https://docs.docker.com/compose/install/), [minikube](https://minikube.sigs.k8s.io/docs/start/), `git`.
+Prerequisites: [Docker Compose v2](https://docs.docker.com/compose/install/), [minikube](https://minikube.sigs.k8s.io/docs/start/), and `git`.
 
 ```bash
 git clone https://github.com/mirusser/Kubernetes-MCP-Guard.git
-
 cd Kubernetes-MCP-Guard
 
 ./scripts/create-demo-kubeconfig.sh --compose
-TAG=latest docker compose -f deploy/mode-d/compose.release.yaml up
+
+export INFRA_GATE_KUBECONFIG_HOST_PATH="$PWD/.kube/mcp-nginx-demo.compose.config"
+export INFRA_GATE_APPROVAL_HOST_PATH="$PWD/.mcp-approvals"
+export INFRA_GATE_GUARD_AUDIT_HOST_PATH="$PWD/.mcp-guardrails"
+export INFRA_GATE_DATA_PROTECTION_HOST_PATH="$PWD/.mcp-dataprotection-keys"
+
+TAG=latest docker compose --env-file deploy/local-oauth/release.env.example \
+  -f deploy/local-oauth/compose.release.yaml up
 ```
 
-Replace `latest` with a specific release tag (e.g. `v0.1.0`) for a stable run. Available tags are listed on the [Releases page](https://github.com/mirusser/Kubernetes-MCP-Guard/releases).
-This starts the Keycloak-backed local OAuth path. The older DevIssuer path remains available under `deploy/mode-c/` as a deprecated fallback while compatibility tests still cover it.
+This starts the local Keycloak-backed OAuth path and the published gateway image. Replace `latest` with a release tag such as `v0.1.0` for a stable image. The host-path exports keep Docker Compose bind mounts anchored at the repository root while still using the committed no-SDK env template.
 
-#### **Connect Codex CLI:**
+### 🛠️ Build From Source
 
-1. Add this block to `~/.codex/config.toml` (create the file if it does not exist):
+Prerequisites: [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), Docker Compose v2, minikube, and `git`.
+
+```bash
+./scripts/create-demo-kubeconfig.sh --compose
+./scripts/generate-env.sh local-compose
+docker compose --env-file deploy/generated/local-compose.env \
+  -f deploy/local-oauth/compose.yaml up --build
+```
+
+Other run modes and full setup details are in [docs/setup-guide.md](docs/setup-guide.md).
+
+### 🤖 Connect Codex CLI
+
+Add this to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.infra-gate]
@@ -208,120 +208,80 @@ oauth_resource = "http://127.0.0.1:3001/mcp"
 scopes = ["mcp:tools"]
 ```
 
-2. Then log in:
+Then authenticate and start Codex:
 
 ```bash
-codex mcp login infra-gate # authenticate 
-codex # run codex
+codex mcp login infra-gate
+codex
 ```
 
-#### **Connect Claude Code:**
+### 💬 Connect Claude Code
 
 ```bash
-# 1. Add/register the MCP server
 claude mcp add-json --scope user infra-gate \
   '{"type":"http","url":"http://127.0.0.1:3001/mcp","oauth":{"scopes":"mcp:tools"}}'
 
-# 2. Start Claude Code
 claude
-
-# 3. Inside Claude Code, open MCP manager/auth flow
 /mcp
 ```
 
- After successful log in you may start with: 
- ```text
- Explain briefly what are the capabilities of MCP server: infra-gate
- ```
+After login, a useful first prompt is:
 
-### Option 2 — Build and run from source
-
-**Prerequisites:** [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), Docker Compose v2, minikube, `git`.
-
-```bash
-./scripts/create-demo-kubeconfig.sh --compose
-docker compose -f deploy/mode-d/compose.yaml up --build
+```text
+Explain briefly what capabilities the MCP server infra-gate exposes.
 ```
 
-Connect Codex the same way as Option 1.
+## 📦 Container Images
 
-*Other run modes and full setup details are in the [Setup Guide](docs/setup-guide.md).*
+Release images are built by the Docker workflow and published to GHCR and Docker Hub.
 
-## 🧰 Current Capabilities 
+| Registry | Gateway image |
+| --- | --- |
+| GitHub Container Registry | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway:<tag>` |
+| Docker Hub | `mirusser/kubernetes-mcp-guard-gateway:<tag>` |
 
-### 🛡️ Gateway Protections 
+Use specific release tags for stable demos. The `:dev` tag tracks the development branch, and `:latest` tracks the most recent stable release.
 
-| Layer | Behavior |
-|---|---|
-| Authentication | OAuth 2.1 JWT for MCP plus browser OAuth cookie for approvals |
-| Prompt-injection guardrails | Warn and redact suspicious model-visible input/output |
-| Audit logging | JSONL guardrail audit with identity resolution |
-| MCP compliance | Streamable HTTP transport, protected-resource metadata, step-up authorization |
-
-### 🔎 Read-Only Observability 
-
-| Tool | Purpose |
-|---|---|
-| `get_allowed_namespaces` | Namespace allow-list the server is configured to access |
-| `get_k8s_status` | Deployments, Services, ConfigMaps, Pods, and ReplicaSets in a namespace |
-| `get_k8s_events` | Bounded `events.k8s.io/v1` cluster diagnostics |
-| `get_pod_logs` | Bounded Pod log reads (tail lines + byte cap) |
-| `get_k8s_resource` | Focused resource summary — no Secret values, ConfigMap data, or raw manifests |
-| `get_deployment_diagnostics` | Deployment health, related Pods, ReplicaSets, and Events |
-| `get_pod_diagnostics` | Pod status, conditions, container state, and Events |
-| `get_service_diagnostics` | Service endpoints, backing Pods, and Events |
-
-### ✅ Approval-Gated Mutations 
-
-| Tool | Purpose |
-|---|---|
-| `request_apply_manifest` | Dry-run and plan a server-side apply for `Deployment`, `Service`, or `ConfigMap` |
-| `request_delete_manifest` | Dry-run and plan a resource deletion |
-| `request_scale_deployment` | Dry-run and plan a replica count change |
-| `request_restart_deployment` | Dry-run and plan a rollout restart |
-| `request_set_deployment_image` | Dry-run and plan a container image update |
-| `apply_approved_plan` | Repeat dry-run, then apply an exact-hash-verified, user-approved plan |
-
-## 🎬 See It In Action 
-
-End-to-end walkthrough of the approval-gated workflow against a deliberately broken Deployment: [docs/demo-failing-deployment.md](docs/demo-failing-deployment.md). Uses the demo manifests under [examples/failing-deployment/](examples/failing-deployment/).
-
-## Compatibility
+## 🧩 Compatibility
 
 | Area | Supported / tested |
 | --- | --- |
 | .NET | .NET 10 |
 | Kubernetes | minikube / local cluster initially |
 | MCP transport | HTTP MCP endpoint at `/mcp` |
-| OIDC | Keycloak (primary local/dev path), DevIssuer (deprecated local fallback), external OIDC providers by configuration |
+| OIDC | Keycloak local/dev path; external OIDC providers by configuration |
 | Container registries | GHCR, Docker Hub |
 | Platforms | linux/amd64 initially |
 
-## 🧭 Explore The Project 
+## ⚖️ Boundaries And Non-Goals
 
-- Developer runbook: [docs/devs-readme.md](docs/devs-readme.md)
-- Setup guide: [docs/setup-guide.md](docs/setup-guide.md)
-- Configuration reference: [docs/configuration.md](docs/configuration.md)
-- MCP compliance notes: [docs/MCP-compliance.md](docs/MCP-compliance.md)
-- Security model: [docs/security-model.md](docs/security-model.md)
-- Tool permissions matrix: [docs/tool-permissions.md](docs/tool-permissions.md)
-- Production OIDC guide: [docs/production-oidc.md](docs/production-oidc.md)
-- Public roadmap: [docs/roadmap.md](docs/roadmap.md)
-- Kubernetes MCP server: [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md)
-- HTTP MCP gateway: [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md)
-- Gateway auth: [src/InfraGate.McpGateway.Auth/README.md](src/InfraGate.McpGateway.Auth/README.md)
-- Approval storage & audit: [src/InfraGate.Approvals/README.md](src/InfraGate.Approvals/README.md)
-- Deprecated local dev OAuth issuer: [src/InfraGate.DevIssuer/README.md](src/InfraGate.DevIssuer/README.md)
+- The project is experimental and not production-certified.
+- The local Keycloak realm runs in development mode over HTTP and is not a production identity provider.
+- Prompt-injection guardrails are defense-in-depth, not a guaranteed hard security boundary.
+- The tool surface does not expose shell execution, `kubectl` passthrough, exec, attach, port-forward, namespace creation, RBAC manipulation, Secret reads, raw manifest reads, or cluster-scoped writes.
+- This is not a full Kubernetes policy engine and not an MCP standard.
 
-<sub><em>**Naming note:** The public name is **Kubernetes MCP Guard**. The internal codename **InfraGate** appears in `.slnx`, project folders, env-var prefixes (`INFRA_GATE_*`), and Docker labels. They refer to the same project; the rename is gradual and does not change runtime behavior.</em></sub>
+See [docs/security-model.md](docs/security-model.md) for the full threat model.
 
+## 🧭 Project Map
 
-## ⚖️ Governance & Policies
+- [docs/devs-readme.md](docs/devs-readme.md): developer runbook, local runs, tool contracts, and verification.
+- [docs/setup-guide.md](docs/setup-guide.md): setup paths for local OAuth, source builds, and published images.
+- [docs/configuration.md](docs/configuration.md): environment variables, defaults, and production guidance.
+- [docs/security-model.md](docs/security-model.md): hard boundaries, defense-in-depth controls, assumptions, and non-goals.
+- [docs/MCP-compliance.md](docs/MCP-compliance.md): MCP transport and OAuth notes.
+- [docs/tool-permissions.md](docs/tool-permissions.md): per-tool RBAC verbs, bounds, and approval requirements.
+- [docs/production-oidc.md](docs/production-oidc.md): production OIDC guidance.
+- [docs/roadmap.md](docs/roadmap.md): public roadmap and current/future scope.
+- [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md): HTTP MCP gateway, forwarding, guardrails, approval endpoints, and audit behavior.
+- [src/InfraGate.Approvals/README.md](src/InfraGate.Approvals/README.md): generic approval storage, challenges, grants, gates, and audit payloads.
+- [src/InfraGate.KubernetesAdapter/README.md](src/InfraGate.KubernetesAdapter/README.md): Kubernetes mutation intent, evidence, policy, freshness checks, and execution.
+- [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md): private Kubernetes MCP server and typed tool surface.
+
+## 📜 Governance
 
 - License: [Apache-2.0](LICENSE)
 - Security policy: [SECURITY.md](SECURITY.md)
 - Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - Release process: [docs/releasing.md](docs/releasing.md)
-
----
