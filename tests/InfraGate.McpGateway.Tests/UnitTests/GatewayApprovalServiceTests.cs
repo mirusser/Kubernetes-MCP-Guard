@@ -535,6 +535,42 @@ public sealed class GatewayApprovalServiceTests
     }
 
     [Fact]
+    public async Task CancelChallengeAsync_ExpiredChallenge_AutoExpires()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+
+        var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
+        var expiredChallenge = challenge! with { ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1) };
+        await context.Challenges.SaveAsync(expiredChallenge, CancellationToken.None);
+
+        var result = await context.Service.CancelChallengeAsync(challengeId, CancellationToken.None);
+        var updated = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("already expired", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(ApprovalConventions.ChallengeStatuses.Expired, updated?.Status);
+    }
+
+    [Fact]
+    public async Task CancelChallengeAsync_DifferentSubject_Rejects()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store);
+        var challengeId = await CreateChallengeAsync(context, plan.Id);
+        SetUser(context.HttpContextAccessor, "other-user");
+
+        var result = await context.Service.CancelChallengeAsync(challengeId, CancellationToken.None);
+        var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("same authenticated subject", result.Message);
+        Assert.Equal(ApprovalConventions.ChallengeStatuses.Rejected, challenge?.Status);
+        Assert.Equal(ApprovalConventions.ChallengeOutcomeStatuses.Rejected, challenge?.Outcome?.Status);
+    }
+
+    [Fact]
     public async Task ApproveChallengeAsync_CanceledChallenge_Rejects()
     {
         var context = CreateContext();
@@ -557,7 +593,7 @@ public sealed class GatewayApprovalServiceTests
         string operation = KubernetesAdapterConventions.PlanOperations.Scale,
         DateTimeOffset? createdAtUtc = null)
     {
-        var objects = new[] { new K8sObjectRef("apps/v1", "Deployment", NamespaceName, "demo") };
+        var objects = new[] { new KubernetesObjectRef("apps/v1", "Deployment", NamespaceName, "demo") };
         var payload = new KubernetesPlanPayload(
             NamespaceName,
             "Scale deployment.",
@@ -582,18 +618,18 @@ public sealed class GatewayApprovalServiceTests
         return KubernetesApprovalAdapter.Materialize(envelope);
     }
 
-    private static K8sPlanDryRun CreateDryRun(IReadOnlyList<K8sObjectRef> objects) =>
+    private static KubernetesPlanDryRun CreateDryRun(IReadOnlyList<KubernetesObjectRef> objects) =>
         new(
             "succeeded",
             DateTimeOffset.UtcNow,
-            objects.Select(obj => new K8sPlanDryRunObject(
+            objects.Select(obj => new KubernetesPlanDryRunObject(
                 $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}",
                 "{}")).ToArray(),
             ["299 - admission warning"],
             "Server-side dry-run succeeded.");
 
-    private static K8sPlanDiff[] CreateDiffs(IReadOnlyList<K8sObjectRef> objects) =>
-        objects.Select(obj => new K8sPlanDiff(
+    private static KubernetesPlanDiff[] CreateDiffs(IReadOnlyList<KubernetesObjectRef> objects) =>
+        objects.Select(obj => new KubernetesPlanDiff(
             obj,
             ApprovalConventions.DiffChangeTypes.Update,
             $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name} will be updated.",

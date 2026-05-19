@@ -10,17 +10,17 @@ public sealed class KubernetesPlanBuilderTests
 
     private static readonly PlanRequester TestRequester = new("test-subject", "oauth-jwt");
 
-    private static K8sPlanDryRun MakeDryRun(string ns, string name) =>
+    private static KubernetesPlanDryRun MakeDryRun(string ns, string name) =>
         new(
             "succeeded",
             DateTimeOffset.UtcNow,
-            [new K8sPlanDryRunObject($"apps/v1 Deployment {ns}/{name}", "{}")],
+            [new KubernetesPlanDryRunObject($"apps/v1 Deployment {ns}/{name}", "{}")],
             [],
             "Server-side dry-run succeeded.");
 
-    private static K8sPlanDiff MakeDiff(string ns, string name) =>
+    private static KubernetesPlanDiff MakeDiff(string ns, string name) =>
         new(
-            new K8sObjectRef("apps/v1", "Deployment", ns, name),
+            new KubernetesObjectRef("apps/v1", "Deployment", ns, name),
             "update",
             $"Update apps/v1 Deployment {ns}/{name}",
             "@@ -1 +1 @@",
@@ -30,20 +30,20 @@ public sealed class KubernetesPlanBuilderTests
             [],
             []);
 
-    private static string DryRunJson(K8sPlanDryRun dryRun) =>
+    private static string DryRunJson(KubernetesPlanDryRun dryRun) =>
         JsonSerializer.Serialize(dryRun, JsonOptions);
 
-    private static string DiffJson(K8sPlanDiff[] diffs) =>
+    private static string DiffJson(KubernetesPlanDiff[] diffs) =>
         JsonSerializer.Serialize(diffs, JsonOptions);
 
-    private static string ApplyEvidenceJson(K8sPlanDryRun dryRun) =>
+    private static string ApplyEvidenceJson(KubernetesPlanDryRun dryRun) =>
         JsonSerializer.Serialize(
-            new K8sApplyEvidence(dryRun, [], false, null),
+            new KubernetesApplyEvidence(dryRun, [], false, null),
             JsonOptions);
 
-    private static string ApplyEvidenceBlockedJson(K8sPlanDryRun dryRun, string refusal) =>
+    private static string ApplyEvidenceBlockedJson(KubernetesPlanDryRun dryRun, string refusal) =>
         JsonSerializer.Serialize(
-            new K8sApplyEvidence(dryRun, [], true, refusal),
+            new KubernetesApplyEvidence(dryRun, [], true, refusal),
             JsonOptions);
 
     [Fact]

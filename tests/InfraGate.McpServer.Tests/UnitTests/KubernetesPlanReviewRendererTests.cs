@@ -94,18 +94,18 @@ public sealed class KubernetesPlanReviewRendererTests
             "mcp-ns",
             "Scale deployment.",
             new Dictionary<string, string> { ["replicas"] = "3" },
-            [new K8sObjectRef("apps/v1", "Deployment", "mcp-ns", "demo")])
+            [new KubernetesObjectRef("apps/v1", "Deployment", "mcp-ns", "demo")])
         {
-            DryRun = new K8sPlanDryRun(
+            DryRun = new KubernetesPlanDryRun(
                 "succeeded",
                 FixedTime,
-                [new K8sPlanDryRunObject("apps/v1/Deployment/mcp-ns/demo", "{}")],
+                [new KubernetesPlanDryRunObject("apps/v1/Deployment/mcp-ns/demo", "{}")],
                 [],
                 "dry-run ok"),
             Diffs =
             [
-                new K8sPlanDiff(
-                    new K8sObjectRef("apps/v1", "Deployment", "mcp-ns", "demo"),
+                new KubernetesPlanDiff(
+                    new KubernetesObjectRef("apps/v1", "Deployment", "mcp-ns", "demo"),
                     "Update",
                     "scaled to 3",
                     "+  replicas: 3\n-  replicas: 1",
@@ -116,7 +116,7 @@ public sealed class KubernetesPlanReviewRendererTests
                     ["/spec/replicas"])
             ],
             PolicyFindings = includeFindings
-                ? [new K8sPlanPolicyFinding("Warn", "W001", "deployment/demo", "Memory limit not set.")]
+                ? [new KubernetesPlanPolicyFinding("Warn", "W001", "deployment/demo", "Memory limit not set.")]
                 : [],
             Manifest = includeManifest
                 ? "apiVersion: apps/v1\nkind: Deployment"

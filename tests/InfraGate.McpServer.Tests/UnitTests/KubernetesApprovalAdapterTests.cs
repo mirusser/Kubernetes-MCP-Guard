@@ -16,16 +16,16 @@ public sealed class KubernetesApprovalAdapterTests
                 ["replicas"] = "2",
                 ["name"] = "demo"
             },
-            [new K8sObjectRef("apps/v1", "Deployment", "demo", "demo")]));
+            [new KubernetesObjectRef("apps/v1", "Deployment", "demo", "demo")]));
 
         var withEvidence = KubernetesApprovalAdapter.WithPayload(
             plan,
             plan.Payload with
             {
-                DryRun = new K8sPlanDryRun(
+                DryRun = new KubernetesPlanDryRun(
                     "succeeded",
                     DateTimeOffset.UtcNow,
-                    [new K8sPlanDryRunObject("apps/v1 Deployment demo/demo", "{}")],
+                    [new KubernetesPlanDryRunObject("apps/v1 Deployment demo/demo", "{}")],
                     [],
                     "Server-side dry-run succeeded.")
             });
@@ -45,7 +45,7 @@ public sealed class KubernetesApprovalAdapterTests
                 ["replicas"] = "2",
                 ["name"] = "demo"
             },
-            [new K8sObjectRef("apps/v1", "Deployment", "demo", "demo")]));
+            [new KubernetesObjectRef("apps/v1", "Deployment", "demo", "demo")]));
         var right = CreatePlan(new KubernetesPlanPayload(
             "demo",
             "Scale deployment.",
@@ -54,7 +54,7 @@ public sealed class KubernetesApprovalAdapterTests
                 ["name"] = "demo",
                 ["replicas"] = "2"
             },
-            [new K8sObjectRef("apps/v1", "Deployment", "demo", "demo")]));
+            [new KubernetesObjectRef("apps/v1", "Deployment", "demo", "demo")]));
 
         Assert.Equal(left.IntentDigest, right.IntentDigest);
     }
@@ -70,18 +70,18 @@ public sealed class KubernetesApprovalAdapterTests
                 ["replicas"] = "2",
                 ["name"] = "demo"
             },
-            [new K8sObjectRef("apps/v1", "Deployment", "demo", "demo")])
+            [new KubernetesObjectRef("apps/v1", "Deployment", "demo", "demo")])
         {
-            DryRun = new K8sPlanDryRun(
+            DryRun = new KubernetesPlanDryRun(
                 "succeeded",
                 DateTimeOffset.UnixEpoch,
-                [new K8sPlanDryRunObject("apps/v1 Deployment demo/demo", "{}")],
+                [new KubernetesPlanDryRunObject("apps/v1 Deployment demo/demo", "{}")],
                 [],
                 "Server-side dry-run succeeded."),
             Diffs =
             [
-                new K8sPlanDiff(
-                    new K8sObjectRef("apps/v1", "Deployment", "demo", "demo"),
+                new KubernetesPlanDiff(
+                    new KubernetesObjectRef("apps/v1", "Deployment", "demo", "demo"),
                     ApprovalConventions.DiffChangeTypes.Update,
                     "Deployment will be updated.",
                     "@@ -1 +1 @@",
@@ -93,7 +93,7 @@ public sealed class KubernetesApprovalAdapterTests
             ],
             PolicyFindings =
             [
-                new K8sPlanPolicyFinding("Warning", "IMAGE_LATEST_TAG", "apps/v1 Deployment demo/demo", "Avoid latest.")
+                new KubernetesPlanPolicyFinding("Warning", "IMAGE_LATEST_TAG", "apps/v1 Deployment demo/demo", "Avoid latest.")
             ]
         });
 
@@ -104,9 +104,9 @@ public sealed class KubernetesApprovalAdapterTests
     }
 
     [Fact]
-    public void K8sPlanPolicyFinding_ImplementsDomainPolicyCheckContract()
+    public void KubernetesPlanPolicyFinding_ImplementsDomainPolicyCheckContract()
     {
-        var finding = new K8sPlanPolicyFinding("Warning", "IMAGE_LATEST_TAG", "apps/v1 Deployment demo/demo", "Avoid latest.");
+        var finding = new KubernetesPlanPolicyFinding("Warning", "IMAGE_LATEST_TAG", "apps/v1 Deployment demo/demo", "Avoid latest.");
 
         var policyCheck = Assert.IsAssignableFrom<IDomainPolicyCheck>(finding);
 
@@ -127,7 +127,7 @@ public sealed class KubernetesApprovalAdapterTests
                 ["replicas"] = "2",
                 ["name"] = "demo"
             },
-            [new K8sObjectRef("apps/v1", "Deployment", "demo", "demo")]));
+            [new KubernetesObjectRef("apps/v1", "Deployment", "demo", "demo")]));
         var tamperedPayload = plan.Payload with
         {
             Parameters = new Dictionary<string, string>

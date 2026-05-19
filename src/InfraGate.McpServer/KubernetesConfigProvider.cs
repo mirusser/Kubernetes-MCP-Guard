@@ -3,7 +3,7 @@ using k8s;
 
 namespace InfraGate.McpServer;
 
-internal sealed class KubernetesConfigProvider(K8SMcpOptions options)
+internal sealed class KubernetesConfigProvider(KubernetesMcpOptions options)
 {
     public KubernetesClientConfiguration Create() =>
         Create(
@@ -22,7 +22,7 @@ internal sealed class KubernetesConfigProvider(K8SMcpOptions options)
         if (options.HasExplicitKubeConfig)
         {
             string kubeConfig = options.KubeConfig ??
-                                throw new InvalidOperationException($"{K8sConventions.EnvironmentVariables.KubeConfig} is required.");
+                                throw new InvalidOperationException($"{KubernetesConventions.EnvironmentVariables.KubeConfig} is required.");
             try
             {
                 config = kubeConfigFactory(kubeConfig);
@@ -47,11 +47,11 @@ internal sealed class KubernetesConfigProvider(K8SMcpOptions options)
             // silently fall back to developer kubeconfig discovery without explicit Kubernetes auth.
             throw new InvalidOperationException(
                 $"Production mode requires explicit Kubernetes auth: set " +
-                $"{K8sConventions.EnvironmentVariables.KubeConfig} or " +
-                $"{K8sConventions.EnvironmentVariables.UseInClusterConfig}=true.");
+                $"{KubernetesConventions.EnvironmentVariables.KubeConfig} or " +
+                $"{KubernetesConventions.EnvironmentVariables.UseInClusterConfig}=true.");
         }
 
-        config.UserAgent = K8sConventions.ServiceName;
+        config.UserAgent = KubernetesConventions.ServiceName;
 
         return config;
     }

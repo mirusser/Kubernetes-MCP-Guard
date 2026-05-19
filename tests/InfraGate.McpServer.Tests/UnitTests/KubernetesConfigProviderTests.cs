@@ -38,7 +38,7 @@ public sealed class KubernetesConfigProviderTests
             var config = provider.Create();
 
             Assert.StartsWith("https://kubeconfig.example.com", config.Host, StringComparison.Ordinal);
-            Assert.Equal(K8sConventions.ServiceName, config.UserAgent);
+            Assert.Equal(KubernetesConventions.ServiceName, config.UserAgent);
         }
         finally
         {
@@ -65,7 +65,7 @@ public sealed class KubernetesConfigProviderTests
 
         Assert.Equal("https://kubeconfig.example.com", config.Host);
         Assert.Equal(kubeConfig, receivedPath);
-        Assert.Equal(K8sConventions.ServiceName, config.UserAgent);
+        Assert.Equal(KubernetesConventions.ServiceName, config.UserAgent);
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public sealed class KubernetesConfigProviderTests
             () => throw new InvalidOperationException("Default config should not be used."));
 
         Assert.Equal("https://in-cluster.example.com", config.Host);
-        Assert.Equal(K8sConventions.ServiceName, config.UserAgent);
+        Assert.Equal(KubernetesConventions.ServiceName, config.UserAgent);
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public sealed class KubernetesConfigProviderTests
             () => new KubernetesClientConfiguration { Host = "http://localhost:8080" });
 
         Assert.Equal("http://localhost:8080", config.Host);
-        Assert.Equal(K8sConventions.ServiceName, config.UserAgent);
+        Assert.Equal(KubernetesConventions.ServiceName, config.UserAgent);
     }
 
     [Fact]
@@ -108,8 +108,8 @@ public sealed class KubernetesConfigProviderTests
             () => throw new InvalidOperationException("In-cluster config should not be used."),
             () => throw new InvalidOperationException("Default config should not be used.")));
 
-        Assert.Contains(K8sConventions.EnvironmentVariables.KubeConfig, exception.Message);
-        Assert.Contains(K8sConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
+        Assert.Contains(KubernetesConventions.EnvironmentVariables.KubeConfig, exception.Message);
+        Assert.Contains(KubernetesConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
     }
 
     [Fact]
@@ -122,8 +122,8 @@ public sealed class KubernetesConfigProviderTests
             () => throw new InvalidOperationException("In-cluster config should not be used."),
             () => throw new InvalidOperationException("Default config should not be used.")));
 
-        Assert.Contains(K8sConventions.EnvironmentVariables.KubeConfig, exception.Message);
-        Assert.Contains(K8sConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
+        Assert.Contains(KubernetesConventions.EnvironmentVariables.KubeConfig, exception.Message);
+        Assert.Contains(KubernetesConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
     }
 
     [Fact]
@@ -136,11 +136,11 @@ public sealed class KubernetesConfigProviderTests
             () => throw new InvalidOperationException("In-cluster config should not be used."),
             () => throw new InvalidOperationException("Default config should not be used.")));
 
-        Assert.Contains(K8sConventions.EnvironmentVariables.KubeConfig, exception.Message);
-        Assert.Contains(K8sConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
+        Assert.Contains(KubernetesConventions.EnvironmentVariables.KubeConfig, exception.Message);
+        Assert.Contains(KubernetesConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
     }
 
-    private static K8SMcpOptions CreateOptions(
+    private static KubernetesMcpOptions CreateOptions(
         RuntimeMode runtimeMode = RuntimeMode.Development,
         string? kubeConfig = null,
         bool isInClusterConfigEnabled = false) =>

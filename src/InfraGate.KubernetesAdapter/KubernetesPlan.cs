@@ -18,15 +18,15 @@ public sealed record KubernetesPlan(PlanEnvelope Envelope, KubernetesPlanPayload
 
     public Dictionary<string, string> Parameters => Payload.Parameters;
 
-    public K8sObjectRef[] Objects => Payload.Objects;
+    public KubernetesObjectRef[] Objects => Payload.Objects;
 
     public string? Manifest => Payload.Manifest;
 
-    public K8sPlanDryRun? DryRun => Payload.DryRun;
+    public KubernetesPlanDryRun? DryRun => Payload.DryRun;
 
-    public K8sPlanDiff[] Diffs => Payload.Diffs;
+    public KubernetesPlanDiff[] Diffs => Payload.Diffs;
 
-    public K8sPlanPolicyFinding[] PolicyFindings => Payload.PolicyFindings;
+    public KubernetesPlanPolicyFinding[] PolicyFindings => Payload.PolicyFindings;
 
     bool IPlanReview.HasReviewEvidence =>
         DryRun is not null && (Diffs.Length > 0 || IsDryRunOnlyOperation(Operation));

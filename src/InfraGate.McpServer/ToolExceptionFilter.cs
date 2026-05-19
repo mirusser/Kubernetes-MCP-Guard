@@ -19,13 +19,13 @@ internal static class ToolExceptionFilter
             catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
             {
                 logger.LogError(ex, "Tool '{ToolName}' timed out", request.Params?.Name);
-                var message = K8sManager.FormatApiException($"Tool '{request.Params?.Name}' timed out", ex);
+                var message = KubernetesManagerHelpers.FormatApiException($"Tool '{request.Params?.Name}' timed out", ex);
                 return ErrorResult(message);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogError(ex, "Tool '{ToolName}' failed with unhandled exception", request.Params?.Name);
-                var message = K8sManager.FormatApiException($"Tool '{request.Params?.Name}' failed", ex);
+                var message = KubernetesManagerHelpers.FormatApiException($"Tool '{request.Params?.Name}' failed", ex);
                 return ErrorResult(message);
             }
         };

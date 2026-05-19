@@ -144,7 +144,7 @@ public sealed class KubernetesPlanReviewRenderer : IPlanReviewRenderer
                """ + string.Join(string.Empty, plan.Diffs.Select(RenderDiff)) + "</section>";
     }
 
-    private static string RenderDiff(K8sPlanDiff diff)
+    private static string RenderDiff(KubernetesPlanDiff diff)
     {
         var paths = RenderDiffPaths(diff);
 
@@ -163,7 +163,7 @@ public sealed class KubernetesPlanReviewRenderer : IPlanReviewRenderer
                 """;
     }
 
-    private static string RenderDiffPaths(K8sPlanDiff diff)
+    private static string RenderDiffPaths(KubernetesPlanDiff diff)
     {
         return $"""
                 <details>

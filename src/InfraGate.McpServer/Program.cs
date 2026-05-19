@@ -15,7 +15,7 @@ AddInfraGateConfiguration(builder.Configuration, args);
 builder.Services.Configure<InfraGateKubernetesSettings>(
     builder.Configuration.GetSection("InfraGate:Kubernetes"));
 
-var mcpOptions = K8SMcpOptions.FromConfiguration(builder.Configuration);
+var mcpOptions = KubernetesMcpOptions.FromConfiguration(builder.Configuration);
 
 builder.AddInfraGateObservability(opt => 
 {
@@ -32,7 +32,9 @@ builder.Services.AddSingleton<IKubernetes>(_ =>
 
     return new Kubernetes(config);
 });
-builder.Services.AddSingleton<K8sManager>();
+builder.Services.AddSingleton<KubernetesManager>();
+builder.Services.AddSingleton<KubernetesEvidenceService>();
+builder.Services.AddSingleton<KubernetesExecutionService>();
 
 builder.Services
     .AddMcpServer()
@@ -57,7 +59,7 @@ builder.Services
 var app = builder.Build();
 
 var appLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("InfraGate.McpServer");
-var k8sOptions = app.Services.GetRequiredService<K8SMcpOptions>();
+var k8sOptions = app.Services.GetRequiredService<KubernetesMcpOptions>();
 if (appLogger.IsEnabled(LogLevel.Information))
 {
     appLogger.LogInformation(
@@ -96,7 +98,7 @@ static void AddInfraGateConfiguration(IConfigurationBuilder configuration, strin
         configuration.AddInfraGateEnvironmentVariables(mappings =>
         {
             RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
-            K8sConventions.RegisterInfraGateEnvVarMappings(mappings);
+            KubernetesConventions.RegisterInfraGateEnvVarMappings(mappings);
         });
         configuration.AddEnvironmentVariables();
         configuration.AddCommandLine(args);

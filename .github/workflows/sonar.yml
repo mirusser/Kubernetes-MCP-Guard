@@ -94,54 +94,54 @@ jobs:
           BASE="https://sonarcloud.io/api"
           METRICS="bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,sqale_rating,reliability_rating,security_rating,security_review_rating,maintainability_rating,ncloc,complexity,cognitive_complexity"
 
+          rm -f /tmp/sonar_issues_*.json
           page=1
-          all_issues='[]'
           while true; do
             resp=$(curl -sf -u "$AUTH" \
               "$BASE/issues/search?componentKeys=$SONAR_PROJECT_KEY&ps=500&p=$page&statuses=OPEN,CONFIRMED&additionalFields=rules") || {
               echo "::warning::SonarCloud issues fetch failed (page $page)" >&2
               break
             }
-            chunk=$(echo "$resp" | jq '.issues // []')
-            all_issues=$(jq -n --argjson a "$all_issues" --argjson b "$chunk" '$a + $b')
+            echo "$resp" | jq '.issues // []' > "/tmp/sonar_issues_${page}.json"
             total=$(echo "$resp" | jq '.paging.total // 0')
             [ $((page * 500)) -ge "$total" ] && break
             page=$((page + 1))
           done
+          jq -s 'add' /tmp/sonar_issues_*.json > /tmp/sonar_all_issues.json 2>/dev/null || echo '[]' > /tmp/sonar_all_issues.json
 
-          qg=$(curl -sf -u "$AUTH" \
-            "$BASE/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY") || {
-            echo "::warning::SonarCloud quality gate fetch failed" >&2; qg='{}'
+          curl -sf -u "$AUTH" \
+            "$BASE/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY" > /tmp/sonar_qg.json || {
+            echo "::warning::SonarCloud quality gate fetch failed" >&2; echo '{}' > /tmp/sonar_qg.json
           }
 
-          measures=$(curl -sf -u "$AUTH" \
-            "$BASE/measures/component?component=$SONAR_PROJECT_KEY&metricKeys=$METRICS") || {
-            echo "::warning::SonarCloud measures fetch failed" >&2; measures='{}'
+          curl -sf -u "$AUTH" \
+            "$BASE/measures/component?component=$SONAR_PROJECT_KEY&metricKeys=$METRICS" > /tmp/sonar_measures.json || {
+            echo "::warning::SonarCloud measures fetch failed" >&2; echo '{}' > /tmp/sonar_measures.json
           }
 
+          rm -f /tmp/sonar_hotspots_*.json
           page=1
-          all_hotspots='[]'
           while true; do
             resp=$(curl -sf -u "$AUTH" \
               "$BASE/hotspots/search?projectKey=$SONAR_PROJECT_KEY&ps=500&p=$page") || {
               echo "::warning::SonarCloud hotspots fetch failed (page $page)" >&2
               break
             }
-            chunk=$(echo "$resp" | jq '.hotspots // []')
-            all_hotspots=$(jq -n --argjson a "$all_hotspots" --argjson b "$chunk" '$a + $b')
+            echo "$resp" | jq '.hotspots // []' > "/tmp/sonar_hotspots_${page}.json"
             total=$(echo "$resp" | jq '.paging.total // 0')
             [ $((page * 500)) -ge "$total" ] && break
             page=$((page + 1))
           done
+          jq -s 'add' /tmp/sonar_hotspots_*.json > /tmp/sonar_all_hotspots.json 2>/dev/null || echo '[]' > /tmp/sonar_all_hotspots.json
 
           jq -n \
             --arg project "$SONAR_PROJECT_KEY" \
             --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg branch "${GITHUB_REF_NAME}" \
-            --argjson qualityGate "$qg" \
-            --argjson measures "$measures" \
-            --argjson issues "$all_issues" \
-            --argjson hotspots "$all_hotspots" \
+            --slurpfile qualityGate /tmp/sonar_qg.json \
+            --slurpfile measures /tmp/sonar_measures.json \
+            --slurpfile issues /tmp/sonar_all_issues.json \
+            --slurpfile hotspots /tmp/sonar_all_hotspots.json \
             '{
               metadata: {
                 generatedAt: $generatedAt,
@@ -149,10 +149,10 @@ jobs:
                 sonarcloudUrl: ("https://sonarcloud.io/project/overview?id=" + $project),
                 branch: $branch
               },
-              qualityGate: $qualityGate,
-              measures: $measures,
-              issues: $issues,
-              hotspots: $hotspots
+              qualityGate: $qualityGate[0],
+              measures: $measures[0],
+              issues: $issues[0],
+              hotspots: $hotspots[0]
             }' > sonarcloud-report.json
 
       - name: Upload SonarCloud report artifact

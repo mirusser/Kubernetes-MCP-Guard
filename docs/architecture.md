@@ -53,9 +53,9 @@ flowchart TB
 
     subgraph ServerRuntime["Kubernetes MCP server"]
         Server["InfraGate.McpServer<br/>private stdio subprocess"]
-        Tools["K8sTools<br/>typed MCP tool surface"]
-        Manager["K8sManager<br/>namespace validation, observability, evidence, raw apply"]
-        Parser["K8sManifestParser<br/>Deployment / Service / ConfigMap allow-list"]
+        Tools["KubernetesTools<br/>typed MCP tool surface"]
+        Manager["KubernetesManager<br/>namespace validation, observability, evidence, raw apply"]
+        Parser["KubernetesManifestParser<br/>Deployment / Service / ConfigMap allow-list"]
         Server --> Tools --> Manager
         Manager --> Parser
     end
@@ -164,11 +164,11 @@ sequenceDiagram
     GW->>Svr: forward tool call<br/>(StdioClientTransport, no token)
     Note over GW,Svr: DownstreamMcpClient.GetClientAsync<br/>OAuth JWT terminated at gateway
 
-    Note over Svr: K8sTools tool handlers
+    Note over Svr: KubernetesTools tool handlers
     Svr->>Svr: validate namespace in allowed list
     Svr->>K8s: KubernetesClient GET/LIST<br/>(namespace-scoped, bounded)
     K8s-->>Svr: Kubernetes API response<br/>(Deployments, Services, ConfigMaps, Pods, ReplicaSets)
-    Note over Svr: K8sManager observability<br/>no Secret values, ConfigMap data, raw manifests
+    Note over Svr: KubernetesManager observability<br/>no Secret values, ConfigMap data, raw manifests
 
     Note over GW: Response sanitization + audit
     Svr-->>GW: tool result text
@@ -206,7 +206,7 @@ sequenceDiagram
 
     Note over Svr: Evidence collection
     Svr->>Svr: validate namespace, name, replicas, or manifest kind
-    Svr->>Svr: K8sManifestParser allows Deployment / Service / ConfigMap
+    Svr->>Svr: KubernetesManifestParser allows Deployment / Service / ConfigMap
     Svr->>K8s: dry-run against K8s API<br/>(dryRun=All, strict field validation)
     Svr-->>Adapter: dry-run, diff, and policy evidence
     Adapter-->>GW: Plan Envelope + target namespace

@@ -42,7 +42,7 @@ sequenceDiagram
     Note over Gateway: JWT issuer/audience/lifetime/signature/scope validation
     Gateway->>Gateway: GuardedToolRunner scans request arguments
     Gateway->>Downstream: Start or reuse stdio McpServer (no token passthrough)
-    Note over Downstream: K8sTools tool handlers
+    Note over Downstream: KubernetesTools tool handlers
 
     alt Read/status or approved apply tool
         Downstream->>K8s: KubernetesClient API request

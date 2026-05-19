@@ -59,10 +59,10 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             },
             ct).ConfigureAwait(false);
 
-        K8sApplyEvidence? applyEvidence;
+        KubernetesApplyEvidence? applyEvidence;
         try
         {
-            applyEvidence = JsonSerializer.Deserialize<K8sApplyEvidence>(applyEvidenceJson, JsonOptions);
+            applyEvidence = JsonSerializer.Deserialize<KubernetesApplyEvidence>(applyEvidenceJson, JsonOptions);
         }
         catch (JsonException)
         {
@@ -91,10 +91,10 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             },
             ct).ConfigureAwait(false);
 
-        K8sPlanDiff[]? diffs;
+        KubernetesPlanDiff[]? diffs;
         try
         {
-            diffs = JsonSerializer.Deserialize<K8sPlanDiff[]>(diffJson, JsonOptions);
+            diffs = JsonSerializer.Deserialize<KubernetesPlanDiff[]>(diffJson, JsonOptions);
         }
         catch (JsonException)
         {
@@ -179,10 +179,10 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             },
             ct).ConfigureAwait(false);
 
-        K8sPlanDiff[]? diffs;
+        KubernetesPlanDiff[]? diffs;
         try
         {
-            diffs = JsonSerializer.Deserialize<K8sPlanDiff[]>(diffJson, JsonOptions);
+            diffs = JsonSerializer.Deserialize<KubernetesPlanDiff[]>(diffJson, JsonOptions);
         }
         catch (JsonException)
         {
@@ -283,7 +283,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                     message));
         }
 
-        var deploymentRef = new K8sObjectRef("apps/v1", "Deployment", namespaceName, name);
+        var deploymentRef = new KubernetesObjectRef("apps/v1", "Deployment", namespaceName, name);
         var payload = new KubernetesPlanPayload(
             namespaceName,
             $"Scale Deployment '{name}' in namespace '{namespaceName}' to {replicas} replicas.",
@@ -356,7 +356,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         }
 
         var restartedAtUtc = DateTimeOffset.UtcNow.ToString(ApprovalConventions.DateTimeFormats.RoundTrip);
-        var deploymentRef = new K8sObjectRef("apps/v1", "Deployment", namespaceName, name);
+        var deploymentRef = new KubernetesObjectRef("apps/v1", "Deployment", namespaceName, name);
         var payload = new KubernetesPlanPayload(
             namespaceName,
             $"Restart Deployment '{name}' in namespace '{namespaceName}'.",
@@ -391,12 +391,12 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             return PlanBuildResult.Failed("Missing required arguments: namespace, name, container, and image.");
         }
 
-        var policyResult = K8sPolicyValidator.ValidateSetDeploymentImage(
+        var policyResult = KubernetesPolicyValidator.ValidateSetDeploymentImage(
             namespaceName,
             name,
             container,
             image,
-            K8sPolicyOptions.Default);
+            KubernetesPolicyOptions.Default);
         if (policyResult.IsDenied)
         {
             return PlanBuildResult.Failed($"Set deployment image rejected by policy:{Environment.NewLine}{policyResult.FormatRefusal()}");
@@ -445,7 +445,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                     message));
         }
 
-        var deploymentRef = new K8sObjectRef("apps/v1", "Deployment", namespaceName, name);
+        var deploymentRef = new KubernetesObjectRef("apps/v1", "Deployment", namespaceName, name);
         var payload = new KubernetesPlanPayload(
             namespaceName,
             $"Update Deployment '{name}' container '{container}' image to '{image}'.",
@@ -487,11 +487,11 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         return PlanBuildResult.Success(envelope, planId, payload.Namespace);
     }
 
-    private static K8sPlanDryRun? DeserializeDryRun(string json)
+    private static KubernetesPlanDryRun? DeserializeDryRun(string json)
     {
         try
         {
-            return JsonSerializer.Deserialize<K8sPlanDryRun>(json, JsonOptions);
+            return JsonSerializer.Deserialize<KubernetesPlanDryRun>(json, JsonOptions);
         }
         catch (JsonException)
         {
@@ -499,11 +499,11 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         }
     }
 
-    private static K8sPlanDiff[]? DeserializeDiffs(string json)
+    private static KubernetesPlanDiff[]? DeserializeDiffs(string json)
     {
         try
         {
-            return JsonSerializer.Deserialize<K8sPlanDiff[]>(json, JsonOptions);
+            return JsonSerializer.Deserialize<KubernetesPlanDiff[]>(json, JsonOptions);
         }
         catch (JsonException)
         {

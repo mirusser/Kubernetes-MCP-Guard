@@ -238,19 +238,19 @@ public sealed class GatewayApprovalEndpointsTests
             namespaceName: "mcp-ns",
             description: "Scale deployment demo to 3 replicas.",
             parameters: new Dictionary<string, string> { ["scale"] = "3" },
-            objects: [new K8sObjectRef("apps/v1", "Deployment", "mcp-ns", "demo")])
+            objects: [new KubernetesObjectRef("apps/v1", "Deployment", "mcp-ns", "demo")])
         {
             Manifest = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: demo\n  namespace: mcp-ns\nspec:\n  replicas: 3",
-            DryRun = new K8sPlanDryRun(
+            DryRun = new KubernetesPlanDryRun(
                 "succeeded",
                 FixedTime,
-                [new K8sPlanDryRunObject("apps/v1/Deployment/mcp-ns/demo", "{\"kind\":\"Deployment\"}")],
+                [new KubernetesPlanDryRunObject("apps/v1/Deployment/mcp-ns/demo", "{\"kind\":\"Deployment\"}")],
                 ["299 - admission warning"],
                 "dry-run completed"),
             Diffs =
             [
-                new K8sPlanDiff(
-                    new K8sObjectRef("apps/v1", "Deployment", "mcp-ns", "demo"),
+                new KubernetesPlanDiff(
+                    new KubernetesObjectRef("apps/v1", "Deployment", "mcp-ns", "demo"),
                     "Update",
                     "scaled replicas to 3",
                     "+  replicas: 3\n-  replicas: 1",
@@ -262,7 +262,7 @@ public sealed class GatewayApprovalEndpointsTests
             ],
             PolicyFindings = canBeApproved
                 ? []
-                : [new K8sPlanPolicyFinding("Deny", "POL-001", "deployment/demo", "Not allowed.")],
+                : [new KubernetesPlanPolicyFinding("Deny", "POL-001", "deployment/demo", "Not allowed.")],
         };
         var envelope = KubernetesApprovalAdapter.CreateEnvelope(
             "plan-xyz789",

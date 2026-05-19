@@ -253,19 +253,19 @@ public sealed class GatewayToolDispatcherTests
                     {
                         [KubernetesAdapterConventions.PlanParameters.ObjectCount] = "1"
                     },
-                    [new K8sObjectRef("apps/v1", "Deployment", namespaceName, "demo")])
+                    [new KubernetesObjectRef("apps/v1", "Deployment", namespaceName, "demo")])
                 {
                     Manifest = "apiVersion: apps/v1",
-                    DryRun = new K8sPlanDryRun(
+                    DryRun = new KubernetesPlanDryRun(
                         "succeeded",
                         DateTimeOffset.UtcNow,
-                        [new K8sPlanDryRunObject($"apps/v1 Deployment {namespaceName}/demo", "{}")],
+                        [new KubernetesPlanDryRunObject($"apps/v1 Deployment {namespaceName}/demo", "{}")],
                         [],
                         "Server-side dry-run succeeded."),
                     Diffs =
                     [
-                        new K8sPlanDiff(
-                            new K8sObjectRef("apps/v1", "Deployment", namespaceName, "demo"),
+                        new KubernetesPlanDiff(
+                            new KubernetesObjectRef("apps/v1", "Deployment", namespaceName, "demo"),
                             ApprovalConventions.DiffChangeTypes.Update,
                             "Deployment will be updated.",
                             "@@ -1 +1 @@",
