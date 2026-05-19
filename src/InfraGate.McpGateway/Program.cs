@@ -2,11 +2,13 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Notifications;
 using InfraGate.Observability;
 using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
@@ -62,13 +64,65 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddAntiforgery();
 builder.Services.AddGatewayAuthentication(options.Auth);
 
+builder.Services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
+builder.Services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
+
 builder.Services
-    .AddMcpServer()
-    .WithHttpTransport()
+    .AddMcpServer(serverOptions =>
+    {
+        serverOptions.Capabilities = new ServerCapabilities
+        {
+            Resources = new ResourcesCapability { Subscribe = true }
+        };
+    })
+    .WithHttpTransport(transportOptions =>
+    {
+        // RunSessionHandler is experimental in ModelContextProtocol.AspNetCore 1.3.0.
+        // It runs before a session starts and its CancellationToken cancels on disconnect,
+        // giving us both the registration and cleanup hook in one place.
+#pragma warning disable MCPEXP002
+        transportOptions.RunSessionHandler = async (httpContext, server, ct) =>
+        {
+            var registry = httpContext.RequestServices.GetRequiredService<ISubscriptionRegistry>();
+            var id = server.SessionId;
+            if (id is not null)
+            {
+                registry.RegisterSession(id, new McpServerSessionNotifier(server));
+            }
+            try
+            {
+                await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            finally
+            {
+                if (id is not null)
+                {
+                    registry.RemoveSession(id);
+                }
+            }
+        };
+#pragma warning restore MCPEXP002
+    })
     .WithListToolsHandler((RequestContext<ListToolsRequestParams> request, CancellationToken ct) =>
         new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().ListToolsAsync(request.Params, ct)))
     .WithCallToolHandler((RequestContext<CallToolRequestParams> request, CancellationToken ct) =>
-        new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct)));
+    {
+        // Store session ID per-request so the dispatcher can retrieve it without a scoped dependency.
+        if (request.Services!.GetService<IHttpContextAccessor>() is { HttpContext: { } httpCtx })
+        {
+            httpCtx.Items[NotificationsConventions.McpSessionIdItemKey] = request.Server.SessionId;
+        }
+        return new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct));
+    })
+    .WithSubscribeToResourcesHandler((RequestContext<SubscribeRequestParams> request, CancellationToken ct) =>
+    {
+        // Subscriptions are managed implicitly by the gateway when challenges are created.
+        // This handler satisfies the MCP protocol handshake for clients that send subscribe requests.
+        return new ValueTask<EmptyResult>(new EmptyResult());
+    });
 
 var app = builder.Build();
 

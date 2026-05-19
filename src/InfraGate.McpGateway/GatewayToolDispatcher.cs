@@ -2,13 +2,13 @@ using System.Text.Json;
 using InfraGate.Approvals;
 using InfraGate.Approvals.AuditPayloads;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Notifications;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
-using ModelContextProtocol.Server;
 
 namespace InfraGate.McpGateway;
 
-public sealed class GatewayToolDispatcher : IGatewayToolDispatcher
+internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 {
     private readonly DownstreamToolRegistry registry;
     private readonly GuardedToolRunner guardedRunner;
@@ -17,6 +17,7 @@ public sealed class GatewayToolDispatcher : IGatewayToolDispatcher
     private readonly ApprovalStore approvalStore;
     private readonly IApprovalPreExecutionGate preExecutionGate;
     private readonly IHttpContextAccessor httpContextAccessor;
+    private readonly ISubscriptionRegistry subscriptionRegistry;
     private readonly ILogger<GatewayToolDispatcher> logger;
 
     public GatewayToolDispatcher(
@@ -27,6 +28,7 @@ public sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         ApprovalStore approvalStore,
         IApprovalPreExecutionGate preExecutionGate,
         IHttpContextAccessor httpContextAccessor,
+        ISubscriptionRegistry subscriptionRegistry,
         ILogger<GatewayToolDispatcher> logger)
     {
         this.registry = registry;
@@ -36,8 +38,12 @@ public sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         this.approvalStore = approvalStore;
         this.preExecutionGate = preExecutionGate;
         this.httpContextAccessor = httpContextAccessor;
+        this.subscriptionRegistry = subscriptionRegistry;
         this.logger = logger;
     }
+
+    private string? CurrentSessionId =>
+        httpContextAccessor.HttpContext?.Items[NotificationsConventions.McpSessionIdItemKey] as string;
 
     public async Task<ListToolsResult> ListToolsAsync(
         ListToolsRequestParams request,
@@ -131,6 +137,12 @@ public sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             return ErrorResult("Refused: mutation plan creation requires an authenticated OAuth subject.");
         }
 
+        var sessionId = CurrentSessionId;
+        if (sessionId is not null)
+        {
+            subscriptionRegistry.BindSubject(sessionId, identity.Subject);
+        }
+
         var args = ConvertArguments(request.Arguments);
         bool requestHasFindings = await guardedRunner.AuditRequestAsync(toolName, args, ct);
 
@@ -193,6 +205,15 @@ public sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         var gate = await approvals.EnsureApprovedOrCreateChallengeAsync(planId, ct);
         if (!gate.IsApproved)
         {
+            if (!gate.Message.Contains("Refused:", StringComparison.Ordinal))
+            {
+                var sessionId = CurrentSessionId;
+                if (sessionId is not null)
+                {
+                    subscriptionRegistry.SubscribeToPlan(sessionId, planId);
+                }
+            }
+
             return gate.Message.Contains("Refused:", StringComparison.Ordinal)
                 ? ErrorResult(gate.Message)
                 : new CallToolResult { Content = [new TextContentBlock { Text = gate.Message }] };

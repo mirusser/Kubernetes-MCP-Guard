@@ -4,6 +4,7 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Notifications;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -688,6 +689,7 @@ public sealed class GatewayApprovalServiceTests
                 new SameSubjectAuthorizationCheck(),
                 gatewayOptions,
                 httpContextAccessor,
+                NullNotificationDispatcher.Instance,
                 NullLogger<GatewayApprovalService>.Instance),
             store,
             challenges,
@@ -727,4 +729,12 @@ public sealed class GatewayApprovalServiceTests
         ApprovalChallengeStore Challenges,
         HttpContextAccessor HttpContextAccessor,
         IPlanReviewAdapter PlanReviewAdapter);
+
+    private sealed class NullNotificationDispatcher : IApprovalNotificationDispatcher
+    {
+        public static readonly NullNotificationDispatcher Instance = new();
+
+        public Task NotifyPlanApprovedAsync(string planId, CancellationToken ct) =>
+            Task.CompletedTask;
+    }
 }
