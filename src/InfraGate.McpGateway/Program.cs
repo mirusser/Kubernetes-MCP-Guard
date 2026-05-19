@@ -3,14 +3,18 @@ using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.Observability;
+using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
-var options = McpGatewayOptions.FromEnvironment();
-options.ValidateProductionSafety();
 var builder = WebApplication.CreateBuilder(args);
+AddInfraGateConfiguration(builder.Configuration, args);
+
+var options = McpGatewayOptions.FromConfiguration(builder.Configuration);
+options.ValidateProductionSafety();
 
 builder.AddInfraGateObservability(opt => 
 {
@@ -19,9 +23,11 @@ builder.AddInfraGateObservability(opt =>
 });
 
 if (string.IsNullOrWhiteSpace(builder.Configuration[McpGatewayConventions.ConfigurationKeys.Urls]) &&
-    string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.AspNetCoreUrls)))
+    string.IsNullOrWhiteSpace(builder.Configuration[McpGatewayConventions.EnvironmentVariables.AspNetCoreUrls]))
 {
-    builder.WebHost.UseUrls(McpGatewayOptions.DefaultUrl);
+    string configuredUrls = builder.Configuration[McpGatewayConventions.ConfigurationKeys.AspNetCoreUrls] ??
+        McpGatewayOptions.DefaultUrl;
+    builder.WebHost.UseUrls(configuredUrls);
 }
 
 builder.Services.AddDataProtection()
@@ -66,3 +72,14 @@ app.MapMcp(McpGatewayConventions.McpPath)
     .RequireAuthorization(GatewayAuthConventions.Schemes.PolicyName);
 
 await app.RunAsync();
+
+static void AddInfraGateConfiguration(IConfigurationBuilder configuration, string[] args)
+{
+    string? configPath = Environment.GetEnvironmentVariable(RuntimeSafetyConventions.EnvironmentVariables.ConfigPath);
+    if (!string.IsNullOrWhiteSpace(configPath))
+    {
+        configuration.AddJsonFile(configPath, optional: false, reloadOnChange: false);
+        configuration.AddEnvironmentVariables();
+        configuration.AddCommandLine(args);
+    }
+}

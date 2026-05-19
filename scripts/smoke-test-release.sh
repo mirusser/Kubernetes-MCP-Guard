@@ -2,7 +2,7 @@
 # smoke-test-release.sh — released-image smoke test.
 #
 # Exercises deploy/local-oauth/compose.release.yaml using the published gateway image:
-#   1. Generates deploy/generated/smoke-release.env from the run profile.
+#   1. Generates deploy/generated/smoke-release.env and appsettings JSON from the run profile.
 #   2. Boots Keycloak and the gateway with docker compose (--pull always).
 #   3. Waits for Keycloak OIDC discovery and the gateway HTTP surface.
 #   4. Verifies host-side volume directories exist.
@@ -26,6 +26,7 @@ TAG="${TAG:-latest}"
 KUBECONFIG_PATH="${KUBECONFIG_PATH:-${REPO_ROOT}/.kube/mcp-nginx-demo.compose.config}"
 COMPOSE_FILE="${REPO_ROOT}/deploy/local-oauth/compose.release.yaml"
 ENV_FILE="${REPO_ROOT}/deploy/generated/smoke-release.env"
+APPSETTINGS_FILE="${REPO_ROOT}/deploy/generated/smoke-release.appsettings.json"
 
 GATEWAY_URL="http://127.0.0.1:3001"
 KEYCLOAK_URL="http://127.0.0.1:3010"
@@ -76,14 +77,19 @@ teardown() {
 }
 trap teardown EXIT
 
-echo "==> Generating run profile env (smoke-release) ..."
+echo "==> Generating run profile files (smoke-release) ..."
 mkdir -p "${REPO_ROOT}/deploy/generated"
 dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- generate smoke-release \
   --set "host.kubeconfigHostPath=${KUBECONFIG_PATH}" \
   --set "host.approvalHostPath=${REPO_ROOT}/.mcp-approvals" \
   --set "host.guardAuditHostPath=${REPO_ROOT}/.mcp-guardrails" \
   --set "host.dataProtectionHostPath=${REPO_ROOT}/.mcp-dataprotection-keys" \
+  --set "host.configHostPath=${APPSETTINGS_FILE}" \
   --output "${ENV_FILE}"
+
+dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- generate smoke-release \
+  --format appsettings \
+  --output "${APPSETTINGS_FILE}"
 
 echo "==> Pulling and starting local OAuth services (tag=${TAG}) ..."
 TAG="${TAG}" INFRA_GATE_GATEWAY_ENV_FILE="${ENV_FILE}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --pull always

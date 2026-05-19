@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace InfraGate.RunProfiles;
 
 internal static class RunProfileCli
@@ -48,18 +50,20 @@ internal static class RunProfileCli
         if (string.Equals(command, RunProfileConventions.Commands.Generate, StringComparison.Ordinal))
         {
             string profileName;
-            string outputPath;
-            bool force;
-            IReadOnlyList<(string Path, string Value)> setOverrides;
-            RunProfile profile;
-            try
-            {
-                profileName = GetRequiredProfileName(args);
-                outputPath = GetRequiredOption(args, RunProfileConventions.Options.Output);
-                force = HasFlag(args, RunProfileConventions.Options.Force);
-                setOverrides = GetSetOverrides(args);
-                profile = document.FindProfileWithDefaults(profileName, document.Defaults);
-                profile = ApplySetOverrides(profile, setOverrides);
+                string outputPath;
+                string format;
+                bool force;
+                IReadOnlyList<(string Path, string Value)> setOverrides;
+                RunProfile profile;
+                try
+                {
+                    profileName = GetRequiredProfileName(args);
+                    outputPath = GetRequiredOption(args, RunProfileConventions.Options.Output);
+                    format = GetGenerateFormat(args);
+                    force = HasFlag(args, RunProfileConventions.Options.Force);
+                    setOverrides = GetSetOverrides(args);
+                    profile = document.FindProfileWithDefaults(profileName, document.Defaults);
+                    profile = ApplySetOverrides(profile, setOverrides);
             }
             catch (InvalidOperationException ex)
             {
@@ -69,11 +73,8 @@ internal static class RunProfileCli
 
             if (File.Exists(outputPath) && !force)
             {
-                string? firstLine = await ReadFirstLineAsync(outputPath, cancellationToken).ConfigureAwait(false);
-                bool isGenerated = firstLine?.StartsWith(RunProfileConventions.GeneratedFile.HeaderLinePrefix, StringComparison.Ordinal) == true;
-                bool isCorrectProfile = firstLine?.EndsWith($"{RunProfileConventions.GeneratedFile.ProfileMarker}{profileName}", StringComparison.Ordinal) == true;
-
-                if (!isGenerated || !isCorrectProfile)
+                string existingContent = await File.ReadAllTextAsync(outputPath, cancellationToken).ConfigureAwait(false);
+                if (!IsGeneratedForProfile(existingContent, profileName))
                 {
                     await error.WriteLineAsync(
                         $"Will not overwrite '{outputPath}': not generated for profile '{profileName}'. Use --force to overwrite.").ConfigureAwait(false);
@@ -81,14 +82,29 @@ internal static class RunProfileCli
                 }
             }
 
-            string envText = EnvFileRenderer.Render(Path.GetFileName(configPath), profile);
+            string generatedText;
+            try
+            {
+                generatedText = format switch
+                {
+                    RunProfileConventions.Formats.AppSettings => AppSettingsRenderer.Render(Path.GetFileName(configPath), profile),
+                    RunProfileConventions.Formats.Env => EnvFileRenderer.Render(Path.GetFileName(configPath), profile),
+                    _ => throw new InvalidOperationException($"Unsupported format: {format}")
+                };
+            }
+            catch (InvalidOperationException ex)
+            {
+                await error.WriteLineAsync(ex.Message).ConfigureAwait(false);
+                return 1;
+            }
+
             string? outputDirectory = Path.GetDirectoryName(outputPath);
             if (!string.IsNullOrWhiteSpace(outputDirectory))
             {
                 Directory.CreateDirectory(outputDirectory);
             }
 
-            await File.WriteAllTextAsync(outputPath, envText, cancellationToken).ConfigureAwait(false);
+            await File.WriteAllTextAsync(outputPath, generatedText, cancellationToken).ConfigureAwait(false);
             await output.WriteLineAsync($"Generated {outputPath}").ConfigureAwait(false);
             return 0;
         }
@@ -114,10 +130,51 @@ internal static class RunProfileCli
         return false;
     }
 
-    private static async Task<string?> ReadFirstLineAsync(string path, CancellationToken cancellationToken)
+    private static string GetGenerateFormat(IReadOnlyList<string> args)
     {
-        using var streamReader = new StreamReader(path);
-        return await streamReader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+        string? format = GetOption(args, RunProfileConventions.Options.Format);
+        if (format is null)
+        {
+            return RunProfileConventions.Formats.Env;
+        }
+
+        if (string.Equals(format, RunProfileConventions.Formats.Env, StringComparison.Ordinal) ||
+            string.Equals(format, RunProfileConventions.Formats.AppSettings, StringComparison.Ordinal))
+        {
+            return format;
+        }
+
+        throw new InvalidOperationException(
+            $"{RunProfileConventions.Options.Format} must be '{RunProfileConventions.Formats.Env}' or '{RunProfileConventions.Formats.AppSettings}'.");
+    }
+
+    private static bool IsGeneratedForProfile(string content, string profileName) =>
+        IsGeneratedEnvForProfile(content, profileName) ||
+        IsGeneratedAppSettingsForProfile(content, profileName);
+
+    private static bool IsGeneratedEnvForProfile(string content, string profileName)
+    {
+        using var reader = new StringReader(content);
+        string? firstLine = reader.ReadLine();
+        return firstLine?.StartsWith(RunProfileConventions.GeneratedFile.HeaderLinePrefix, StringComparison.Ordinal) == true &&
+            firstLine.EndsWith($"{RunProfileConventions.GeneratedFile.ProfileMarker}{profileName}", StringComparison.Ordinal);
+    }
+
+    private static bool IsGeneratedAppSettingsForProfile(string content, string profileName)
+    {
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(content);
+            return document.RootElement.TryGetProperty(
+                    RunProfileConventions.GeneratedFile.MetadataSection,
+                    out JsonElement metadata) &&
+                metadata.TryGetProperty(RunProfileConventions.GeneratedFile.MetadataProfile, out JsonElement profile) &&
+                string.Equals(profile.GetString(), profileName, StringComparison.Ordinal);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static bool IsKnownCommand(string command) =>
@@ -260,7 +317,7 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.Host => profile with
             {
                 Host = ApplyHostOverride(
-                    profile.Host ?? new HostProfile(null, null, null, null, null, null, null), field, value, path)
+                    profile.Host ?? new HostProfile(null, null, null, null, null, null, null, null), field, value, path)
             },
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };
@@ -316,6 +373,7 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.BindAddress => profile with { BindAddress = value },
             RunProfileConventions.YamlKeys.BindPort => profile with { BindPort = value },
             RunProfileConventions.YamlKeys.GatewayImage => profile with { GatewayImage = value },
+            RunProfileConventions.YamlKeys.ConfigHostPath => profile with { ConfigHostPath = value },
             RunProfileConventions.YamlKeys.KubeconfigHostPath => profile with { KubeconfigHostPath = value },
             RunProfileConventions.YamlKeys.ApprovalHostPath => profile with { ApprovalHostPath = value },
             RunProfileConventions.YamlKeys.GuardAuditHostPath => profile with { GuardAuditHostPath = value },

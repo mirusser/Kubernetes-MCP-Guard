@@ -198,7 +198,7 @@ docker compose --env-file deploy/generated/local-compose.env \
   -f deploy/local-oauth/compose.yaml up --build
 ```
 
-`generate-env.sh` writes `deploy/generated/local-compose.env` from `deploy/run-profiles.yaml` (profile `local-compose`) and supplies absolute host paths via `--set` so the command is independent of the current working directory. The generated file is gitignored; `deploy/local-oauth/release.env.example` is the committed no-SDK reference for the released profile.
+`generate-env.sh` writes `deploy/generated/local-compose.env` and `deploy/generated/local-compose.appsettings.json` from `deploy/run-profiles.yaml` (profile `local-compose`) and supplies absolute host paths via `--set` so the command is independent of the current working directory. The generated files are gitignored; `deploy/local-oauth/release.env.example` and `deploy/local-oauth/release.appsettings.json` are the committed no-SDK references for the released profile.
 
 Keycloak starts first and takes ~30s to pass its health check before the gateway comes up. No manual step is needed — the `depends_on: condition: service_healthy` gate handles the ordering.
 
@@ -290,7 +290,7 @@ TAG=vX.Y.Z docker compose --env-file deploy/local-oauth/release.env.example \
   -f deploy/local-oauth/compose.release.yaml up
 ```
 
-Keycloak is pulled from `quay.io/keycloak/keycloak:26.6.1`; the gateway image is pulled from GHCR. Replace `vX.Y.Z` with the release tag from <https://github.com/mirusser/Kubernetes-MCP-Guard/releases>. The committed release env template is generated from the `smoke-release` Run Profile and is the no-SDK path for published images.
+Keycloak is pulled from `quay.io/keycloak/keycloak:26.6.1`; the gateway image is pulled from GHCR. Replace `vX.Y.Z` with the release tag from <https://github.com/mirusser/Kubernetes-MCP-Guard/releases>. The committed release env template and appsettings file are generated from the `smoke-release` Run Profile and are the no-SDK path for published images.
 
 After release, the published-image path is verified by `scripts/smoke-test-release.sh` (see [Verification](#verification)).
 
@@ -405,7 +405,7 @@ The canonical environment variable, CI/CD, and release configuration reference i
 │   └── local-oauth/compose.release.yaml  # Keycloak + Gateway (published images)
 ├── scripts/
 │   ├── create-demo-kubeconfig.sh         # Bootstrap RBAC & generate kubeconfig
-│   ├── generate-env.sh                   # Generate a run profile env file for local Compose use
+│   ├── generate-env.sh                   # Generate run profile env/appsettings files for local Compose use
 │   └── smoke-test-release.sh             # Published-image smoke
 ├── .kube/                                # Generated kubeconfigs (gitignored)
 ├── .mcp-approvals/                       # Approval files: pending/, grants/, applied/, challenges/ (gitignored)

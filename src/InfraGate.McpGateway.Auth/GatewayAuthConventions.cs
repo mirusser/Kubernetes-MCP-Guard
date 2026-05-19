@@ -20,6 +20,19 @@ public static class GatewayAuthConventions
         public const string ApprovalOAuthCallbackPath = "INFRA_GATE_APPROVAL_OAUTH_CALLBACK_PATH";
     }
 
+    public static class ConfigurationKeys
+    {
+        public const string OAuthAuthority = "InfraGate:Auth:OAuthAuthority";
+        public const string OAuthMetadataAddress = "InfraGate:Auth:OAuthMetadataAddress";
+        public const string OAuthResource = "InfraGate:Auth:OAuthResource";
+        public const string OAuthScope = "InfraGate:Auth:OAuthScope";
+        public const string OAuthRequireHttpsMetadata = "InfraGate:Auth:OAuthRequireHttpsMetadata";
+        public const string ApprovalOAuthClientId = "InfraGate:Auth:ApprovalOAuthClientId";
+        public const string ApprovalOAuthAuthorizationEndpoint = "InfraGate:Auth:ApprovalOAuthAuthorizationEndpoint";
+        public const string ApprovalOAuthTokenEndpoint = "InfraGate:Auth:ApprovalOAuthTokenEndpoint";
+        public const string ApprovalOAuthCallbackPath = "InfraGate:Auth:ApprovalOAuthCallbackPath";
+    }
+
     public static class Schemes
     {
         public const string PolicyName = "InfraGateMcpGateway";

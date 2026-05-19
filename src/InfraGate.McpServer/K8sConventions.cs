@@ -25,6 +25,15 @@ internal static class K8sConventions
         public const string LogPath = "K8S_MCP_LOG_PATH";
     }
 
+    public static class ConfigurationKeys
+    {
+        public const string AllowedNamespaces = "InfraGate:Kubernetes:AllowedNamespaces";
+        public const string ApprovalRoot = "InfraGate:Approval:Root";
+        public const string KubeConfig = "InfraGate:Kubernetes:KubeConfig";
+        public const string LogPath = "InfraGate:Kubernetes:LogPath";
+        public const string UseInClusterConfig = "InfraGate:Kubernetes:UseInClusterConfig";
+    }
+
     public static class MutationOperations
     {
         public const string Apply = "apply";

@@ -2,6 +2,7 @@ using System.Globalization;
 using InfraGate.Approvals;
 using InfraGate.McpGateway.Auth;
 using InfraGate.RuntimeSafety;
+using Microsoft.Extensions.Configuration;
 
 namespace InfraGate.McpGateway;
 
@@ -52,6 +53,65 @@ public sealed record McpGatewayOptions(
         string? approvalBaseUrl = Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl);
         TimeSpan approvalChallengeTtl = ParseTimeSpanSeconds(
             Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.ApprovalChallengeTtlSeconds),
+            DefaultApprovalChallengeTtl);
+
+        return new McpGatewayOptions(
+            auth,
+            downstreamProject,
+            auditRoot,
+            workingDirectory,
+            approvalRoot,
+            approvalBaseUrl,
+            approvalChallengeTtl,
+            downstreamAssembly,
+            runtimeMode,
+            isGuardAuditRootExplicit,
+            isApprovalRootExplicit);
+    }
+
+    public static McpGatewayOptions FromConfiguration(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        var auth = GatewayAuthOptions.FromConfiguration(configuration);
+        RuntimeMode runtimeMode = RuntimeModeResolver.FromConfiguration(configuration);
+        string workingDirectory = Directory.GetCurrentDirectory();
+        string downstreamProject = GetConfigurationValue(
+                configuration,
+                McpGatewayConventions.EnvironmentVariables.DownstreamProject,
+                McpGatewayConventions.ConfigurationKeys.DownstreamProject) ??
+            Path.Combine(
+                workingDirectory,
+                McpGatewayConventions.Paths.SourceDirectory,
+                McpGatewayConventions.Paths.DefaultDownstreamProjectDirectory,
+                McpGatewayConventions.Paths.DefaultDownstreamProjectFileName);
+        string? downstreamAssembly = GetConfigurationValue(
+            configuration,
+            McpGatewayConventions.EnvironmentVariables.DownstreamAssembly,
+            McpGatewayConventions.ConfigurationKeys.DownstreamAssembly);
+        string? auditRootValue = GetConfigurationValue(
+            configuration,
+            McpGatewayConventions.EnvironmentVariables.GuardAuditRoot,
+            McpGatewayConventions.ConfigurationKeys.GuardAuditRoot);
+        bool isGuardAuditRootExplicit = !string.IsNullOrWhiteSpace(auditRootValue);
+        string auditRoot = auditRootValue ??
+            Path.Combine(workingDirectory, McpGatewayConventions.Paths.DefaultGuardAuditRootDirectory);
+        string? approvalRootValue = GetConfigurationValue(
+            configuration,
+            ApprovalConventions.EnvironmentVariables.ApprovalRoot,
+            McpGatewayConventions.ConfigurationKeys.ApprovalRoot);
+        bool isApprovalRootExplicit = !string.IsNullOrWhiteSpace(approvalRootValue);
+        string approvalRoot = approvalRootValue ??
+            Path.Combine(workingDirectory, ApprovalConventions.Storage.DefaultRootDirectory);
+        string? approvalBaseUrl = GetConfigurationValue(
+            configuration,
+            McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl,
+            McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl);
+        TimeSpan approvalChallengeTtl = ParseTimeSpanSeconds(
+            GetConfigurationValue(
+                configuration,
+                McpGatewayConventions.EnvironmentVariables.ApprovalChallengeTtlSeconds,
+                McpGatewayConventions.ConfigurationKeys.ApprovalChallengeTtlSeconds),
             DefaultApprovalChallengeTtl);
 
         return new McpGatewayOptions(
@@ -121,5 +181,16 @@ public sealed record McpGatewayOptions(
         return string.IsNullOrWhiteSpace(value)
             ? defaultValue
             : TimeSpan.FromSeconds(double.Parse(value, CultureInfo.InvariantCulture));
+    }
+
+    private static string? GetConfigurationValue(
+        IConfiguration configuration,
+        string environmentVariable,
+        string configurationKey)
+    {
+        string? environmentValue = configuration[environmentVariable];
+        return !string.IsNullOrWhiteSpace(environmentValue)
+            ? environmentValue
+            : configuration[configurationKey];
     }
 }

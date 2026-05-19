@@ -2,7 +2,7 @@
 # smoke-test-local.sh — local-build smoke test.
 #
 # Exercises deploy/local-oauth/compose.yaml and builds the gateway from source:
-#   1. Generates deploy/generated/smoke-local.env from the run profile.
+#   1. Generates deploy/generated/smoke-local.env and appsettings JSON from the run profile.
 #   2. Builds and starts Keycloak + gateway with docker compose (--build).
 #   3. Waits for Keycloak OIDC discovery and the gateway HTTP surface.
 #   4. Verifies host-side volume directories exist.
@@ -24,6 +24,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 KUBECONFIG_PATH="${KUBECONFIG_PATH:-${REPO_ROOT}/.kube/mcp-nginx-demo.compose.config}"
 COMPOSE_FILE="${REPO_ROOT}/deploy/local-oauth/compose.yaml"
 ENV_FILE="${REPO_ROOT}/deploy/generated/smoke-local.env"
+APPSETTINGS_FILE="${REPO_ROOT}/deploy/generated/smoke-local.appsettings.json"
 
 GATEWAY_URL="http://127.0.0.1:3001"
 KEYCLOAK_URL="http://127.0.0.1:3010"
@@ -75,14 +76,19 @@ teardown() {
 }
 trap teardown EXIT
 
-echo "==> Generating run profile env (smoke-local) ..."
+echo "==> Generating run profile files (smoke-local) ..."
 mkdir -p "${REPO_ROOT}/deploy/generated"
 dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- generate smoke-local \
   --set "host.kubeconfigHostPath=${KUBECONFIG_PATH}" \
   --set "host.approvalHostPath=${REPO_ROOT}/.mcp-approvals" \
   --set "host.guardAuditHostPath=${REPO_ROOT}/.mcp-guardrails" \
   --set "host.dataProtectionHostPath=${REPO_ROOT}/.mcp-dataprotection-keys" \
+  --set "host.configHostPath=${APPSETTINGS_FILE}" \
   --output "${ENV_FILE}"
+
+dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- generate smoke-local \
+  --format appsettings \
+  --output "${APPSETTINGS_FILE}"
 
 echo "==> Building and starting local OAuth services (local build) ..."
 INFRA_GATE_GATEWAY_ENV_FILE="${ENV_FILE}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --build

@@ -1,5 +1,6 @@
 using InfraGate.McpServer;
 using InfraGate.RuntimeSafety;
+using Microsoft.Extensions.Configuration;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
 
@@ -86,6 +87,47 @@ public sealed class K8SMcpOptionsTests
 
         Assert.Contains(K8sConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
         Assert.Contains("maybe", exception.Message);
+    }
+
+    [Fact]
+    public void FromConfiguration_UsesGeneratedAppSettingsValues()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment] =
+                    RuntimeSafetyConventions.EnvironmentValues.Production,
+                [K8sConventions.ConfigurationKeys.ApprovalRoot] = ProductionPath("approvals"),
+                [K8sConventions.ConfigurationKeys.KubeConfig] = ProductionPath("kubeconfig"),
+                [K8sConventions.ConfigurationKeys.AllowedNamespaces + ":0"] = "alpha",
+                [K8sConventions.ConfigurationKeys.AllowedNamespaces + ":1"] = "beta"
+            })
+            .Build();
+
+        var options = K8SMcpOptions.FromConfiguration(configuration);
+
+        Assert.Equal(RuntimeMode.Production, options.RuntimeMode);
+        Assert.Equal(ProductionPath("approvals"), options.ApprovalRoot);
+        Assert.Equal(ProductionPath("kubeconfig"), options.KubeConfig);
+        Assert.Equal(["alpha", "beta"], options.AllowedNamespaces.Order(StringComparer.Ordinal));
+        Assert.True(options.IsApprovalRootExplicit);
+        Assert.True(options.HasExplicitAllowedNamespaces);
+    }
+
+    [Fact]
+    public void FromConfiguration_PrefersFlatEnvironmentKeyOverGeneratedAppSettingsValue()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [K8sConventions.ConfigurationKeys.KubeConfig] = "/json/kubeconfig",
+                [K8sConventions.EnvironmentVariables.KubeConfig] = "/env/kubeconfig"
+            })
+            .Build();
+
+        var options = K8SMcpOptions.FromConfiguration(configuration);
+
+        Assert.Equal("/env/kubeconfig", options.KubeConfig);
     }
 
     [Fact]

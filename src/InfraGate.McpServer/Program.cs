@@ -1,6 +1,8 @@
 using InfraGate.McpServer;
 using InfraGate.Observability;
+using InfraGate.RuntimeSafety;
 using k8s;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -8,8 +10,9 @@ using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 var builder = Host.CreateApplicationBuilder(args);
+AddInfraGateConfiguration(builder.Configuration, args);
 
-var mcpOptions = K8SMcpOptions.FromEnvironment();
+var mcpOptions = K8SMcpOptions.FromConfiguration(builder.Configuration);
 
 builder.AddInfraGateObservability(opt => 
 {
@@ -80,3 +83,14 @@ using (var probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
 }
 
 await app.RunAsync();
+
+static void AddInfraGateConfiguration(IConfigurationBuilder configuration, string[] args)
+{
+    string? configPath = Environment.GetEnvironmentVariable(RuntimeSafetyConventions.EnvironmentVariables.ConfigPath);
+    if (!string.IsNullOrWhiteSpace(configPath))
+    {
+        configuration.AddJsonFile(configPath, optional: false, reloadOnChange: false);
+        configuration.AddEnvironmentVariables();
+        configuration.AddCommandLine(args);
+    }
+}

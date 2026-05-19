@@ -41,6 +41,7 @@ services:
     environment:
       DOTNET_ENVIRONMENT: Development
     volumes:
+      - ${INFRA_GATE_CONFIG_HOST_PATH}:/app/config/appsettings.InfraGate.json:ro
       - ${INFRA_GATE_KUBECONFIG_HOST_PATH}:/run/kube/mcp-nginx-demo.compose.config:ro
       - ${INFRA_GATE_APPROVAL_HOST_PATH}:/data/approvals
       - ${INFRA_GATE_GUARD_AUDIT_HOST_PATH}:/data/guardrails
