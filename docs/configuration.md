@@ -97,7 +97,7 @@ dotnet run --project src/InfraGate.RunProfiles -- generate local-compose \
 
 **Section inheritance**: profiles only inherit `defaults:` values for sections they explicitly declare. A profile must include `gateway: {}` to receive gateway defaults; omitting the key produces no gateway vars. This keeps test profiles free of Compose-only configuration.
 
-**`--set` overrides**: use `section.field=value` syntax. Section names match the YAML keys (`gateway`, `identityProvider`, `approvalAuthority`, `genericApprovalCore`, `host`). Overrides are applied after merging defaults and are required for host-path fields that must be absolute (Docker Compose resolves bind-mount paths relative to the Compose file directory).
+**`--set` overrides**: use `section.field=value` syntax. Section names match the YAML keys (`gateway`, `identityProvider`, `approvalAuthority`, `genericApprovalCore`, `host`). Overrides are applied after merging defaults. Use them for host-path fields when a run needs paths different from the profile defaults; `scripts/generate-env.sh` uses them to emit absolute repository-root paths for local Compose runs.
 
 **`--force`**: by default, `generate` refuses to overwrite an existing file. Pass `--force` when the generator must write to a system path (e.g., `/etc/infra-gate/development.env` from `scripts/setup-development-deploy.sh`).
 

@@ -130,7 +130,7 @@ profiles:
 | `genericApprovalCore` | `approvalRoot` |
 | `host` | `bindAddress`, `bindPort`, `gatewayImage`, `kubeconfigHostPath`, `approvalHostPath`, `guardAuditHostPath`, `dataProtectionHostPath` |
 
-`--set` is required for host-path fields when running Docker Compose: volume bind-mount paths are resolved relative to the Compose file directory, not the working directory. Always pass absolute paths via `--set` for `host.*HostPath` fields in Compose scenarios.
+Use `--set` when a run needs host paths different from the profile defaults. Docker Compose resolves relative bind-mount paths from the Compose file directory, so local OAuth profiles keep committed defaults relative to `deploy/local-oauth/`. For generated local runs, `scripts/generate-env.sh` supplies absolute repository-root paths so the command is independent of the current working directory.
 
 `scripts/generate-env.sh` handles this automatically for local runs:
 
@@ -143,10 +143,6 @@ To call the generator directly:
 
 ```bash
 dotnet run --project src/InfraGate.RunProfiles -- generate local-compose \
-  --set "host.kubeconfigHostPath=$(pwd)/.kube/mcp-nginx-demo.compose.config" \
-  --set "host.approvalHostPath=$(pwd)/.mcp-approvals" \
-  --set "host.guardAuditHostPath=$(pwd)/.mcp-guardrails" \
-  --set "host.dataProtectionHostPath=$(pwd)/.mcp-dataprotection-keys" \
   --output deploy/generated/local-compose.env
 ```
 

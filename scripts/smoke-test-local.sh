@@ -68,9 +68,9 @@ teardown() {
   if [[ ${exit_code} -ne 0 ]]; then
     echo ""
     echo "FAIL: local-build smoke test failed. Last logs:" >&2
-    docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" logs --tail=80 2>/dev/null || true
+    INFRA_GATE_GATEWAY_ENV_FILE="${ENV_FILE}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" logs --tail=80 2>/dev/null || true
   fi
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" down -v --remove-orphans 2>/dev/null || true
+  INFRA_GATE_GATEWAY_ENV_FILE="${ENV_FILE}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" down -v --remove-orphans 2>/dev/null || true
   rm -rf "${tmp_dir}"
 }
 trap teardown EXIT
@@ -85,7 +85,7 @@ dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- generate smoke-
   --output "${ENV_FILE}"
 
 echo "==> Building and starting local OAuth services (local build) ..."
-docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --build
+INFRA_GATE_GATEWAY_ENV_FILE="${ENV_FILE}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --build
 
 echo "==> Waiting for Keycloak OIDC discovery ..."
 elapsed=0
@@ -124,7 +124,7 @@ done
 echo "    All host volume directories present."
 
 echo "==> Verifying no filesystem permission errors in gateway logs ..."
-if docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" logs mcp-gateway 2>/dev/null | \
+if INFRA_GATE_GATEWAY_ENV_FILE="${ENV_FILE}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" logs mcp-gateway 2>/dev/null | \
    grep -qE 'KeyRingProvider.*error|UnauthorizedAccessException|Permission denied'; then
   echo "ERROR: Gateway logs contain filesystem permission errors." >&2
   exit 1
