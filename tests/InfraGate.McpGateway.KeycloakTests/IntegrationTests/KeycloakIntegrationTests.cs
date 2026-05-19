@@ -8,6 +8,7 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Notifications;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -894,6 +895,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             {
                 services.AddRouting();
                 services.AddSingleton(options);
+                services.AddSingleton<IApprovalNotificationDispatcher, NullNotificationDispatcher>();
                 services.AddSingleton<IGuardrailAuditStore, NullAuditStore>();
                 services.AddSingleton<IDownstreamMcpClient, NullDownstreamClient>();
                 services.AddSingleton<GuardedToolRunner>();
@@ -945,6 +947,12 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
     private sealed class NullAuditStore : IGuardrailAuditStore
     {
         public Task WriteAsync(GuardrailAuditEvent auditEvent, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+    }
+
+    private sealed class NullNotificationDispatcher : IApprovalNotificationDispatcher
+    {
+        public Task NotifyPlanApprovedAsync(string planId, CancellationToken ct) =>
             Task.CompletedTask;
     }
 

@@ -6,18 +6,36 @@ Add authentication between `InfraGate.McpGateway` and the private stdio `InfraGa
 
 This implements ADR 0008. The standards-aligned parts are token issuance and JWT validation. The token presentation over stdio `_meta` is intentionally InfraGate-private because the official MCP authorization model targets HTTP protected resources.
 
+The downstream token is not the primary defense. It is a cheap defense-in-depth layer that improves auditability, catches miswired clients, avoids silent unauthenticated drift, and keeps the design closer to a future standardized MCP auth shape. The primary security boundary is the combination of trusted server launch, immutable runtime packaging, sandboxed child-process permissions, out-of-band approval for destructive actions, and per-action authorization checks against trusted requester identity.
+
 ## Architecture Decisions
 
 - Keep the downstream MCP server on stdio; do not expose it as HTTP for this work.
 - Reuse the existing Keycloak local/demo realm by adding a confidential service-account client for the gateway service identity.
 - The downstream token represents only the gateway service, never a requester or approver.
+- Treat the downstream token as defense-in-depth, audit signal, and forward-compatibility, not as the main authorization control.
 - Pass the service token per downstream MCP request through a private `_meta` key, not through environment variables.
 - Require downstream auth before tool discovery and tool execution.
 - Secure the legacy `initialize` handshake when the SDK permits it; otherwise add an explicit pre-MCP stdio launch-auth gate before the server processes MCP frames.
 - Production fails closed when downstream auth is disabled or incomplete.
 - Direct unauthenticated stdio remains possible only through an explicit development/test opt-out.
 - Tokens are bearer tokens: not encrypted by OAuth itself. Secrecy relies on process/container isolation, trusted server launch, short lifetime, strict validation, and redaction.
+- The server binary must be launched from a verified production artifact, preferably an immutable image layer, without shell indirection.
+- The child process must run under the narrowest practical filesystem, process, network, and Kubernetes permissions.
+- Destructive actions remain protected by out-of-band approval and pre-execution authorization checks; downstream service auth does not replace those controls.
 - Future hardening options remain out of scope for the first cut: HTTP protected-resource migration, mTLS/DPoP sender-constrained tokens, stdio request signing, and challenge-response.
+
+## Security Priority
+
+The planned controls are ordered by importance:
+
+1. **Trusted launch**: the gateway starts the intended downstream binary from a verified, immutable runtime artifact.
+2. **Containment**: the downstream process can touch only the filesystem paths, network endpoints, Kubernetes namespaces, and credentials it needs.
+3. **Human approval**: destructive actions require the existing out-of-band approval flow, not an MCP-client-provided approval signal.
+4. **Per-action authorization**: request and execution checks use trusted gateway identity context for the requester and approval model.
+5. **Downstream service token**: the gateway proves service identity to the downstream server for audit, defense-in-depth, and forward compatibility.
+
+The token is intentionally last in that list. It is still worth implementing, but a stolen bearer token must not be enough to bypass trusted launch, sandboxing, approval, or action-level authorization.
 
 ## Public Interfaces
 
@@ -80,6 +98,9 @@ Add a new confidential client:
 
 ```text
 ADR/glossary decision
+    |
+    v
+Primary boundary controls
     |
     v
 Downstream auth contract and config
@@ -175,13 +196,14 @@ Downstream auth contract and config
 
 ## Task 3: Harden Downstream Process Environment Passing
 
-**Description:** Stop treating inherited environment as a safe transport for all values. The gateway currently copies every environment variable into the server subprocess. Replace that with an explicit pass-through policy or at minimum a denylist for gateway-only auth secrets, so service tokens and client secrets never reach the server through environment variables.
+**Description:** Stop treating inherited environment as a safe transport for all values. The gateway currently copies every environment variable into the server subprocess. Replace that with an explicit pass-through policy or at minimum a denylist for gateway-only auth secrets, so service tokens and client secrets never reach the server through environment variables. Also make trusted launch explicit: production should start a configured downstream artifact directly, without shell indirection or `dotnet run --project`.
 
 **Acceptance criteria:**
 - [ ] `INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET` is not passed to the server subprocess.
 - [ ] No access token is ever added to `StdioClientTransportOptions.EnvironmentVariables`.
 - [ ] Required server runtime values still pass through, including `INFRA_GATE_CONFIG_PATH`, runtime mode, Kubernetes config, and approval root.
-- [ ] Production uses a configured downstream assembly path rather than `dotnet run --project`.
+- [ ] Production uses a configured downstream assembly path from the built runtime artifact rather than `dotnet run --project`.
+- [ ] The downstream process is launched directly, not through a shell wrapper.
 
 **Verification:**
 - [ ] `dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --filter DownstreamMcpClient`
@@ -198,11 +220,40 @@ Downstream auth contract and config
 
 **Estimated scope:** Medium
 
+## Task 3A: Verify Primary Boundary Controls Are Enforced Or Documented
+
+**Description:** Make the non-token controls explicit before treating downstream auth as complete. Verify that the production run shape launches the expected server artifact from an immutable image, restricts what the child process can touch, preserves out-of-band approval for destructive actions, and keeps per-action authorization checks in the gateway/pre-execution path.
+
+**Acceptance criteria:**
+- [ ] Production image/run configuration starts the downstream server from a known built artifact included in the image.
+- [ ] Server process does not receive gateway-only secrets or broader filesystem mounts than it needs.
+- [ ] Kubernetes permissions and allowed namespaces remain scoped independently from downstream service-token validation.
+- [ ] Destructive downstream tools remain reachable only through the gateway's approval-bound execution path.
+- [ ] Per-action authorization and pre-execution gates are documented as primary controls; service-token validation is documented as defense-in-depth.
+
+**Verification:**
+- [ ] `docker build` or existing image-build verification shows the downstream artifact is included in the gateway image.
+- [ ] Compose/rendered run config review confirms mounts, env vars, and Kubernetes credentials are minimal for the selected profile.
+- [ ] Gateway tests for approval-bound execution and authorization checks still pass.
+- [ ] `git diff --check`
+
+**Dependencies:** Tasks 1 and 3
+
+**Files likely touched:**
+- `src/InfraGate.McpGateway/DownstreamMcpClient.cs`
+- `deploy/local-oauth/*`
+- `deploy/run-profiles.yaml`
+- `README.md` or `docs/devs-readme.md`
+- existing approval/authorization tests if assertions need tightening
+
+**Estimated scope:** Medium
+
 ### Checkpoint: Contract
 
 - [ ] Both processes understand downstream auth configuration.
 - [ ] Production cannot accidentally start unauthenticated.
 - [ ] Gateway-only secrets are not inherited by the server subprocess.
+- [ ] The plan still treats trusted launch, sandboxing, approval, and per-action authorization as primary controls.
 - [ ] Existing non-Keycloak unit tests still pass for changed projects.
 
 ### Phase 2: Keycloak and Token Issuance
@@ -368,6 +419,7 @@ Downstream auth contract and config
 - [ ] Server blocks discovery and execution without a valid token.
 - [ ] Gateway refreshes and retries once on auth rejection.
 - [ ] No user/requester/approver token is forwarded downstream.
+- [ ] A valid downstream service token alone cannot bypass approval-bound execution or per-action authorization.
 
 ### Phase 5: Redaction, Integration, and Docs
 
@@ -449,6 +501,7 @@ Downstream auth contract and config
 - [ ] Opt-in Keycloak tests pass when Docker is available.
 - [ ] Compose config renders without missing downstream auth settings.
 - [ ] Token and client secret values are absent from logs/audit/error outputs in tests.
+- [ ] Production launch, sandboxing, approval, and per-action authorization are documented as primary controls.
 - [ ] Docs explain the standards tradeoff and local dev opt-out.
 
 ## Risks and Mitigations
@@ -456,7 +509,9 @@ Downstream auth contract and config
 | Risk | Impact | Mitigation |
 |------|--------|------------|
 | `McpClient.CreateAsync` sends `initialize` before normal call sites can attach `_meta` | Medium | Task 0 must select either authenticated initialize via SDK/custom transport support or a pre-MCP stdio launch-auth gate. Do not proceed with an unauthenticated initialize that exposes tool metadata. |
+| The service token is mistaken for the primary security boundary | High | Keep trusted launch, sandboxing, out-of-band approval, and per-action authorization explicit in docs and tests. Treat the token as audit, defense-in-depth, and forward-compatibility. |
 | Server child process inherits gateway-only secrets | High | Add explicit environment pass-through policy and tests excluding client secret/token values. |
+| Verified launch or sandboxing is left implicit while token work proceeds | High | Complete Task 3A before end-to-end sign-off. Production must launch a known artifact directly and restrict downstream filesystem, network, and Kubernetes access. |
 | Keycloak audience mapping differs from ideal RFC 8707 resource-indicator flow | Medium | Use Keycloak client scope audience mapper for local/demo and validate `aud` server-side. Keep issuer-neutral code so production IdPs can use their own resource/audience model. |
 | Token leaks through logs or generic MCP exception wrapping | High | Add redaction tests around gateway logs, server logs, audit payloads, and thrown exception text. Keep auth failures stable and sanitized. |
 | Retry detection becomes string-parsing brittle | Medium | Define a small internal downstream auth failure convention and test it. |
@@ -474,15 +529,16 @@ Downstream auth contract and config
 2. Task 1
 3. Task 2
 4. Task 3
-5. Task 4
-6. Task 5
-7. Task 8
-8. Task 9
-9. Task 6
-10. Task 7
-11. Task 10
-12. Task 11
-13. Task 12
+5. Task 3A
+6. Task 4
+7. Task 5
+8. Task 8
+9. Task 9
+10. Task 6
+11. Task 7
+12. Task 10
+13. Task 11
+14. Task 12
 
 The server validation work can start after the shared contract exists and can proceed in parallel with gateway token acquisition. Gateway forwarding should wait until both token provider and server error semantics are defined.
 
