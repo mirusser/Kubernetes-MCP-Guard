@@ -1,11 +1,22 @@
 using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
+using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpServer;
 
 // Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 internal static class K8sConventions
 {
+    public static void RegisterInfraGateEnvVarMappings(InfraGateEnvVarMappings mappings)
+    {
+        ArgumentNullException.ThrowIfNull(mappings);
+        mappings.Map(EnvironmentVariables.KubeConfig, ConfigurationKeys.KubeConfig);
+        mappings.Map(EnvironmentVariables.UseInClusterConfig, ConfigurationKeys.UseInClusterConfig);
+        mappings.Map(EnvironmentVariables.ApprovalRoot, ConfigurationKeys.ApprovalRoot);
+        mappings.Map(EnvironmentVariables.AllowedNamespaces, ConfigurationKeys.AllowedNamespaces);
+        mappings.Map(EnvironmentVariables.LogPath, ConfigurationKeys.LogPath);
+    }
+
     public const string ServiceName = "infra-gate-mcp";
     public const string DefaultNamespace = "mcp-nginx-demo";
     public const int MaxReplicas = 5;

@@ -115,19 +115,23 @@ public sealed class K8SMcpOptionsTests
     }
 
     [Fact]
-    public void FromConfiguration_PrefersFlatEnvironmentKeyOverGeneratedAppSettingsValue()
+    public void FromConfiguration_BindsFromKubernetesSection()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 [K8sConventions.ConfigurationKeys.KubeConfig] = "/json/kubeconfig",
-                [K8sConventions.EnvironmentVariables.KubeConfig] = "/env/kubeconfig"
+                [K8sConventions.ConfigurationKeys.ApprovalRoot] = "/data/approvals",
+                [K8sConventions.ConfigurationKeys.AllowedNamespaces + ":0"] = "alpha",
+                [K8sConventions.ConfigurationKeys.AllowedNamespaces + ":1"] = "beta"
             })
             .Build();
 
         var options = K8SMcpOptions.FromConfiguration(configuration);
 
-        Assert.Equal("/env/kubeconfig", options.KubeConfig);
+        Assert.Equal("/json/kubeconfig", options.KubeConfig);
+        Assert.Equal("/data/approvals", options.ApprovalRoot);
+        Assert.Equal(["alpha", "beta"], options.AllowedNamespaces.Order(StringComparer.Ordinal));
     }
 
     [Fact]

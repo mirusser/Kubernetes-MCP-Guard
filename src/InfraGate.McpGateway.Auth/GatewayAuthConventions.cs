@@ -1,7 +1,23 @@
+using InfraGate.RuntimeSafety;
+
 namespace InfraGate.McpGateway.Auth;
 
 public static class GatewayAuthConventions
 {
+    public static void RegisterInfraGateEnvVarMappings(InfraGateEnvVarMappings mappings)
+    {
+        ArgumentNullException.ThrowIfNull(mappings);
+        mappings.Map(EnvironmentVariables.OAuthAuthority, ConfigurationKeys.OAuthAuthority);
+        mappings.Map(EnvironmentVariables.OAuthMetadataAddress, ConfigurationKeys.OAuthMetadataAddress);
+        mappings.Map(EnvironmentVariables.OAuthResource, ConfigurationKeys.OAuthResource);
+        mappings.Map(EnvironmentVariables.OAuthScope, ConfigurationKeys.OAuthScope);
+        mappings.Map(EnvironmentVariables.OAuthRequireHttpsMetadata, ConfigurationKeys.OAuthRequireHttpsMetadata);
+        mappings.Map(EnvironmentVariables.ApprovalOAuthClientId, ConfigurationKeys.ApprovalOAuthClientId);
+        mappings.Map(EnvironmentVariables.ApprovalOAuthCallbackPath, ConfigurationKeys.ApprovalOAuthCallbackPath);
+        mappings.Map(EnvironmentVariables.ApprovalOAuthAuthorizationEndpoint, ConfigurationKeys.ApprovalOAuthAuthorizationEndpoint);
+        mappings.Map(EnvironmentVariables.ApprovalOAuthTokenEndpoint, ConfigurationKeys.ApprovalOAuthTokenEndpoint);
+    }
+
     public const string DefaultOAuthResource = "http://127.0.0.1:3001/mcp";
     public const string DefaultOAuthScope = "mcp:tools";
     public const string DefaultApprovalOAuthClientId = "infra-gate-approval-ui";

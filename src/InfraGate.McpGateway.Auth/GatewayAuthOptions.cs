@@ -69,54 +69,25 @@ public sealed record GatewayAuthOptions(
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
-        string? oauthAuthority = GetConfigurationValue(
-            configuration,
-            GatewayAuthConventions.EnvironmentVariables.OAuthAuthority,
-            GatewayAuthConventions.ConfigurationKeys.OAuthAuthority);
-        string? oauthMetadataAddress = GetConfigurationValue(
-            configuration,
-            GatewayAuthConventions.EnvironmentVariables.OAuthMetadataAddress,
-            GatewayAuthConventions.ConfigurationKeys.OAuthMetadataAddress);
-        string oauthResource = GetConfigurationValue(
-                configuration,
-                GatewayAuthConventions.EnvironmentVariables.OAuthResource,
-                GatewayAuthConventions.ConfigurationKeys.OAuthResource) ??
-            GatewayAuthConventions.DefaultOAuthResource;
-        string oauthScope = GetConfigurationValue(
-                configuration,
-                GatewayAuthConventions.EnvironmentVariables.OAuthScope,
-                GatewayAuthConventions.ConfigurationKeys.OAuthScope) ??
-            GatewayAuthConventions.DefaultOAuthScope;
-        bool requireHttpsMetadata = ParseBooleanEnvironmentVariable(
-            GetConfigurationValue(
-                configuration,
-                GatewayAuthConventions.EnvironmentVariables.OAuthRequireHttpsMetadata,
-                GatewayAuthConventions.ConfigurationKeys.OAuthRequireHttpsMetadata),
-            defaultValue: true);
-        string approvalClientId = GetConfigurationValue(
-                configuration,
-                GatewayAuthConventions.EnvironmentVariables.ApprovalOAuthClientId,
-                GatewayAuthConventions.ConfigurationKeys.ApprovalOAuthClientId) ??
-            GatewayAuthConventions.DefaultApprovalOAuthClientId;
-        string? approvalAuthorizationEndpoint = GetConfigurationValue(
-            configuration,
-            GatewayAuthConventions.EnvironmentVariables.ApprovalOAuthAuthorizationEndpoint,
-            GatewayAuthConventions.ConfigurationKeys.ApprovalOAuthAuthorizationEndpoint);
-        string? approvalTokenEndpoint = GetConfigurationValue(
-            configuration,
-            GatewayAuthConventions.EnvironmentVariables.ApprovalOAuthTokenEndpoint,
-            GatewayAuthConventions.ConfigurationKeys.ApprovalOAuthTokenEndpoint);
-        string approvalCallbackPath = GetConfigurationValue(
-                configuration,
-                GatewayAuthConventions.EnvironmentVariables.ApprovalOAuthCallbackPath,
-                GatewayAuthConventions.ConfigurationKeys.ApprovalOAuthCallbackPath) ??
-            GatewayAuthConventions.Approvals.DefaultCallbackPath;
+        var authSettings = configuration
+            .GetSection("InfraGate:Auth")
+            .Get<InfraGateAuthSettings>();
 
-        if (string.IsNullOrWhiteSpace(oauthAuthority))
-        {
+        string oauthAuthority = authSettings?.OAuthAuthority ??
             throw new InvalidOperationException(
                 $"{GatewayAuthConventions.EnvironmentVariables.OAuthAuthority} is required.");
-        }
+        string oauthResource = authSettings?.OAuthResource ??
+            GatewayAuthConventions.DefaultOAuthResource;
+        string oauthScope = authSettings?.OAuthScope ??
+            GatewayAuthConventions.DefaultOAuthScope;
+        bool requireHttpsMetadata = authSettings?.OAuthRequireHttpsMetadata ?? true;
+        string? oauthMetadataAddress = authSettings?.OAuthMetadataAddress;
+        string approvalClientId = authSettings?.ApprovalOAuthClientId ??
+            GatewayAuthConventions.DefaultApprovalOAuthClientId;
+        string? approvalAuthorizationEndpoint = authSettings?.ApprovalOAuthAuthorizationEndpoint;
+        string? approvalTokenEndpoint = authSettings?.ApprovalOAuthTokenEndpoint;
+        string approvalCallbackPath = authSettings?.ApprovalOAuthCallbackPath ??
+            GatewayAuthConventions.Approvals.DefaultCallbackPath;
 
         return new GatewayAuthOptions(
             oauthAuthority,
@@ -135,17 +106,6 @@ public sealed record GatewayAuthOptions(
         return string.IsNullOrWhiteSpace(value)
             ? defaultValue
             : bool.Parse(value);
-    }
-
-    private static string? GetConfigurationValue(
-        IConfiguration configuration,
-        string environmentVariable,
-        string configurationKey)
-    {
-        string? environmentValue = configuration[environmentVariable];
-        return !string.IsNullOrWhiteSpace(environmentValue)
-            ? environmentValue
-            : configuration[configurationKey];
     }
 
     private static string TrimTrailingSlash(string value) => value.TrimEnd('/');

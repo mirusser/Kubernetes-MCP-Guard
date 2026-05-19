@@ -12,6 +12,9 @@ using ModelContextProtocol.Server;
 var builder = Host.CreateApplicationBuilder(args);
 AddInfraGateConfiguration(builder.Configuration, args);
 
+builder.Services.Configure<InfraGateKubernetesSettings>(
+    builder.Configuration.GetSection("InfraGate:Kubernetes"));
+
 var mcpOptions = K8SMcpOptions.FromConfiguration(builder.Configuration);
 
 builder.AddInfraGateObservability(opt => 
@@ -90,6 +93,11 @@ static void AddInfraGateConfiguration(IConfigurationBuilder configuration, strin
     if (!string.IsNullOrWhiteSpace(configPath))
     {
         configuration.AddJsonFile(configPath, optional: false, reloadOnChange: false);
+        configuration.AddInfraGateEnvironmentVariables(mappings =>
+        {
+            RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
+            K8sConventions.RegisterInfraGateEnvVarMappings(mappings);
+        });
         configuration.AddEnvironmentVariables();
         configuration.AddCommandLine(args);
     }

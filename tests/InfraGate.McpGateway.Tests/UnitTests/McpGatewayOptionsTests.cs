@@ -95,20 +95,21 @@ public sealed class McpGatewayOptionsTests
     }
 
     [Fact]
-    public void FromConfiguration_PrefersFlatEnvironmentKeyOverGeneratedAppSettingsValue()
+    public void FromConfiguration_BindsFromGatewayAndApprovalSections()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 [GatewayAuthConventions.ConfigurationKeys.OAuthAuthority] = OAuthAuthority,
-                [McpGatewayConventions.ConfigurationKeys.DownstreamAssembly] = "/app/json.dll",
-                [McpGatewayConventions.EnvironmentVariables.DownstreamAssembly] = "/app/env.dll"
+                [McpGatewayConventions.ConfigurationKeys.DownstreamAssembly] = "/app/server.dll",
+                [McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl] = "https://gateway.example.com"
             })
             .Build();
 
         var options = McpGatewayOptions.FromConfiguration(configuration);
 
-        Assert.Equal("/app/env.dll", options.DownstreamAssembly);
+        Assert.Equal("/app/server.dll", options.DownstreamAssembly);
+        Assert.Equal("https://gateway.example.com", options.ApprovalBaseUrl);
     }
 
     [Fact]

@@ -76,42 +76,32 @@ public sealed record McpGatewayOptions(
         var auth = GatewayAuthOptions.FromConfiguration(configuration);
         RuntimeMode runtimeMode = RuntimeModeResolver.FromConfiguration(configuration);
         string workingDirectory = Directory.GetCurrentDirectory();
-        string downstreamProject = GetConfigurationValue(
-                configuration,
-                McpGatewayConventions.EnvironmentVariables.DownstreamProject,
-                McpGatewayConventions.ConfigurationKeys.DownstreamProject) ??
+
+        var gatewaySettings = configuration
+            .GetSection("InfraGate:Gateway")
+            .Get<InfraGateGatewaySettings>();
+        var approvalSettings = configuration
+            .GetSection("InfraGate:Approval")
+            .Get<InfraGateApprovalSettings>();
+
+        string downstreamProject = gatewaySettings?.DownstreamProject ??
             Path.Combine(
                 workingDirectory,
                 McpGatewayConventions.Paths.SourceDirectory,
                 McpGatewayConventions.Paths.DefaultDownstreamProjectDirectory,
                 McpGatewayConventions.Paths.DefaultDownstreamProjectFileName);
-        string? downstreamAssembly = GetConfigurationValue(
-            configuration,
-            McpGatewayConventions.EnvironmentVariables.DownstreamAssembly,
-            McpGatewayConventions.ConfigurationKeys.DownstreamAssembly);
-        string? auditRootValue = GetConfigurationValue(
-            configuration,
-            McpGatewayConventions.EnvironmentVariables.GuardAuditRoot,
-            McpGatewayConventions.ConfigurationKeys.GuardAuditRoot);
+        string? downstreamAssembly = gatewaySettings?.DownstreamAssembly;
+        string? auditRootValue = gatewaySettings?.GuardAuditRoot;
         bool isGuardAuditRootExplicit = !string.IsNullOrWhiteSpace(auditRootValue);
         string auditRoot = auditRootValue ??
             Path.Combine(workingDirectory, McpGatewayConventions.Paths.DefaultGuardAuditRootDirectory);
-        string? approvalRootValue = GetConfigurationValue(
-            configuration,
-            ApprovalConventions.EnvironmentVariables.ApprovalRoot,
-            McpGatewayConventions.ConfigurationKeys.ApprovalRoot);
+        string? approvalRootValue = approvalSettings?.Root;
         bool isApprovalRootExplicit = !string.IsNullOrWhiteSpace(approvalRootValue);
         string approvalRoot = approvalRootValue ??
             Path.Combine(workingDirectory, ApprovalConventions.Storage.DefaultRootDirectory);
-        string? approvalBaseUrl = GetConfigurationValue(
-            configuration,
-            McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl,
-            McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl);
+        string? approvalBaseUrl = approvalSettings?.BaseUrl;
         TimeSpan approvalChallengeTtl = ParseTimeSpanSeconds(
-            GetConfigurationValue(
-                configuration,
-                McpGatewayConventions.EnvironmentVariables.ApprovalChallengeTtlSeconds,
-                McpGatewayConventions.ConfigurationKeys.ApprovalChallengeTtlSeconds),
+            approvalSettings?.ChallengeTtlSeconds,
             DefaultApprovalChallengeTtl);
 
         return new McpGatewayOptions(
@@ -183,14 +173,4 @@ public sealed record McpGatewayOptions(
             : TimeSpan.FromSeconds(double.Parse(value, CultureInfo.InvariantCulture));
     }
 
-    private static string? GetConfigurationValue(
-        IConfiguration configuration,
-        string environmentVariable,
-        string configurationKey)
-    {
-        string? environmentValue = configuration[environmentVariable];
-        return !string.IsNullOrWhiteSpace(environmentValue)
-            ? environmentValue
-            : configuration[configurationKey];
-    }
 }

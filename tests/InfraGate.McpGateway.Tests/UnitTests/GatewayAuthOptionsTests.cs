@@ -38,18 +38,21 @@ public sealed class GatewayAuthOptionsTests
     }
 
     [Fact]
-    public void FromConfiguration_PrefersFlatEnvironmentKeyOverGeneratedAppSettingsValue()
+    public void FromConfiguration_BindsFromAuthSectionHierarchy()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 [GatewayAuthConventions.ConfigurationKeys.OAuthAuthority] = "http://json-issuer",
-                [GatewayAuthConventions.EnvironmentVariables.OAuthAuthority] = "http://env-issuer"
+                [GatewayAuthConventions.ConfigurationKeys.OAuthResource] = "https://gateway.example.com/mcp",
+                [GatewayAuthConventions.ConfigurationKeys.OAuthScope] = "custom-scope"
             })
             .Build();
 
         var options = GatewayAuthOptions.FromConfiguration(configuration);
 
-        Assert.Equal("http://env-issuer", options.OAuthAuthority);
+        Assert.Equal("http://json-issuer", options.OAuthAuthority);
+        Assert.Equal("https://gateway.example.com/mcp", options.OAuthResource);
+        Assert.Equal("custom-scope", options.OAuthScope);
     }
 }

@@ -2,6 +2,12 @@ namespace InfraGate.RuntimeSafety;
 
 public static class RuntimeSafetyConventions
 {
+    public static void RegisterInfraGateEnvVarMappings(InfraGateEnvVarMappings mappings)
+    {
+        ArgumentNullException.ThrowIfNull(mappings);
+        mappings.Map(EnvironmentVariables.InfraGateEnvironment, ConfigurationKeys.InfraGateRuntimeEnvironment);
+    }
+
     public static class EnvironmentVariables
     {
         public const string ConfigPath = "INFRA_GATE_CONFIG_PATH";

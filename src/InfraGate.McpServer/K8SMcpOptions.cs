@@ -58,10 +58,12 @@ public sealed record K8SMcpOptions(
         ArgumentNullException.ThrowIfNull(configuration);
 
         RuntimeMode runtimeMode = RuntimeModeResolver.FromConfiguration(configuration);
-        string? approvalRootValue = GetConfigurationValue(
-            configuration,
-            K8sConventions.EnvironmentVariables.ApprovalRoot,
-            K8sConventions.ConfigurationKeys.ApprovalRoot);
+
+        var k8sSettings = configuration
+            .GetSection("InfraGate:Kubernetes")
+            .Get<InfraGateKubernetesSettings>();
+
+        string? approvalRootValue = configuration[K8sConventions.ConfigurationKeys.ApprovalRoot];
         bool isApprovalRootExplicit = !string.IsNullOrWhiteSpace(approvalRootValue);
         string approvalRoot = string.IsNullOrWhiteSpace(approvalRootValue)
             ? Path.Combine(Directory.GetCurrentDirectory(), ApprovalConventions.Storage.DefaultRootDirectory)
@@ -69,23 +71,12 @@ public sealed record K8SMcpOptions(
 
         string? allowedNamespacesValue = configuration[K8sConventions.EnvironmentVariables.AllowedNamespaces];
         bool hasExplicitAllowedNamespaces = !string.IsNullOrWhiteSpace(allowedNamespacesValue) ||
-            HasConfiguredChildren(configuration, K8sConventions.ConfigurationKeys.AllowedNamespaces) ||
+            (k8sSettings?.AllowedNamespaces is { Count: > 0 }) ||
             !string.IsNullOrWhiteSpace(configuration[K8sConventions.ConfigurationKeys.AllowedNamespaces]);
-        IReadOnlySet<string> allowedNamespaces = ParseAllowedNamespaces(configuration, allowedNamespacesValue);
-        string? kubeConfig = GetConfigurationValue(
-            configuration,
-            K8sConventions.EnvironmentVariables.KubeConfig,
-            K8sConventions.ConfigurationKeys.KubeConfig);
-        bool isInClusterConfigEnabled = ParseBooleanEnvironmentVariable(
-            GetConfigurationValue(
-                configuration,
-                K8sConventions.EnvironmentVariables.UseInClusterConfig,
-                K8sConventions.ConfigurationKeys.UseInClusterConfig),
-            defaultValue: false);
-        string? logPath = GetConfigurationValue(
-            configuration,
-            K8sConventions.EnvironmentVariables.LogPath,
-            K8sConventions.ConfigurationKeys.LogPath);
+        IReadOnlySet<string> allowedNamespaces = ParseAllowedNamespaces(configuration, allowedNamespacesValue, k8sSettings);
+        string? kubeConfig = k8sSettings?.KubeConfig;
+        bool isInClusterConfigEnabled = k8sSettings?.UseInClusterConfig ?? false;
+        string? logPath = k8sSettings?.LogPath;
 
         return new K8SMcpOptions(
             allowedNamespaces,
@@ -162,39 +153,22 @@ public sealed record K8SMcpOptions(
 
     private static IReadOnlySet<string> ParseAllowedNamespaces(
         IConfiguration configuration,
-        string? environmentValue)
+        string? environmentValue,
+        InfraGateKubernetesSettings? k8sSettings)
     {
         if (!string.IsNullOrWhiteSpace(environmentValue))
         {
             return ParseAllowedNamespaces(environmentValue);
         }
 
-        IReadOnlyList<string> configuredNamespaces = configuration
-            .GetSection(K8sConventions.ConfigurationKeys.AllowedNamespaces)
-            .GetChildren()
-            .Select(child => child.Value)
-            .Where(namespaceName => !string.IsNullOrWhiteSpace(namespaceName))
-            .Select(namespaceName => namespaceName!)
-            .ToArray();
-        if (configuredNamespaces.Count > 0)
+        if (k8sSettings?.AllowedNamespaces is { Count: > 0 })
         {
-            return configuredNamespaces.ToHashSet(StringComparer.Ordinal);
+            return k8sSettings.AllowedNamespaces
+                .Where(namespaceName => !string.IsNullOrWhiteSpace(namespaceName))
+                .ToHashSet(StringComparer.Ordinal);
         }
 
         return ParseAllowedNamespaces(configuration[K8sConventions.ConfigurationKeys.AllowedNamespaces]);
     }
 
-    private static bool HasConfiguredChildren(IConfiguration configuration, string configurationKey) =>
-        configuration.GetSection(configurationKey).GetChildren().Any(child => !string.IsNullOrWhiteSpace(child.Value));
-
-    private static string? GetConfigurationValue(
-        IConfiguration configuration,
-        string environmentVariable,
-        string configurationKey)
-    {
-        string? environmentValue = configuration[environmentVariable];
-        return !string.IsNullOrWhiteSpace(environmentValue)
-            ? environmentValue
-            : configuration[configurationKey];
-    }
 }
