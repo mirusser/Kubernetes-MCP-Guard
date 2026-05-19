@@ -657,6 +657,127 @@ public sealed class KubernetesPlanBuilderTests
         Assert.Equal(ApprovalConventions.AuditEvents.DiffFailed, result.Audit.EventName);
     }
 
+    [Fact]
+    public async Task BuildAsync_ScaleDeployment_WithFractionalDoubleReplicas_ReturnsFailed()
+    {
+        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["replicas"] = 3.5d
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Missing required arguments", result.Message);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ScaleDeployment_WithNonParseableStringReplicas_ReturnsFailed()
+    {
+        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["replicas"] = "abc"
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Missing required arguments", result.Message);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ScaleDeployment_WithNullReplicas_ReturnsFailed()
+    {
+        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["replicas"] = null
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Missing required arguments", result.Message);
+    }
+
+    [Fact]
+    public async Task BuildAsync_RestartDeployment_DryRunDeserializedAsNull_ReturnsFailed()
+    {
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_restart_deployment", "null");
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "restart_deployment",
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["name"] = "nginx" },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("dry-run failed", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task BuildAsync_RestartDeployment_DiffsDeserializedAsNull_ReturnsFailed()
+    {
+        var dryRun = MakeDryRun("demo", "nginx");
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_restart_deployment", DryRunJson(dryRun))
+            .With("diff_deployment", "null");
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "restart_deployment",
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["name"] = "nginx" },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Diff evidence failed", result.Message);
+        Assert.NotNull(result.Audit);
+        Assert.Equal(ApprovalConventions.AuditEvents.DiffFailed, result.Audit.EventName);
+    }
+
+    [Fact]
+    public async Task BuildAsync_SetDeploymentImage_DryRunDeserializedAsNull_ReturnsFailed()
+    {
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_set_deployment_image", "null");
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "set_deployment_image",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["container"] = "nginx",
+                ["image"] = "nginx:1.25"
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("dry-run failed", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class FakeToolCaller : IToolCaller
     {
         private readonly Dictionary<string, string> responses = new(StringComparer.Ordinal);

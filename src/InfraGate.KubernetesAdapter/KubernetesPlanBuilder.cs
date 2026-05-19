@@ -572,7 +572,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                 return true;
             }
 
-            if (raw is double d && d % 1 == 0 && d >= int.MinValue && d <= int.MaxValue)
+            if (raw is double d && Math.Abs(d % 1) < 1e-10 && d >= int.MinValue && d <= int.MaxValue)
             {
                 value = (int)d;
                 return true;
