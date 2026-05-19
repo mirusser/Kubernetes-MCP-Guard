@@ -8,33 +8,33 @@ using ModelContextProtocol.Server;
 
 namespace InfraGate.McpGateway;
 
-public sealed class GatewayToolDispatcher
+public sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 {
     private readonly DownstreamToolRegistry registry;
     private readonly GuardedToolRunner guardedRunner;
-    private readonly IDomainPlanBuilder planBuilder;
-    private readonly IDomainPlanExecutor planExecutor;
-    private readonly GatewayApprovalService approvals;
+    private readonly IDomainAdapter domainAdapter;
+    private readonly IGatewayApprovalService approvals;
     private readonly ApprovalStore approvalStore;
+    private readonly IApprovalPreExecutionGate preExecutionGate;
     private readonly IHttpContextAccessor httpContextAccessor;
     private readonly ILogger<GatewayToolDispatcher> logger;
 
     public GatewayToolDispatcher(
         DownstreamToolRegistry registry,
         GuardedToolRunner guardedRunner,
-        IDomainPlanBuilder planBuilder,
-        IDomainPlanExecutor planExecutor,
-        GatewayApprovalService approvals,
+        IDomainAdapter domainAdapter,
+        IGatewayApprovalService approvals,
         ApprovalStore approvalStore,
+        IApprovalPreExecutionGate preExecutionGate,
         IHttpContextAccessor httpContextAccessor,
         ILogger<GatewayToolDispatcher> logger)
     {
         this.registry = registry;
         this.guardedRunner = guardedRunner;
-        this.planBuilder = planBuilder;
-        this.planExecutor = planExecutor;
+        this.domainAdapter = domainAdapter;
         this.approvals = approvals;
         this.approvalStore = approvalStore;
+        this.preExecutionGate = preExecutionGate;
         this.httpContextAccessor = httpContextAccessor;
         this.logger = logger;
     }
@@ -134,7 +134,7 @@ public sealed class GatewayToolDispatcher
         var args = ConvertArguments(request.Arguments);
         bool requestHasFindings = await guardedRunner.AuditRequestAsync(toolName, args, ct);
 
-        var planResult = await planBuilder.BuildAsync(
+        var planResult = await domainAdapter.BuildAsync(
             mutationToolName,
             args,
             new PlanRequester(identity.Subject, identity.AuthenticationType),
@@ -198,13 +198,40 @@ public sealed class GatewayToolDispatcher
                 : new CallToolResult { Content = [new TextContentBlock { Text = gate.Message }] };
         }
 
-        var granted = await approvalStore.GetGrantedPlanAsync(planId, ct);
-        if (!granted.IsGranted || granted.Envelope is null || granted.Grant is null)
+        var preExecution = await preExecutionGate.EvaluateAsync(planId, domainAdapter, ct);
+        if (!preExecution.IsPassed || preExecution.Envelope is null || preExecution.Grant is null)
         {
-            return ErrorResult(granted.Message);
+            if (preExecution.Audit is { } audit)
+            {
+                await WritePlanAuditAsync(audit, planId, ct);
+            }
+
+            return ErrorResult(preExecution.Message);
         }
 
-        var executeResult = await planExecutor.ExecuteAsync(granted.Envelope, ct);
+        DomainPlanExecutionResult executeResult;
+        try
+        {
+            executeResult = await domainAdapter.ExecuteAsync(preExecution.Envelope, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            var message = $"Plan '{planId}' execution failed: {ex.Message}";
+            await WritePlanAuditAsync(
+                new PlanAudit(
+                    ApprovalConventions.AuditEvents.ApplyFailed,
+                    new ApplyFailedPayload(
+                        planId,
+                        preExecution.Envelope.Operation,
+                        message)),
+                planId,
+                ct);
+
+            logger.LogWarning(ex, "Approved plan {PlanId} execution failed.", planId);
+
+            return ErrorResult(message);
+        }
+
         if (!executeResult.IsSuccessful)
         {
             if (executeResult.Audit is { } audit)
@@ -223,9 +250,9 @@ public sealed class GatewayToolDispatcher
         }
 
         await approvalStore.MarkAppliedAsync(
-            granted.Envelope,
-            executeResult.TargetNamespace ?? GetNamespaceFromEnvelope(granted.Envelope),
-            granted.Grant,
+            preExecution.Envelope,
+            executeResult.TargetNamespace ?? GetNamespaceFromEnvelope(preExecution.Envelope),
+            preExecution.Grant,
             ct);
 
         return new CallToolResult

@@ -19,6 +19,7 @@ public sealed record PlanEnvelope
         ExecutionReusePolicy executionReusePolicy,
         FreshnessPolicy freshnessPolicy,
         ReviewSurfaceContext reviewSurfaceContext,
+        EvidenceArtifactSummary[] evidenceArtifacts,
         ApprovalDigest intentDigest,
         ApprovalDigest reviewDigest,
         JsonElement payload)
@@ -35,6 +36,7 @@ public sealed record PlanEnvelope
         ExecutionReusePolicy = executionReusePolicy;
         FreshnessPolicy = freshnessPolicy;
         ReviewSurfaceContext = reviewSurfaceContext;
+        EvidenceArtifacts = evidenceArtifacts;
         IntentDigest = intentDigest;
         ReviewDigest = reviewDigest;
         Payload = payload;
@@ -63,6 +65,8 @@ public sealed record PlanEnvelope
     public FreshnessPolicy FreshnessPolicy { get; init; } = FreshnessPolicy.Empty;
 
     public ReviewSurfaceContext ReviewSurfaceContext { get; init; } = new(string.Empty, string.Empty);
+
+    public EvidenceArtifactSummary[] EvidenceArtifacts { get; init; } = [];
 
     public ApprovalDigest IntentDigest { get; init; } = new(string.Empty, string.Empty, string.Empty);
 

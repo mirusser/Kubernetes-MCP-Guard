@@ -88,10 +88,10 @@ public sealed class DryRunFailureTests(SafetyE2EFixture fixture)
         var pendingPath = fixture.ApprovalStore.GetPendingPath(planId);
 
         // Rewrite the planned target name to a deployment that does not exist, then
-        // create and approve a browser challenge for the mutated hash. Result:
-        // Grant validation succeeds, drift check sees the original Objects[] (still
-        // unchanged in the cluster), and the pre-apply dry-run patches a non-existent
-        // target -> 404 -> dry-run fails.
+        // refresh the digest-bound envelope fields and approve that mutated plan.
+        // Result: grant validation succeeds, drift check sees the original Objects[]
+        // (still unchanged in the cluster), and the pre-apply dry-run patches a
+        // non-existent target -> 404 -> dry-run fails.
         // String-based replace is too brittle because ApprovalStore writes pending plans
         // with WriteIndented = true (key/value separated by ": ", not ":").
         var pendingJson = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
@@ -103,10 +103,21 @@ public sealed class DryRunFailureTests(SafetyE2EFixture fixture)
         {
             WriteIndented = true
         };
-        var envelope = JsonSerializer.Deserialize<PlanEnvelope>(root.ToJsonString(), rewriteOptions)
+        var tamperedEnvelope = JsonSerializer.Deserialize<PlanEnvelope>(root.ToJsonString(), rewriteOptions)
             ?? throw new InvalidOperationException("Failed to deserialize modified pending plan.");
-        var newReviewDigest = PlanEnvelopeFactory.ComputeReviewDigest(envelope);
-        root["reviewDigest"] = JsonSerializer.SerializeToNode(newReviewDigest, rewriteOptions);
+        var tamperedPayload = tamperedEnvelope.Payload.Deserialize<KubernetesPlanPayload>(rewriteOptions)
+            ?? throw new InvalidOperationException("Failed to deserialize modified Kubernetes payload.");
+        var refreshedEnvelope = KubernetesApprovalAdapter.ToEnvelope(
+            KubernetesApprovalAdapter.CreateEnvelope(
+                tamperedEnvelope.Id,
+                tamperedEnvelope.Operation,
+                tamperedEnvelope.CreatedAtUtc,
+                tamperedEnvelope.Requester,
+                tamperedPayload,
+                tamperedEnvelope.ReviewSurfaceContext,
+                tamperedEnvelope.FreshnessPolicy));
+        root = JsonSerializer.SerializeToNode(refreshedEnvelope, rewriteOptions)
+            ?? throw new InvalidOperationException("Failed to serialize refreshed pending plan.");
 
         var rewritten = root.ToJsonString(rewriteOptions);
         await File.WriteAllTextAsync(pendingPath, rewritten, CancellationToken.None);

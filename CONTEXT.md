@@ -175,11 +175,11 @@ The chronological record of approval-profile lifecycle events for **Plan Envelop
 _Avoid_: Log file, Kubernetes event
 
 **Audit Spine**:
-The generic lifecycle event sequence required to prove approval-bound execution across **Domain Adapters**.
+The generic lifecycle event sequence required to prove approval-bound execution across **Domain Adapters**, including grant validation, adapter pre-execution checks, execution start, blocked execution, failed execution, and successful execution.
 _Avoid_: Adapter audit schema
 
 **Adapter Audit Payload**:
-Domain-specific audit data attached to an **Audit Spine** event.
+Domain-specific audit data attached to an **Audit Spine** event under an adapter-owned payload slot.
 _Avoid_: Generic audit fields
 
 ## Relationships
@@ -214,6 +214,7 @@ _Avoid_: Generic audit fields
 - An **Audit Trail** records the lifecycle of **Plan Envelopes**, **Approval Challenges**, **Challenge Outcomes**, **Approval Grants**, and **Execution Attempts**
 - An **Audit Spine** defines the generic lifecycle events in an **Audit Trail**
 - An **Adapter Audit Payload** may be attached to an **Audit Spine** event
+- Grant validation proof belongs to pre-execution gate audit events, not to `execution.started`
 - An **Authorization Check** is separate from an **Approval Policy**
 - An **Authorization Check** may gate creation of a **Plan Envelope** or creation of an **Execution Attempt**
 - A **Domain Policy Check** is separate from an **Approval Policy** and an **Authorization Check**

@@ -120,6 +120,18 @@ public sealed class GatewayApprovalEndpointsTests
     }
 
     [Fact]
+    public void RenderApprovalForm_ContainsCancelAction()
+    {
+        var challenge = CreateChallenge();
+        var plan = CreatePlan();
+
+        var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
+
+        Assert.Contains($"/approvals/{challenge.Id}/cancel", result);
+        Assert.Contains("<button type=\"submit\" class=\"cancel\">Cancel</button>", result);
+    }
+
+    [Fact]
     public void RenderApprovalForm_ApproveButtonDisabled_WhenCannotBeApproved()
     {
         var challenge = CreateChallenge();

@@ -183,6 +183,102 @@ public sealed class ApprovalChallengeStoreTests
     }
 
     [Fact]
+    public async Task FindPendingAsync_WhenPendingChallengeMatchesAllCriteria_ReturnsIt()
+    {
+        var store = CreateStore();
+        var challenge = new ApprovalChallenge(
+            Id: "aabbcc8844",
+            PlanId: "plan-789",
+            PendingPlanHash: "hash-xyz",
+            RequesterSubject: "carol",
+            RequesterAuthenticationType: "oauth-jwt",
+            CreatedAtUtc: DateTimeOffset.UtcNow,
+            ExpiresAtUtc: DateTimeOffset.UtcNow.AddMinutes(10),
+            Status: ApprovalConventions.ChallengeStatuses.Pending,
+            ApproverSubject: null,
+            DecidedAtUtc: null,
+            IntentDigest: IntentDigest,
+            ReviewDigest: ReviewDigest);
+
+        await store.SaveAsync(challenge, CancellationToken.None);
+
+        var found = await store.FindPendingAsync(
+            "plan-789",
+            "hash-xyz",
+            "carol",
+            IntentDigest,
+            ReviewDigest,
+            CancellationToken.None);
+
+        Assert.NotNull(found);
+        Assert.Equal("aabbcc8844", found.Id);
+    }
+
+    [Theory]
+    [InlineData(ApprovalConventions.ChallengeStatuses.Approved)]
+    [InlineData(ApprovalConventions.ChallengeStatuses.Denied)]
+    public async Task FindPendingAsync_WhenChallengeIsTerminal_ReturnsNull(string status)
+    {
+        var store = CreateStore();
+        var challenge = new ApprovalChallenge(
+            Id: "aabbcc8845",
+            PlanId: "plan-789",
+            PendingPlanHash: "hash-xyz",
+            RequesterSubject: "carol",
+            RequesterAuthenticationType: "oauth-jwt",
+            CreatedAtUtc: DateTimeOffset.UtcNow,
+            ExpiresAtUtc: DateTimeOffset.UtcNow.AddMinutes(10),
+            Status: status,
+            ApproverSubject: status == ApprovalConventions.ChallengeStatuses.Approved ? "carol" : null,
+            DecidedAtUtc: DateTimeOffset.UtcNow,
+            IntentDigest: IntentDigest,
+            ReviewDigest: ReviewDigest);
+
+        await store.SaveAsync(challenge, CancellationToken.None);
+
+        var found = await store.FindPendingAsync(
+            "plan-789",
+            "hash-xyz",
+            "carol",
+            IntentDigest,
+            ReviewDigest,
+            CancellationToken.None);
+
+        Assert.Null(found);
+    }
+
+    [Fact]
+    public async Task FindPendingAsync_WhenChallengeExpired_ReturnsNull()
+    {
+        var store = CreateStore();
+        var challenge = new ApprovalChallenge(
+            Id: "aabbcc8846",
+            PlanId: "plan-789",
+            PendingPlanHash: "hash-xyz",
+            RequesterSubject: "carol",
+            RequesterAuthenticationType: "oauth-jwt",
+            CreatedAtUtc: DateTimeOffset.UtcNow.AddMinutes(-20),
+            ExpiresAtUtc: DateTimeOffset.UtcNow.AddMinutes(-10),
+            Status: ApprovalConventions.ChallengeStatuses.Pending,
+            ApproverSubject: null,
+            DecidedAtUtc: null,
+            IntentDigest: IntentDigest,
+            ReviewDigest: ReviewDigest);
+
+        await store.SaveAsync(challenge, CancellationToken.None);
+
+        var found = await store.FindPendingAsync(
+            "plan-789",
+            "hash-xyz",
+            "carol",
+            IntentDigest,
+            ReviewDigest,
+            CancellationToken.None);
+
+        Assert.Null(found);
+    }
+
+    [Fact]
     public async Task FindApprovedAsync_WhenPlanIdDoesNotMatch_ReturnsNull()
     {
         var store = CreateStore();

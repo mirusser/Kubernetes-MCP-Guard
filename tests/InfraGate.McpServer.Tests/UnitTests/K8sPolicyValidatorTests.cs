@@ -406,6 +406,38 @@ public sealed class K8sPolicyValidatorTests
         Assert.DoesNotContain(result.Findings, f => f.Code == KubernetesAdapterConventions.PolicyCodes.ImageLatestTag);
     }
 
+    [Theory]
+    [InlineData("nginx")]
+    [InlineData("nginx:latest")]
+    public void ValidateSetDeploymentImage_LatestImageTag_IsDenied(string image)
+    {
+        var result = K8sPolicyValidator.ValidateSetDeploymentImage(
+            "demo",
+            "nginx",
+            "app",
+            image,
+            K8sPolicyOptions.Default);
+
+        Assert.True(result.IsDenied);
+        Assert.Contains(result.Findings, f =>
+            f.Severity == K8sPolicySeverity.Deny &&
+            f.Code == KubernetesAdapterConventions.PolicyCodes.ImageLatestTag);
+    }
+
+    [Fact]
+    public void ValidateSetDeploymentImage_PinnedImageTag_IsAllowed()
+    {
+        var result = K8sPolicyValidator.ValidateSetDeploymentImage(
+            "demo",
+            "nginx",
+            "app",
+            "nginx:1.27",
+            K8sPolicyOptions.Default);
+
+        Assert.False(result.IsDenied);
+        Assert.DoesNotContain(result.Findings, f => f.Code == KubernetesAdapterConventions.PolicyCodes.ImageLatestTag);
+    }
+
     [Fact]
     public void Validate_LoadBalancerService_IsDenied()
     {

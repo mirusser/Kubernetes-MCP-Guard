@@ -1,5 +1,6 @@
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.Approvals.AuditPayloads;
 using InfraGate.McpServer;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
@@ -27,6 +28,29 @@ public sealed class ApprovalStoreTests
         await store.CreatePlanAsync(plan, TargetNamespace, CancellationToken.None);
 
         Assert.False(Directory.Exists(Path.Combine(root, "approved")));
+    }
+
+    [Fact]
+    public async Task PublishAsync_PlanAudit_WritesAuditEvent()
+    {
+        var store = CreateStore();
+        var publisher = new ApprovalStoreAuditPublisher(store);
+
+        await publisher.PublishAsync(
+            new PlanAudit(
+                ApprovalConventions.AuditEvents.PreExecutionChecked,
+                new PreExecutionCheckedPayload(
+                    "plan-1",
+                    "scale",
+                    "kubernetes",
+                    JsonSerializer.SerializeToElement(new { namespaceName = TargetNamespace }))),
+            CancellationToken.None);
+
+        string audit = await File.ReadAllTextAsync(store.AuditPath, CancellationToken.None);
+
+        Assert.Contains($@"""eventName"": ""{ApprovalConventions.AuditEvents.PreExecutionChecked}""", audit);
+        Assert.Contains(@"""adapterPayload"": {", audit);
+        Assert.Contains($@"""namespaceName"": ""{TargetNamespace}""", audit);
     }
 
     [Fact]

@@ -49,3 +49,11 @@ public sealed record ApprovalChallengeRejectedPayload(
     string RequesterSubject,
     string? ApproverSubject,
     string Reason) : IChallengeAuditPayload;
+
+public sealed record ApprovalChallengeCanceledPayload(
+    string Id,
+    string PlanId,
+    string PendingPlanHash,
+    string RequesterSubject,
+    string? ActorSubject,
+    DateTimeOffset DecidedAt) : IChallengeAuditPayload;

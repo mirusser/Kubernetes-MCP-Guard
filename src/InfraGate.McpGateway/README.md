@@ -5,8 +5,8 @@
 ## Runtime Flow
 
 - `Program.cs` configures the HTTP MCP server at `/mcp`, registers auth, approval endpoints, guardrails, the downstream client, and the Kubernetes adapter implementation of the generic plan seams.
-- `GatewayToolDispatcher.cs` dynamically forwards downstream ReadOnly tools, hides downstream Destructive tools, exposes `request_*` wrappers for plan creation, and owns `execute_approved_plan`.
-- `GatewayApprovalService.cs` and `GatewayApprovalEndpoints.cs` create short-lived approval URLs and render Kubernetes review evidence decoded through `InfraGate.KubernetesAdapter`; `ApprovalChallengeStore` lives in `InfraGate.Approvals`.
+- `IGatewayToolDispatcher.cs` / `GatewayToolDispatcher.cs` dynamically forward downstream ReadOnly tools, hide downstream Destructive tools, expose `request_*` wrappers for plan creation, own `execute_approved_plan`, and call the generic pre-execution gate before adapter execution.
+- `IGatewayApprovalService.cs`, `GatewayApprovalService.cs`, and `GatewayApprovalEndpoints.cs` create or reuse short-lived approval URLs and render Kubernetes review evidence decoded through `InfraGate.KubernetesAdapter`; `IApprovalChallengeStore` lives in `InfraGate.Approvals`.
 - `GuardedToolRunner.cs` scans inbound arguments, calls the downstream stdio server, sanitizes risky model-visible output, and writes audit events.
 - `DownstreamMcpClient.cs` starts and reuses the downstream `InfraGate.McpServer` process via the Model Context Protocol client.
 - `PromptInjectionGuard*.cs` contains argument scanning, response redaction, operational-line allow-listing, and regex patterns.
@@ -24,7 +24,7 @@
 - The gateway binds approval challenges to the requester stored in the generic plan envelope; a different authenticated subject must request a fresh plan.
 - Approval is browser-based and out-of-band: MCP clients receive an approval URL but cannot submit approval content through MCP.
 - Browser approval pages render the stored Kubernetes server-side dry-run status, Intent Digest, Review Digest, and adapter review evidence. Manifest plans require diff evidence; narrow Deployment operations may be dry-run-only.
-- Approval challenges are bound to plan id, intent/review digests, requester subject, expiry, and Single-Execution status. The gateway recomputes the plan file's intent and review digests at challenge creation and approval time to detect drift between the stored plan and the challenge bindings. Approved challenges issue Approval Grants consumed by execution.
+- Approval challenges are bound to plan id, intent/review digests, requester subject, expiry, and Single-Execution status. The gateway recomputes the plan file hash and digest bindings at challenge creation and approval time to detect drift between the stored plan and the challenge bindings. Repeated execution requests reuse a matching still-pending challenge URL. Approved challenges issue Approval Grants consumed by the generic pre-execution gate.
 - Guardrail audit entries must not include bearer tokens or raw credentials.
 
 ## Settings

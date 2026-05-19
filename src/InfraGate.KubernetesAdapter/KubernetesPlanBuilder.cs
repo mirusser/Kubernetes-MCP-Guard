@@ -1,5 +1,6 @@
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.KubernetesAdapter.Policy;
 
 namespace InfraGate.KubernetesAdapter;
 
@@ -97,12 +98,26 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         }
         catch (JsonException)
         {
-            return PlanBuildResult.Failed($"Diff evidence failed: {diffJson}");
+            var message = $"Diff evidence failed: {diffJson}";
+            return PlanBuildResult.Failed(
+                message,
+                DiffAudit(
+                    KubernetesAdapterConventions.PlanOperations.Apply,
+                    namespaceName,
+                    applyEvidence.DryRun.Objects.Select(obj => obj.Object).ToArray(),
+                    message));
         }
 
         if (diffs is null)
         {
-            return PlanBuildResult.Failed("Diff evidence returned an empty result.");
+            const string message = "Diff evidence returned an empty result.";
+            return PlanBuildResult.Failed(
+                message,
+                DiffAudit(
+                    KubernetesAdapterConventions.PlanOperations.Apply,
+                    namespaceName,
+                    applyEvidence.DryRun.Objects.Select(obj => obj.Object).ToArray(),
+                    message));
         }
 
         var objects = diffs.Select(d => d.Object).ToArray();
@@ -171,12 +186,26 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         }
         catch (JsonException)
         {
-            return PlanBuildResult.Failed($"Diff evidence failed: {diffJson}");
+            var message = $"Diff evidence failed: {diffJson}";
+            return PlanBuildResult.Failed(
+                message,
+                DiffAudit(
+                    KubernetesAdapterConventions.PlanOperations.Delete,
+                    namespaceName,
+                    dryRun.Objects.Select(obj => obj.Object).ToArray(),
+                    message));
         }
 
         if (diffs is null)
         {
-            return PlanBuildResult.Failed("Diff evidence returned an empty result.");
+            const string message = "Diff evidence returned an empty result.";
+            return PlanBuildResult.Failed(
+                message,
+                DiffAudit(
+                    KubernetesAdapterConventions.PlanOperations.Delete,
+                    namespaceName,
+                    dryRun.Objects.Select(obj => obj.Object).ToArray(),
+                    message));
         }
 
         var objects = diffs.Select(d => d.Object).ToArray();
@@ -244,7 +273,14 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         var diffs = DeserializeDiffs(diffJson);
         if (diffs is null)
         {
-            return PlanBuildResult.Failed($"Diff evidence failed: {diffJson}");
+            var message = $"Diff evidence failed: {diffJson}";
+            return PlanBuildResult.Failed(
+                message,
+                DiffAudit(
+                    KubernetesAdapterConventions.PlanOperations.Scale,
+                    namespaceName,
+                    dryRun.Objects.Select(obj => obj.Object).ToArray(),
+                    message));
         }
 
         var deploymentRef = new K8sObjectRef("apps/v1", "Deployment", namespaceName, name);
@@ -309,7 +345,14 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         var diffs = DeserializeDiffs(diffJson);
         if (diffs is null)
         {
-            return PlanBuildResult.Failed($"Diff evidence failed: {diffJson}");
+            var message = $"Diff evidence failed: {diffJson}";
+            return PlanBuildResult.Failed(
+                message,
+                DiffAudit(
+                    KubernetesAdapterConventions.PlanOperations.Restart,
+                    namespaceName,
+                    dryRun.Objects.Select(obj => obj.Object).ToArray(),
+                    message));
         }
 
         var restartedAtUtc = DateTimeOffset.UtcNow.ToString(ApprovalConventions.DateTimeFormats.RoundTrip);
@@ -348,6 +391,17 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             return PlanBuildResult.Failed("Missing required arguments: namespace, name, container, and image.");
         }
 
+        var policyResult = K8sPolicyValidator.ValidateSetDeploymentImage(
+            namespaceName,
+            name,
+            container,
+            image,
+            K8sPolicyOptions.Default);
+        if (policyResult.IsDenied)
+        {
+            return PlanBuildResult.Failed($"Set deployment image rejected by policy:{Environment.NewLine}{policyResult.FormatRefusal()}");
+        }
+
         var dryRunJson = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.DryRunSetDeploymentImage,
             new Dictionary<string, object?>
@@ -381,7 +435,14 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         var diffs = DeserializeDiffs(diffJson);
         if (diffs is null)
         {
-            return PlanBuildResult.Failed($"Diff evidence failed: {diffJson}");
+            var message = $"Diff evidence failed: {diffJson}";
+            return PlanBuildResult.Failed(
+                message,
+                DiffAudit(
+                    KubernetesAdapterConventions.PlanOperations.SetImage,
+                    namespaceName,
+                    dryRun.Objects.Select(obj => obj.Object).ToArray(),
+                    message));
         }
 
         var deploymentRef = new K8sObjectRef("apps/v1", "Deployment", namespaceName, name);
@@ -459,6 +520,20 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                 operation,
                 namespaceName,
                 Array.Empty<string>(),
+                message));
+
+    private static PlanAudit DiffAudit(
+        string operation,
+        string namespaceName,
+        string[] objects,
+        string message) =>
+        new(
+            ApprovalConventions.AuditEvents.DiffFailed,
+            new InfraGate.Approvals.AuditPayloads.DiffFailedPayload(
+                ApprovalStore.NewPlanId(),
+                operation,
+                namespaceName,
+                objects,
                 message));
 
     private static bool TryGetString(IReadOnlyDictionary<string, object?> args, string key, out string value)

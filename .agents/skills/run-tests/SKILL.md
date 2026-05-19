@@ -24,7 +24,7 @@ description: Run all available tests in the repository, correctly accounting for
 ./scripts/run-tests.sh
 ```
 
-Auto-detects Docker and K8s availability. Skips tiers your machine can't run. Reports what ran and what was skipped.
+Regenerates the test kubeconfig with a fresh 24h SA token, auto-detects Docker and K8s availability, and runs everything it can. Skips tiers your machine can't run. Reports what ran and what was skipped. Tests clean up their own K8s resources.
 
 ---
 
@@ -269,6 +269,30 @@ OK: local-build smoke test passed.
 
 ---
 
+## Kubeconfig Auto-Regeneration
+
+`run-tests.sh` automatically regenerates the test kubeconfig before every run by calling `create-demo-kubeconfig.sh`. This:
+- Creates a fresh 24h ServiceAccount token (never expires mid-run)
+- Applies RBAC if needed (idempotent `kubectl apply`)
+- Also regenerates the compose kubeconfig when Docker is available
+
+You no longer need to manually run `create-demo-kubeconfig.sh` before invoking `run-tests.sh`. When running individual tiers directly (tiers 3-5), regenerate first:
+
+```bash
+./scripts/create-demo-kubeconfig.sh
+```
+
+If `run-tests.sh` reports "K8s cluster reachable for admin but SA token access failed", the cluster is running but RBAC setup failed — check `deploy/minikube/rbac.yaml` and re-run `create-demo-kubeconfig.sh` manually.
+
+## Resource Cleanup
+
+| Test tier | Creates K8s resources? | Cleanup approach |
+|-----------|------------------------|------------------|
+| Tier 4 (Gateway integration) | Yes (`mcp-api-demo` Deployment, Service, ConfigMap) | Inline delete via MCP tool + `finally`-block safety net via `kubectl delete --ignore-not-found` |
+| Tier 5 (Safety E2E) | No (mutates pre-existing `nginx-demo` via restart) | Restart is idempotent — no cleanup needed |
+
+Tests are designed to be re-runnable without manual intervention.
+
 ## Prerequisites Verification
 
 Run these checks before running tests:
@@ -283,12 +307,9 @@ docker info
 # Expected: prints daemon info, no error
 
 # Kubernetes cluster (for tiers 3, 4, 5)
-kubectl --kubeconfig .kube/mcp-nginx-demo.config cluster-info
+kubectl cluster-info
 # Expected: cluster info output
-
-# Demo namespace (for tiers 3, 4, 5)
-kubectl --kubeconfig .kube/mcp-nginx-demo.config -n mcp-nginx-demo get deployment nginx-demo
-# Expected: deployment found
+# Note: kubeconfig regeneration happens automatically — just ensure the cluster is running.
 ```
 
 **Environment variable check:**
@@ -302,6 +323,8 @@ echo "INFRA_GATE_RUN_SAFETY_E2E=$INFRA_GATE_RUN_SAFETY_E2E"          # should be
 
 ```bash
 # Compose setup (populates kubeconfig and persistence dirs)
+# Note: run-tests.sh regenerates this automatically. Run manually only when
+# running smoke-test-release.sh or smoke-test-local.sh directly.
 ./scripts/create-demo-kubeconfig.sh --compose
 # Expected: creates .kube/mcp-nginx-demo.compose.config and directories under .mcp-*
 
@@ -331,12 +354,12 @@ Tiers 3, 4, and 5 require real infrastructure (K8s, Docker) and should be verifi
 
 ## Auto-Detection Runner
 
-`scripts/run-tests.sh` auto-detects available infrastructure and runs everything it can:
+`scripts/run-tests.sh` regenerates kubeconfig, auto-detects available infrastructure, and runs everything it can:
 
-1. Always runs tier 1 (unit tests)
-2. Detects Docker → runs tier 2 (Keycloak)
-3. Detects K8s cluster + kubeconfig → runs tiers 3, 4, 5
-4. Detects Docker + K8s + compose kubeconfig → runs tier 7 (release smoke)
+1. Regenerates the test kubeconfig with a fresh 24h SA token (calls `create-demo-kubeconfig.sh`)
+2. Always runs tier 1 (unit tests)
+3. Detects Docker → runs tier 2 (Keycloak)
+4. Detects K8s cluster + kubeconfig → runs tiers 3, 4, 5
 5. Reports a summary of what ran, what passed, and what was skipped
 
 Run it:

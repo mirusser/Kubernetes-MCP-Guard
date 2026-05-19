@@ -18,7 +18,7 @@ internal static class GatewayApprovalEndpoints
                 McpGatewayConventions.Approvals.ChallengeRoute,
                 async (
                     string challengeId,
-                    GatewayApprovalService approvals,
+                    IGatewayApprovalService approvals,
                     [FromServices] IPlanReviewRenderer renderer,
                     HttpContext context,
                     IAntiforgery antiforgery,
@@ -37,7 +37,7 @@ internal static class GatewayApprovalEndpoints
                 McpGatewayConventions.Approvals.ApproveRoute,
                 async (
                     string challengeId,
-                    GatewayApprovalService approvals,
+                    IGatewayApprovalService approvals,
                     HttpContext context,
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
@@ -57,7 +57,7 @@ internal static class GatewayApprovalEndpoints
                 McpGatewayConventions.Approvals.DenyRoute,
                 async (
                     string challengeId,
-                    GatewayApprovalService approvals,
+                    IGatewayApprovalService approvals,
                     HttpContext context,
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
@@ -69,6 +69,26 @@ internal static class GatewayApprovalEndpoints
                     }
 
                     var result = await approvals.DenyChallengeAsync(challengeId, cancellationToken);
+
+                    return Results.Content(RenderDecisionPage(result), "text/html", Encoding.UTF8);
+                })
+            .RequireAuthorization(GatewayAuthConventions.Schemes.ApprovalPolicyName);
+        endpoints.MapPost(
+                McpGatewayConventions.Approvals.CancelRoute,
+                async (
+                    string challengeId,
+                    IGatewayApprovalService approvals,
+                    HttpContext context,
+                    IAntiforgery antiforgery,
+                    CancellationToken cancellationToken) =>
+                {
+                    var validation = await ValidateAntiforgeryAsync(context, antiforgery);
+                    if (validation is not null)
+                    {
+                        return validation;
+                    }
+
+                    var result = await approvals.CancelChallengeAsync(challengeId, cancellationToken);
 
                     return Results.Content(RenderDecisionPage(result), "text/html", Encoding.UTF8);
                 })
@@ -168,6 +188,10 @@ internal static class GatewayApprovalEndpoints
                   <form method="post" action="{McpGatewayConventions.Approvals.PathPrefix}/{Html(challengeId)}/deny">
                     <input type="hidden" name="{McpGatewayConventions.Approvals.RequestVerificationToken}" value="{token}">
                     <button type="submit" class="deny">Deny</button>
+                  </form>
+                  <form method="post" action="{McpGatewayConventions.Approvals.PathPrefix}/{Html(challengeId)}/cancel">
+                    <input type="hidden" name="{McpGatewayConventions.Approvals.RequestVerificationToken}" value="{token}">
+                    <button type="submit" class="cancel">Cancel</button>
                   </form>
                 </section>
                 """;
@@ -406,6 +430,11 @@ internal static class GatewayApprovalEndpoints
                       border-color: var(--color-deny);
                       background: var(--color-deny);
                       color: #ffffff;
+                    }
+                    button.cancel {
+                      border-color: var(--color-warning);
+                      background: transparent;
+                      color: var(--color-warning);
                     }
                     button:disabled {
                       opacity: 0.45;

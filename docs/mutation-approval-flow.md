@@ -125,10 +125,14 @@ sequenceDiagram
     Authority->>Authority: Issue or reference Approval Grant
     Client->>Executor: Request execution for planId
     Executor->>Core: Evaluate Pre-Execution Gates
+    Core->>Core: Audit pre_execution.grant.validated
     Core->>Adapter: Verify freshness and domain policy checks
     Adapter-->>Core: Checks pass
+    Adapter-->>Core: Adapter audit payload for pre_execution.checked
     Core-->>Executor: Gates pass
+    Core->>Core: Audit pre_execution.checked
     Executor->>Adapter: Execute Mutation Intent
+    Adapter-->>Core: Audit execution.started with adapter payload
     Adapter-->>Core: Execution result and adapter audit payload
     Core->>Core: Record audit events
 ```
@@ -195,6 +199,10 @@ flowchart TD
 ```
 
 Execution is approval-bound only if the grant and every required gate pass immediately before mutation.
+
+The 8 flowchart gates above are implemented as two ownership buckets divided by the generic core / domain adapter boundary. Gates 1–6 (grant validity through reuse policy) are owned by `ApprovalStore.GetGrantedPlanAsync` in the generic core. Gates 7–8 (freshness policy and domain policy checks) are owned by `IDomainPlanExecutor.CheckPreExecutionAsync` in the domain adapter. Adding a generic gate means editing `GetGrantedPlanAsync`; adding a domain-specific gate means editing `CheckPreExecutionAsync`.
+
+For Kubernetes today, apply-manifest policy is rechecked by the pre-execution server-side dry-run evidence path. Set-image policy is checked directly by the Kubernetes adapter before dry-run because the image tag is carried as operation parameters rather than as a full manifest.
 
 ## Scenarios To Verify
 

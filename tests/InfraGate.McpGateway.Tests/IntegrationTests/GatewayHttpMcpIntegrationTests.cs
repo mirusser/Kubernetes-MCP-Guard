@@ -380,6 +380,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         using var server = CreateGatewayServer(downstream, audit, CreateGatewayOptions(serverProject, testRoot, repoRoot));
         await using var client = await CreateHttpMcpClientAsync(server);
 
+        try
+        {
+
         var applyRequestText = await CallTextAsync(
             client,
             "request_apply_manifest",
@@ -609,6 +612,18 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         Assert.Contains("Deleted apps/v1 Deployment", deleteText);
         Assert.Contains("Deleted v1 Service", deleteText);
         Assert.Contains("Deleted v1 ConfigMap", deleteText);
+        }
+        finally
+        {
+            try
+            {
+                CleanupTestResources(kubeconfig, NamespaceName);
+            }
+            catch
+            {
+                // Best-effort cleanup; ignore if kubectl isn't available or resources are already gone.
+            }
+        }
     }
 
     private static TestServer CreateGatewayServer(
@@ -631,15 +646,16 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<GuardedToolRunner>();
                 services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
                 services.AddSingleton<ApprovalStore>();
+                services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
                 services.AddSingleton<ApprovalChallengeStore>();
-                services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
-                services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
-                services.AddSingleton<GatewayApprovalService>();
-                services.AddSingleton<IDomainPlanBuilder, KubernetesPlanBuilder>();
-                services.AddSingleton<IDomainPlanExecutor, KubernetesPlanExecutor>();
+                services.AddSingleton<IApprovalChallengeStore>(sp => sp.GetRequiredService<ApprovalChallengeStore>());
+                services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
+                services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
+                services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
+                services.AddKubernetesAdapter();
                 services.AddSingleton<DownstreamToolRegistry>();
-                services.AddSingleton<GatewayToolDispatcher>();
+                services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
                 services.AddHttpContextAccessor();
                 services.AddLogging();
                 services.AddAntiforgery();
@@ -691,10 +707,10 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         return server;
     }
 
-    private static GatewayToolDispatcher ResolveDispatcher(
+    private static IGatewayToolDispatcher ResolveDispatcher(
         IServiceProvider? requestServices,
         IServiceProvider? serverServices) =>
-        (requestServices ?? serverServices)?.GetRequiredService<GatewayToolDispatcher>()
+        (requestServices ?? serverServices)?.GetRequiredService<IGatewayToolDispatcher>()
         ?? throw new InvalidOperationException("GatewayToolDispatcher not available.");
 
     private static McpGatewayOptions CreateGatewayOptions(string downstreamProject, string testRoot, string workingDirectory) =>

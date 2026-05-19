@@ -109,16 +109,16 @@ The roadmap ([.agents/Plans/archive/security-roadmap.md §13](../.agents/Plans/a
 
 ```text
 1. AI client calls request_apply_manifest (or scale/restart/setImage/delete)
-   └── McpServer creates a PlanEnvelope with KubernetesPlanPayload, writes pending/<planId>.json
-       Audit: plan_requested  (PlanRequestedPayload)
+   └── Gateway asks the Kubernetes adapter to create a PlanEnvelope with KubernetesPlanPayload, then writes pending/<planId>.json
+       Audit: plan.created  (PlanRequestedPayload)
 
 2. AI client calls execute_approved_plan(planId)
-   └── McpServer asks ApprovalStore.GetGrantedPlanAsync
+   └── Gateway asks ApprovalStore.GetGrantedPlanAsync
        └── No grants/<planId>.json exists yet
-           Server returns "Refused: not approved" up to the Gateway
+           Gateway sees "Refused: not approved"
        Gateway's EnsureApprovedOrCreateChallengeAsync sees no challenge either
            Creates ApprovalChallenge, writes challenges/<challengeId>.json
-           Audit: approval_challenge_created  (ApprovalChallengeCreatedPayload)
+           Audit: challenge.created  (ApprovalChallengeCreatedPayload)
            Returns approval URL to the AI client
 
 3. Human opens approval URL in a browser (separate OAuth session)
@@ -135,15 +135,16 @@ The roadmap ([.agents/Plans/archive/security-roadmap.md §13](../.agents/Plans/a
          - Marks challenge Status=approved, sets ApproverSubject + DecidedAtUtc
          - Calls ApprovalStore.CreateGrantAsync
              which writes grants/<planId>.json
-         Audit: approval_challenge_approved  (ApprovalChallengeApprovedPayload)
-         Audit: grant_issued                  (ApprovalGrantIssuedPayload)
+         Audit: challenge.approved  (ApprovalChallengeApprovedPayload)
+         Audit: grant.issued        (ApprovalGrantIssuedPayload)
 
 5. AI client calls execute_approved_plan(planId) again
    └── ApprovalStore.GetGrantedPlanAsync now finds grants/<planId>.json
        Validates grant expiry, Intent Digest, Review Digest, and Single-Execution state
-       McpServer reruns dryRun=All; must still succeed (pre-apply gate)
-       Then mutates Kubernetes; moves to applied/<planId>.json
-       Audit: plan_applied  (PlanAppliedPayload)
+       Gateway validates generic pre-execution gates
+       Kubernetes adapter reruns dryRun=All; must still succeed (pre-execution gate)
+       Then mutates Kubernetes; gateway writes applied/<planId>.json
+       Audit: execution.succeeded  (PlanAppliedPayload)
 ```
 
 The plan threads through every step from 1 to 5. The challenge only matters for steps 2 to 4 — it is *gone* (well, marked consumed) before any real Kubernetes mutation happens.

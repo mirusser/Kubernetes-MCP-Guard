@@ -5,21 +5,23 @@ using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpGateway;
 
-public sealed class GatewayApprovalService
+public sealed class GatewayApprovalService : IGatewayApprovalService
 {
     private readonly ApprovalStore approvalStore;
-    private readonly ApprovalChallengeStore challengeStore;
+    private readonly IApprovalChallengeStore challengeStore;
     private readonly IPlanReviewAdapter planReviewAdapter;
     private readonly IPlanReviewRenderer planReviewRenderer;
+    private readonly IAuthorizationCheck authorizationCheck;
     private readonly McpGatewayOptions options;
     private readonly IHttpContextAccessor httpContextAccessor;
     private readonly ILogger<GatewayApprovalService> logger;
 
     public GatewayApprovalService(
         ApprovalStore approvalStore,
-        ApprovalChallengeStore challengeStore,
+        IApprovalChallengeStore challengeStore,
         IPlanReviewAdapter planReviewAdapter,
         IPlanReviewRenderer planReviewRenderer,
+        IAuthorizationCheck authorizationCheck,
         McpGatewayOptions options,
         IHttpContextAccessor httpContextAccessor,
         ILogger<GatewayApprovalService> logger)
@@ -28,6 +30,7 @@ public sealed class GatewayApprovalService
         this.challengeStore = challengeStore;
         this.planReviewAdapter = planReviewAdapter;
         this.planReviewRenderer = planReviewRenderer;
+        this.authorizationCheck = authorizationCheck;
         this.options = options;
         this.httpContextAccessor = httpContextAccessor;
         this.logger = logger;
@@ -46,13 +49,19 @@ public sealed class GatewayApprovalService
         var granted = await approvalStore.GetGrantedPlanAsync(planId, cancellationToken);
         if (granted.IsGranted && granted.Envelope is not null && granted.Grant is not null)
         {
-            var decoded = planReviewAdapter.TryDecodeForReview(granted.Envelope);
+            var decoded = planReviewAdapter.TryDecodeForReview(granted.Envelope, out var decodeError);
             if (decoded is null)
             {
-                return ApprovalGateResult.RequiresApproval($"Refused: Plan '{planId}' could not be decoded by the approval adapter.");
+                var message = decodeError ?? $"Plan '{planId}' could not be decoded by the approval adapter.";
+                await WriteApplyDeniedAuditAsync(planId, message, cancellationToken);
+
+                return ApprovalGateResult.RequiresApproval($"Refused: {message}");
             }
 
-            if (!SameSubject(decoded.Envelope.Requester.Subject, requester.Subject))
+            var grantedAuthz = await authorizationCheck.EvaluateAsync(
+                new PlanAuthorizationContext(decoded.Envelope.Requester.Subject, requester.Subject),
+                cancellationToken).ConfigureAwait(false);
+            if (!grantedAuthz.IsAuthorized)
             {
                 return ApprovalGateResult.RequiresApproval("Refused: apply approval requires the same authenticated subject that requested the plan.");
             }
@@ -79,13 +88,16 @@ public sealed class GatewayApprovalService
             return ApprovalGateResult.RequiresApproval($"Refused: {pending.Message}");
         }
 
-        var pendingPlan = planReviewAdapter.TryDecodeForReview(pending.Envelope);
+        var pendingPlan = planReviewAdapter.TryDecodeForReview(pending.Envelope, out var pendingError);
         if (pendingPlan is null)
         {
-            return ApprovalGateResult.RequiresApproval($"Refused: Plan '{planId}' could not be decoded by the approval adapter.");
+            return ApprovalGateResult.RequiresApproval($"Refused: {pendingError ?? $"Plan '{planId}' could not be decoded by the approval adapter."}");
         }
 
-        if (!SameSubject(pendingPlan.Envelope.Requester.Subject, requester.Subject))
+        var pendingAuthz = await authorizationCheck.EvaluateAsync(
+            new PlanAuthorizationContext(pendingPlan.Envelope.Requester.Subject, requester.Subject),
+            cancellationToken).ConfigureAwait(false);
+        if (!pendingAuthz.IsAuthorized)
         {
             return ApprovalGateResult.RequiresApproval("Refused: apply approval requires the same authenticated subject that requested the plan.");
         }
@@ -96,12 +108,43 @@ public sealed class GatewayApprovalService
             return ApprovalGateResult.RequiresApproval($"Refused: {pendingRefusal}");
         }
 
+        var existingChallenge = await challengeStore.FindPendingAsync(
+            planId,
+            pending.Hash,
+            requester.Subject,
+            pending.Envelope.IntentDigest,
+            pending.Envelope.ReviewDigest,
+            cancellationToken);
+        if (existingChallenge is not null)
+        {
+            return ApprovalGateResult.RequiresApproval(planReviewRenderer.RenderApprovalRequiredMessage(
+                pendingPlan,
+                CreateApprovalUrl(existingChallenge.Id),
+                existingChallenge.ExpiresAtUtc));
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (now < pending.Envelope.ValidFromUtc)
+        {
+            return ApprovalGateResult.RequiresApproval(
+                $"Refused: plan '{planId}' validity window has not started yet.");
+        }
+
+        if (now >= pending.Envelope.ValidUntilUtc)
+        {
+            return ApprovalGateResult.RequiresApproval(
+                $"Refused: plan '{planId}' has expired.");
+        }
+
+        var remainingWindow = pending.Envelope.ValidUntilUtc - now;
+        var effectiveTtl = remainingWindow < options.ApprovalChallengeTtl ? remainingWindow : options.ApprovalChallengeTtl;
+
         var challenge = await challengeStore.CreateAsync(
             planId,
             pending.Hash,
             requester.Subject,
             requester.AuthenticationType,
-            options.ApprovalChallengeTtl,
+            effectiveTtl,
             pending.Envelope.IntentDigest,
             pending.Envelope.ReviewDigest,
             cancellationToken);
@@ -251,6 +294,73 @@ public sealed class GatewayApprovalService
         return new ApprovalDecisionResult(true, $"Plan '{denied.PlanId}' was denied.");
     }
 
+    public async Task<ApprovalDecisionResult> CancelChallengeAsync(
+        string challengeId,
+        CancellationToken cancellationToken)
+    {
+        var challenge = await challengeStore.GetAsync(challengeId, cancellationToken);
+        if (challenge is null)
+        {
+            return new ApprovalDecisionResult(false, "Approval challenge was not found.");
+        }
+
+        var actor = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
+        if (actor is null)
+        {
+            return new ApprovalDecisionResult(false, "Approval cancellation requires an authenticated OAuth subject.");
+        }
+
+        if (!IsPending(challenge))
+        {
+            return new ApprovalDecisionResult(false, $"Approval challenge is already {challenge.Status}.");
+        }
+
+        if (challenge.ExpiresAtUtc <= DateTimeOffset.UtcNow)
+        {
+            var expired = await ExpireChallengeAsync(challenge, cancellationToken);
+
+            return new ApprovalDecisionResult(false, $"Approval challenge is already {expired.Status}.");
+        }
+
+        if (!SameSubject(challenge.RequesterSubject, actor.Subject))
+        {
+            await WriteChallengeRejectedAuditAsync(
+                challenge,
+                actor.Subject,
+                "Canceling subject did not match requester subject.",
+                cancellationToken);
+
+            return new ApprovalDecisionResult(false, "Approval must be canceled by the same authenticated subject that requested it.");
+        }
+
+        var decidedAt = DateTimeOffset.UtcNow;
+        var canceled = challenge with
+        {
+            Status = ApprovalConventions.ChallengeStatuses.Canceled,
+            ApproverSubject = actor.Subject,
+            DecidedAtUtc = decidedAt,
+            Outcome = new ChallengeOutcome(
+                ApprovalConventions.ChallengeOutcomeStatuses.Canceled,
+                actor.Subject,
+                decidedAt,
+                Reason: null,
+                GrantId: null)
+        };
+        await challengeStore.SaveAsync(canceled, cancellationToken);
+        await approvalStore.WriteAuditAsync(
+            ApprovalConventions.AuditEvents.ApprovalChallengeCanceled,
+            new ApprovalChallengeCanceledPayload(
+                canceled.Id,
+                canceled.PlanId,
+                canceled.PendingPlanHash,
+                canceled.RequesterSubject,
+                canceled.Outcome.ActorSubject,
+                decidedAt),
+            cancellationToken);
+
+        return new ApprovalDecisionResult(true, $"Plan '{canceled.PlanId}' approval challenge was canceled.");
+    }
+
     private async Task<ChallengeValidation> ValidatePendingChallengeAsync(
         string challengeId,
         CancellationToken cancellationToken)
@@ -268,28 +378,7 @@ public sealed class GatewayApprovalService
 
         if (challenge.ExpiresAtUtc <= DateTimeOffset.UtcNow)
         {
-            var decidedAt = DateTimeOffset.UtcNow;
-            var expired = challenge with
-            {
-                Status = ApprovalConventions.ChallengeStatuses.Expired,
-                DecidedAtUtc = decidedAt,
-                Outcome = new ChallengeOutcome(
-                    ApprovalConventions.ChallengeOutcomeStatuses.Expired,
-                    ActorSubject: null,
-                    decidedAt,
-                    "Challenge TTL expired.",
-                    GrantId: null)
-            };
-            await challengeStore.SaveAsync(expired, cancellationToken);
-            await approvalStore.WriteAuditAsync(
-                ApprovalConventions.AuditEvents.ApprovalChallengeExpired,
-                new ApprovalChallengeExpiredPayload(
-                    expired.Id,
-                    expired.PlanId,
-                    expired.PendingPlanHash,
-                    expired.RequesterSubject,
-                    expired.ExpiresAtUtc),
-                cancellationToken);
+            var expired = await ExpireChallengeAsync(challenge, cancellationToken);
 
             return ChallengeValidation.Invalid("Approval challenge expired. Ask the MCP client to request a new approval URL.", expired);
         }
@@ -336,33 +425,34 @@ public sealed class GatewayApprovalService
             return ChallengeValidation.Invalid(message, challenge);
         }
 
-        var decoded = planReviewAdapter.TryDecodeForReview(pending.Envelope);
-        if (decoded is null)
+        if (!FixedTimeStringComparer.Equals(challenge.PendingPlanHash, pending.Hash))
         {
-            await WriteChallengeRejectedAuditAsync(
-                challenge,
-                approver.Subject,
-                "Plan could not be decoded by the approval adapter.",
-                cancellationToken);
-
-            return ChallengeValidation.Invalid("Plan could not be decoded by the approval adapter.", challenge);
-        }
-
-        if (!SameSubject(challenge.RequesterSubject, decoded.Envelope.Requester.Subject))
-        {
-            const string message = "The pending plan requester changed after this approval URL was created. Ask the MCP client to request a new approval URL.";
+            const string message = "The pending plan changed after this approval URL was created. Ask the MCP client to request a new approval URL.";
             await WriteChallengeRejectedAuditAsync(
                 challenge,
                 approver.Subject,
                 message,
                 cancellationToken);
 
-            return ChallengeValidation.Invalid(message, challenge, decoded);
+            return ChallengeValidation.Invalid(message, challenge);
         }
 
-        if (!FixedTimeStringComparer.Equals(challenge.PendingPlanHash, pending.Hash))
+        var decoded = planReviewAdapter.TryDecodeForReview(pending.Envelope, out var decodeError);
+        if (decoded is null)
         {
-            const string message = "The pending plan changed after this approval URL was created. Ask the MCP client to request a new approval URL.";
+            var errorMessage = decodeError ?? "Plan could not be decoded by the approval adapter.";
+            await WriteChallengeRejectedAuditAsync(
+                challenge,
+                approver.Subject,
+                errorMessage,
+                cancellationToken);
+
+            return ChallengeValidation.Invalid(errorMessage, challenge);
+        }
+
+        if (!SameSubject(challenge.RequesterSubject, decoded.Envelope.Requester.Subject))
+        {
+            const string message = "The pending plan requester changed after this approval URL was created. Ask the MCP client to request a new approval URL.";
             await WriteChallengeRejectedAuditAsync(
                 challenge,
                 approver.Subject,
@@ -417,6 +507,36 @@ public sealed class GatewayApprovalService
                 approverSubject,
                 reason),
             cancellationToken);
+    }
+
+    private async Task<ApprovalChallenge> ExpireChallengeAsync(
+        ApprovalChallenge challenge,
+        CancellationToken cancellationToken)
+    {
+        var decidedAt = DateTimeOffset.UtcNow;
+        var expired = challenge with
+        {
+            Status = ApprovalConventions.ChallengeStatuses.Expired,
+            DecidedAtUtc = decidedAt,
+            Outcome = new ChallengeOutcome(
+                ApprovalConventions.ChallengeOutcomeStatuses.Expired,
+                ActorSubject: null,
+                decidedAt,
+                "Challenge TTL expired.",
+                GrantId: null)
+        };
+        await challengeStore.SaveAsync(expired, cancellationToken);
+        await approvalStore.WriteAuditAsync(
+            ApprovalConventions.AuditEvents.ApprovalChallengeExpired,
+            new ApprovalChallengeExpiredPayload(
+                expired.Id,
+                expired.PlanId,
+                expired.PendingPlanHash,
+                expired.RequesterSubject,
+                expired.ExpiresAtUtc),
+            cancellationToken);
+
+        return expired;
     }
 
     private async Task WriteApplyDeniedAuditAsync(

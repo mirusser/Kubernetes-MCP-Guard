@@ -435,6 +435,7 @@ public sealed class ApprovalStore
             envelope.ExecutionReusePolicy,
             envelope.FreshnessPolicy,
             envelope.ReviewSurfaceContext,
+            envelope.EvidenceArtifacts,
             envelope.IntentDigest,
             envelope.ReviewDigest,
             payload);

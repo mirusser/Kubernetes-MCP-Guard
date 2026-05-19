@@ -23,6 +23,33 @@ public sealed class AuditPayloadsTests
             new PlanRequestedPayload("plan-1", "apply", "ns", "deadbeef", digest, digest),
             new[] { "planId", "operation", "namespace", "hash", "intentDigest", "reviewDigest" });
         data.Add(
+            new PreExecutionGrantValidatedPayload(
+                "plan-1",
+                "grant-1",
+                "challenge-1",
+                "user",
+                "user",
+                digest,
+                digest,
+                new ApprovalPolicy("same-subject"),
+                new ExecutionReusePolicy("single-execution"),
+                DateTimeOffset.UnixEpoch),
+            new[] { "planId", "grantId", "sourceChallengeId", "requesterSubject", "approverSubject", "intentDigest", "reviewDigest", "approvalPolicy", "executionReusePolicy", "expiresAtUtc" });
+        data.Add(
+            new PreExecutionCheckedPayload(
+                "plan-1",
+                "apply",
+                "kubernetes",
+                JsonSerializer.SerializeToElement(new { namespaceName = "ns" }, AuditJsonOptions)),
+            new[] { "planId", "operation", "adapterId", "adapterPayload" });
+        data.Add(
+            new ExecutionStartedPayload(
+                "plan-1",
+                "apply",
+                "kubernetes",
+                JsonSerializer.SerializeToElement(new { namespaceName = "ns" }, AuditJsonOptions)),
+            new[] { "planId", "operation", "adapterId", "adapterPayload" });
+        data.Add(
             new ApprovalGrantIssuedPayload("plan-1", "grant-1", "challenge-1", "user", "user", digest, digest, DateTimeOffset.UnixEpoch),
             new[] { "planId", "grantId", "sourceChallengeId", "requesterSubject", "approverSubject", "intentDigest", "reviewDigest", "expiresAtUtc" });
         data.Add(
@@ -65,7 +92,30 @@ public sealed class AuditPayloadsTests
         data.Add(
             new ApprovalChallengeRejectedPayload("ch-1", "plan-1", "deadbeef", "user", "approver", "subject mismatch"),
             new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "approverSubject", "reason" });
+        data.Add(
+            new ApprovalChallengeCanceledPayload("ch-1", "plan-1", "deadbeef", "user", "user", expiresAt),
+            new[] { "id", "planId", "pendingPlanHash", "requesterSubject", "actorSubject", "decidedAt" });
         return data;
+    }
+
+    [Fact]
+    public void Serialize_AdapterAuditPayload_EmitsNestedFlexibleJson()
+    {
+        var adapterPayload = JsonSerializer.SerializeToElement(
+            new
+            {
+                namespaceName = "demo",
+                objects = new[] { "apps/v1 Deployment demo/nginx" }
+            },
+            AuditJsonOptions);
+        var root = SerializeToObject(new ExecutionStartedPayload(
+            "plan-1",
+            "apply",
+            "kubernetes",
+            adapterPayload));
+
+        var nested = Assert.IsType<JsonObject>(root["adapterPayload"]);
+        Assert.Equal("demo", nested["namespaceName"]?.GetValue<string>());
     }
 
     [Theory]

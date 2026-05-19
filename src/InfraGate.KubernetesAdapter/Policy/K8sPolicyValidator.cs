@@ -37,6 +37,25 @@ public static class K8sPolicyValidator
         return new K8sPolicyResult(findings);
     }
 
+    public static K8sPolicyResult ValidateSetDeploymentImage(
+        string namespaceName,
+        string deploymentName,
+        string containerName,
+        string image,
+        K8sPolicyOptions options)
+    {
+        var findings = new List<K8sPolicyFinding>();
+        if (options.DenyLatestImageTag && IsLatestOrImplicitImageTag(image))
+        {
+            findings.Add(Deny(
+                KubernetesAdapterConventions.PolicyCodes.ImageLatestTag,
+                $"apps/v1 Deployment {namespaceName}/{deploymentName}",
+                $"Container '{containerName}' uses image '{image}' which resolves to latest. Pin to a specific tag."));
+        }
+
+        return new K8sPolicyResult(findings);
+    }
+
     private static void ValidateDeployment(
         V1Deployment deployment,
         K8sPolicyOptions options,
@@ -153,12 +172,15 @@ public static class K8sPolicyValidator
         }
 
         var image = container.Image;
-        if (string.IsNullOrEmpty(image) || !image.Contains(':') || image.EndsWith(":latest", StringComparison.Ordinal))
+        if (IsLatestOrImplicitImageTag(image))
         {
             findings.Add(Deny(KubernetesAdapterConventions.PolicyCodes.ImageLatestTag, objRef,
                 $"Container '{container.Name}' uses image '{image}' which resolves to latest. Pin to a specific tag."));
         }
     }
+
+    private static bool IsLatestOrImplicitImageTag(string? image) =>
+        string.IsNullOrEmpty(image) || !image.Contains(':') || image.EndsWith(":latest", StringComparison.Ordinal);
 
     private static void ValidateService(
         V1Service service,
