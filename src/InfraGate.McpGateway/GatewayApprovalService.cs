@@ -11,6 +11,7 @@ public sealed class GatewayApprovalService : IGatewayApprovalService
     private readonly IApprovalChallengeStore challengeStore;
     private readonly IPlanReviewAdapter planReviewAdapter;
     private readonly IPlanReviewRenderer planReviewRenderer;
+    private readonly IAuthorizationCheck authorizationCheck;
     private readonly McpGatewayOptions options;
     private readonly IHttpContextAccessor httpContextAccessor;
     private readonly ILogger<GatewayApprovalService> logger;
@@ -20,6 +21,7 @@ public sealed class GatewayApprovalService : IGatewayApprovalService
         IApprovalChallengeStore challengeStore,
         IPlanReviewAdapter planReviewAdapter,
         IPlanReviewRenderer planReviewRenderer,
+        IAuthorizationCheck authorizationCheck,
         McpGatewayOptions options,
         IHttpContextAccessor httpContextAccessor,
         ILogger<GatewayApprovalService> logger)
@@ -28,6 +30,7 @@ public sealed class GatewayApprovalService : IGatewayApprovalService
         this.challengeStore = challengeStore;
         this.planReviewAdapter = planReviewAdapter;
         this.planReviewRenderer = planReviewRenderer;
+        this.authorizationCheck = authorizationCheck;
         this.options = options;
         this.httpContextAccessor = httpContextAccessor;
         this.logger = logger;
@@ -55,7 +58,10 @@ public sealed class GatewayApprovalService : IGatewayApprovalService
                 return ApprovalGateResult.RequiresApproval($"Refused: {message}");
             }
 
-            if (!SameSubject(decoded.Envelope.Requester.Subject, requester.Subject))
+            var grantedAuthz = await authorizationCheck.EvaluateAsync(
+                new PlanAuthorizationContext(decoded.Envelope.Requester.Subject, requester.Subject),
+                cancellationToken).ConfigureAwait(false);
+            if (!grantedAuthz.IsAuthorized)
             {
                 return ApprovalGateResult.RequiresApproval("Refused: apply approval requires the same authenticated subject that requested the plan.");
             }
@@ -88,7 +94,10 @@ public sealed class GatewayApprovalService : IGatewayApprovalService
             return ApprovalGateResult.RequiresApproval($"Refused: {pendingError ?? $"Plan '{planId}' could not be decoded by the approval adapter."}");
         }
 
-        if (!SameSubject(pendingPlan.Envelope.Requester.Subject, requester.Subject))
+        var pendingAuthz = await authorizationCheck.EvaluateAsync(
+            new PlanAuthorizationContext(pendingPlan.Envelope.Requester.Subject, requester.Subject),
+            cancellationToken).ConfigureAwait(false);
+        if (!pendingAuthz.IsAuthorized)
         {
             return ApprovalGateResult.RequiresApproval("Refused: apply approval requires the same authenticated subject that requested the plan.");
         }
@@ -114,12 +123,28 @@ public sealed class GatewayApprovalService : IGatewayApprovalService
                 existingChallenge.ExpiresAtUtc));
         }
 
+        var now = DateTimeOffset.UtcNow;
+        if (now < pending.Envelope.ValidFromUtc)
+        {
+            return ApprovalGateResult.RequiresApproval(
+                $"Refused: plan '{planId}' validity window has not started yet.");
+        }
+
+        if (now >= pending.Envelope.ValidUntilUtc)
+        {
+            return ApprovalGateResult.RequiresApproval(
+                $"Refused: plan '{planId}' has expired.");
+        }
+
+        var remainingWindow = pending.Envelope.ValidUntilUtc - now;
+        var effectiveTtl = remainingWindow < options.ApprovalChallengeTtl ? remainingWindow : options.ApprovalChallengeTtl;
+
         var challenge = await challengeStore.CreateAsync(
             planId,
             pending.Hash,
             requester.Subject,
             requester.AuthenticationType,
-            options.ApprovalChallengeTtl,
+            effectiveTtl,
             pending.Envelope.IntentDigest,
             pending.Envelope.ReviewDigest,
             cancellationToken);

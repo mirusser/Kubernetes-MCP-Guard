@@ -24,3 +24,4 @@
 [audit] Don't make Domain Adapters persist the Audit Trail directly — let adapters emit adapter audit payloads/events and let the generic audit trail save them. (cause: audit persistence ownership)
 [audit] Don't overload execution.started with approval-grant validation data — audit grant and pre-execution gate validation at the gate boundary, then keep execution.started focused on the adapter execution attempt. (cause: lifecycle boundary clarity)
 [audit] Don't make generic audit payload contracts know adapter payload schemas — keep the generic slot flexible while Domain Adapters use strong types before serialization. (cause: adapter payload boundary)
+[docs] Don't present lack of token passthrough to stdio as a feature — describe downstream auth as a planned client-credentials OAuth boundary instead. (cause: upcoming downstream OAuth flow)

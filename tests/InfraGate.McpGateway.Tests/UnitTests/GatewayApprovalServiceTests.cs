@@ -330,6 +330,69 @@ public sealed class GatewayApprovalServiceTests
     }
 
     [Fact]
+    public async Task EnsureApprovedOrCreateChallengeAsync_PlanWindowNotStarted_ReturnsRefusal()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(context.Store, createdAtUtc: DateTimeOffset.UtcNow.AddHours(1));
+
+        var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+
+        Assert.False(result.IsApproved);
+        Assert.StartsWith("Refused:", result.Message, StringComparison.Ordinal);
+        Assert.Contains("not started", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
+    }
+
+    [Fact]
+    public async Task EnsureApprovedOrCreateChallengeAsync_PlanWindowExpired_ReturnsRefusal()
+    {
+        var context = CreateContext();
+        // ValidFromUtc = now-2h, ValidUntilUtc = now-1h (window closed 1 hour ago)
+        var plan = await CreatePendingPlanAsync(context.Store, createdAtUtc: DateTimeOffset.UtcNow.AddHours(-2));
+
+        var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+
+        Assert.False(result.IsApproved);
+        Assert.StartsWith("Refused:", result.Message, StringComparison.Ordinal);
+        Assert.Contains("expired", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
+    }
+
+    [Fact]
+    public async Task EnsureApprovedOrCreateChallengeAsync_PlanWindowNearExpiry_CapsChallengeTtl()
+    {
+        var context = CreateContext();
+        // ValidUntilUtc = now+5min; configured TTL = 15min → effective TTL should be ~5min
+        var plan = await CreatePendingPlanAsync(context.Store, createdAtUtc: DateTimeOffset.UtcNow.AddMinutes(-55));
+
+        var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+        string challengeId = ApprovalUrl(result.Message).Split('/').Last();
+        var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.IsApproved);
+        Assert.NotNull(challenge);
+        Assert.True(challenge.ExpiresAtUtc < DateTimeOffset.UtcNow.AddMinutes(10),
+            $"Expected ExpiresAtUtc < now+10min but was {challenge.ExpiresAtUtc}");
+    }
+
+    [Fact]
+    public async Task EnsureApprovedOrCreateChallengeAsync_PlanWindowAmple_UsesConfiguredTtl()
+    {
+        var context = CreateContext();
+        // ValidUntilUtc = now+1h; configured TTL = 15min → effective TTL should be 15min
+        var plan = await CreatePendingPlanAsync(context.Store);
+
+        var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
+        string challengeId = ApprovalUrl(result.Message).Split('/').Last();
+        var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.IsApproved);
+        Assert.NotNull(challenge);
+        Assert.True(challenge.ExpiresAtUtc >= DateTimeOffset.UtcNow.AddMinutes(14),
+            $"Expected ExpiresAtUtc >= now+14min but was {challenge.ExpiresAtUtc}");
+    }
+
+    [Fact]
     public async Task GetApprovalPageAsync_ValidPlan_IncludesDiffModel()
     {
         var context = CreateContext();
@@ -490,7 +553,8 @@ public sealed class GatewayApprovalServiceTests
         ApprovalStore store,
         bool includeDryRun = true,
         bool includeDiff = true,
-        string operation = KubernetesAdapterConventions.PlanOperations.Scale)
+        string operation = KubernetesAdapterConventions.PlanOperations.Scale,
+        DateTimeOffset? createdAtUtc = null)
     {
         var objects = new[] { new K8sObjectRef("apps/v1", "Deployment", NamespaceName, "demo") };
         var payload = new KubernetesPlanPayload(
@@ -509,7 +573,7 @@ public sealed class GatewayApprovalServiceTests
         var envelope = KubernetesApprovalAdapter.CreateEnvelope(
             ApprovalStore.NewPlanId(),
             operation,
-            DateTimeOffset.UtcNow,
+            createdAtUtc ?? DateTimeOffset.UtcNow,
             new PlanRequester(Subject, "test"),
             payload);
         await store.CreatePlanAsync(envelope, payload.Namespace, CancellationToken.None);
@@ -621,6 +685,7 @@ public sealed class GatewayApprovalServiceTests
                 challenges,
                 planReviewAdapter,
                 planReviewRenderer,
+                new SameSubjectAuthorizationCheck(),
                 gatewayOptions,
                 httpContextAccessor,
                 NullLogger<GatewayApprovalService>.Instance),

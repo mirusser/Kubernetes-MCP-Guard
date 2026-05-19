@@ -12,8 +12,7 @@ public sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 {
     private readonly DownstreamToolRegistry registry;
     private readonly GuardedToolRunner guardedRunner;
-    private readonly IDomainPlanBuilder planBuilder;
-    private readonly IDomainPlanExecutor planExecutor;
+    private readonly IDomainAdapter domainAdapter;
     private readonly IGatewayApprovalService approvals;
     private readonly ApprovalStore approvalStore;
     private readonly IApprovalPreExecutionGate preExecutionGate;
@@ -23,8 +22,7 @@ public sealed class GatewayToolDispatcher : IGatewayToolDispatcher
     public GatewayToolDispatcher(
         DownstreamToolRegistry registry,
         GuardedToolRunner guardedRunner,
-        IDomainPlanBuilder planBuilder,
-        IDomainPlanExecutor planExecutor,
+        IDomainAdapter domainAdapter,
         IGatewayApprovalService approvals,
         ApprovalStore approvalStore,
         IApprovalPreExecutionGate preExecutionGate,
@@ -33,8 +31,7 @@ public sealed class GatewayToolDispatcher : IGatewayToolDispatcher
     {
         this.registry = registry;
         this.guardedRunner = guardedRunner;
-        this.planBuilder = planBuilder;
-        this.planExecutor = planExecutor;
+        this.domainAdapter = domainAdapter;
         this.approvals = approvals;
         this.approvalStore = approvalStore;
         this.preExecutionGate = preExecutionGate;
@@ -137,7 +134,7 @@ public sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         var args = ConvertArguments(request.Arguments);
         bool requestHasFindings = await guardedRunner.AuditRequestAsync(toolName, args, ct);
 
-        var planResult = await planBuilder.BuildAsync(
+        var planResult = await domainAdapter.BuildAsync(
             mutationToolName,
             args,
             new PlanRequester(identity.Subject, identity.AuthenticationType),
@@ -201,7 +198,7 @@ public sealed class GatewayToolDispatcher : IGatewayToolDispatcher
                 : new CallToolResult { Content = [new TextContentBlock { Text = gate.Message }] };
         }
 
-        var preExecution = await preExecutionGate.EvaluateAsync(planId, planExecutor, ct);
+        var preExecution = await preExecutionGate.EvaluateAsync(planId, domainAdapter, ct);
         if (!preExecution.IsPassed || preExecution.Envelope is null || preExecution.Grant is null)
         {
             if (preExecution.Audit is { } audit)
@@ -215,7 +212,7 @@ public sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         DomainPlanExecutionResult executeResult;
         try
         {
-            executeResult = await planExecutor.ExecuteAsync(preExecution.Envelope, ct);
+            executeResult = await domainAdapter.ExecuteAsync(preExecution.Envelope, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

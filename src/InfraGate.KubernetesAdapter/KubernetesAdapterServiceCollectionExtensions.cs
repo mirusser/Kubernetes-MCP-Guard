@@ -1,0 +1,21 @@
+using InfraGate.Approvals;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace InfraGate.KubernetesAdapter;
+
+public static class KubernetesAdapterServiceCollectionExtensions
+{
+    public static IServiceCollection AddKubernetesAdapter(this IServiceCollection services)
+    {
+        services.AddSingleton<KubernetesPlanBuilder>();
+        services.AddSingleton<KubernetesPlanExecutor>();
+        services.AddSingleton<KubernetesPlanReviewAdapter>();
+        services.AddSingleton<KubernetesPlanReviewRenderer>();
+        services.AddSingleton<IDomainPlanBuilder>(sp => sp.GetRequiredService<KubernetesPlanBuilder>());
+        services.AddSingleton<IDomainPlanExecutor>(sp => sp.GetRequiredService<KubernetesPlanExecutor>());
+        services.AddSingleton<IPlanReviewAdapter>(sp => sp.GetRequiredService<KubernetesPlanReviewAdapter>());
+        services.AddSingleton<IPlanReviewRenderer>(sp => sp.GetRequiredService<KubernetesPlanReviewRenderer>());
+        services.AddSingleton<IDomainAdapter, KubernetesDomainAdapter>();
+        return services;
+    }
+}

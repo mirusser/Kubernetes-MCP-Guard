@@ -21,6 +21,7 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton<IApprovalChallengeStore, ApprovalChallengeStore>();
         services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
         services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
+        services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
         services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
         services.AddHttpContextAccessor();
         services.AddLogging();
@@ -58,13 +59,11 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton<ApprovalStore>();
         services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
         services.AddSingleton<IApprovalChallengeStore, ApprovalChallengeStore>();
-        services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
-        services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
+        services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
         services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
         services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
-        services.AddSingleton<IDomainPlanBuilder, KubernetesPlanBuilder>();
-        services.AddSingleton<IDomainPlanExecutor, KubernetesPlanExecutor>();
         services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
+        services.AddKubernetesAdapter();
         services.AddSingleton<DownstreamToolRegistry>();
         services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
         services.AddHttpContextAccessor();

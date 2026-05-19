@@ -3,7 +3,7 @@ using InfraGate.Approvals;
 
 namespace InfraGate.KubernetesAdapter;
 
-public static class KubernetesApprovalAdapter
+internal static class KubernetesApprovalAdapter
 {
     private static readonly ReviewSurfaceContext DefaultReviewSurfaceContext = new(
         ApprovalConventions.ReviewSurfaces.GatewayBrowser,

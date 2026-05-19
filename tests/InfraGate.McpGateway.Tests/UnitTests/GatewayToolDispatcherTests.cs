@@ -203,16 +203,20 @@ public sealed class GatewayToolDispatcherTests
             challenges,
             new KubernetesPlanReviewAdapter(),
             new KubernetesPlanReviewRenderer(),
+            new SameSubjectAuthorizationCheck(),
             gatewayOptions,
             httpContextAccessor,
             NullLogger<GatewayApprovalService>.Instance);
+
+        var domainAdapter = new FakeDomainAdapter(
+            planBuilder ?? new FakeDomainPlanBuilder(PlanBuildResult.Failed("not implemented")),
+            planExecutor);
 
         return new TestContext(
             new GatewayToolDispatcher(
                 new DownstreamToolRegistry(downstream),
                 guardedRunner,
-                planBuilder ?? new FakeDomainPlanBuilder(PlanBuildResult.Failed("not implemented")),
-                planExecutor,
+                domainAdapter,
                 approvals,
                 store,
                 new ApprovalPreExecutionGate(store, new ApprovalStoreAuditPublisher(store)),
@@ -291,6 +295,37 @@ public sealed class GatewayToolDispatcherTests
                 new DownstreamTool("get_allowed_namespaces", "Returns allowed namespaces.", true, false, DefaultSchema),
                 new DownstreamTool("apply_manifest", "Applies manifests.", false, true, DefaultSchema)
             ]);
+    }
+
+    private sealed class FakeDomainAdapter(
+        IDomainPlanBuilder builder,
+        IDomainPlanExecutor executor) : IDomainAdapter
+    {
+        public string AdapterId => "fake";
+
+        public Task<PlanBuildResult> BuildAsync(
+            string mutationToolName,
+            IReadOnlyDictionary<string, object?> arguments,
+            PlanRequester requester,
+            CancellationToken ct) =>
+            builder.BuildAsync(mutationToolName, arguments, requester, ct);
+
+        public Task<DomainPlanExecutionResult> CheckPreExecutionAsync(PlanEnvelope envelope, CancellationToken ct) =>
+            executor.CheckPreExecutionAsync(envelope, ct);
+
+        public Task<DomainPlanExecutionResult> ExecuteAsync(PlanEnvelope envelope, CancellationToken ct) =>
+            executor.ExecuteAsync(envelope, ct);
+
+        public IPlanReview? TryDecodeForReview(PlanEnvelope envelope, out string? error)
+        {
+            error = null;
+            return null;
+        }
+
+        public string RenderReviewContent(IPlanReview planReview) => string.Empty;
+
+        public string RenderApprovalRequiredMessage(IPlanReview planReview, string approvalUrl, DateTimeOffset expiresAtUtc) =>
+            string.Empty;
     }
 
     private sealed class FakeDomainPlanBuilder(PlanBuildResult result) : IDomainPlanBuilder

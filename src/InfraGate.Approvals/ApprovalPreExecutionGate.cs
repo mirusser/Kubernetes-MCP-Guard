@@ -8,6 +8,11 @@ public sealed class ApprovalPreExecutionGate(
 {
     private readonly IApprovalAuditPublisher auditPublisher = auditPublisher ?? NoOpApprovalAuditPublisher.Instance;
 
+    // The profile's 8 sequential pre-execution gates are implemented as two ownership buckets:
+    // Bucket 1 — generic core (gates 1–6: grant validity, plan window, grant expiry, authorization,
+    //   intent digest, review digest, reuse policy): owned by ApprovalStore.GetGrantedPlanAsync.
+    // Bucket 2 — domain adapter (gates 7–8: freshness policy, domain policy checks): owned by
+    //   domainExecutor.CheckPreExecutionAsync.
     public async Task<PreExecutionGateResult> EvaluateAsync(
         string planId,
         IDomainPlanExecutor domainExecutor,

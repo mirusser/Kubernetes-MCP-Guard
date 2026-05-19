@@ -2,6 +2,8 @@ namespace InfraGate.Approvals;
 
 public interface IApprovalChallengeStore
 {
+    // Callers are responsible for validating the plan validity window and capping ttl to the remaining
+    // window before calling. The store does not enforce window validity.
     Task<ApprovalChallenge> CreateAsync(
         string planId,
         string pendingPlanHash,
