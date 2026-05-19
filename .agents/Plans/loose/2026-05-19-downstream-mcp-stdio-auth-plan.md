@@ -73,6 +73,15 @@ Environment mappings should use constants, with names shaped like:
 
 `GatewayClientSecret` is gateway-only. The server subprocess must not receive it through inherited environment variables.
 
+### Timing Constants
+
+Use fixed internal timing constants for the first implementation:
+
+- Gateway token refresh skew: **60 seconds before `exp`**.
+- Server JWT validation clock skew: **30 seconds**.
+
+These values are intentionally small because gateway and server run in the same deployment shape and the downstream token is short-lived. If production telemetry later shows real clock drift, make the values configurable with conservative production validation.
+
 ### MCP Metadata
 
 Use one private `_meta` key for the bearer token. The exact key should be defined once in code, for example:
@@ -226,6 +235,7 @@ Downstream auth contract and config
 
 **Acceptance criteria:**
 - [ ] Production image/run configuration starts the downstream server from a known built artifact included in the image.
+- [ ] The downstream artifact path resolves inside an immutable container image layer or an equivalently read-only, verified deployment artifact; a mutable mounted path is not accepted for production.
 - [ ] Server process does not receive gateway-only secrets or broader filesystem mounts than it needs.
 - [ ] Kubernetes permissions and allowed namespaces remain scoped independently from downstream service-token validation.
 - [ ] Destructive downstream tools remain reachable only through the gateway's approval-bound execution path.
@@ -284,16 +294,19 @@ Downstream auth contract and config
 
 ## Task 5: Implement Gateway Service Token Provider
 
-**Description:** Add a gateway-side client-credentials token provider. It should use OIDC metadata/token endpoint discovery from the configured authority or metadata address, request the downstream scope, cache the token in memory, refresh before expiry, and support one forced refresh after a downstream auth rejection.
+**Description:** Add a gateway-side client-credentials token provider. It should use OIDC metadata/token endpoint discovery from the configured authority or metadata address, request the downstream scope, cache the token in memory, refresh 60 seconds before expiry, and support one forced refresh after a downstream auth rejection. Cache misses and refreshes must be single-flight so a burst of concurrent downstream requests results in one token request while other callers wait for the same result.
 
 **Acceptance criteria:**
 - [ ] Token request uses `grant_type=client_credentials`, configured gateway client id/secret, and `mcp:downstream` scope.
-- [ ] Token is cached in memory and refreshed before expiry using a fixed internal skew.
+- [ ] Token is cached in memory and refreshed 60 seconds before expiry.
+- [ ] Empty-cache acquisition is single-flight: concurrent callers share one in-progress token request.
+- [ ] Refresh-before-expiry is single-flight: concurrent callers share one in-progress refresh request.
 - [ ] Forced refresh bypasses the cache for the one-retry path.
 - [ ] Token value is never logged.
 
 **Verification:**
-- [ ] Unit tests cover cache hit, refresh-before-expiry, forced refresh, token endpoint failure, and missing `access_token`.
+- [ ] Unit tests cover cache hit, refresh-before-expiry at 60 seconds, forced refresh, token endpoint failure, missing `access_token`, and concurrent empty-cache calls.
+- [ ] Unit tests prove concurrent cache misses call the token endpoint exactly once and return the same acquired token to waiting callers.
 - [ ] Keycloak integration test proves the provider obtains a real service token.
 
 **Dependencies:** Tasks 1 and 4
@@ -366,19 +379,20 @@ Downstream auth contract and config
 
 ## Task 8: Validate Downstream Tokens On Server Requests
 
-**Description:** Add server validation that requires and validates the private downstream credential before startup returns tool metadata, tool discovery runs, or tool execution runs. Use request filters for `listTools` and `callTool`; use the Task 0 strategy for `initialize` if the SDK lacks an initialize filter. Validation should require issuer/signature, lifetime, audience, `mcp:downstream` scope, and configured gateway client identity. User/requester/approver claims must not be used for downstream authorization.
+**Description:** Add server validation that requires and validates the private downstream credential before startup returns tool metadata, tool discovery runs, or tool execution runs. Use request filters for `listTools` and `callTool`; use the Task 0 strategy for `initialize` if the SDK lacks an initialize filter. Validation should require issuer/signature, lifetime with 30 seconds of clock skew, audience, `mcp:downstream` scope, and configured gateway client identity. User/requester/approver claims must not be used for downstream authorization.
 
 **Acceptance criteria:**
 - [ ] Startup without a valid service credential is refused before exposing tool metadata.
 - [ ] `listTools` without a valid service token is refused.
 - [ ] `callTool` without a valid service token is refused.
 - [ ] Invalid issuer, signature, lifetime, audience, scope, or gateway client identity are refused.
+- [ ] Lifetime validation uses 30 seconds of clock skew; tokens outside that skew are refused.
 - [ ] Successful validation records only safe auth outcome details.
 - [ ] Disabled dev/test mode bypasses validation only when explicitly configured.
 
 **Verification:**
 - [ ] `dotnet test tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj --filter DownstreamAuth`
-- [ ] Tests use locally signed JWTs for positive and negative validation cases.
+- [ ] Tests use locally signed JWTs for positive and negative validation cases, including accepted/rejected boundaries around the 30-second clock skew.
 
 **Dependencies:** Tasks 1 and 2
 
@@ -512,6 +526,9 @@ Downstream auth contract and config
 | The service token is mistaken for the primary security boundary | High | Keep trusted launch, sandboxing, out-of-band approval, and per-action authorization explicit in docs and tests. Treat the token as audit, defense-in-depth, and forward-compatibility. |
 | Server child process inherits gateway-only secrets | High | Add explicit environment pass-through policy and tests excluding client secret/token values. |
 | Verified launch or sandboxing is left implicit while token work proceeds | High | Complete Task 3A before end-to-end sign-off. Production must launch a known artifact directly and restrict downstream filesystem, network, and Kubernetes access. |
+| Burst traffic stampedes Keycloak on empty cache or refresh | Medium | Token provider uses single-flight acquisition and refresh; tests prove concurrent callers share one token endpoint request. |
+| Refresh/validation skew values drift into PR-only decisions | Medium | Plan fixes gateway refresh skew at 60 seconds and server JWT validation clock skew at 30 seconds for the first implementation. |
+| Configured downstream path points at a mutable file that can be swapped after validation | High | Production accepts only paths inside immutable image layers or equivalently read-only verified artifacts. Mutable mounted downstream binaries are rejected or documented as dev-only. |
 | Keycloak audience mapping differs from ideal RFC 8707 resource-indicator flow | Medium | Use Keycloak client scope audience mapper for local/demo and validate `aud` server-side. Keep issuer-neutral code so production IdPs can use their own resource/audience model. |
 | Token leaks through logs or generic MCP exception wrapping | High | Add redaction tests around gateway logs, server logs, audit payloads, and thrown exception text. Keep auth failures stable and sanitized. |
 | Retry detection becomes string-parsing brittle | Medium | Define a small internal downstream auth failure convention and test it. |

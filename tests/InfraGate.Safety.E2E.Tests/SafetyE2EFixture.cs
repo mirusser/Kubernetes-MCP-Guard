@@ -8,6 +8,7 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Notifications;
 using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Builder;
@@ -17,6 +18,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -510,13 +512,29 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                 {
                     oauthOptions.Backchannel = new HttpClient(new FakeApprovalOAuthBackchannel(() => approvalOAuthSubject));
                 });
+
+                services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
+                services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
+
                 services
-                    .AddMcpServer()
+                    .AddMcpServer(serverOptions =>
+                    {
+                        serverOptions.Capabilities = new ServerCapabilities
+                        {
+                            Resources = new ResourcesCapability { Subscribe = true }
+                        };
+                    })
                     .WithHttpTransport()
                     .WithListToolsHandler((RequestContext<ListToolsRequestParams> request, CancellationToken ct) =>
                         new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().ListToolsAsync(request.Params, ct)))
                     .WithCallToolHandler((RequestContext<CallToolRequestParams> request, CancellationToken ct) =>
-                        new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct)));
+                    {
+                        if (request.Services!.GetService<IHttpContextAccessor>() is { HttpContext: { } httpCtx })
+                        {
+                            httpCtx.Items[NotificationsConventions.McpSessionIdItemKey] = request.Server.SessionId;
+                        }
+                        return new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct));
+                    });
             })
             .Configure(app =>
             {
