@@ -3,6 +3,7 @@ obj/
 .kube/
 .mcp-approvals/
 .mcp-guardrails/
+.mcp-dataprotection-keys/
 TestResults/
 coverage-report/
 .sonarqube/
@@ -13,3 +14,4 @@ src/InfraGate.McpGateway/.mcp-guardrails/audit.jsonl
 .agents/Reports/sonarcloud-report.json
 .mcp-logs/mcp-server.log
 .agents/Reports/sonarcloud-report.zip
+/deploy/generated

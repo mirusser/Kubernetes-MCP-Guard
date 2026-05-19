@@ -45,7 +45,7 @@ KEYCLOAK_BIND_ADDRESS="${KEYCLOAK_BIND_ADDRESS:-0.0.0.0}"
 
 # Clear-text HTTP is intentional for this local Debian development setup.
 # Production OIDC configuration must use HTTPS outside this script.
-LOCAL_HTTP_SCHEME="http"
+LOCAL_HTTP_SCHEME="http" # NOSONAR
 LOCAL_LOOPBACK_HOST="127.0.0.1"
 LOCAL_LISTEN_HOST="0.0.0.0"
 KEYCLOAK_REALM_PATH="/realms/infra-gate"
@@ -252,7 +252,7 @@ docker compose -f "$KEYCLOAK_COMPOSE_FILE" up -d keycloak
 echo "Waiting for Keycloak discovery at $KEYCLOAK_DISCOVERY_URL ..."
 elapsed=0
 while true; do
-  if curl -fsS "$KEYCLOAK_DISCOVERY_URL" >/dev/null; then
+  if curl -fsS "$KEYCLOAK_DISCOVERY_URL" >/dev/null; then # NOSONAR
     break
   fi
 
@@ -270,7 +270,7 @@ echo "Keycloak is ready."
 echo "Verifying Keycloak discovery from Docker containers at $OAUTH_METADATA_ADDRESS ..."
 elapsed=0
 while true; do
-  if docker run --rm alpine/curl -fsS "$OAUTH_METADATA_ADDRESS" >/dev/null 2>&1; then
+  if docker run --rm alpine/curl -fsS "$OAUTH_METADATA_ADDRESS" >/dev/null 2>&1; then # NOSONAR
     break
   fi
 
