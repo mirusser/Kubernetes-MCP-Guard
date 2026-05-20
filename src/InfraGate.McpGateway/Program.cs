@@ -2,6 +2,7 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.Observability;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging;
@@ -48,6 +49,23 @@ builder.Services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddAntiforgery();
 builder.Services.AddGatewayAuthentication(options.Auth);
+
+var downstreamAuth = options.DownstreamAuth ?? new InfraGate.DownstreamAuth.DownstreamAuthOptions();
+if (downstreamAuth.Required)
+{
+    builder.Services.AddSingleton(downstreamAuth);
+    builder.Services.AddHttpClient();
+    builder.Services.AddSingleton<IDownstreamServiceTokenProvider>(sp =>
+        new ClientCredentialsDownstreamServiceTokenProvider(
+            sp.GetRequiredService<InfraGate.DownstreamAuth.DownstreamAuthOptions>(),
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(ClientCredentialsDownstreamServiceTokenProvider)),
+            TimeProvider.System,
+            sp.GetRequiredService<ILogger<ClientCredentialsDownstreamServiceTokenProvider>>()));
+}
+else
+{
+    builder.Services.AddSingleton<IDownstreamServiceTokenProvider, NullDownstreamServiceTokenProvider>();
+}
 
 builder.Services
     .AddMcpServer()

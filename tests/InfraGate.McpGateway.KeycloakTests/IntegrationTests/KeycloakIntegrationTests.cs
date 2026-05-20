@@ -34,6 +34,10 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
     private const string AdminClientId = "admin-cli";
     private const string AdminUsername = "admin";
     private const string AdminPassword = "admin";
+    private const string GatewayServiceClientId = "infra-gate-gateway-service";
+    private const string GatewayServiceClientSecret = "gateway-service-secret";
+    private const string GatewayServiceScope = "mcp:downstream";
+    private const string RunKeycloakTestsEnvVar = "INFRA_GATE_RUN_KEYCLOAK_TESTS";
     private const string McpClientId = "mcp-client";
     private const string SmokeClientId = "mcp-smoke-client";
     private const string LimitedClientId = "mcp-client-limited";
@@ -276,6 +280,47 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         using var errorDocument = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
         Assert.Equal(InvalidGrantOAuthError, errorDocument.RootElement.GetProperty(KeycloakJson.Error).GetString());
+    }
+
+    [Fact]
+    public async Task GatewayServiceClient_ClientCredentials_AcquiresDownstreamToken()
+    {
+        if (!string.Equals(
+            Environment.GetEnvironmentVariable(RunKeycloakTestsEnvVar),
+            "1",
+            StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var options = new InfraGate.DownstreamAuth.DownstreamAuthOptions
+        {
+            Required = true,
+            Authority = RealmAuthority(),
+            RequireHttpsMetadata = false,
+            GatewayClientId = GatewayServiceClientId,
+            GatewayClientSecret = GatewayServiceClientSecret,
+            Scope = GatewayServiceScope,
+        };
+
+        using var httpClient = new HttpClient();
+        var provider = new InfraGate.McpGateway.DownstreamAuth.ClientCredentialsDownstreamServiceTokenProvider(
+            options,
+            httpClient,
+            TimeProvider.System,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<InfraGate.McpGateway.DownstreamAuth.ClientCredentialsDownstreamServiceTokenProvider>.Instance);
+
+        string bearerHeader = await provider.GetServiceTokenAsync(CancellationToken.None);
+
+        Assert.False(string.IsNullOrWhiteSpace(bearerHeader));
+        Assert.StartsWith(InfraGate.DownstreamAuth.DownstreamAuthConventions.BearerPrefix, bearerHeader, StringComparison.Ordinal);
+
+        string accessToken = bearerHeader[InfraGate.DownstreamAuth.DownstreamAuthConventions.BearerPrefix.Length..];
+        Assert.NotEmpty(accessToken);
+
+        // Verify the second call is served from cache
+        string bearerHeader2 = await provider.GetServiceTokenAsync(CancellationToken.None);
+        Assert.Equal(bearerHeader, bearerHeader2);
     }
 
     private string RealmAuthority() =>
