@@ -93,6 +93,8 @@ Reusable skill definitions live in [.agents/skills/](.agents/skills/). Load the 
 - [verify-readme-docs](.agents/skills/verify-readme-docs/SKILL.md): audit and minimally fix README files against actual code and tests.
 - [infragate-mcp-gateway](.agents/skills/infragate-mcp-gateway/SKILL.md): use the local InfraGate MCP gateway for Kubernetes inspection and guarded changes.
 - [review-mutation-approval-flow](.agents/skills/review-mutation-approval-flow/SKILL.md): review the MCP mutation-approval glossary, flow diagrams, relationship table, profile sketch, and related ADRs for consistency.
+- [run-local-sonarqube](.agents/skills/run-local-sonarqube/SKILL.md): run local SonarQube Community Build analysis and ensure the agent-ingestible report is saved to disk.
+- [sonar-local-remediaton](.agents/skills/sonar-local-remediaton/SKILL.md): consume the saved local SonarQube report and produce a remediation plan.
 
 ## Solution Map
 

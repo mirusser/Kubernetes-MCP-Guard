@@ -18,7 +18,7 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
     private readonly SemaphoreSlim callLock = new(1, 1);
     private McpClient? client;
 
-    internal DownstreamMcpClient(
+    public DownstreamMcpClient(
         McpGatewayOptions options,
         IDownstreamServiceTokenProvider tokenProvider,
         ILogger<DownstreamMcpClient> logger)

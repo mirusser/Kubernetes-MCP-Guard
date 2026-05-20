@@ -132,7 +132,7 @@ run_tier() {
 
 run_tier \
     "Unit Tests" \
-    'dotnet test InfraGate.slnx --filter "Category!=Keycloak"'
+    'dotnet test InfraGate.slnx --filter "Category!=Keycloak&Category!=SafetyE2E"'
 
 # ────────────────── Tier 2: Keycloak Integration ──────────────────
 

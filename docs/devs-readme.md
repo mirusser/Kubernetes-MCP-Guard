@@ -292,3 +292,4 @@ kubectl --kubeconfig .kube/mcp-nginx-demo.config -n mcp-nginx-demo get deploymen
 
 The stdio integration test drives the MCP server directly, while the gateway integration test drives the HTTP MCP endpoint, downstream stdio bridge, gateway guardrails, approval plans, and Kubernetes path. Both live integration modes expect a usable kubeconfig, defaulting to `.kube/mcp-nginx-demo.config` when `KUBECONFIG` is unset.
 Code coverage HTML reports are generated at `coverage-report/index.html` by running `./scripts/coverage.sh`.
+Local SonarQube pre-push analysis is documented in [tools/sonarqube/README.md](../tools/sonarqube/README.md).

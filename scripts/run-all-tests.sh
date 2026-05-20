@@ -10,7 +10,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 echo "=== Running All Tests (CI Parity) ==="
 
 echo "1. Running Unit Tests..."
-dotnet test "$REPO_ROOT/InfraGate.slnx" --filter "Category!=Keycloak" --configuration Release
+dotnet test "$REPO_ROOT/InfraGate.slnx" --filter "Category!=Keycloak&Category!=SafetyE2E" --configuration Release
 
 echo "2. Running Keycloak Integration Tests..."
 dotnet test "$REPO_ROOT/tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj" --filter "Category=Keycloak" --configuration Release

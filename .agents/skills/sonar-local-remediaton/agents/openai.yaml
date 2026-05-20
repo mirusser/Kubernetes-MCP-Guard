@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sonar Local Remediation"
+  short_description: "Plan fixes from local Sonar reports"
+  default_prompt: "Use $sonar-local-remediaton to triage the saved local SonarQube report and produce a remediation plan."
