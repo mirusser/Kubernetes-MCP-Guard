@@ -13,6 +13,16 @@
 - `GuardrailAuditStore.cs` appends JSONL audit entries under the configured guardrail audit root.
 - MCP transport and OAuth compliance details for this gateway path are summarized in [MCP-compliance.md](../../docs/MCP-compliance.md).
 
+## Security Controls (Priority Order)
+
+The controls below are ordered by importance. The downstream service token (in-progress) is intentionally last; a stolen bearer token must not bypass the controls above it.
+
+1. **Trusted launch** — production starts the downstream server from a configured built artifact (`INFRA_GATE_DOWNSTREAM_ASSEMBLY=/app/server/InfraGate.McpServer.dll`), not `dotnet run --project`. The `dotnet run --project` fallback is development-only and must not be used in production images.
+2. **Containment** — the downstream subprocess receives only an explicit allowlist of environment variables (`McpGatewayConventions.DownstreamProcess.AllowedEnvironmentVariables`), not the full gateway environment. Gateway-only secrets such as `INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET` are intentionally excluded.
+3. **Human approval** — destructive downstream tools are reachable only through the gateway's approval-bound execution path; the MCP client cannot trigger them directly.
+4. **Per-action authorization** — request and execution checks use trusted requester identity from the gateway JWT; downstream service-token validation is not a substitute for these checks.
+5. **Downstream service token** (defense-in-depth) — proves gateway service identity for audit and forward-compatibility. Not the primary boundary.
+
 ## Important Contracts
 
 - Gateway public read-only tool names and generated `request_*` wrappers must stay stable for clients. Raw downstream Destructive tools are not exposed through the gateway and must only be reached by the domain executor after approval gates pass.
