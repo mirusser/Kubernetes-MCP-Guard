@@ -1,7 +1,9 @@
+using System.Text.Json.Nodes;
 using InfraGate.Approvals;
 using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.RuntimeSafety;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -15,7 +17,7 @@ public sealed class DownstreamMcpClientTests
         string secretKey = DownstreamAuthConventions.EnvironmentVariables.GatewayClientSecret;
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
         Environment.SetEnvironmentVariable(secretKey, "super-secret-value");
         try
         {
@@ -35,7 +37,7 @@ public sealed class DownstreamMcpClientTests
         string clientIdKey = DownstreamAuthConventions.EnvironmentVariables.GatewayClientId;
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
         Environment.SetEnvironmentVariable(clientIdKey, "infra-gate-gateway");
         try
         {
@@ -55,7 +57,7 @@ public sealed class DownstreamMcpClientTests
         string key = GatewayAuthConventions.EnvironmentVariables.OAuthAuthority;
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
         Environment.SetEnvironmentVariable(key, "http://keycloak/realms/infra-gate");
         try
         {
@@ -77,7 +79,7 @@ public sealed class DownstreamMcpClientTests
     {
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
         string? original = Environment.GetEnvironmentVariable(envVarName);
         Environment.SetEnvironmentVariable(envVarName, envVarValue);
         try
@@ -103,7 +105,7 @@ public sealed class DownstreamMcpClientTests
     {
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
         string? original = Environment.GetEnvironmentVariable(envVarName);
         Environment.SetEnvironmentVariable(envVarName, envVarValue);
         try
@@ -125,7 +127,7 @@ public sealed class DownstreamMcpClientTests
         string downstreamProject = "/app/server/InfraGate.McpServer.dll";
 
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory(), downstreamAssembly: "/app/server/InfraGate.McpServer.dll");
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -139,7 +141,7 @@ public sealed class DownstreamMcpClientTests
     {
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -156,7 +158,7 @@ public sealed class DownstreamMcpClientTests
     {
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory(), downstreamAssembly: "   ");
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -175,7 +177,7 @@ public sealed class DownstreamMcpClientTests
         {
             string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
             var options = CreateOptions(downstreamProject, workingDirectory: workingDirectory);
-            var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+            var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
 
             var transportOptions = client.CreateTransportOptions();
 
@@ -192,7 +194,7 @@ public sealed class DownstreamMcpClientTests
     {
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -204,12 +206,60 @@ public sealed class DownstreamMcpClientTests
     {
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
         Assert.Equal(McpGatewayConventions.DownstreamProcess.Name, transportOptions.Name);
         Assert.Equal(McpGatewayConventions.DownstreamProcess.Command, transportOptions.Command);
+    }
+
+    [Fact]
+    public void BuildAuthMeta_WithBearerToken_ReturnsMetaWithAuthKey()
+    {
+        string token = "Bearer eyJhbGciOiJSUzI1NiJ9.test.sig";
+
+        var meta = DownstreamMcpClient.BuildAuthMeta(token);
+
+        Assert.NotNull(meta);
+        Assert.True(meta.ContainsKey(DownstreamAuthConventions.MetaKey));
+        Assert.Equal(token, meta[DownstreamAuthConventions.MetaKey]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    public void BuildAuthMeta_WithEmptyOrNullToken_ReturnsNull(string? token)
+    {
+        var meta = DownstreamMcpClient.BuildAuthMeta(token!);
+
+        Assert.Null(meta);
+    }
+
+    [Fact]
+    public void BuildAuthMeta_TokenValue_DoesNotAppearInMetaKeyName()
+    {
+        string token = "Bearer supersecrettoken";
+
+        var meta = DownstreamMcpClient.BuildAuthMeta(token);
+
+        Assert.NotNull(meta);
+        // The key must be the convention key, not the token value itself
+        string key = Assert.Single(meta!.Select(kv => kv.Key));
+        Assert.Equal(DownstreamAuthConventions.MetaKey, key);
+        Assert.DoesNotContain("supersecrettoken", key);
+    }
+
+    [Fact]
+    public void Constructor_AcceptsNullTokenProvider_ForDisabledAuthMode()
+    {
+        string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
+        var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
+
+        // NullDownstreamServiceTokenProvider is the disabled-auth provider (Required=false)
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
+
+        Assert.NotNull(client);
     }
 
     private static McpGatewayOptions CreateOptions(
