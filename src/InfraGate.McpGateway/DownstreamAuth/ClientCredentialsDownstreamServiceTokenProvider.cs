@@ -6,8 +6,6 @@ namespace InfraGate.McpGateway.DownstreamAuth;
 
 internal sealed class ClientCredentialsDownstreamServiceTokenProvider : IDownstreamServiceTokenProvider
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
     private readonly DownstreamAuthOptions options;
     private readonly HttpClient httpClient;
     private readonly TimeProvider timeProvider;
