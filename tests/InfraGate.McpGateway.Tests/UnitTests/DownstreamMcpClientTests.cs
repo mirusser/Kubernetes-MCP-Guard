@@ -6,6 +6,7 @@ using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.RuntimeSafety;
 using Microsoft.Extensions.Logging.Abstractions;
+using ModelContextProtocol;
 
 namespace InfraGate.McpGateway.Tests.UnitTests;
 
@@ -262,6 +263,137 @@ public sealed class DownstreamMcpClientTests
         Assert.NotNull(client);
     }
 
+    // --- IsDownstreamAuthRejection ---
+
+    [Fact]
+    public void IsDownstreamAuthRejection_McpExceptionWithAuthCode_ReturnsTrue()
+    {
+        var ex = new McpException($"{DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired}: token expired");
+
+        bool result = DownstreamMcpClient.IsDownstreamAuthRejection(ex);
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void IsDownstreamAuthRejection_McpExceptionWithUnrelatedMessage_ReturnsFalse()
+    {
+        var ex = new McpException("tool_not_found: no such tool");
+
+        bool result = DownstreamMcpClient.IsDownstreamAuthRejection(ex);
+
+        Assert.False(result);
+    }
+
+    [Theory]
+    [InlineData(typeof(InvalidOperationException))]
+    [InlineData(typeof(TimeoutException))]
+    [InlineData(typeof(OperationCanceledException))]
+    public void IsDownstreamAuthRejection_NonMcpException_ReturnsFalse(Type exceptionType)
+    {
+        var ex = (Exception)Activator.CreateInstance(exceptionType, "some message")!;
+
+        bool result = DownstreamMcpClient.IsDownstreamAuthRejection(ex);
+
+        Assert.False(result);
+    }
+
+    // --- WithAuthRetryAsync ---
+
+    [Fact]
+    public async Task WithAuthRetryAsync_SuccessOnFirstAttempt_ReturnsResultWithoutRefresh()
+    {
+        var tokenProvider = new FakeDownstreamServiceTokenProvider("first-token", "refreshed-token");
+        var downstreamClient = CreateDownstreamMcpClient(tokenProvider);
+        int callCount = 0;
+
+        string result = await downstreamClient.WithAuthRetryAsync(token =>
+        {
+            callCount++;
+            return Task.FromResult($"ok-{token}");
+        }, CancellationToken.None);
+
+        Assert.Equal("ok-first-token", result);
+        Assert.Equal(1, callCount);
+        Assert.Equal(0, tokenProvider.RefreshCallCount);
+    }
+
+    [Fact]
+    public async Task WithAuthRetryAsync_AuthRejectionOnFirstAttempt_RefreshesAndRetries()
+    {
+        var tokenProvider = new FakeDownstreamServiceTokenProvider("first-token", "refreshed-token");
+        var downstreamClient = CreateDownstreamMcpClient(tokenProvider);
+        int callCount = 0;
+
+        string result = await downstreamClient.WithAuthRetryAsync(token =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                throw new McpException($"{DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired}: expired");
+            }
+            return Task.FromResult($"ok-{token}");
+        }, CancellationToken.None);
+
+        Assert.Equal("ok-refreshed-token", result);
+        Assert.Equal(2, callCount);
+        Assert.Equal(1, tokenProvider.RefreshCallCount);
+    }
+
+    [Fact]
+    public async Task WithAuthRetryAsync_NonAuthExceptionOnFirstAttempt_DoesNotRetry()
+    {
+        var tokenProvider = new FakeDownstreamServiceTokenProvider("first-token", "refreshed-token");
+        var downstreamClient = CreateDownstreamMcpClient(tokenProvider);
+
+        await Assert.ThrowsAsync<McpException>(() => downstreamClient.WithAuthRetryAsync<string>(token =>
+        {
+            throw new McpException("tool_not_found: missing");
+        }, CancellationToken.None));
+
+        Assert.Equal(0, tokenProvider.RefreshCallCount);
+    }
+
+    [Fact]
+    public async Task WithAuthRetryAsync_AuthRejectionAfterRefresh_ThrowsMcpExceptionWithoutTokenContent()
+    {
+        string sensitiveToken = "Bearer super-secret-refreshed-token";
+        var tokenProvider = new FakeDownstreamServiceTokenProvider("first-token", sensitiveToken);
+        var downstreamClient = CreateDownstreamMcpClient(tokenProvider);
+
+        var ex = await Assert.ThrowsAsync<McpException>(() => downstreamClient.WithAuthRetryAsync<string>(token =>
+        {
+            throw new McpException($"{DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired}: rejected");
+        }, CancellationToken.None));
+
+        // The final exception message must NOT contain the token value
+        Assert.DoesNotContain(sensitiveToken, ex.Message);
+        // The message must reference the config key so operators know where to look
+        Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.GatewayClientId, ex.Message);
+    }
+
+    [Fact]
+    public async Task WithAuthRetryAsync_AuthRejectionAfterRefresh_WrapsOriginalException()
+    {
+        var tokenProvider = new FakeDownstreamServiceTokenProvider("first-token", "refreshed-token");
+        var downstreamClient = CreateDownstreamMcpClient(tokenProvider);
+
+        var ex = await Assert.ThrowsAsync<McpException>(() => downstreamClient.WithAuthRetryAsync<string>(token =>
+        {
+            throw new McpException($"{DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired}: rejected");
+        }, CancellationToken.None));
+
+        Assert.NotNull(ex.InnerException);
+        Assert.IsType<McpException>(ex.InnerException);
+    }
+
+    private static DownstreamMcpClient CreateDownstreamMcpClient(IDownstreamServiceTokenProvider tokenProvider)
+    {
+        string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
+        var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
+        return new DownstreamMcpClient(options, tokenProvider, NullLogger<DownstreamMcpClient>.Instance);
+    }
+
     private static McpGatewayOptions CreateOptions(
         string downstreamProject,
         string workingDirectory,
@@ -282,5 +414,28 @@ public sealed class DownstreamMcpClientTests
             ApprovalBaseUrl: null,
             ApprovalChallengeTtl: McpGatewayOptions.DefaultApprovalChallengeTtl,
             DownstreamAssembly: downstreamAssembly);
+    }
+}
+
+internal sealed class FakeDownstreamServiceTokenProvider : IDownstreamServiceTokenProvider
+{
+    private readonly string initialToken;
+    private readonly string refreshedToken;
+
+    public int RefreshCallCount { get; private set; }
+
+    internal FakeDownstreamServiceTokenProvider(string initialToken, string refreshedToken)
+    {
+        this.initialToken = initialToken;
+        this.refreshedToken = refreshedToken;
+    }
+
+    public Task<string> GetServiceTokenAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(initialToken);
+
+    public Task<string> RefreshServiceTokenAsync(CancellationToken cancellationToken)
+    {
+        RefreshCallCount++;
+        return Task.FromResult(refreshedToken);
     }
 }

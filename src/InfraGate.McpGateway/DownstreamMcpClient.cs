@@ -34,32 +34,34 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
         CancellationToken cancellationToken)
     {
         var mcpClient = await GetClientAsync(cancellationToken);
-        var token = await tokenProvider.GetServiceTokenAsync(cancellationToken).ConfigureAwait(false);
         await callLock.WaitAsync(cancellationToken);
         try
         {
-            var meta = BuildAuthMeta(token);
-            var requestOptions = meta is not null ? new RequestOptions { Meta = meta } : null;
-            var result = await mcpClient.CallToolAsync(
-                toolName,
-                arguments,
-                progress: null,
-                options: requestOptions,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-
-            var text = string.Join(
-                Environment.NewLine,
-                result.Content.OfType<TextContentBlock>().Select(content => content.Text));
-
-            if (result.IsError == true)
+            return await WithAuthRetryAsync(async token =>
             {
-                logger.LogError("Downstream tool '{ToolName}' returned IsError=true. Args={ArgKeys}: {Text}",
+                var meta = BuildAuthMeta(token);
+                var requestOptions = meta is not null ? new RequestOptions { Meta = meta } : null;
+                var result = await mcpClient.CallToolAsync(
                     toolName,
-                    string.Join(",", arguments.Keys),
-                    text);
-            }
+                    arguments,
+                    progress: null,
+                    options: requestOptions,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            return text;
+                var text = string.Join(
+                    Environment.NewLine,
+                    result.Content.OfType<TextContentBlock>().Select(content => content.Text));
+
+                if (result.IsError == true)
+                {
+                    logger.LogError("Downstream tool '{ToolName}' returned IsError=true. Args={ArgKeys}: {Text}",
+                        toolName,
+                        string.Join(",", arguments.Keys),
+                        text);
+                }
+
+                return text;
+            }, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -70,18 +72,20 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
     public async Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken)
     {
         var mcpClient = await GetClientAsync(cancellationToken);
-        var token = await tokenProvider.GetServiceTokenAsync(cancellationToken).ConfigureAwait(false);
-        var meta = BuildAuthMeta(token);
-        var requestOptions = meta is not null ? new RequestOptions { Meta = meta } : null;
-        var tools = await mcpClient.ListToolsAsync(requestOptions, cancellationToken: cancellationToken).ConfigureAwait(false);
-        return tools
-            .Select(t => new DownstreamTool(
-                t.Name,
-                t.Description ?? string.Empty,
-                t.ProtocolTool.Annotations?.ReadOnlyHint ?? false,
-                t.ProtocolTool.Annotations?.DestructiveHint ?? false,
-                t.JsonSchema))
-            .ToList();
+        return await WithAuthRetryAsync(async token =>
+        {
+            var meta = BuildAuthMeta(token);
+            var requestOptions = meta is not null ? new RequestOptions { Meta = meta } : null;
+            var tools = await mcpClient.ListToolsAsync(requestOptions, cancellationToken: cancellationToken).ConfigureAwait(false);
+            return tools
+                .Select(t => new DownstreamTool(
+                    t.Name,
+                    t.Description ?? string.Empty,
+                    t.ProtocolTool.Annotations?.ReadOnlyHint ?? false,
+                    t.ProtocolTool.Annotations?.DestructiveHint ?? false,
+                    t.JsonSchema))
+                .ToList() as IReadOnlyList<DownstreamTool>;
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     Task<string> IToolCaller.CallAsync(
@@ -130,6 +134,37 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
         finally
         {
             clientLock.Release();
+        }
+    }
+
+    internal static bool IsDownstreamAuthRejection(Exception ex)
+        => ex is McpException mcpEx
+           && mcpEx.Message.Contains(DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired);
+
+    internal async Task<T> WithAuthRetryAsync<T>(
+        Func<string, Task<T>> operation,
+        CancellationToken cancellationToken)
+    {
+        string token = await tokenProvider.GetServiceTokenAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await operation(token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsDownstreamAuthRejection(ex))
+        {
+            logger.LogWarning("Downstream auth rejected; forcing token refresh and retrying once.");
+            string refreshedToken = await tokenProvider.RefreshServiceTokenAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await operation(refreshedToken).ConfigureAwait(false);
+            }
+            catch (Exception retryEx) when (IsDownstreamAuthRejection(retryEx))
+            {
+                throw new McpException(
+                    $"Downstream service authentication failed after token refresh. " +
+                    $"Check {DownstreamAuthConventions.EnvironmentVariables.GatewayClientId} configuration.",
+                    retryEx);
+            }
         }
     }
 
