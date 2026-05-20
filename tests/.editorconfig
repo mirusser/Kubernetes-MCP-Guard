@@ -14,3 +14,5 @@ dotnet_diagnostic.MA0074.severity = none
 dotnet_diagnostic.MA0006.severity = none
 dotnet_diagnostic.CA1812.severity = none
 dotnet_diagnostic.MA0032.severity = none
+dotnet_diagnostic.CA1711.severity = none        # xUnit Collection fixtures end in 'Collection'
+dotnet_diagnostic.CA5399.severity = none        # Testcontainers HttpClient doesn't need CRL check

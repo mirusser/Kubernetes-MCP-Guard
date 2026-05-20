@@ -1293,7 +1293,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
     private static bool IsDownstreamAuthFailure(string result) =>
         result.Contains(DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired, StringComparison.Ordinal);
 
-    [GeneratedRegex(@"(?:PlanId:\s+|Approval plan\s+')(?<id>[0-9a-z-]+)", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
+    [GeneratedRegex(@"(?:PlanId:\s+|Approval plan\s+')(?<id>[0-9A-Za-z-]+)", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
     private static partial Regex PlanIdPattern();
 
     [GeneratedRegex(@"https?://[^/]+/approvals/(?<id>[0-9A-Fa-f]+)", RegexOptions.None, matchTimeoutMilliseconds: 5000)]

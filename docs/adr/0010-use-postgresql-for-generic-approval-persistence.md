@@ -32,6 +32,7 @@ Approval records will be stored with explicit relational columns for approval-fl
 - Approval persistence tests that cross the database seam use PostgreSQL through Testcontainers and are integration tests. In-memory or fake database persistence is not used for this slice.
 - Approval audit is mandatory transactional lifecycle state. When an approval state transition requires audit events, the state rows and audit rows commit or roll back together.
 - PostgreSQL will add an operational execution-claim table keyed by Plan Identifier to prevent concurrent execution of the same plan before Kubernetes mutation begins. Claims are separate from immutable lifecycle records and fail closed if a process crashes before recording a terminal outcome.
+- Gateway services should not consume approval persistence directly. The Gateway calls approval-core workflow interfaces, while PostgreSQL persistence remains behind the Generic Approval Core and its adapter project.
 
 ## Considered Options
 
