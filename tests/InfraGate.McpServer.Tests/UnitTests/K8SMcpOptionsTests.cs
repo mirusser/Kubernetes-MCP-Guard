@@ -1,3 +1,4 @@
+using InfraGate.DownstreamAuth;
 using InfraGate.McpServer;
 using InfraGate.RuntimeSafety;
 
@@ -6,6 +7,7 @@ namespace InfraGate.McpServer.Tests.UnitTests;
 public sealed class K8SMcpOptionsTests
 {
     private const string DefaultApprovalRootDirectory = ".mcp-approvals";
+    private const string DownstreamAuthority = "https://idp.example.com";
 
     [Fact]
     public void Constructor_UsesOptionalDefaults_WhenFlagsOmitted()
@@ -158,6 +160,71 @@ public sealed class K8SMcpOptionsTests
         Assert.Null(exception);
     }
 
+    [Fact]
+    public void ProductionMode_WithDownstreamAuthRequired_False_RefusesStartup()
+    {
+        using var environment = SetProductionEnvironment(
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
+
+        var options = K8SMcpOptions.FromEnvironment();
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.Required, exception.Message);
+    }
+
+    [Fact]
+    public void ProductionMode_WithValidDownstreamAuth_AllowsStartup()
+    {
+        using var environment = SetProductionEnvironment();
+
+        var options = K8SMcpOptions.FromEnvironment();
+        Exception? exception = Record.Exception(options.ValidateProductionSafety);
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void DevelopmentMode_WithDownstreamAuthRequired_False_AllowsStartup()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"),
+            (K8sConventions.EnvironmentVariables.ApprovalRoot, null),
+            (K8sConventions.EnvironmentVariables.AllowedNamespaces, null),
+            (K8sConventions.EnvironmentVariables.KubeConfig, null),
+            (K8sConventions.EnvironmentVariables.UseInClusterConfig, null));
+
+        var options = K8SMcpOptions.FromEnvironment();
+        Exception? exception = Record.Exception(options.ValidateProductionSafety);
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void FromEnvironment_WithDownstreamAuthRequired_Absent_DefaultsToRequired()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (DownstreamAuthConventions.EnvironmentVariables.Required, null));
+
+        var options = K8SMcpOptions.FromEnvironment();
+
+        Assert.True(options.DownstreamAuth?.Required);
+    }
+
+    [Fact]
+    public void FromEnvironment_PopulatesDownstreamAuth_FromEnvironment()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "true"),
+            (DownstreamAuthConventions.EnvironmentVariables.Authority, DownstreamAuthority));
+
+        var options = K8SMcpOptions.FromEnvironment();
+
+        Assert.NotNull(options.DownstreamAuth);
+        Assert.True(options.DownstreamAuth.Required);
+        Assert.Equal(DownstreamAuthority, options.DownstreamAuth.Authority);
+    }
+
     private static EnvironmentVariableScope SetProductionEnvironment(params (string Name, string? Value)[] overrides)
     {
         var variables = new Dictionary<string, string?>(StringComparer.Ordinal)
@@ -167,7 +234,9 @@ public sealed class K8SMcpOptionsTests
             [K8sConventions.EnvironmentVariables.ApprovalRoot] = ProductionPath("approvals"),
             [K8sConventions.EnvironmentVariables.AllowedNamespaces] = "mcp-nginx-demo",
             [K8sConventions.EnvironmentVariables.KubeConfig] = ProductionPath("kubeconfig"),
-            [K8sConventions.EnvironmentVariables.UseInClusterConfig] = null
+            [K8sConventions.EnvironmentVariables.UseInClusterConfig] = null,
+            [DownstreamAuthConventions.EnvironmentVariables.Required] = "true",
+            [DownstreamAuthConventions.EnvironmentVariables.Authority] = DownstreamAuthority
         };
 
         foreach (var item in overrides)

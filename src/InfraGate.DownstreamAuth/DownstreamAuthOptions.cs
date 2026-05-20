@@ -15,9 +15,9 @@ public sealed class DownstreamAuthOptions
     {
         return new DownstreamAuthOptions
         {
-            Required = string.Equals(
+            Required = !string.Equals(
                 Environment.GetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.Required),
-                "true",
+                "false",
                 StringComparison.OrdinalIgnoreCase),
             Authority = Environment.GetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.Authority) ?? string.Empty,
             MetadataAddress = Environment.GetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.MetadataAddress),

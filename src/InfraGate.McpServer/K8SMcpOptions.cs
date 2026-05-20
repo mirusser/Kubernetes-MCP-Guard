@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.DownstreamAuth;
 using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpServer;
@@ -11,7 +12,8 @@ public sealed record K8SMcpOptions(
     bool HasExplicitAllowedNamespaces = true,
     string? KubeConfig = null,
     bool IsInClusterConfigEnabled = false,
-    string? LogPath = null)
+    string? LogPath = null,
+    DownstreamAuthOptions? DownstreamAuth = null)
 {
     public const string DefaultNamespace = K8sConventions.DefaultNamespace;
     private static readonly IReadOnlySet<string> DeniedApprovalRootNames =
@@ -25,6 +27,7 @@ public sealed record K8SMcpOptions(
     public static K8SMcpOptions FromEnvironment()
     {
         RuntimeMode runtimeMode = RuntimeModeResolver.FromEnvironment();
+        var downstreamAuth = DownstreamAuthOptions.FromEnvironment();
         string? approvalRootValue = Environment.GetEnvironmentVariable(K8sConventions.EnvironmentVariables.ApprovalRoot);
         bool isApprovalRootExplicit = !string.IsNullOrWhiteSpace(approvalRootValue);
         string approvalRoot = string.IsNullOrWhiteSpace(approvalRootValue)
@@ -49,7 +52,8 @@ public sealed record K8SMcpOptions(
             hasExplicitAllowedNamespaces,
             kubeConfig,
             isInClusterConfigEnabled,
-            logPath);
+            logPath,
+            downstreamAuth);
     }
 
     public void ValidateProductionSafety()
@@ -65,6 +69,16 @@ public sealed record K8SMcpOptions(
         {
             return;
         }
+
+        var downstreamAuth = DownstreamAuth ?? new DownstreamAuthOptions();
+        if (!downstreamAuth.Required)
+        {
+            throw new InvalidOperationException(
+                $"{DownstreamAuthConventions.EnvironmentVariables.Required} must not be false in Production mode. " +
+                $"Downstream authentication is required for production deployments.");
+        }
+
+        downstreamAuth.ValidateForServer();
 
         if (!HasExplicitKubeConfig && !IsInClusterConfigEnabled)
         {
