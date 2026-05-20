@@ -1,16 +1,17 @@
 using InfraGate.McpServer;
 using InfraGate.RuntimeSafety;
+using Microsoft.Extensions.Configuration;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
 
-public sealed class K8SMcpOptionsTests
+public sealed class KubernetesMcpOptionsTests
 {
     private const string DefaultApprovalRootDirectory = ".mcp-approvals";
 
     [Fact]
     public void Constructor_UsesOptionalDefaults_WhenFlagsOmitted()
     {
-        var options = new K8SMcpOptions(
+        var options = new KubernetesMcpOptions(
             new HashSet<string>(["demo"], StringComparer.Ordinal),
             ProductionPath("approvals"));
 
@@ -24,25 +25,25 @@ public sealed class K8SMcpOptionsTests
     public void FromEnvironment_UsesDefaultApprovalRootAndNamespace_WhenUnset()
     {
         using var environment = EnvironmentVariableScope.Set(
-            (K8sConventions.EnvironmentVariables.ApprovalRoot, null),
-            (K8sConventions.EnvironmentVariables.AllowedNamespaces, null));
+            (KubernetesConventions.EnvironmentVariables.ApprovalRoot, null),
+            (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null));
 
-        var options = K8SMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromEnvironment();
 
         Assert.Equal(
             Path.Combine(Directory.GetCurrentDirectory(), DefaultApprovalRootDirectory),
             options.ApprovalRoot);
-        Assert.Equal([K8SMcpOptions.DefaultNamespace], options.AllowedNamespaces);
+        Assert.Equal([KubernetesMcpOptions.DefaultNamespace], options.AllowedNamespaces);
     }
 
     [Fact]
     public void FromEnvironment_UsesConfiguredApprovalRoot_WhenSet()
     {
         using var environment = EnvironmentVariableScope.Set(
-            (K8sConventions.EnvironmentVariables.ApprovalRoot, "/tmp/infra-gate-approvals"),
-            (K8sConventions.EnvironmentVariables.AllowedNamespaces, null));
+            (KubernetesConventions.EnvironmentVariables.ApprovalRoot, "/tmp/infra-gate-approvals"),
+            (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null));
 
-        var options = K8SMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromEnvironment();
 
         Assert.Equal("/tmp/infra-gate-approvals", options.ApprovalRoot);
     }
@@ -51,10 +52,10 @@ public sealed class K8SMcpOptionsTests
     public void FromEnvironment_UsesConfiguredNamespaces_WhenSet()
     {
         using var environment = EnvironmentVariableScope.Set(
-            (K8sConventions.EnvironmentVariables.ApprovalRoot, null),
-            (K8sConventions.EnvironmentVariables.AllowedNamespaces, "alpha, beta ,,gamma"));
+            (KubernetesConventions.EnvironmentVariables.ApprovalRoot, null),
+            (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, "alpha, beta ,,gamma"));
 
-        var options = K8SMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromEnvironment();
 
         Assert.Equal(["alpha", "beta", "gamma"], options.AllowedNamespaces.Order(StringComparer.Ordinal));
     }
@@ -64,12 +65,12 @@ public sealed class K8SMcpOptionsTests
     {
         using var environment = EnvironmentVariableScope.Set(
             (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
-            (K8sConventions.EnvironmentVariables.ApprovalRoot, null),
-            (K8sConventions.EnvironmentVariables.AllowedNamespaces, null),
-            (K8sConventions.EnvironmentVariables.KubeConfig, null),
-            (K8sConventions.EnvironmentVariables.UseInClusterConfig, "true"));
+            (KubernetesConventions.EnvironmentVariables.ApprovalRoot, null),
+            (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null),
+            (KubernetesConventions.EnvironmentVariables.KubeConfig, null),
+            (KubernetesConventions.EnvironmentVariables.UseInClusterConfig, "true"));
 
-        var options = K8SMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromEnvironment();
 
         Assert.True(options.IsInClusterConfigEnabled);
         Assert.False(options.HasExplicitKubeConfig);
@@ -80,27 +81,72 @@ public sealed class K8SMcpOptionsTests
     {
         using var environment = EnvironmentVariableScope.Set(
             (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
-            (K8sConventions.EnvironmentVariables.UseInClusterConfig, "maybe"));
+            (KubernetesConventions.EnvironmentVariables.UseInClusterConfig, "maybe"));
 
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(K8SMcpOptions.FromEnvironment);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(KubernetesMcpOptions.FromEnvironment);
 
-        Assert.Contains(K8sConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
+        Assert.Contains(KubernetesConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
         Assert.Contains("maybe", exception.Message);
+    }
+
+    [Fact]
+    public void FromConfiguration_UsesGeneratedAppSettingsValues()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment] =
+                    RuntimeSafetyConventions.EnvironmentValues.Production,
+                [KubernetesConventions.ConfigurationKeys.ApprovalRoot] = ProductionPath("approvals"),
+                [KubernetesConventions.ConfigurationKeys.KubeConfig] = ProductionPath("kubeconfig"),
+                [KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":0"] = "alpha",
+                [KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":1"] = "beta"
+            })
+            .Build();
+
+        var options = KubernetesMcpOptions.FromConfiguration(configuration);
+
+        Assert.Equal(RuntimeMode.Production, options.RuntimeMode);
+        Assert.Equal(ProductionPath("approvals"), options.ApprovalRoot);
+        Assert.Equal(ProductionPath("kubeconfig"), options.KubeConfig);
+        Assert.Equal(["alpha", "beta"], options.AllowedNamespaces.Order(StringComparer.Ordinal));
+        Assert.True(options.IsApprovalRootExplicit);
+        Assert.True(options.HasExplicitAllowedNamespaces);
+    }
+
+    [Fact]
+    public void FromConfiguration_BindsFromKubernetesSection()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [KubernetesConventions.ConfigurationKeys.KubeConfig] = "/json/kubeconfig",
+                [KubernetesConventions.ConfigurationKeys.ApprovalRoot] = "/data/approvals",
+                [KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":0"] = "alpha",
+                [KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":1"] = "beta"
+            })
+            .Build();
+
+        var options = KubernetesMcpOptions.FromConfiguration(configuration);
+
+        Assert.Equal("/json/kubeconfig", options.KubeConfig);
+        Assert.Equal("/data/approvals", options.ApprovalRoot);
+        Assert.Equal(["alpha", "beta"], options.AllowedNamespaces.Order(StringComparer.Ordinal));
     }
 
     [Fact]
     public void ParseAllowedNamespaces_UsesDefault_WhenUnset()
     {
-        var namespaces = K8SMcpOptions.ParseAllowedNamespaces(null);
+        var namespaces = KubernetesMcpOptions.ParseAllowedNamespaces(null);
 
-        Assert.Contains(K8SMcpOptions.DefaultNamespace, namespaces);
+        Assert.Contains(KubernetesMcpOptions.DefaultNamespace, namespaces);
         Assert.Single(namespaces);
     }
 
     [Fact]
     public void ParseAllowedNamespaces_TrimsCommaSeparatedValues()
     {
-        var namespaces = K8SMcpOptions.ParseAllowedNamespaces("alpha, beta ,,gamma");
+        var namespaces = KubernetesMcpOptions.ParseAllowedNamespaces("alpha, beta ,,gamma");
 
         Assert.Equal(["alpha", "beta", "gamma"], namespaces.Order(StringComparer.Ordinal));
     }
@@ -109,26 +155,26 @@ public sealed class K8SMcpOptionsTests
     public void ProductionMode_WithDefaultKubeConfigFallback_RefusesStartup()
     {
         using var environment = SetProductionEnvironment(
-            (K8sConventions.EnvironmentVariables.KubeConfig, null),
-            (K8sConventions.EnvironmentVariables.UseInClusterConfig, null));
+            (KubernetesConventions.EnvironmentVariables.KubeConfig, null),
+            (KubernetesConventions.EnvironmentVariables.UseInClusterConfig, null));
 
-        var options = K8SMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromEnvironment();
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
-        Assert.Contains(K8sConventions.EnvironmentVariables.KubeConfig, exception.Message);
-        Assert.Contains(K8sConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
+        Assert.Contains(KubernetesConventions.EnvironmentVariables.KubeConfig, exception.Message);
+        Assert.Contains(KubernetesConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
     }
 
     [Fact]
     public void ProductionMode_WithoutExplicitNamespaces_RefusesStartup()
     {
         using var environment = SetProductionEnvironment(
-            (K8sConventions.EnvironmentVariables.AllowedNamespaces, null));
+            (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null));
 
-        var options = K8SMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromEnvironment();
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
-        Assert.Contains(K8sConventions.EnvironmentVariables.AllowedNamespaces, exception.Message);
+        Assert.Contains(KubernetesConventions.EnvironmentVariables.AllowedNamespaces, exception.Message);
     }
 
     [Fact]
@@ -136,7 +182,7 @@ public sealed class K8SMcpOptionsTests
     {
         using var environment = SetProductionEnvironment();
 
-        var options = K8SMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromEnvironment();
         Exception? exception = Record.Exception(options.ValidateProductionSafety);
 
         Assert.Null(exception);
@@ -147,12 +193,12 @@ public sealed class K8SMcpOptionsTests
     {
         using var environment = EnvironmentVariableScope.Set(
             (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
-            (K8sConventions.EnvironmentVariables.ApprovalRoot, null),
-            (K8sConventions.EnvironmentVariables.AllowedNamespaces, null),
-            (K8sConventions.EnvironmentVariables.KubeConfig, null),
-            (K8sConventions.EnvironmentVariables.UseInClusterConfig, null));
+            (KubernetesConventions.EnvironmentVariables.ApprovalRoot, null),
+            (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null),
+            (KubernetesConventions.EnvironmentVariables.KubeConfig, null),
+            (KubernetesConventions.EnvironmentVariables.UseInClusterConfig, null));
 
-        var options = K8SMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromEnvironment();
         Exception? exception = Record.Exception(options.ValidateProductionSafety);
 
         Assert.Null(exception);
@@ -164,10 +210,10 @@ public sealed class K8SMcpOptionsTests
         {
             [RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment] =
                 RuntimeSafetyConventions.EnvironmentValues.Production,
-            [K8sConventions.EnvironmentVariables.ApprovalRoot] = ProductionPath("approvals"),
-            [K8sConventions.EnvironmentVariables.AllowedNamespaces] = "mcp-nginx-demo",
-            [K8sConventions.EnvironmentVariables.KubeConfig] = ProductionPath("kubeconfig"),
-            [K8sConventions.EnvironmentVariables.UseInClusterConfig] = null
+            [KubernetesConventions.EnvironmentVariables.ApprovalRoot] = ProductionPath("approvals"),
+            [KubernetesConventions.EnvironmentVariables.AllowedNamespaces] = "mcp-nginx-demo",
+            [KubernetesConventions.EnvironmentVariables.KubeConfig] = ProductionPath("kubeconfig"),
+            [KubernetesConventions.EnvironmentVariables.UseInClusterConfig] = null
         };
 
         foreach (var item in overrides)

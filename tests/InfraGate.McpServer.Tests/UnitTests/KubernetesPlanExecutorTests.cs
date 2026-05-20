@@ -10,17 +10,17 @@ public sealed class KubernetesPlanExecutorTests
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly PlanRequester TestRequester = new("test-subject", "oauth-jwt");
 
-    private static K8sPlanDryRun MakeDryRun(string ns, string name) =>
+    private static KubernetesPlanDryRun MakeDryRun(string ns, string name) =>
         new(
             "succeeded",
             DateTimeOffset.UtcNow,
-            [new K8sPlanDryRunObject($"apps/v1 Deployment {ns}/{name}", "{}")],
+            [new KubernetesPlanDryRunObject($"apps/v1 Deployment {ns}/{name}", "{}")],
             [],
             "Server-side dry-run succeeded.");
 
-    private static K8sPlanDiff MakeDiff(string ns, string name) =>
+    private static KubernetesPlanDiff MakeDiff(string ns, string name) =>
         new(
-            new K8sObjectRef("apps/v1", "Deployment", ns, name),
+            new KubernetesObjectRef("apps/v1", "Deployment", ns, name),
             "update",
             $"Update apps/v1 Deployment {ns}/{name}",
             "@@ -1 +1 @@",
@@ -30,19 +30,19 @@ public sealed class KubernetesPlanExecutorTests
             [],
             []);
 
-    private static string DryRunJson(K8sPlanDryRun dryRun) =>
+    private static string DryRunJson(KubernetesPlanDryRun dryRun) =>
         JsonSerializer.Serialize(dryRun, JsonOptions);
 
-    private static string ApplyEvidenceJson(K8sPlanDryRun dryRun) =>
-        JsonSerializer.Serialize(new K8sApplyEvidence(dryRun, [], false, null), JsonOptions);
+    private static string ApplyEvidenceJson(KubernetesPlanDryRun dryRun) =>
+        JsonSerializer.Serialize(new KubernetesApplyEvidence(dryRun, [], false, null), JsonOptions);
 
-    private static PlanEnvelope BuildApplyEnvelope(K8sPlanDiff[] diffs, string ns = "demo", string name = "nginx")
+    private static PlanEnvelope BuildApplyEnvelope(KubernetesPlanDiff[] diffs, string ns = "demo", string name = "nginx")
     {
         var payload = new KubernetesPlanPayload(
             ns,
             $"Apply deployment {name}.",
             new Dictionary<string, string> { [KubernetesAdapterConventions.PlanParameters.ObjectCount] = "1" },
-            [new K8sObjectRef("apps/v1", "Deployment", ns, name)])
+            [new KubernetesObjectRef("apps/v1", "Deployment", ns, name)])
         {
             Manifest = "apiVersion: apps/v1",
             DryRun = MakeDryRun(ns, name),
@@ -75,7 +75,7 @@ public sealed class KubernetesPlanExecutorTests
                 [KubernetesAdapterConventions.PlanParameters.Name] = name,
                 [KubernetesAdapterConventions.PlanParameters.Replicas] = replicas.ToString()
             },
-            [new K8sObjectRef("apps/v1", "Deployment", ns, name)])
+            [new KubernetesObjectRef("apps/v1", "Deployment", ns, name)])
         {
             DryRun = MakeDryRun(ns, name)
         };
@@ -107,7 +107,7 @@ public sealed class KubernetesPlanExecutorTests
                 [KubernetesAdapterConventions.PlanParameters.Container] = "nginx",
                 [KubernetesAdapterConventions.PlanParameters.Image] = image
             },
-            [new K8sObjectRef("apps/v1", "Deployment", ns, name)])
+            [new KubernetesObjectRef("apps/v1", "Deployment", ns, name)])
         {
             DryRun = MakeDryRun(ns, name)
         };
@@ -239,7 +239,7 @@ public sealed class KubernetesPlanExecutorTests
             .With(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift, KubernetesAdapterConventions.DriftCheckResults.NoDrift)
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
                 JsonSerializer.Serialize(
-                    new K8sApplyEvidence(dryRun, [], true, "[PRIVILEGED_CONTAINER] Privileged container detected"),
+                    new KubernetesApplyEvidence(dryRun, [], true, "[PRIVILEGED_CONTAINER] Privileged container detected"),
                     JsonOptions));
 
         var executor = new KubernetesPlanExecutor(toolCaller);

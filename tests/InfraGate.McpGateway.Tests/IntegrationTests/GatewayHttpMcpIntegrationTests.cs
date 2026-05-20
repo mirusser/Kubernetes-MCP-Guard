@@ -9,6 +9,7 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Notifications;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Builder;
@@ -650,6 +651,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<ApprovalChallengeStore>();
                 services.AddSingleton<IApprovalChallengeStore>(sp => sp.GetRequiredService<ApprovalChallengeStore>());
                 services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
+                services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
+                services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
                 services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
                 services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());

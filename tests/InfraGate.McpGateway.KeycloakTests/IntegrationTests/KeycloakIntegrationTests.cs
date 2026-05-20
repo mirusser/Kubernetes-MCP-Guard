@@ -8,6 +8,7 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Notifications;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -735,7 +736,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
 
     private static PlanEnvelope<KubernetesPlanPayload> CreateApprovalPlan()
     {
-        var objects = new[] { new K8sObjectRef("apps/v1", "Deployment", "mcp-nginx-demo", "nginx-demo") };
+        var objects = new[] { new KubernetesObjectRef("apps/v1", "Deployment", "mcp-nginx-demo", "nginx-demo") };
 
         var payload = new KubernetesPlanPayload(
             "mcp-nginx-demo",
@@ -759,18 +760,18 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             payload);
     }
 
-    private static K8sPlanDryRun CreateDryRun(IReadOnlyList<K8sObjectRef> objects) =>
+    private static KubernetesPlanDryRun CreateDryRun(IReadOnlyList<KubernetesObjectRef> objects) =>
         new(
             "succeeded",
             DateTimeOffset.UtcNow,
-            objects.Select(obj => new K8sPlanDryRunObject(
+            objects.Select(obj => new KubernetesPlanDryRunObject(
                 $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}",
                 "{}")).ToArray(),
             [],
             "Server-side dry-run succeeded.");
 
-    private static K8sPlanDiff[] CreateDiffs(IReadOnlyList<K8sObjectRef> objects) =>
-        objects.Select(obj => new K8sPlanDiff(
+    private static KubernetesPlanDiff[] CreateDiffs(IReadOnlyList<KubernetesObjectRef> objects) =>
+        objects.Select(obj => new KubernetesPlanDiff(
             obj,
             ApprovalConventions.DiffChangeTypes.Update,
             $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name} will be updated.",
@@ -894,6 +895,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             {
                 services.AddRouting();
                 services.AddSingleton(options);
+                services.AddSingleton<IApprovalNotificationDispatcher, NullNotificationDispatcher>();
                 services.AddSingleton<IGuardrailAuditStore, NullAuditStore>();
                 services.AddSingleton<IDownstreamMcpClient, NullDownstreamClient>();
                 services.AddSingleton<GuardedToolRunner>();
@@ -945,6 +947,12 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
     private sealed class NullAuditStore : IGuardrailAuditStore
     {
         public Task WriteAsync(GuardrailAuditEvent auditEvent, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+    }
+
+    private sealed class NullNotificationDispatcher : IApprovalNotificationDispatcher
+    {
+        public Task NotifyPlanApprovedAsync(string planId, CancellationToken ct) =>
             Task.CompletedTask;
     }
 

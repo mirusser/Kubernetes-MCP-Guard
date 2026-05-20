@@ -128,7 +128,7 @@ Before moving to production, ensure you have:
 - [ ] Explicit Kubernetes auth configured with either `KUBECONFIG` or `K8S_MCP_USE_IN_CLUSTER=true`.
 - [ ] Explicit `K8S_MCP_ALLOWED_NAMESPACES`, `K8S_MCP_APPROVAL_ROOT`, and `INFRA_GATE_GUARD_AUDIT_ROOT`.
 - [ ] Durable approval and audit paths that are not temp paths, default dev paths, or group/other-writable.
-- [ ] Host Docker env file provisioned at `/etc/infra-gate/production.env` when using the remote Compose deployment.
+- [ ] Host Docker env file and appsettings file provisioned at `/etc/infra-gate/production.env` and `/etc/infra-gate/production.appsettings.json` when using the remote Compose deployment.
 - [ ] No opaque manual bearer values in MCP client configuration.
 
 ## Future Support

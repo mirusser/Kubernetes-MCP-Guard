@@ -2,7 +2,7 @@
 # smoke-test-release.sh — released-image smoke test.
 #
 # Exercises deploy/local-oauth/compose.release.yaml using the published gateway image:
-#   1. Generates deploy/generated/smoke-release.env from the run profile.
+#   1. Generates deploy/generated/smoke-release.env and appsettings JSON from the run profile.
 #   2. Boots Keycloak and the gateway with docker compose (--pull always).
 #   3. Waits for Keycloak OIDC discovery and the gateway HTTP surface.
 #   4. Verifies host-side volume directories exist.
@@ -26,6 +26,7 @@ TAG="${TAG:-latest}"
 KUBECONFIG_PATH="${KUBECONFIG_PATH:-${REPO_ROOT}/.kube/mcp-nginx-demo.compose.config}"
 COMPOSE_FILE="${REPO_ROOT}/deploy/local-oauth/compose.release.yaml"
 ENV_FILE="${REPO_ROOT}/deploy/generated/smoke-release.env"
+APPSETTINGS_FILE="${REPO_ROOT}/deploy/generated/smoke-release.appsettings.json"
 
 GATEWAY_URL="http://127.0.0.1:3001"
 KEYCLOAK_URL="http://127.0.0.1:3010"
@@ -69,24 +70,29 @@ teardown() {
   if [[ ${exit_code} -ne 0 ]]; then
     echo ""
     echo "FAIL: release smoke test failed for tag '${TAG}'. Last logs:" >&2
-    TAG="${TAG}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" logs --tail=80 2>/dev/null || true
+    TAG="${TAG}" INFRA_GATE_GATEWAY_ENV_FILE="${ENV_FILE}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" logs --tail=80 2>/dev/null || true
   fi
-  TAG="${TAG}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" down -v --remove-orphans 2>/dev/null || true
+  TAG="${TAG}" INFRA_GATE_GATEWAY_ENV_FILE="${ENV_FILE}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" down -v --remove-orphans 2>/dev/null || true
   rm -rf "${tmp_dir}"
 }
 trap teardown EXIT
 
-echo "==> Generating run profile env (smoke-release) ..."
+echo "==> Generating run profile files (smoke-release) ..."
 mkdir -p "${REPO_ROOT}/deploy/generated"
 dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- generate smoke-release \
   --set "host.kubeconfigHostPath=${KUBECONFIG_PATH}" \
   --set "host.approvalHostPath=${REPO_ROOT}/.mcp-approvals" \
   --set "host.guardAuditHostPath=${REPO_ROOT}/.mcp-guardrails" \
   --set "host.dataProtectionHostPath=${REPO_ROOT}/.mcp-dataprotection-keys" \
+  --set "host.configHostPath=${APPSETTINGS_FILE}" \
   --output "${ENV_FILE}"
 
+dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- generate smoke-release \
+  --format appsettings \
+  --output "${APPSETTINGS_FILE}"
+
 echo "==> Pulling and starting local OAuth services (tag=${TAG}) ..."
-TAG="${TAG}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --pull always
+TAG="${TAG}" INFRA_GATE_GATEWAY_ENV_FILE="${ENV_FILE}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" up -d --pull always
 
 echo "==> Waiting for Keycloak OIDC discovery ..."
 elapsed=0
@@ -125,7 +131,7 @@ done
 echo "    All host volume directories present."
 
 echo "==> Verifying no filesystem permission errors in gateway logs ..."
-if TAG="${TAG}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" logs mcp-gateway 2>/dev/null | \
+if TAG="${TAG}" INFRA_GATE_GATEWAY_ENV_FILE="${ENV_FILE}" docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" logs mcp-gateway 2>/dev/null | \
    grep -qE 'KeyRingProvider.*error|UnauthorizedAccessException|Permission denied'; then
   echo "ERROR: Gateway logs contain filesystem permission errors." >&2
   exit 1

@@ -4,10 +4,10 @@
 
 ## Runtime Flow
 
-- `Program.cs` wires the generic host, stdio MCP transport, `K8SMcpOptions`, `IKubernetes`, and `K8sManager`.
-- `K8sTools.cs` is the MCP-facing tool surface. Tool names are external contracts and must stay aligned with `K8sConventions.ToolNames`.
-- `K8sManager.*.cs` contains the behavior behind those tools: status reads, bounded observability and diagnostics reads, evidence dry-runs, manifest diffs, raw execution, and validation helpers.
-- `K8sManifestParser.cs` accepts YAML/JSON manifests and allows only `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap`.
+- `Program.cs` wires the generic host, stdio MCP transport, `KubernetesMcpOptions`, `IKubernetes`, and `KubernetesManager`.
+- `KubernetesTools.cs` is the MCP-facing tool surface. Tool names are external contracts and must stay aligned with `KubernetesConventions.ToolNames`.
+- `KubernetesManager.*.cs` contains the behavior behind those tools: status reads, bounded observability and diagnostics reads, evidence dry-runs, manifest diffs, raw execution, and validation helpers.
+- `KubernetesManifestParser.cs` accepts YAML/JSON manifests and allows only `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap`.
 - The server uses Kubernetes adapter evidence and policy records, but it does not create, approve, or apply approval plans.
 
 ## Important Contracts

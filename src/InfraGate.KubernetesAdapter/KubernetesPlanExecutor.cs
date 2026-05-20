@@ -175,12 +175,12 @@ public sealed class KubernetesPlanExecutor(
             return null;
         }
 
-        var policyResult = K8sPolicyValidator.ValidateSetDeploymentImage(
+        var policyResult = KubernetesPolicyValidator.ValidateSetDeploymentImage(
             payload.Namespace,
             payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Name, string.Empty),
             payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Container, string.Empty),
             payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Image, string.Empty),
-            K8sPolicyOptions.Default);
+            KubernetesPolicyOptions.Default);
 
         return policyResult.IsDenied
             ? $"Plan '{plan.Id}' blocked by policy:{Environment.NewLine}{policyResult.FormatRefusal()}"
@@ -198,10 +198,10 @@ public sealed class KubernetesPlanExecutor(
             },
             ct).ConfigureAwait(false);
 
-        K8sApplyEvidence? evidence;
+        KubernetesApplyEvidence? evidence;
         try
         {
-            evidence = JsonSerializer.Deserialize<K8sApplyEvidence>(evidenceJson, JsonOptions);
+            evidence = JsonSerializer.Deserialize<KubernetesApplyEvidence>(evidenceJson, JsonOptions);
         }
         catch (JsonException)
         {
@@ -229,10 +229,10 @@ public sealed class KubernetesPlanExecutor(
     {
         var dryRunJson = await toolCaller.CallAsync(toolName, arguments, ct).ConfigureAwait(false);
 
-        K8sPlanDryRun? dryRun;
+        KubernetesPlanDryRun? dryRun;
         try
         {
-            dryRun = JsonSerializer.Deserialize<K8sPlanDryRun>(dryRunJson, JsonOptions);
+            dryRun = JsonSerializer.Deserialize<KubernetesPlanDryRun>(dryRunJson, JsonOptions);
         }
         catch (JsonException)
         {

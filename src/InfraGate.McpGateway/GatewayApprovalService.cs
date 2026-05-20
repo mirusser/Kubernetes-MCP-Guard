@@ -1,11 +1,12 @@
 using InfraGate.Approvals;
 using InfraGate.Approvals.AuditPayloads;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Notifications;
 using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpGateway;
 
-public sealed class GatewayApprovalService : IGatewayApprovalService
+internal sealed class GatewayApprovalService : IGatewayApprovalService
 {
     private readonly ApprovalStore approvalStore;
     private readonly IApprovalChallengeStore challengeStore;
@@ -14,6 +15,7 @@ public sealed class GatewayApprovalService : IGatewayApprovalService
     private readonly IAuthorizationCheck authorizationCheck;
     private readonly McpGatewayOptions options;
     private readonly IHttpContextAccessor httpContextAccessor;
+    private readonly IApprovalNotificationDispatcher notificationDispatcher;
     private readonly ILogger<GatewayApprovalService> logger;
 
     public GatewayApprovalService(
@@ -24,6 +26,7 @@ public sealed class GatewayApprovalService : IGatewayApprovalService
         IAuthorizationCheck authorizationCheck,
         McpGatewayOptions options,
         IHttpContextAccessor httpContextAccessor,
+        IApprovalNotificationDispatcher notificationDispatcher,
         ILogger<GatewayApprovalService> logger)
     {
         this.approvalStore = approvalStore;
@@ -33,6 +36,7 @@ public sealed class GatewayApprovalService : IGatewayApprovalService
         this.authorizationCheck = authorizationCheck;
         this.options = options;
         this.httpContextAccessor = httpContextAccessor;
+        this.notificationDispatcher = notificationDispatcher;
         this.logger = logger;
     }
 
@@ -218,6 +222,7 @@ public sealed class GatewayApprovalService : IGatewayApprovalService
                 grant.Id)
         };
         await challengeStore.SaveAsync(updated, cancellationToken);
+        await notificationDispatcher.NotifyPlanApprovedAsync(updated.PlanId, cancellationToken).ConfigureAwait(false);
         await approvalStore.WriteAuditAsync(
             ApprovalConventions.AuditEvents.ApprovalChallengeApproved,
             new ApprovalChallengeApprovedPayload(

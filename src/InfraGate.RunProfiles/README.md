@@ -1,6 +1,6 @@
 # InfraGate.RunProfiles
 
-CLI tool that compiles named profiles from `deploy/run-profiles.yaml` into `.env` files for Docker Compose and deployment scripts. It is the canonical source of truth for all runnable environment configuration.
+CLI tool that compiles named profiles from `deploy/run-profiles.yaml` into `.env` files for Docker Compose/deployment scripts and appsettings JSON for .NET runtime binding. It is the canonical source of truth for all runnable environment configuration.
 
 ## Commands
 
@@ -11,7 +11,7 @@ dotnet run --project src/InfraGate.RunProfiles -- list
 # Validate all profiles parse without error
 dotnet run --project src/InfraGate.RunProfiles -- validate
 
-# Generate an env file from a profile
+# Generate an env file or appsettings JSON from a profile
 dotnet run --project src/InfraGate.RunProfiles -- generate <profile> [options]
 ```
 
@@ -19,6 +19,7 @@ dotnet run --project src/InfraGate.RunProfiles -- generate <profile> [options]
 
 | Flag | Description |
 |---|---|
+| `--format env\|appsettings` | Output format (default: `env`) |
 | `--output <path>` | Write to a file instead of stdout |
 | `--set section.field=value` | Override a single field after profile merge; repeatable |
 | `--force` | Overwrite an existing output file (default: refuse) |
@@ -128,26 +129,27 @@ profiles:
 | `identityProvider` | `authority`, `metadataAddress`, `resource`, `scope`, `requireHttpsMetadata` |
 | `approvalAuthority` | `baseUrl`, `oauthAuthorizationEndpoint`, `oauthTokenEndpoint` |
 | `genericApprovalCore` | `approvalRoot` |
-| `host` | `bindAddress`, `bindPort`, `gatewayImage`, `kubeconfigHostPath`, `approvalHostPath`, `guardAuditHostPath`, `dataProtectionHostPath` |
+| `host` | `bindAddress`, `bindPort`, `gatewayImage`, `configHostPath`, `kubeconfigHostPath`, `approvalHostPath`, `guardAuditHostPath`, `dataProtectionHostPath` |
 
-`--set` is required for host-path fields when running Docker Compose: volume bind-mount paths are resolved relative to the Compose file directory, not the working directory. Always pass absolute paths via `--set` for `host.*HostPath` fields in Compose scenarios.
+Use `--set` when a run needs host paths different from the profile defaults. Docker Compose resolves relative bind-mount paths from the Compose file directory, so local OAuth profiles keep committed defaults relative to `deploy/local-oauth/`. For generated local runs, `scripts/generate-env.sh` supplies absolute repository-root paths so the command is independent of the current working directory.
 
 `scripts/generate-env.sh` handles this automatically for local runs:
 
 ```bash
 ./scripts/generate-env.sh local-compose
-# → writes deploy/generated/local-compose.env with absolute REPO_ROOT-based host paths
+# → writes deploy/generated/local-compose.env and deploy/generated/local-compose.appsettings.json
+#   with absolute REPO_ROOT-based host paths
 ```
 
 To call the generator directly:
 
 ```bash
 dotnet run --project src/InfraGate.RunProfiles -- generate local-compose \
-  --set "host.kubeconfigHostPath=$(pwd)/.kube/mcp-nginx-demo.compose.config" \
-  --set "host.approvalHostPath=$(pwd)/.mcp-approvals" \
-  --set "host.guardAuditHostPath=$(pwd)/.mcp-guardrails" \
-  --set "host.dataProtectionHostPath=$(pwd)/.mcp-dataprotection-keys" \
   --output deploy/generated/local-compose.env
+
+dotnet run --project src/InfraGate.RunProfiles -- generate local-compose \
+  --format appsettings \
+  --output deploy/generated/local-compose.appsettings.json
 ```
 
 ## Generated file layout
@@ -183,21 +185,29 @@ K8S_MCP_ALLOWED_NAMESPACES=...
 
 # Host
 INFRA_GATE_BIND_ADDRESS=...
+INFRA_GATE_CONFIG_PATH=/app/config/appsettings.InfraGate.json
+INFRA_GATE_CONFIG_HOST_PATH=...
 ...
 ```
 
-Sections are omitted when the profile produces no vars for them.
+The generated appsettings file carries the .NET runtime values under `InfraGate:*` sections. The gateway loads the file named by `INFRA_GATE_CONFIG_PATH`, and the downstream MCP server inherits that same bootstrap env var from the gateway process.
+
+Sections are omitted when the profile produces no values for them.
 
 ## Output paths and gitignore
 
-Generated files belong in `deploy/generated/`, which is covered by `.gitignore`. The only committed example is `deploy/local-oauth/release.env.example`, generated from the `smoke-release` profile:
+Generated files belong in `deploy/generated/`, which is covered by `.gitignore`. The committed no-SDK release examples are `deploy/local-oauth/release.env.example` and `deploy/local-oauth/release.appsettings.json`, both generated from the `smoke-release` profile:
 
 ```bash
 dotnet run --project src/InfraGate.RunProfiles -- generate smoke-release \
   --output deploy/local-oauth/release.env.example
+
+dotnet run --project src/InfraGate.RunProfiles -- generate smoke-release \
+  --format appsettings \
+  --output deploy/local-oauth/release.appsettings.json
 ```
 
-Regenerate and commit it whenever the `smoke-release` profile or its merged defaults change.
+Regenerate and commit both files whenever the `smoke-release` profile or its merged defaults change.
 
 ## Secret handling
 

@@ -8,7 +8,7 @@ public sealed record KubernetesPlanPayload
         string namespaceName,
         string description,
         Dictionary<string, string> parameters,
-        K8sObjectRef[] objects)
+        KubernetesObjectRef[] objects)
     {
         Namespace = namespaceName;
         Description = description;
@@ -22,13 +22,13 @@ public sealed record KubernetesPlanPayload
 
     public Dictionary<string, string> Parameters { get; init; } = [];
 
-    public K8sObjectRef[] Objects { get; init; } = [];
+    public KubernetesObjectRef[] Objects { get; init; } = [];
 
     public string? Manifest { get; init; }
 
-    public K8sPlanDryRun? DryRun { get; init; }
+    public KubernetesPlanDryRun? DryRun { get; init; }
 
-    public K8sPlanDiff[] Diffs { get; init; } = [];
+    public KubernetesPlanDiff[] Diffs { get; init; } = [];
 
-    public K8sPlanPolicyFinding[] PolicyFindings { get; init; } = [];
+    public KubernetesPlanPolicyFinding[] PolicyFindings { get; init; } = [];
 }

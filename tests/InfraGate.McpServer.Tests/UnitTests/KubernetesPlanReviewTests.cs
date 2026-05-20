@@ -72,7 +72,7 @@ public sealed class KubernetesPlanReviewTests
         {
             DryRun = CreateDryRun(),
             Diffs = [CreateDiff()],
-            PolicyFindings = [new K8sPlanPolicyFinding("Deny", "POL-001", "deployment/demo", "Not allowed.")]
+            PolicyFindings = [new KubernetesPlanPolicyFinding("Deny", "POL-001", "deployment/demo", "Not allowed.")]
         }));
 
         var review = (IPlanReview)plan;
@@ -87,7 +87,7 @@ public sealed class KubernetesPlanReviewTests
         {
             DryRun = CreateDryRun(),
             Diffs = [CreateDiff()],
-            PolicyFindings = [new K8sPlanPolicyFinding("Warn", "W001", "deployment/demo", "Consider labels.")]
+            PolicyFindings = [new KubernetesPlanPolicyFinding("Warn", "W001", "deployment/demo", "Consider labels.")]
         }));
 
         var review = (IPlanReview)plan;
@@ -106,7 +106,7 @@ public sealed class KubernetesPlanReviewTests
             "mcp-ns",
             "Scale deployment.",
             new Dictionary<string, string> { ["replicas"] = "3" },
-            [new K8sObjectRef("apps/v1", "Deployment", "mcp-ns", "demo")]));
+            [new KubernetesObjectRef("apps/v1", "Deployment", "mcp-ns", "demo")]));
 
         return KubernetesApprovalAdapter.CreateEnvelope(
             "plan-xyz",
@@ -116,17 +116,17 @@ public sealed class KubernetesPlanReviewTests
             payload);
     }
 
-    private static K8sPlanDryRun CreateDryRun() =>
+    private static KubernetesPlanDryRun CreateDryRun() =>
         new(
             "succeeded",
             FixedTime,
-            [new K8sPlanDryRunObject("apps/v1/Deployment/mcp-ns/demo", "{}")],
+            [new KubernetesPlanDryRunObject("apps/v1/Deployment/mcp-ns/demo", "{}")],
             [],
             "dry-run ok");
 
-    private static K8sPlanDiff CreateDiff() =>
+    private static KubernetesPlanDiff CreateDiff() =>
         new(
-            new K8sObjectRef("apps/v1", "Deployment", "mcp-ns", "demo"),
+            new KubernetesObjectRef("apps/v1", "Deployment", "mcp-ns", "demo"),
             "Update",
             "scaled to 3",
             "+  replicas: 3\n-  replicas: 1",

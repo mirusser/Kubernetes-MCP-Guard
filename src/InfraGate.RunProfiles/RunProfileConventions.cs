@@ -14,9 +14,16 @@ internal static class RunProfileConventions
     public static class Options
     {
         public const string Config = "--config";
+        public const string Format = "--format";
         public const string Force = "--force";
         public const string Output = "--output";
         public const string Set = "--set";
+    }
+
+    public static class Formats
+    {
+        public const string AppSettings = "appsettings";
+        public const string Env = "env";
     }
 
     public static class GeneratedFile
@@ -24,6 +31,36 @@ internal static class RunProfileConventions
         public const string HeaderLinePrefix = "# Generated from ";
         public const string ProfileMarker = " profile: ";
         public const string DoNotEditLinePrefix = "# Do not edit. Run: dotnet run --project src/InfraGate.RunProfiles -- generate ";
+        public const string MetadataSection = "_generated";
+        public const string MetadataProfile = "profile";
+        public const string MetadataSource = "source";
+    }
+
+    public static class AppSettings
+    {
+        public const string Root = "InfraGate";
+        public const string Runtime = "Runtime";
+        public const string Gateway = "Gateway";
+        public const string Auth = "Auth";
+        public const string Approval = "Approval";
+        public const string Kubernetes = "Kubernetes";
+        public const string AllowedNamespaces = "AllowedNamespaces";
+        public const string ApprovalOAuthAuthorizationEndpoint = "ApprovalOAuthAuthorizationEndpoint";
+        public const string ApprovalOAuthCallbackPath = "ApprovalOAuthCallbackPath";
+        public const string ApprovalOAuthClientId = "ApprovalOAuthClientId";
+        public const string ApprovalOAuthTokenEndpoint = "ApprovalOAuthTokenEndpoint";
+        public const string AspNetCoreUrls = "AspNetCoreUrls";
+        public const string BaseUrl = "BaseUrl";
+        public const string DownstreamAssembly = "DownstreamAssembly";
+        public const string Environment = "Environment";
+        public const string GuardAuditRoot = "GuardAuditRoot";
+        public const string KubeConfig = "KubeConfig";
+        public const string OAuthAuthority = "OAuthAuthority";
+        public const string OAuthMetadataAddress = "OAuthMetadataAddress";
+        public const string OAuthRequireHttpsMetadata = "OAuthRequireHttpsMetadata";
+        public const string OAuthResource = "OAuthResource";
+        public const string OAuthScope = "OAuthScope";
+        public const string RootPath = "Root";
     }
 
     public static class YamlKeys
@@ -36,6 +73,7 @@ internal static class RunProfileConventions
         public const string BaseUrl = "baseUrl";
         public const string BindAddress = "bindAddress";
         public const string BindPort = "bindPort";
+        public const string ConfigHostPath = "configHostPath";
         public const string DataProtectionHostPath = "dataProtectionHostPath";
         public const string Defaults = "defaults";
         public const string DomainAdapters = "domainAdapters";
@@ -81,6 +119,8 @@ internal static class RunProfileConventions
         public const string AspnetcoreUrls = "ASPNETCORE_URLS";
         public const string BindAddress = "INFRA_GATE_BIND_ADDRESS";
         public const string BindPort = "INFRA_GATE_BIND_PORT";
+        public const string ConfigHostPath = "INFRA_GATE_CONFIG_HOST_PATH";
+        public const string ConfigPath = "INFRA_GATE_CONFIG_PATH";
         public const string DataProtectionHostPath = "INFRA_GATE_DATA_PROTECTION_HOST_PATH";
         public const string DownstreamAssembly = "INFRA_GATE_DOWNSTREAM_ASSEMBLY";
         public const string GatewayImage = "INFRA_GATE_GATEWAY_IMAGE";
@@ -99,5 +139,10 @@ internal static class RunProfileConventions
     public static class DomainAdapterTypes
     {
         public const string Kubernetes = "kubernetes";
+    }
+
+    public static class RuntimeConfig
+    {
+        public const string ContainerPath = "/app/config/appsettings.InfraGate.json";
     }
 }

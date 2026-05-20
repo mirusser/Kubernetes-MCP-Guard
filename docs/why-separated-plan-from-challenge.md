@@ -22,11 +22,11 @@ KubernetesPlanPayload:
 Namespace         string
 Description       string
 Parameters        Dictionary<string,string>
-Objects           K8sObjectRef[]
+Objects           KubernetesObjectRef[]
 Manifest          string?
-DryRun            K8sPlanDryRun?
-Diffs             K8sPlanDiff[]
-PolicyFindings    K8sPlanPolicyFinding[]
+DryRun            KubernetesPlanDryRun?
+Diffs             KubernetesPlanDiff[]
+PolicyFindings    KubernetesPlanPolicyFinding[]
 ```
 
 [ApprovalChallenge](../src/InfraGate.Approvals/ApprovalChallenge.cs) — the **approval ticket**:
@@ -83,7 +83,7 @@ If a user lets a challenge expire or denies it, [`EnsureApprovedOrCreateChalleng
 
 ### 3. Two different security questions
 
-The plan answers: *"Is this change valid and policy-compliant?"* — driven by [`K8sPolicyValidator`](../src/InfraGate.KubernetesAdapter/Policy/K8sPolicyValidator.cs), the dry-run, and the manifest parser. None of that involves a user.
+The plan answers: *"Is this change valid and policy-compliant?"* — driven by [`KubernetesPolicyValidator`](../src/InfraGate.KubernetesAdapter/Policy/KubernetesPolicyValidator.cs), the dry-run, and the manifest parser. None of that involves a user.
 
 The challenge answers: *"Did the right human, while still authorized, click Approve?"* — driven by [`GatewayApprovalService.ApproveChallengeAsync`](../src/InfraGate.McpGateway/GatewayApprovalService.cs) checking:
 - The approver's `sub` claim equals `RequesterSubject` (same-subject mode).

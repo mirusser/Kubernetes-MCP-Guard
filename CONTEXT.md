@@ -54,6 +54,10 @@ _Avoid_: Gateway, approval store, workflow system
 The external OAuth/OIDC authority that authenticates **Requesters** and **Approvers** and issues JWTs consumed by the gateway.
 _Avoid_: Approval Authority, Gateway
 
+**Gateway Service Identity**:
+The machine identity used by the gateway when it calls a private downstream domain server.
+_Avoid_: Requester, Approver, user token passthrough
+
 **Mutation Intent**:
 The exact domain-specific operation that an executor may later perform after approval.
 _Avoid_: Plan payload, request body
@@ -182,6 +186,14 @@ _Avoid_: Adapter audit schema
 Domain-specific audit data attached to an **Audit Spine** event under an adapter-owned payload slot.
 _Avoid_: Generic audit fields
 
+**Notification Registry**:
+The in-memory mapping from active MCP session identifiers to their notification targets and from plan URIs to subscribed session sets, used to route **Approval Notifications** back to the right AI agent sessions.
+_Avoid_: Session store, connection pool
+
+**Approval Notification**:
+A server-to-client MCP `notifications/resources/updated` message sent when an **Approval Challenge** is approved, carrying the plan status resource URI so the AI agent's host can read the updated status and retry execution without manual prompting.
+_Avoid_: Push event, callback
+
 ## Relationships
 
 - A **Plan Envelope** wraps exactly one **Mutation Intent**
@@ -211,6 +223,11 @@ _Avoid_: Generic audit fields
 - An **Approval Challenge** does not define the **Mutation Intent**
 - An **Approval Authority** creates **Approval Challenges** and records **Challenge Outcomes**
 - An **Identity Provider** authenticates **Requesters** and **Approvers** but does not create **Approval Challenges** or issue **Approval Grants**
+- An **Identity Provider** may authenticate the **Gateway Service Identity** independently from **Requesters** and **Approvers**
+- A **Gateway Service Identity** is not a **Requester** or an **Approver**
+- A **Gateway Service Identity** does not replace **Approval Policy**, **Authorization Checks**, or **Approval Grants**
+- A **Gateway Service Identity** authenticates private downstream calls before discovery or execution behavior is exposed
+- A **Gateway Service Identity** proves the private downstream caller, not the authority to request, approve, or execute a **Mutation Intent**
 - An **Audit Trail** records the lifecycle of **Plan Envelopes**, **Approval Challenges**, **Challenge Outcomes**, **Approval Grants**, and **Execution Attempts**
 - An **Audit Spine** defines the generic lifecycle events in an **Audit Trail**
 - An **Adapter Audit Payload** may be attached to an **Audit Spine** event
@@ -271,3 +288,4 @@ _Avoid_: Generic audit fields
 - "Kubernetes adapter" was treated as if it might own approval lifecycle behavior — resolved: **Kubernetes Adapter** owns Kubernetes mutation meaning and evidence, while **Generic Approval Core** owns approval lifecycle behavior.
 - "approval page" was treated as a UI detail only — resolved: **Review Surface** rendering is implementation-specific, but it must present the trusted **Review Digest** snapshot instead of model-supplied approval content.
 - "standard" was too strong for current positioning — resolved: InfraGate is currently an **Experimental Reference Implementation** for a possible **Mutation Approval Profile**.
+- "gateway-to-server auth" was treated as user authorization — resolved: **Gateway Service Identity** authenticates the private downstream call and does not carry **Requester** or **Approver** authority.

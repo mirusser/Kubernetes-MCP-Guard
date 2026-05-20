@@ -1,4 +1,5 @@
 using InfraGate.RuntimeSafety;
+using Microsoft.Extensions.Configuration;
 
 namespace InfraGate.RuntimeSafety.Tests.UnitTests;
 
@@ -76,6 +77,40 @@ public sealed class RuntimeModeResolverTests
         var exception = Assert.Throws<InvalidOperationException>(() => RuntimeModeResolver.FromEnvironment());
 
         Assert.Contains(RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, exception.Message);
+    }
+
+    [Fact]
+    public void FromConfiguration_UsesInfraGateRuntimeEnvironment_WhenFlatEnvironmentUnset()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment] =
+                    RuntimeSafetyConventions.EnvironmentValues.Production
+            })
+            .Build();
+
+        var mode = RuntimeModeResolver.FromConfiguration(configuration);
+
+        Assert.Equal(RuntimeMode.Production, mode);
+    }
+
+    [Fact]
+    public void FromConfiguration_PrefersFlatInfraGateEnvironmentOverJsonValue()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment] =
+                    RuntimeSafetyConventions.EnvironmentValues.Development,
+                [RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment] =
+                    RuntimeSafetyConventions.EnvironmentValues.Production
+            })
+            .Build();
+
+        var mode = RuntimeModeResolver.FromConfiguration(configuration);
+
+        Assert.Equal(RuntimeMode.Development, mode);
     }
 
     private sealed class EnvironmentVariableScope : IDisposable
