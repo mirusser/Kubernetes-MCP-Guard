@@ -41,7 +41,7 @@ internal static class DownstreamAuthFilter
         CancellationToken cancellationToken)
         where TParams : RequestParams
     {
-        var validator = request.Services?.GetRequiredService<DownstreamTokenValidator>();
+        var validator = request.Services?.GetService<DownstreamTokenValidator>();
         if (validator is null)
         {
             // No validator registered — this means Required=false; pass through
