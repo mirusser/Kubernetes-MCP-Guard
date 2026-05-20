@@ -722,6 +722,8 @@ public sealed class RunProfileCliTests
             "INFRA_GATE_BIND_ADDRESS",
             "INFRA_GATE_BIND_PORT",
             "INFRA_GATE_GATEWAY_IMAGE",
+            "INFRA_GATE_CONFIG_PATH",
+            "INFRA_GATE_CONFIG_HOST_PATH",
             "INFRA_GATE_KUBECONFIG_HOST_PATH",
             "INFRA_GATE_APPROVAL_HOST_PATH",
             "INFRA_GATE_GUARD_AUDIT_HOST_PATH",
