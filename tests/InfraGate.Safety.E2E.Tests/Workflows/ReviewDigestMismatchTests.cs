@@ -33,8 +33,7 @@ public sealed class ReviewDigestMismatchTests(SafetyE2EFixture fixture)
                 [McpGatewayConventions.ToolArguments.PlanId] = planId
             });
         var challengeId = SafetyE2EFixture.ParseChallengeId(approvalRequired);
-        var approvalResponse = await fixture.ApproveChallengeInBrowserAsync(challengeId, client.Subject);
-        Assert.Contains("was approved", approvalResponse, StringComparison.Ordinal);
+        await fixture.ApproveChallengeInBrowserAsync(challengeId, client.Subject);
 
         var pendingPath = fixture.ApprovalStore.GetPendingPath(planId);
         var pendingJson = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);

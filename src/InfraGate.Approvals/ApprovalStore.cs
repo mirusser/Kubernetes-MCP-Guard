@@ -94,64 +94,80 @@ public sealed class ApprovalStore
     {
         if (!IsSafePlanId(planId))
         {
-            return GrantedPlanResult.Denied("Plan id contains unsupported characters.", grantExists: false);
+            return GrantedPlanResult.Denied(
+                "Plan id contains unsupported characters.",
+                grantExists: false,
+                reasonCode: ApprovalConventions.ResultReasonCodes.InvalidPlanId);
         }
 
         var pendingPath = GetPendingPath(planId);
         if (!File.Exists(pendingPath))
         {
-            return GrantedPlanResult.MissingGrant($"No pending plan exists for '{planId}'.");
+            return GrantedPlanResult.MissingGrant(
+                $"No pending plan exists for '{planId}'.",
+                ApprovalConventions.ResultReasonCodes.PlanNotPending);
         }
 
         var appliedPath = GetAppliedPath(planId);
         if (File.Exists(appliedPath))
         {
-            return GrantedPlanResult.Denied($"Plan '{planId}' was already applied.", grantExists: false);
+            return GrantedPlanResult.Denied(
+                $"Plan '{planId}' was already applied.",
+                grantExists: false,
+                reasonCode: ApprovalConventions.ResultReasonCodes.PlanAlreadyApplied);
         }
 
         var grant = await GetGrantAsync(planId, cancellationToken);
         if (grant is null)
         {
-            return GrantedPlanResult.MissingGrant($"Plan '{planId}' is not approved yet.");
+            return GrantedPlanResult.MissingGrant(
+                $"Plan '{planId}' is not approved yet.",
+                ApprovalConventions.ResultReasonCodes.PlanNotApproved);
         }
 
         var read = await ReadEnvelopeAsync(planId, pendingPath, cancellationToken);
         if (read.Envelope is null)
         {
-            return GrantedPlanResult.Denied(read.Message);
+            return GrantedPlanResult.Denied(read.Message, reasonCode: read.ReasonCode);
         }
 
         var validation = ValidateGrant(read.Envelope, grant);
 
         return validation is null
             ? GrantedPlanResult.Granted(read.Envelope, grant)
-            : GrantedPlanResult.Denied(validation);
+            : GrantedPlanResult.Denied(validation.Message, reasonCode: validation.ReasonCode);
     }
 
     public async Task<PendingPlanResult> GetPendingPlanAsync(string planId, CancellationToken cancellationToken)
     {
         if (!IsSafePlanId(planId))
         {
-            return PendingPlanResult.Denied("Plan id contains unsupported characters.");
+            return PendingPlanResult.Denied(
+                "Plan id contains unsupported characters.",
+                ApprovalConventions.ResultReasonCodes.InvalidPlanId);
         }
 
         var pendingPath = GetPendingPath(planId);
         if (!File.Exists(pendingPath))
         {
-            return PendingPlanResult.Denied($"No pending plan exists for '{planId}'.");
+            return PendingPlanResult.Denied(
+                $"No pending plan exists for '{planId}'.",
+                ApprovalConventions.ResultReasonCodes.PlanNotPending);
         }
 
         var appliedPath = GetAppliedPath(planId);
         if (File.Exists(appliedPath))
         {
-            return PendingPlanResult.Denied($"Plan '{planId}' was already applied.");
+            return PendingPlanResult.Denied(
+                $"Plan '{planId}' was already applied.",
+                ApprovalConventions.ResultReasonCodes.PlanAlreadyApplied);
         }
 
         var actualHash = await ComputeSha256Async(pendingPath, cancellationToken);
         var read = await ReadEnvelopeAsync(planId, pendingPath, cancellationToken);
 
         return read.Envelope is null
-            ? PendingPlanResult.Denied(read.Message)
+            ? PendingPlanResult.Denied(read.Message, read.ReasonCode)
             : PendingPlanResult.Found(read.Envelope, pendingPath, actualHash);
     }
 
@@ -308,25 +324,31 @@ public sealed class ApprovalStore
         }
         catch (JsonException)
         {
-            return EnvelopeReadResult.Failed($"Plan '{planId}' could not be read.");
+            return EnvelopeReadResult.Failed(
+                $"Plan '{planId}' could not be read.",
+                ApprovalConventions.ResultReasonCodes.PlanReadFailed);
         }
 
         if (envelope is null)
         {
-            return EnvelopeReadResult.Failed($"Plan '{planId}' could not be read.");
+            return EnvelopeReadResult.Failed(
+                $"Plan '{planId}' could not be read.",
+                ApprovalConventions.ResultReasonCodes.PlanReadFailed);
         }
 
         var validation = ValidateEnvelope(planId, envelope);
         return validation is null
             ? EnvelopeReadResult.Success(envelope)
-            : EnvelopeReadResult.Failed(validation);
+            : EnvelopeReadResult.Failed(validation.Message, validation.ReasonCode);
     }
 
-    private static string? ValidateEnvelope(string planId, PlanEnvelope envelope)
+    private static ResultFailure? ValidateEnvelope(string planId, PlanEnvelope envelope)
     {
         if (!string.Equals(envelope.Id, planId, StringComparison.Ordinal))
         {
-            return $"Plan '{planId}' file contains mismatched plan id '{envelope.Id}'.";
+            return new ResultFailure(
+                $"Plan '{planId}' file contains mismatched plan id '{envelope.Id}'.",
+                ApprovalConventions.ResultReasonCodes.PlanReadFailed);
         }
 
         if (string.IsNullOrWhiteSpace(envelope.AdapterId) ||
@@ -342,7 +364,9 @@ public sealed class ApprovalStore
             envelope.ValidUntilUtc <= envelope.ValidFromUtc ||
             envelope.Payload.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
         {
-            return $"Plan '{planId}' uses an old approval file format. Re-request the plan.";
+            return new ResultFailure(
+                $"Plan '{planId}' uses an old approval file format. Re-request the plan.",
+                ApprovalConventions.ResultReasonCodes.PlanUnsupportedFormat);
         }
 
         return null;
@@ -363,22 +387,28 @@ public sealed class ApprovalStore
     private static bool IsSupportedReusePolicy(ExecutionReusePolicy policy) =>
         string.Equals(policy.Type, ApprovalConventions.ExecutionReusePolicyTypes.SingleExecution, StringComparison.Ordinal);
 
-    private static string? ValidateGrant(PlanEnvelope envelope, ApprovalGrant grant)
+    private static ResultFailure? ValidateGrant(PlanEnvelope envelope, ApprovalGrant grant)
     {
         var now = DateTimeOffset.UtcNow;
         if (envelope.ValidFromUtc > now)
         {
-            return $"Plan '{envelope.Id}' is not valid yet.";
+            return new ResultFailure(
+                $"Plan '{envelope.Id}' is not valid yet.",
+                ApprovalConventions.ResultReasonCodes.PlanNotStarted);
         }
 
         if (envelope.ValidUntilUtc <= now)
         {
-            return $"Plan '{envelope.Id}' expired before execution.";
+            return new ResultFailure(
+                $"Plan '{envelope.Id}' expired before execution.",
+                ApprovalConventions.ResultReasonCodes.PlanExpired);
         }
 
         if (grant.ExpiresAtUtc <= now)
         {
-            return $"Approval grant '{grant.Id}' expired before execution.";
+            return new ResultFailure(
+                $"Approval grant '{grant.Id}' expired before execution.",
+                ApprovalConventions.ResultReasonCodes.GrantExpired);
         }
 
         if (!string.Equals(grant.PlanId, envelope.Id, StringComparison.Ordinal) ||
@@ -388,19 +418,25 @@ public sealed class ApprovalStore
             !SamePolicy(grant.ApprovalPolicy, envelope.ApprovalPolicy) ||
             !SameReusePolicy(grant.ExecutionReusePolicy, envelope.ExecutionReusePolicy))
         {
-            return $"Approval grant '{grant.Id}' no longer matches plan '{envelope.Id}'.";
+            return new ResultFailure(
+                $"Approval grant '{grant.Id}' no longer matches plan '{envelope.Id}'.",
+                ApprovalConventions.ResultReasonCodes.InvalidGrant);
         }
 
         if (string.Equals(envelope.ApprovalPolicy.Type, ApprovalConventions.ApprovalPolicyTypes.SameSubject, StringComparison.Ordinal) &&
             !string.Equals(grant.RequesterSubject, grant.ApproverSubject, StringComparison.Ordinal))
         {
-            return $"Approval grant '{grant.Id}' violates same-subject approval policy.";
+            return new ResultFailure(
+                $"Approval grant '{grant.Id}' violates same-subject approval policy.",
+                ApprovalConventions.ResultReasonCodes.InvalidGrant);
         }
 
         var actualReviewDigest = PlanEnvelopeFactory.ComputeReviewDigest(envelope);
         if (!SameDigest(envelope.ReviewDigest, actualReviewDigest))
         {
-            return $"Plan '{envelope.Id}' review digest no longer matches the pending plan.";
+            return new ResultFailure(
+                $"Plan '{envelope.Id}' review digest no longer matches the pending plan.",
+                ApprovalConventions.ResultReasonCodes.DigestChanged);
         }
 
         return null;
@@ -441,12 +477,14 @@ public sealed class ApprovalStore
             payload);
     }
 
-    private sealed record EnvelopeReadResult(PlanEnvelope? Envelope, string Message)
+    private sealed record ResultFailure(string Message, string ReasonCode);
+
+    private sealed record EnvelopeReadResult(PlanEnvelope? Envelope, string Message, string? ReasonCode)
     {
         public static EnvelopeReadResult Success(PlanEnvelope envelope) =>
-            new(envelope, "Read.");
+            new(envelope, "Read.", ReasonCode: null);
 
-        public static EnvelopeReadResult Failed(string message) =>
-            new(null, message);
+        public static EnvelopeReadResult Failed(string message, string reasonCode) =>
+            new(null, message, reasonCode);
     }
 }

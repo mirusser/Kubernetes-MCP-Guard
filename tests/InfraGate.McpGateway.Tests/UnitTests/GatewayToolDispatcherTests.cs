@@ -14,6 +14,7 @@ namespace InfraGate.McpGateway.Tests.UnitTests;
 public sealed class GatewayToolDispatcherTests
 {
     private const string Subject = "requester";
+    private const string RefusedReasonCode = "approval.refused.test";
 
     [Fact]
     public async Task CallToolAsync_RawDestructiveTool_ReturnsErrorWithoutCallingDownstream()
@@ -62,6 +63,30 @@ public sealed class GatewayToolDispatcherTests
         Assert.False(File.Exists(context.Store.GetAppliedPath(envelope.Id)));
         Assert.Empty(executor.ExecuteCalls);
         Assert.Single(executor.PreExecutionCalls);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_RefusedApprovalGate_ReturnsErrorWithoutParsingMessageText()
+    {
+        const string refusalMessage = "Approval cannot continue.";
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            approvals: new FakeGatewayApprovalService(
+                ApprovalGateResult.Refused(refusalMessage, RefusedReasonCode)));
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+                Arguments = new Dictionary<string, JsonElement>
+                {
+                    [McpGatewayConventions.ToolArguments.PlanId] = JsonSerializer.SerializeToElement("plan-1")
+                }
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Equal(refusalMessage, Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
     }
 
     [Fact]
@@ -167,7 +192,8 @@ public sealed class GatewayToolDispatcherTests
 
     private static TestContext CreateContext(
         IDomainPlanExecutor planExecutor,
-        IDomainPlanBuilder? planBuilder = null)
+        IDomainPlanBuilder? planBuilder = null,
+        IGatewayApprovalService? approvals = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-dispatcher-tests", Guid.NewGuid().ToString("N"));
         var storeOptions = new ApprovalStoreOptions(root);
@@ -199,7 +225,7 @@ public sealed class GatewayToolDispatcherTests
             audit,
             httpContextAccessor,
             NullLogger<GuardedToolRunner>.Instance);
-        var approvals = new GatewayApprovalService(
+        var gatewayApprovalService = approvals ?? new GatewayApprovalService(
             store,
             challenges,
             new KubernetesPlanReviewAdapter(),
@@ -219,7 +245,7 @@ public sealed class GatewayToolDispatcherTests
                 new DownstreamToolRegistry(downstream),
                 guardedRunner,
                 domainAdapter,
-                approvals,
+                gatewayApprovalService,
                 store,
                 new ApprovalPreExecutionGate(store, new ApprovalStoreAuditPublisher(store)),
                 httpContextAccessor,
@@ -375,6 +401,34 @@ public sealed class GatewayToolDispatcherTests
     {
         public Task WriteAsync(GuardrailAuditEvent auditEvent, CancellationToken cancellationToken) =>
             Task.CompletedTask;
+    }
+
+    private sealed class FakeGatewayApprovalService(ApprovalGateResult gateResult) : IGatewayApprovalService
+    {
+        public Task<ApprovalGateResult> EnsureApprovedOrCreateChallengeAsync(
+            string planId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(gateResult);
+
+        public Task<ApprovalPageModel> GetApprovalPageAsync(
+            string challengeId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<ApprovalDecisionResult> ApproveChallengeAsync(
+            string challengeId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<ApprovalDecisionResult> DenyChallengeAsync(
+            string challengeId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<ApprovalDecisionResult> CancelChallengeAsync(
+            string challengeId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed record TestContext(

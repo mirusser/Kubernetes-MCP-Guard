@@ -21,7 +21,7 @@ public sealed class ApprovalPreExecutionGate(
         var granted = await approvalStore.GetGrantedPlanAsync(planId, cancellationToken).ConfigureAwait(false);
         if (!granted.IsGranted || granted.Envelope is null || granted.Grant is null)
         {
-            return PreExecutionGateResult.Blocked(planId, granted.Message);
+            return PreExecutionGateResult.Blocked(planId, granted.Message, granted.ReasonCode);
         }
 
         await auditPublisher.PublishAsync(

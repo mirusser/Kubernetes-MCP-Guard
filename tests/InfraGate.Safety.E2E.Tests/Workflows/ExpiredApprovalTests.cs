@@ -31,7 +31,7 @@ public sealed class ExpiredApprovalTests(SafetyE2EFixture fixture)
             // Create a challenge for the pending plan, then force it into the past.
             var firstResult = await approvals.EnsureApprovedOrCreateChallengeAsync(planId, CancellationToken.None);
             Assert.False(firstResult.IsApproved);
-            var challengeId = ExtractChallengeId(firstResult.Message);
+            var challengeId = firstResult.ChallengeId!;
 
             var challenge = await fixture.ChallengeStore.GetAsync(challengeId, CancellationToken.None)
                 ?? throw new InvalidOperationException("Challenge not found after creation.");
@@ -42,7 +42,7 @@ public sealed class ExpiredApprovalTests(SafetyE2EFixture fixture)
             var afterChallenge = await fixture.ChallengeStore.GetAsync(challengeId, CancellationToken.None);
 
             Assert.False(approveResult.Succeeded);
-            Assert.Contains("expired", approveResult.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(ApprovalConventions.ResultReasonCodes.ChallengeExpired, approveResult.ReasonCode);
             Assert.Equal(ApprovalConventions.ChallengeStatuses.Expired, afterChallenge?.Status);
             Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
 
@@ -55,11 +55,4 @@ public sealed class ExpiredApprovalTests(SafetyE2EFixture fixture)
             fixture.ClearAuthenticatedSubject();
         }
     }
-
-    private static string ExtractChallengeId(string message) =>
-        message
-            .Split(Environment.NewLine)
-            .Single(line => line.StartsWith("Approval URL:", StringComparison.Ordinal))
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .Last();
 }

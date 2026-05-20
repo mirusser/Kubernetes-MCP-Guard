@@ -36,7 +36,9 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                 BuildRestartDeploymentAsync(arguments, requester, ct),
             KubernetesAdapterConventions.MutationTools.SetDeploymentImage =>
                 BuildSetDeploymentImageAsync(arguments, requester, ct),
-            _ => Task.FromResult(PlanBuildResult.Failed($"Unsupported mutation tool '{mutationToolName}'."))
+            _ => Task.FromResult(PlanBuildResult.Failed(
+                $"Unsupported mutation tool '{mutationToolName}'.",
+                KubernetesAdapterConventions.ResultReasonCodes.UnsupportedMutationTool))
         };
 
     private async Task<PlanBuildResult> BuildApplyManifestAsync(
@@ -47,7 +49,9 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         if (!TryGetString(arguments, KubernetesAdapterConventions.EvidenceArguments.Namespace, out var namespaceName) ||
             !TryGetString(arguments, KubernetesAdapterConventions.EvidenceArguments.Manifest, out var manifest))
         {
-            return PlanBuildResult.Failed("Missing required arguments: namespace and manifest.");
+            return PlanBuildResult.Failed(
+                "Missing required arguments: namespace and manifest.",
+                KubernetesAdapterConventions.ResultReasonCodes.MissingArguments);
         }
 
         var applyEvidenceJson = await toolCaller.CallAsync(
@@ -67,19 +71,28 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         catch (JsonException)
         {
             var message = $"Evidence dry-run failed: {applyEvidenceJson}";
-            return PlanBuildResult.Failed(message, DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message));
+            return PlanBuildResult.Failed(
+                message,
+                DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message),
+                KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed);
         }
 
         if (applyEvidence is null)
         {
             const string message = "Evidence dry-run returned an empty result.";
-            return PlanBuildResult.Failed(message, DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message));
+            return PlanBuildResult.Failed(
+                message,
+                DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message),
+                KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed);
         }
 
         if (applyEvidence.PolicyBlocked)
         {
             var message = $"Manifest rejected by policy:{Environment.NewLine}{applyEvidence.PolicyRefusal}";
-            return PlanBuildResult.Failed(message, DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message));
+            return PlanBuildResult.Failed(
+                message,
+                DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message),
+                KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked);
         }
 
         var diffJson = await toolCaller.CallAsync(
@@ -105,7 +118,8 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                     KubernetesAdapterConventions.PlanOperations.Apply,
                     namespaceName,
                     applyEvidence.DryRun.Objects.Select(obj => obj.Object).ToArray(),
-                    message));
+                    message),
+                KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceFailed);
         }
 
         if (diffs is null)
@@ -117,7 +131,8 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                     KubernetesAdapterConventions.PlanOperations.Apply,
                     namespaceName,
                     applyEvidence.DryRun.Objects.Select(obj => obj.Object).ToArray(),
-                    message));
+                    message),
+                KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceEmpty);
         }
 
         var objects = diffs.Select(d => d.Object).ToArray();
@@ -152,7 +167,9 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         if (!TryGetString(arguments, KubernetesAdapterConventions.EvidenceArguments.Namespace, out var namespaceName) ||
             !TryGetString(arguments, KubernetesAdapterConventions.EvidenceArguments.Manifest, out var manifest))
         {
-            return PlanBuildResult.Failed("Missing required arguments: namespace and manifest.");
+            return PlanBuildResult.Failed(
+                "Missing required arguments: namespace and manifest.",
+                KubernetesAdapterConventions.ResultReasonCodes.MissingArguments);
         }
 
         var dryRunJson = await toolCaller.CallAsync(
@@ -167,7 +184,9 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         var dryRun = DeserializeDryRun(dryRunJson);
         if (dryRun is null)
         {
-            return PlanBuildResult.Failed($"Evidence dry-run failed: {dryRunJson}");
+            return PlanBuildResult.Failed(
+                $"Evidence dry-run failed: {dryRunJson}",
+                KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed);
         }
 
         var diffJson = await toolCaller.CallAsync(
@@ -193,7 +212,8 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                     KubernetesAdapterConventions.PlanOperations.Delete,
                     namespaceName,
                     dryRun.Objects.Select(obj => obj.Object).ToArray(),
-                    message));
+                    message),
+                KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceFailed);
         }
 
         if (diffs is null)
@@ -205,7 +225,8 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                     KubernetesAdapterConventions.PlanOperations.Delete,
                     namespaceName,
                     dryRun.Objects.Select(obj => obj.Object).ToArray(),
-                    message));
+                    message),
+                KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceEmpty);
         }
 
         var objects = diffs.Select(d => d.Object).ToArray();
@@ -239,7 +260,9 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             !TryGetString(arguments, KubernetesAdapterConventions.EvidenceArguments.Name, out var name) ||
             !TryGetInt(arguments, KubernetesAdapterConventions.EvidenceArguments.Replicas, out int replicas))
         {
-            return PlanBuildResult.Failed("Missing required arguments: namespace, name, and replicas.");
+            return PlanBuildResult.Failed(
+                "Missing required arguments: namespace, name, and replicas.",
+                KubernetesAdapterConventions.ResultReasonCodes.MissingArguments);
         }
 
         var dryRunJson = await toolCaller.CallAsync(
@@ -255,7 +278,9 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         var dryRun = DeserializeDryRun(dryRunJson);
         if (dryRun is null)
         {
-            return PlanBuildResult.Failed($"Evidence dry-run failed: {dryRunJson}");
+            return PlanBuildResult.Failed(
+                $"Evidence dry-run failed: {dryRunJson}",
+                KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed);
         }
 
         var diffJson = await toolCaller.CallAsync(
@@ -280,7 +305,8 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                     KubernetesAdapterConventions.PlanOperations.Scale,
                     namespaceName,
                     dryRun.Objects.Select(obj => obj.Object).ToArray(),
-                    message));
+                    message),
+                KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceFailed);
         }
 
         var deploymentRef = new KubernetesObjectRef("apps/v1", "Deployment", namespaceName, name);
@@ -313,7 +339,9 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         if (!TryGetString(arguments, KubernetesAdapterConventions.EvidenceArguments.Namespace, out var namespaceName) ||
             !TryGetString(arguments, KubernetesAdapterConventions.EvidenceArguments.Name, out var name))
         {
-            return PlanBuildResult.Failed("Missing required arguments: namespace and name.");
+            return PlanBuildResult.Failed(
+                "Missing required arguments: namespace and name.",
+                KubernetesAdapterConventions.ResultReasonCodes.MissingArguments);
         }
 
         var dryRunJson = await toolCaller.CallAsync(
@@ -328,7 +356,9 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         var dryRun = DeserializeDryRun(dryRunJson);
         if (dryRun is null)
         {
-            return PlanBuildResult.Failed($"Evidence dry-run failed: {dryRunJson}");
+            return PlanBuildResult.Failed(
+                $"Evidence dry-run failed: {dryRunJson}",
+                KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed);
         }
 
         var diffJson = await toolCaller.CallAsync(
@@ -352,7 +382,8 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                     KubernetesAdapterConventions.PlanOperations.Restart,
                     namespaceName,
                     dryRun.Objects.Select(obj => obj.Object).ToArray(),
-                    message));
+                    message),
+                KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceFailed);
         }
 
         var restartedAtUtc = DateTimeOffset.UtcNow.ToString(ApprovalConventions.DateTimeFormats.RoundTrip);
@@ -388,7 +419,9 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             !TryGetString(arguments, KubernetesAdapterConventions.EvidenceArguments.Container, out var container) ||
             !TryGetString(arguments, KubernetesAdapterConventions.EvidenceArguments.Image, out var image))
         {
-            return PlanBuildResult.Failed("Missing required arguments: namespace, name, container, and image.");
+            return PlanBuildResult.Failed(
+                "Missing required arguments: namespace, name, container, and image.",
+                KubernetesAdapterConventions.ResultReasonCodes.MissingArguments);
         }
 
         var policyResult = KubernetesPolicyValidator.ValidateSetDeploymentImage(
@@ -399,7 +432,9 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             KubernetesPolicyOptions.Default);
         if (policyResult.IsDenied)
         {
-            return PlanBuildResult.Failed($"Set deployment image rejected by policy:{Environment.NewLine}{policyResult.FormatRefusal()}");
+            return PlanBuildResult.Failed(
+                $"Set deployment image rejected by policy:{Environment.NewLine}{policyResult.FormatRefusal()}",
+                KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked);
         }
 
         var dryRunJson = await toolCaller.CallAsync(
@@ -416,7 +451,9 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         var dryRun = DeserializeDryRun(dryRunJson);
         if (dryRun is null)
         {
-            return PlanBuildResult.Failed($"Evidence dry-run failed: {dryRunJson}");
+            return PlanBuildResult.Failed(
+                $"Evidence dry-run failed: {dryRunJson}",
+                KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed);
         }
 
         var diffJson = await toolCaller.CallAsync(
@@ -442,7 +479,8 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                     KubernetesAdapterConventions.PlanOperations.SetImage,
                     namespaceName,
                     dryRun.Objects.Select(obj => obj.Object).ToArray(),
-                    message));
+                    message),
+                KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceFailed);
         }
 
         var deploymentRef = new KubernetesObjectRef("apps/v1", "Deployment", namespaceName, name);

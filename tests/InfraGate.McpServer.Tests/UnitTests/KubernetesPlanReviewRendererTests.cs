@@ -15,11 +15,11 @@ public sealed class KubernetesPlanReviewRendererTests
 
         var html = Renderer.RenderReviewContent(plan);
 
-        Assert.Contains("<h2>Objects</h2>", html);
+        Assert.Contains("data-section=\"objects\"", html);
         Assert.Contains("apps/v1 Deployment mcp-ns/demo", html);
-        Assert.Contains("<h2>Dry-run Results</h2>", html);
+        Assert.Contains("data-section=\"dry-run-results\"", html);
         Assert.Contains("Server-side dry-run: succeeded", html);
-        Assert.Contains("<h2>Diff</h2>", html);
+        Assert.Contains("data-section=\"diff\"", html);
         Assert.Contains("scaled to 3", html);
     }
 
@@ -30,7 +30,7 @@ public sealed class KubernetesPlanReviewRendererTests
 
         var html = Renderer.RenderReviewContent(plan);
 
-        Assert.Contains("<h2>Policy Findings</h2>", html);
+        Assert.Contains("data-section=\"policy-findings\"", html);
         Assert.Contains("Warn", html);
         Assert.Contains("W001", html);
         Assert.Contains("Memory limit not set.", html);
@@ -43,7 +43,7 @@ public sealed class KubernetesPlanReviewRendererTests
 
         var html = Renderer.RenderReviewContent(plan);
 
-        Assert.Contains("Submitted Manifest", html);
+        Assert.Contains("data-section=\"submitted-manifest\"", html);
         Assert.Contains("apiVersion: apps/v1", html);
     }
 
@@ -54,7 +54,7 @@ public sealed class KubernetesPlanReviewRendererTests
 
         var html = Renderer.RenderReviewContent(plan);
 
-        Assert.DoesNotContain("Submitted Manifest", html);
+        Assert.DoesNotContain("data-section=\"submitted-manifest\"", html);
     }
 
     [Fact]

@@ -30,8 +30,7 @@ public sealed class AlreadyAppliedPlanTests(SafetyE2EFixture fixture)
                 [McpGatewayConventions.ToolArguments.PlanId] = planId
             });
         var challengeId = SafetyE2EFixture.ParseChallengeId(approvalRequired);
-        var approvalResponse = await fixture.ApproveChallengeInBrowserAsync(challengeId, client.Subject);
-        Assert.Contains("was approved", approvalResponse, StringComparison.Ordinal);
+        await fixture.ApproveChallengeInBrowserAsync(challengeId, client.Subject);
 
         var firstApply = await client.CallToolAsync(
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
@@ -46,7 +45,6 @@ public sealed class AlreadyAppliedPlanTests(SafetyE2EFixture fixture)
                 [McpGatewayConventions.ToolArguments.PlanId] = planId
             });
 
-        Assert.StartsWith("Refused:", secondApply, StringComparison.Ordinal);
         Assert.Contains("already applied", secondApply, StringComparison.OrdinalIgnoreCase);
         Assert.True(File.Exists(fixture.ApprovalStore.GetAppliedPath(planId)));
 

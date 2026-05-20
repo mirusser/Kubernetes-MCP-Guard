@@ -85,6 +85,23 @@ public static class KubernetesAdapterConventions
         public const string NoDrift = "ok";
     }
 
+    public static class ResultReasonCodes
+    {
+        public const string DiffEvidenceEmpty = "kubernetes.diff_evidence.empty";
+        public const string DiffEvidenceFailed = "kubernetes.diff_evidence.failed";
+        public const string DryRunFailed = "kubernetes.dry_run.failed";
+        public const string EvidenceDigestChanged = "kubernetes.evidence_digest.changed";
+        public const string IntentDigestChanged = "kubernetes.intent_digest.changed";
+        public const string LiveDrift = "kubernetes.live_drift.detected";
+        public const string MissingArguments = "kubernetes.arguments.missing";
+        public const string PayloadReadFailed = "kubernetes.payload.read_failed";
+        public const string PolicyBlocked = "kubernetes.policy.blocked";
+        public const string PreExecuteDryRunFailed = "kubernetes.pre_execute_dry_run.failed";
+        public const string UnsupportedAdapter = "kubernetes.adapter.unsupported";
+        public const string UnsupportedMutationTool = "kubernetes.mutation_tool.unsupported";
+        public const string UnsupportedOperation = "kubernetes.operation.unsupported";
+    }
+
     public static class PlanOperations
     {
         public const string Apply = "apply";

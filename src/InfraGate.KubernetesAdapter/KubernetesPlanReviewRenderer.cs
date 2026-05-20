@@ -59,7 +59,7 @@ public sealed class KubernetesPlanReviewRenderer : IPlanReviewRenderer
                 $"<li>{Html(obj.ApiVersion)} {Html(obj.Kind)} {Html(obj.Namespace)}/{Html(obj.Name)}</li>"));
 
         return $"""
-                <section class="card">
+                <section class="card" data-section="objects">
                   <h2>Objects</h2>
                   <ul>{objects}</ul>
                 </section>
@@ -69,7 +69,7 @@ public sealed class KubernetesPlanReviewRenderer : IPlanReviewRenderer
     private static string RenderManifestCard(KubernetesPlan plan)
     {
         return $"""
-                <section class="card">
+                <section class="card" data-section="submitted-manifest">
                   <h2>Submitted Manifest</h2>
                   <details>
                     <summary>View manifest</summary>
@@ -88,7 +88,7 @@ public sealed class KubernetesPlanReviewRenderer : IPlanReviewRenderer
                     $"<li><span class=\"badge badge-{Html(finding.Severity.ToLowerInvariant())}\">{Html(finding.Severity)}</span> [{Html(finding.Code)}] {Html(finding.Message)} <span class=\"kv-label\">{Html(finding.ObjectRef)}</span></li>")) + "</ul>");
 
         return $"""
-                <section class="card">
+                <section class="card" data-section="policy-findings">
                   <h2>Policy Findings</h2>
                   {body}
                 </section>
@@ -109,7 +109,7 @@ public sealed class KubernetesPlanReviewRenderer : IPlanReviewRenderer
             ? "success" : "error";
 
         return $"""
-                <section class="card">
+                <section class="card" data-section="dry-run-results">
                   <h2>Dry-run Results</h2>
                   <p class="{statusClass}">Server-side dry-run: {Html(dr.Status)}</p>
                   <div class="kv-grid">
@@ -131,7 +131,7 @@ public sealed class KubernetesPlanReviewRenderer : IPlanReviewRenderer
         if (plan.Diffs.Length == 0)
         {
             return """
-                   <section class="card">
+                   <section class="card" data-section="diff">
                      <h2>Diff</h2>
                      <p class="error">No diff was recorded for this plan.</p>
                    </section>
@@ -139,7 +139,7 @@ public sealed class KubernetesPlanReviewRenderer : IPlanReviewRenderer
         }
 
         return """
-               <section class="card">
+               <section class="card" data-section="diff">
                  <h2>Diff</h2>
                """ + string.Join(string.Empty, plan.Diffs.Select(RenderDiff)) + "</section>";
     }

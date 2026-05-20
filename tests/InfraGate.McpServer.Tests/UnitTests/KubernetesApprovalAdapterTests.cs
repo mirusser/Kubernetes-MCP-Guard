@@ -141,7 +141,7 @@ public sealed class KubernetesApprovalAdapterTests
         var result = KubernetesApprovalAdapter.Decode(tamperedEnvelope);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("intent digest", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.IntentDigestChanged, result.ReasonCode);
     }
 
     private static PlanEnvelope<KubernetesPlanPayload> CreatePlan(KubernetesPlanPayload payload) =>

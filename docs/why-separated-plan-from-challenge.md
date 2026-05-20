@@ -95,7 +95,7 @@ Splitting the records makes it impossible for one concern to silently mutate the
 
 ### 4. Hash binding, decoupled from approval mechanics
 
-When a challenge is created, it snapshots the current `PendingPlanHash`. If the pending plan file changes between challenge creation and the approve click, the hash comparison in [GatewayApprovalService.cs](../src/InfraGate.McpGateway/GatewayApprovalService.cs) detects it and refuses approval ("The pending plan changed after this approval URL was created."). This is the safety property proved by [`ModifiedPendingPlanTests`](../tests/InfraGate.Safety.E2E.Tests/Workflows/ModifiedPendingPlanTests.cs) and [`ApproveChallengeAsync_PendingPlanHashDrift_Rejects`](../tests/InfraGate.McpGateway.Tests/UnitTests/GatewayApprovalServiceTests.cs).
+When a challenge is created, it snapshots the current `PendingPlanHash`. If the pending plan file changes between challenge creation and the approve click, the hash comparison in [GatewayApprovalService.cs](../src/InfraGate.McpGateway/GatewayApprovalService.cs) detects it and returns the `approval.challenge.pending_plan_changed` reason code with a user-facing refusal message. This is the safety property proved by [`ModifiedPendingPlanTests`](../tests/InfraGate.Safety.E2E.Tests/Workflows/ModifiedPendingPlanTests.cs) and [`ApproveChallengeAsync_PendingPlanHashDrift_Rejects`](../tests/InfraGate.McpGateway.Tests/UnitTests/GatewayApprovalServiceTests.cs).
 
 If the plan and challenge were one record, there would be no "before" snapshot to compare against.
 
@@ -115,7 +115,7 @@ The roadmap ([.agents/Plans/archive/security-roadmap.md §13](../.agents/Plans/a
 2. AI client calls execute_approved_plan(planId)
    └── Gateway asks ApprovalStore.GetGrantedPlanAsync
        └── No grants/<planId>.json exists yet
-           Gateway sees "Refused: not approved"
+           Gateway receives ApprovalGateStatus.Refused / approval.plan.not_approved
        Gateway's EnsureApprovedOrCreateChallengeAsync sees no challenge either
            Creates ApprovalChallenge, writes challenges/<challengeId>.json
            Audit: challenge.created  (ApprovalChallengeCreatedPayload)
