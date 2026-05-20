@@ -120,17 +120,12 @@ public sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, IAs
             : [options.DownstreamAssembly];
 
         var environmentVariables = new Dictionary<string, string?>();
-        foreach (string? key in Environment.GetEnvironmentVariables().Keys)
+        foreach (string name in McpGatewayConventions.DownstreamProcess.AllowedEnvironmentVariables)
         {
-            if (key is null)
-            {
-                continue;
-            }
-
-            string? value = Environment.GetEnvironmentVariable(key);
+            string? value = Environment.GetEnvironmentVariable(name);
             if (value is not null)
             {
-                environmentVariables[key] = value;
+                environmentVariables[name] = value;
             }
         }
 

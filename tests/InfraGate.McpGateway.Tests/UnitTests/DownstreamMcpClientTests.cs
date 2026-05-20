@@ -1,5 +1,8 @@
+using InfraGate.Approvals;
+using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.RuntimeSafety;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace InfraGate.McpGateway.Tests.UnitTests;
@@ -7,7 +10,7 @@ namespace InfraGate.McpGateway.Tests.UnitTests;
 public sealed class DownstreamMcpClientTests
 {
     [Fact]
-    public void CreateTransportOptions_ForwardsAllEnvironmentVariables()
+    public void CreateTransportOptions_OnlyForwardsAllowedEnvironmentVariables()
     {
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
@@ -16,12 +19,122 @@ public sealed class DownstreamMcpClientTests
         var transportOptions = client.CreateTransportOptions();
 
         Assert.NotNull(transportOptions.EnvironmentVariables);
-        Assert.NotEmpty(transportOptions.EnvironmentVariables);
         Assert.All(transportOptions.EnvironmentVariables, kv =>
         {
             Assert.False(string.IsNullOrEmpty(kv.Key));
             Assert.NotNull(kv.Value);
+            Assert.Contains(kv.Key, McpGatewayConventions.DownstreamProcess.AllowedEnvironmentVariables);
         });
+    }
+
+    [Fact]
+    public void CreateTransportOptions_ExcludesGatewayClientSecret()
+    {
+        string secretKey = DownstreamAuthConventions.EnvironmentVariables.GatewayClientSecret;
+        string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
+        var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
+        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        Environment.SetEnvironmentVariable(secretKey, "super-secret-value");
+        try
+        {
+            var transportOptions = client.CreateTransportOptions();
+
+            Assert.DoesNotContain(secretKey, transportOptions.EnvironmentVariables!.Keys);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(secretKey, null);
+        }
+    }
+
+    [Fact]
+    public void CreateTransportOptions_ExcludesGatewayClientId()
+    {
+        string clientIdKey = DownstreamAuthConventions.EnvironmentVariables.GatewayClientId;
+        string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
+        var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
+        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        Environment.SetEnvironmentVariable(clientIdKey, "infra-gate-gateway");
+        try
+        {
+            var transportOptions = client.CreateTransportOptions();
+
+            Assert.DoesNotContain(clientIdKey, transportOptions.EnvironmentVariables!.Keys);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(clientIdKey, null);
+        }
+    }
+
+    [Fact]
+    public void CreateTransportOptions_ExcludesGatewayOAuthAuthority()
+    {
+        string key = GatewayAuthConventions.EnvironmentVariables.OAuthAuthority;
+        string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
+        var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
+        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        Environment.SetEnvironmentVariable(key, "http://keycloak/realms/infra-gate");
+        try
+        {
+            var transportOptions = client.CreateTransportOptions();
+
+            Assert.DoesNotContain(key, transportOptions.EnvironmentVariables!.Keys);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(key, null);
+        }
+    }
+
+    [Theory]
+    [InlineData(RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, "Development")]
+    [InlineData(RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment, "Production")]
+    [InlineData(RuntimeSafetyConventions.EnvironmentVariables.AspNetCoreEnvironment, "Staging")]
+    public void CreateTransportOptions_PassesThroughAllowedVar_WhenSet(string envVarName, string envVarValue)
+    {
+        string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
+        var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
+        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        string? original = Environment.GetEnvironmentVariable(envVarName);
+        Environment.SetEnvironmentVariable(envVarName, envVarValue);
+        try
+        {
+            var transportOptions = client.CreateTransportOptions();
+
+            Assert.Contains(envVarName, transportOptions.EnvironmentVariables!.Keys);
+            Assert.Equal(envVarValue, transportOptions.EnvironmentVariables![envVarName]);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVarName, original);
+        }
+    }
+
+    [Theory]
+    [InlineData(ApprovalConventions.EnvironmentVariables.ApprovalRoot, "/mnt/approvals")]
+    [InlineData(DownstreamAuthConventions.EnvironmentVariables.Required, "true")]
+    [InlineData(DownstreamAuthConventions.EnvironmentVariables.Authority, "http://keycloak/realms/infra-gate")]
+    [InlineData(DownstreamAuthConventions.EnvironmentVariables.Audience, "urn:infra-gate:mcp-server")]
+    [InlineData(DownstreamAuthConventions.EnvironmentVariables.Scope, "mcp:downstream")]
+    public void CreateTransportOptions_PassesThroughServerConfigVar_WhenSet(string envVarName, string envVarValue)
+    {
+        string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
+        var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
+        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        string? original = Environment.GetEnvironmentVariable(envVarName);
+        Environment.SetEnvironmentVariable(envVarName, envVarValue);
+        try
+        {
+            var transportOptions = client.CreateTransportOptions();
+
+            Assert.Contains(envVarName, transportOptions.EnvironmentVariables!.Keys);
+            Assert.Equal(envVarValue, transportOptions.EnvironmentVariables![envVarName]);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVarName, original);
+        }
     }
 
     [Fact]
