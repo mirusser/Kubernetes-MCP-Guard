@@ -132,7 +132,7 @@ internal static class GatewayApprovalEndpoints
         var title = page.CanDecide ? "Review Plan" : "Approval Unavailable";
         var body = page.CanDecide && page.Challenge is not null && page.PlanReview is not null
             ? RenderApprovalForm(page.Challenge, page.PlanReview, renderer, requestToken)
-            : $"<p class=\"error\">{Html(page.Error ?? "Approval challenge is unavailable.")}</p>";
+            : $"<section class=\"card\" data-section=\"approval-unavailable\"><p class=\"error\" data-field=\"error-message\">{Html(page.Error ?? "Approval challenge is unavailable.")}</p></section>";
 
         return RenderDocument(title, body);
     }
@@ -205,8 +205,8 @@ internal static class GatewayApprovalEndpoints
         return RenderDocument(
             result.Succeeded ? "Approval Recorded" : "Approval Failed",
             $"""
-             <section class="card">
-               <p class="{className}">{Html(result.Message)}</p>
+             <section class="card" data-section="decision-result">
+               <p class="{className}" data-field="decision-message">{Html(result.Message)}</p>
              </section>
              """);
     }
