@@ -4,6 +4,7 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Notifications;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Protocol;
@@ -206,6 +207,7 @@ public sealed class GatewayToolDispatcherTests
             new SameSubjectAuthorizationCheck(),
             gatewayOptions,
             httpContextAccessor,
+            NullNotificationDispatcher.Instance,
             NullLogger<GatewayApprovalService>.Instance);
 
         var domainAdapter = new FakeDomainAdapter(
@@ -221,6 +223,7 @@ public sealed class GatewayToolDispatcherTests
                 store,
                 new ApprovalPreExecutionGate(store, new ApprovalStoreAuditPublisher(store)),
                 httpContextAccessor,
+                new SubscriptionRegistry(),
                 NullLogger<GatewayToolDispatcher>.Instance),
             store,
             downstream);
@@ -250,19 +253,19 @@ public sealed class GatewayToolDispatcherTests
                     {
                         [KubernetesAdapterConventions.PlanParameters.ObjectCount] = "1"
                     },
-                    [new K8sObjectRef("apps/v1", "Deployment", namespaceName, "demo")])
+                    [new KubernetesObjectRef("apps/v1", "Deployment", namespaceName, "demo")])
                 {
                     Manifest = "apiVersion: apps/v1",
-                    DryRun = new K8sPlanDryRun(
+                    DryRun = new KubernetesPlanDryRun(
                         "succeeded",
                         DateTimeOffset.UtcNow,
-                        [new K8sPlanDryRunObject($"apps/v1 Deployment {namespaceName}/demo", "{}")],
+                        [new KubernetesPlanDryRunObject($"apps/v1 Deployment {namespaceName}/demo", "{}")],
                         [],
                         "Server-side dry-run succeeded."),
                     Diffs =
                     [
-                        new K8sPlanDiff(
-                            new K8sObjectRef("apps/v1", "Deployment", namespaceName, "demo"),
+                        new KubernetesPlanDiff(
+                            new KubernetesObjectRef("apps/v1", "Deployment", namespaceName, "demo"),
                             ApprovalConventions.DiffChangeTypes.Update,
                             "Deployment will be updated.",
                             "@@ -1 +1 @@",
@@ -378,4 +381,12 @@ public sealed class GatewayToolDispatcherTests
         IGatewayToolDispatcher Dispatcher,
         ApprovalStore Store,
         FakeDownstream Downstream);
+
+    private sealed class NullNotificationDispatcher : IApprovalNotificationDispatcher
+    {
+        public static readonly NullNotificationDispatcher Instance = new();
+
+        public Task NotifyPlanApprovedAsync(string planId, CancellationToken ct) =>
+            Task.CompletedTask;
+    }
 }

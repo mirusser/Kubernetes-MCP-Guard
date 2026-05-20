@@ -2,6 +2,7 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Notifications;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -22,6 +23,8 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
         services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
         services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
+        services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
+        services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
         services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
         services.AddHttpContextAccessor();
         services.AddLogging();
@@ -60,6 +63,8 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
         services.AddSingleton<IApprovalChallengeStore, ApprovalChallengeStore>();
         services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
+        services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
+        services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
         services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
         services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
         services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());

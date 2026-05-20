@@ -173,16 +173,11 @@ cd Kubernetes-MCP-Guard
 
 ./scripts/create-demo-kubeconfig.sh --compose
 
-export INFRA_GATE_KUBECONFIG_HOST_PATH="$PWD/.kube/mcp-nginx-demo.compose.config"
-export INFRA_GATE_APPROVAL_HOST_PATH="$PWD/.mcp-approvals"
-export INFRA_GATE_GUARD_AUDIT_HOST_PATH="$PWD/.mcp-guardrails"
-export INFRA_GATE_DATA_PROTECTION_HOST_PATH="$PWD/.mcp-dataprotection-keys"
-
 TAG=latest docker compose --env-file deploy/local-oauth/release.env.example \
   -f deploy/local-oauth/compose.release.yaml up
 ```
 
-This starts the local Keycloak-backed OAuth path and the published gateway image. Replace `latest` with a release tag such as `v0.1.0` for a stable image. The host-path exports keep Docker Compose bind mounts anchored at the repository root while still using the committed no-SDK env template.
+This starts the local Keycloak-backed OAuth path and the published gateway image. Replace `latest` with a release tag such as `v0.1.0` for a stable image. The committed no-SDK files come from the `smoke-release` Run Profile: `release.env.example` supplies Compose interpolation and bootstrap env vars, and `release.appsettings.json` is mounted into the gateway container.
 
 ### 🛠️ Build From Source
 
@@ -194,6 +189,8 @@ Prerequisites: [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0),
 docker compose --env-file deploy/generated/local-compose.env \
   -f deploy/local-oauth/compose.yaml up --build
 ```
+
+`generate-env.sh` writes both `deploy/generated/local-compose.env` and `deploy/generated/local-compose.appsettings.json` from `deploy/run-profiles.yaml`.
 
 Other run modes and full setup details are in [docs/setup-guide.md](docs/setup-guide.md).
 

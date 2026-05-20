@@ -5,12 +5,7 @@
 # Prerequisites: ./scripts/create-demo-kubeconfig.sh --compose
 #
 # Run:
-#   dotnet run --project src/InfraGate.RunProfiles -- generate local-compose \
-#     --set host.kubeconfigHostPath="$(pwd)/.kube/mcp-nginx-demo.compose.config" \
-#     --set host.approvalHostPath="$(pwd)/.mcp-approvals" \
-#     --set host.guardAuditHostPath="$(pwd)/.mcp-guardrails" \
-#     --set host.dataProtectionHostPath="$(pwd)/.mcp-dataprotection-keys" \
-#     --output deploy/generated/local-compose.env
+#   ./scripts/generate-env.sh local-compose
 #   docker compose --env-file deploy/generated/local-compose.env \
 #     -f deploy/local-oauth/compose.yaml up --build
 #
@@ -47,8 +42,11 @@ services:
     depends_on:
       keycloak:
         condition: service_healthy
+    env_file:
+      # Compose --env-file supplies interpolation values; env_file passes the
+      # same generated profile into the gateway container runtime.
+      - ${INFRA_GATE_GATEWAY_ENV_FILE:-../generated/local-compose.env}
     environment:
-      INFRA_GATE_ENVIRONMENT: ${INFRA_GATE_ENVIRONMENT}
       DOTNET_ENVIRONMENT: Development
       ASPNETCORE_URLS: ${ASPNETCORE_URLS}
       INFRA_GATE_OAUTH_AUTHORITY: ${INFRA_GATE_OAUTH_AUTHORITY}
@@ -76,6 +74,7 @@ services:
       K8S_MCP_ALLOWED_NAMESPACES: ${K8S_MCP_ALLOWED_NAMESPACES}
       K8S_MCP_LOG_PATH: /data/logs/mcp-server.log
     volumes:
+      - ${INFRA_GATE_CONFIG_HOST_PATH}:/app/config/appsettings.InfraGate.json:ro
       - ${INFRA_GATE_KUBECONFIG_HOST_PATH}:/run/kube/mcp-nginx-demo.compose.config:ro
       - ${INFRA_GATE_APPROVAL_HOST_PATH}:/data/approvals
       - ${INFRA_GATE_GUARD_AUDIT_HOST_PATH}:/data/guardrails

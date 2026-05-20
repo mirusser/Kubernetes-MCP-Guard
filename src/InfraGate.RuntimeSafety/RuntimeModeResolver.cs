@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Configuration;
+
 namespace InfraGate.RuntimeSafety;
 
 public static class RuntimeModeResolver
@@ -21,6 +23,41 @@ public static class RuntimeModeResolver
 
         string? aspNetCoreEnvironment = Environment.GetEnvironmentVariable(
             RuntimeSafetyConventions.EnvironmentVariables.AspNetCoreEnvironment);
+        if (!string.IsNullOrWhiteSpace(aspNetCoreEnvironment))
+        {
+            return ParseStandardEnvironment(aspNetCoreEnvironment);
+        }
+
+        return RuntimeMode.Development;
+    }
+
+    public static RuntimeMode FromConfiguration(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        string? infraGateEnvironment = configuration[
+            RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment];
+        if (!string.IsNullOrWhiteSpace(infraGateEnvironment))
+        {
+            return ParseInfraGateEnvironment(infraGateEnvironment);
+        }
+
+        string? configuredRuntimeEnvironment = configuration[
+            RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment];
+        if (!string.IsNullOrWhiteSpace(configuredRuntimeEnvironment))
+        {
+            return ParseInfraGateEnvironment(configuredRuntimeEnvironment);
+        }
+
+        string? dotNetEnvironment = configuration[
+            RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment];
+        if (!string.IsNullOrWhiteSpace(dotNetEnvironment))
+        {
+            return ParseStandardEnvironment(dotNetEnvironment);
+        }
+
+        string? aspNetCoreEnvironment = configuration[
+            RuntimeSafetyConventions.EnvironmentVariables.AspNetCoreEnvironment];
         if (!string.IsNullOrWhiteSpace(aspNetCoreEnvironment))
         {
             return ParseStandardEnvironment(aspNetCoreEnvironment);

@@ -110,6 +110,109 @@ public sealed class RunProfileCliTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_GenerateAppSettings_WritesDeterministicJsonFile()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            defaults:
+              gateway:
+                aspnetcoreUrls: http://0.0.0.0:3001
+                downstreamAssembly: /app/server/InfraGate.McpServer.dll
+                guardAuditRoot: /data/guardrails
+              identityProvider:
+                scope: mcp:tools
+                requireHttpsMetadata: "false"
+              approvalAuthority:
+                oauthClientId: infra-gate-approval-ui
+                oauthCallbackPath: /approvals/oauth/callback
+            profiles:
+              local-compose:
+                kind: compose
+                runtimeMode: Development
+                gateway: {}
+                identityProvider:
+                  authority: http://127.0.0.1:3010/realms/infra-gate
+                  metadataAddress: http://keycloak:8080/realms/infra-gate/.well-known/openid-configuration
+                  resource: http://127.0.0.1:3001/mcp
+                approvalAuthority:
+                  baseUrl: http://127.0.0.1:3001
+                  oauthAuthorizationEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/auth
+                  oauthTokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
+                genericApprovalCore:
+                  approvalRoot: /data/approvals
+                host:
+                  bindAddress: 127.0.0.1
+                  bindPort: "3001"
+                  gatewayImage: kubernetes-mcp-guard-gateway
+                  kubeconfigHostPath: .kube/config
+                  approvalHostPath: .approvals
+                  guardAuditHostPath: .guardrails
+                  dataProtectionHostPath: .dataprotection
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - mcp-nginx-demo
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "local-compose.appsettings.json");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--format", "appsettings", "--output", outputPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        Assert.Equal(
+            """
+            {
+              "_generated": {
+                "source": "run-profiles.yaml",
+                "profile": "local-compose"
+              },
+              "InfraGate": {
+                "Runtime": {
+                  "Environment": "Development"
+                },
+                "Gateway": {
+                  "AspNetCoreUrls": "http://0.0.0.0:3001",
+                  "DownstreamAssembly": "/app/server/InfraGate.McpServer.dll",
+                  "GuardAuditRoot": "/data/guardrails"
+                },
+                "Auth": {
+                  "OAuthAuthority": "http://127.0.0.1:3010/realms/infra-gate",
+                  "OAuthMetadataAddress": "http://keycloak:8080/realms/infra-gate/.well-known/openid-configuration",
+                  "OAuthResource": "http://127.0.0.1:3001/mcp",
+                  "OAuthScope": "mcp:tools",
+                  "OAuthRequireHttpsMetadata": false,
+                  "ApprovalOAuthClientId": "infra-gate-approval-ui",
+                  "ApprovalOAuthCallbackPath": "/approvals/oauth/callback",
+                  "ApprovalOAuthAuthorizationEndpoint": "http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/auth",
+                  "ApprovalOAuthTokenEndpoint": "http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token"
+                },
+                "Approval": {
+                  "Root": "/data/approvals",
+                  "BaseUrl": "http://127.0.0.1:3001"
+                },
+                "Kubernetes": {
+                  "KubeConfig": "/run/kube/config",
+                  "AllowedNamespaces": [
+                    "mcp-nginx-demo"
+                  ]
+                }
+              }
+            }
+            """.ReplaceLineEndings().TrimEnd('\r', '\n'),
+            (await File.ReadAllTextAsync(outputPath)).ReplaceLineEndings().TrimEnd('\r', '\n'));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ValidateWithUnsupportedDomainAdapter_ReturnsError()
     {
         string configPath = await WriteConfigAsync(
@@ -473,6 +576,7 @@ public sealed class RunProfileCliTests
                   bindAddress: 127.0.0.1
                   bindPort: "3001"
                   gatewayImage: kubernetes-mcp-guard-gateway
+                  configHostPath: ../generated/local-compose.appsettings.json
                   kubeconfigHostPath: .kube/mcp-nginx-demo.compose.config
                   approvalHostPath: .mcp-approvals
                   guardAuditHostPath: .mcp-guardrails
@@ -501,6 +605,8 @@ public sealed class RunProfileCliTests
         Assert.Contains("INFRA_GATE_BIND_ADDRESS", keys);
         Assert.Contains("INFRA_GATE_BIND_PORT", keys);
         Assert.Contains("INFRA_GATE_GATEWAY_IMAGE", keys);
+        Assert.Contains("INFRA_GATE_CONFIG_PATH", keys);
+        Assert.Contains("INFRA_GATE_CONFIG_HOST_PATH", keys);
         Assert.Contains("INFRA_GATE_KUBECONFIG_HOST_PATH", keys);
         Assert.Contains("INFRA_GATE_APPROVAL_HOST_PATH", keys);
         Assert.Contains("INFRA_GATE_GUARD_AUDIT_HOST_PATH", keys);
@@ -577,6 +683,8 @@ public sealed class RunProfileCliTests
             "INFRA_GATE_BIND_ADDRESS",
             "INFRA_GATE_BIND_PORT",
             "INFRA_GATE_GATEWAY_IMAGE",
+            "INFRA_GATE_CONFIG_PATH",
+            "INFRA_GATE_CONFIG_HOST_PATH",
             "INFRA_GATE_KUBECONFIG_HOST_PATH",
             "INFRA_GATE_APPROVAL_HOST_PATH",
             "INFRA_GATE_GUARD_AUDIT_HOST_PATH",
@@ -985,6 +1093,291 @@ public sealed class RunProfileCliTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_NoArgs_ReturnsError()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            [],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Command is required.", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnknownCommand_ReturnsError()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["foobar"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Unknown command: foobar", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ValidateWithValidConfig_ReturnsSuccess()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-stdio:
+                kind: mcp-stdio
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: .kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["validate", "--config", configPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Contains("Run profile configuration is valid.", output.ToString(), StringComparison.Ordinal);
+        Assert.Empty(error.ToString());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ConfigReadFailure_ReturnsError()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            {} # not a valid run profile document
+            """);
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["list", "--config", configPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.NotEmpty(error.ToString());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetWithoutValue_ReturnsError()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-stdio:
+                kind: mcp-stdio
+                genericApprovalCore:
+                  approvalRoot: .mcp-approvals
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: .kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-stdio", "--config", configPath, "--output", outputPath, "--set"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("--set", error.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetPathWithoutDot_ReturnsError()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-stdio:
+                kind: mcp-stdio
+                genericApprovalCore:
+                  approvalRoot: .mcp-approvals
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: .kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-stdio", "--config", configPath, "--output", outputPath,
+             "--set", "gateway=value"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Unknown --set path: gateway", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateAppSettingsWithExistingForeignFile_ReturnsErrorWithoutForce()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                gateway:
+                  aspnetcoreUrls: http://0.0.0.0:3001
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "local-compose.appsettings.json");
+        await File.WriteAllTextAsync(outputPath, """{"not":"generated"}""");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--format", "appsettings", "--output", outputPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Will not overwrite", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateAppSettingsWithMatchingGeneratedFile_Overwrites()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                gateway:
+                  aspnetcoreUrls: http://0.0.0.0:3001
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "local-compose.appsettings.json");
+        await File.WriteAllTextAsync(outputPath,
+            """{"_generated":{"source":"run-profiles.yaml","profile":"local-compose"},"InfraGate":{"OldKey":"old"}}""");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--format", "appsettings", "--output", outputPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string fileContent = await File.ReadAllTextAsync(outputPath);
+        Assert.DoesNotContain("OldKey", fileContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithFormatWithoutValue_ReturnsError()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-stdio:
+                kind: mcp-stdio
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: .kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-stdio", "--config", configPath, "--output", outputPath, "--format"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("--format", error.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithUnknownFormat_ReturnsError()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-stdio:
+                kind: mcp-stdio
+                genericApprovalCore:
+                  approvalRoot: .mcp-approvals
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: .kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-stdio", "--config", configPath, "--format", "json", "--output", outputPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("--format", error.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_GenerateSmokeRelease_MatchesCommittedReleaseExample()
     {
         string repoRoot = FindRepoRoot();
@@ -1100,6 +1493,31 @@ public sealed class RunProfileCliTests
         Assert.Contains("INFRA_GATE_DOWNSTREAM_AUTH_AUTHORITY", keys);
         Assert.DoesNotContain("INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_ID", keys);
         Assert.DoesNotContain("INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET", keys);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateSmokeReleaseAppSettings_MatchesCommittedReleaseExample()
+    {
+        string repoRoot = FindRepoRoot();
+        string examplePath = Path.Combine(repoRoot, "deploy", "local-oauth", "release.appsettings.json");
+        string outputPath = Path.Combine(Path.GetTempPath(), $"smoke-release-{Guid.NewGuid()}.appsettings.json");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "smoke-release", "--format", "appsettings", "--output", outputPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+
+        string generated = await File.ReadAllTextAsync(outputPath);
+        string committed = await File.ReadAllTextAsync(examplePath);
+        Assert.Equal(
+            committed.ReplaceLineEndings(),
+            generated.ReplaceLineEndings());
     }
 
     private static string FindRepoRoot()

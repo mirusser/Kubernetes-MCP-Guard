@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Configuration;
+
 namespace InfraGate.McpGateway.Auth;
 
 public sealed record GatewayAuthOptions(
@@ -50,6 +52,42 @@ public sealed record GatewayAuthOptions(
             throw new InvalidOperationException(
                 $"{GatewayAuthConventions.EnvironmentVariables.OAuthAuthority} is required.");
         }
+
+        return new GatewayAuthOptions(
+            oauthAuthority,
+            oauthResource,
+            oauthScope,
+            requireHttpsMetadata,
+            oauthMetadataAddress,
+            approvalClientId,
+            approvalAuthorizationEndpoint,
+            approvalTokenEndpoint,
+            approvalCallbackPath);
+    }
+
+    public static GatewayAuthOptions FromConfiguration(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        var authSettings = configuration
+            .GetSection("InfraGate:Auth")
+            .Get<InfraGateAuthSettings>();
+
+        string oauthAuthority = authSettings?.OAuthAuthority ??
+            throw new InvalidOperationException(
+                $"{GatewayAuthConventions.EnvironmentVariables.OAuthAuthority} is required.");
+        string oauthResource = authSettings?.OAuthResource ??
+            GatewayAuthConventions.DefaultOAuthResource;
+        string oauthScope = authSettings?.OAuthScope ??
+            GatewayAuthConventions.DefaultOAuthScope;
+        bool requireHttpsMetadata = authSettings?.OAuthRequireHttpsMetadata ?? true;
+        string? oauthMetadataAddress = authSettings?.OAuthMetadataAddress;
+        string approvalClientId = authSettings?.ApprovalOAuthClientId ??
+            GatewayAuthConventions.DefaultApprovalOAuthClientId;
+        string? approvalAuthorizationEndpoint = authSettings?.ApprovalOAuthAuthorizationEndpoint;
+        string? approvalTokenEndpoint = authSettings?.ApprovalOAuthTokenEndpoint;
+        string approvalCallbackPath = authSettings?.ApprovalOAuthCallbackPath ??
+            GatewayAuthConventions.Approvals.DefaultCallbackPath;
 
         return new GatewayAuthOptions(
             oauthAuthority,

@@ -76,7 +76,7 @@ Hash binding protects the integrity of the approval signal after a user approves
 
 ### 2.6 Manifest Allow-list
 
-`K8sManifestParser` accepts only `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap` manifests for apply and delete planning. Other kinds are rejected before any Kubernetes write can occur.
+`KubernetesManifestParser` accepts only `apps/v1 Deployment`, `v1 Service`, and `v1 ConfigMap` manifests for apply and delete planning. Other kinds are rejected before any Kubernetes write can occur.
 
 ### 2.7 Bounded Observability
 

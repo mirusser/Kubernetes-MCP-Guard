@@ -7,7 +7,7 @@ namespace InfraGate.McpServer.Tests.UnitTests;
 
 public sealed class ApprovalStoreTests
 {
-    private const string TargetNamespace = K8SMcpOptions.DefaultNamespace;
+    private const string TargetNamespace = KubernetesMcpOptions.DefaultNamespace;
 
     [Fact]
     public void NewPlanId_ReturnsOpaquePlanIdentifier()

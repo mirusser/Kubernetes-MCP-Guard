@@ -262,7 +262,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
     private static KubernetesPlanPayload CreateRestartPayload()
     {
-        var objects = new[] { new K8sObjectRef("apps/v1", "Deployment", "mcp-nginx-demo", "nginx-demo") };
+        var objects = new[] { new KubernetesObjectRef("apps/v1", "Deployment", "mcp-nginx-demo", "nginx-demo") };
 
         return new KubernetesPlanPayload(
             "mcp-nginx-demo",
@@ -274,15 +274,15 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
             },
             objects)
         {
-            DryRun = new K8sPlanDryRun(
+            DryRun = new KubernetesPlanDryRun(
                 "succeeded",
                 DateTimeOffset.UtcNow,
-                objects.Select(obj => new K8sPlanDryRunObject(
+                objects.Select(obj => new KubernetesPlanDryRunObject(
                     $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}",
                     "{}")).ToArray(),
                 [],
                 "Server-side dry-run succeeded."),
-            Diffs = objects.Select(obj => new K8sPlanDiff(
+            Diffs = objects.Select(obj => new KubernetesPlanDiff(
                 obj,
                 ApprovalConventions.DiffChangeTypes.Update,
                 $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name} will be restarted.",

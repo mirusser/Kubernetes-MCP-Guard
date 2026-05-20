@@ -1,7 +1,9 @@
 using InfraGate.McpServer;
 using InfraGate.McpServer.DownstreamAuth;
 using InfraGate.Observability;
+using InfraGate.RuntimeSafety;
 using k8s;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -9,8 +11,12 @@ using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 var builder = Host.CreateApplicationBuilder(args);
+AddInfraGateConfiguration(builder.Configuration, args);
 
-var mcpOptions = K8SMcpOptions.FromEnvironment();
+builder.Services.Configure<InfraGateKubernetesSettings>(
+    builder.Configuration.GetSection("InfraGate:Kubernetes"));
+
+var mcpOptions = KubernetesMcpOptions.FromConfiguration(builder.Configuration);
 
 builder.AddInfraGateObservability(opt => 
 {
@@ -28,7 +34,9 @@ builder.Services.AddSingleton<IKubernetes>(_ =>
 
     return new Kubernetes(config);
 });
-builder.Services.AddSingleton<K8sManager>();
+builder.Services.AddSingleton<KubernetesManager>();
+builder.Services.AddSingleton<KubernetesEvidenceService>();
+builder.Services.AddSingleton<KubernetesExecutionService>();
 
 builder.Services
     .AddMcpServer()
@@ -55,7 +63,7 @@ builder.Services
 var app = builder.Build();
 
 var appLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("InfraGate.McpServer");
-var k8sOptions = app.Services.GetRequiredService<K8SMcpOptions>();
+var k8sOptions = app.Services.GetRequiredService<KubernetesMcpOptions>();
 if (appLogger.IsEnabled(LogLevel.Information))
 {
     appLogger.LogInformation(
@@ -84,3 +92,19 @@ using (var probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
 }
 
 await app.RunAsync();
+
+static void AddInfraGateConfiguration(IConfigurationBuilder configuration, string[] args)
+{
+    string? configPath = Environment.GetEnvironmentVariable(RuntimeSafetyConventions.EnvironmentVariables.ConfigPath);
+    if (!string.IsNullOrWhiteSpace(configPath))
+    {
+        configuration.AddJsonFile(configPath, optional: false, reloadOnChange: false);
+        configuration.AddInfraGateEnvironmentVariables(mappings =>
+        {
+            RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
+            KubernetesConventions.RegisterInfraGateEnvVarMappings(mappings);
+        });
+        configuration.AddEnvironmentVariables();
+        configuration.AddCommandLine(args);
+    }
+}

@@ -6,7 +6,7 @@ Static analysis that blocks dangerous Kubernetes manifests before a plan is crea
 
 ## Purpose
 
-The Kubernetes API allows manifests that are syntactically valid but operationally dangerous — privileged containers, host-path volumes, NodePort services, and so on. Kind allow-listing (enforced by `K8sManifestParser`) is the first gate; the policy validator is the second.
+The Kubernetes API allows manifests that are syntactically valid but operationally dangerous — privileged containers, host-path volumes, NodePort services, and so on. Kind allow-listing (enforced by `KubernetesManifestParser`) is the first gate; the policy validator is the second.
 
 Policy runs twice:
 1. **At plan creation** (`KubernetesPlanBuilder` via `dry_run_apply_manifest`) — gives early feedback to the model and prevents plans containing unsafe manifests.
@@ -19,11 +19,11 @@ Delete plans are intentionally not policy-checked; a delete manifest identifies 
 ## Architecture
 
 ```
-K8sPolicyOptions      — configuration flags, all on by default; K8sPolicyOptions.Default is used at all call sites
-K8sPolicySeverity     — Deny | Warning
-K8sPolicyFinding      — one finding: Severity, Code, ObjectRef, Message
-K8sPolicyResult       — list of findings + IsDenied + FormatRefusal() + FormatWarnings()
-K8sPolicyValidator    — static entry point: Validate(objects, options) -> K8sPolicyResult
+KubernetesPolicyOptions      — configuration flags, all on by default; KubernetesPolicyOptions.Default is used at all call sites
+KubernetesPolicySeverity     — Deny | Warning
+KubernetesPolicyFinding      — one finding: Severity, Code, ObjectRef, Message
+KubernetesPolicyResult       — list of findings + IsDenied + FormatRefusal() + FormatWarnings()
+KubernetesPolicyValidator    — static entry point: Validate(objects, options) -> KubernetesPolicyResult
 KubernetesAdapterConventions.PolicyCodes — string constants for each rule code
 ```
 
@@ -38,8 +38,8 @@ The validator and records live in `InfraGate.KubernetesAdapter.Policy`; policy c
 ```
 KubernetesPlanBuilder.BuildAsync("apply_manifest", ...)
   -> ValidateNamespace
-  -> K8sManifestParser.ParseSupported          // kind allow-list
-  -> K8sPolicyValidator.Validate               // policy check
+  -> KubernetesManifestParser.ParseSupported          // kind allow-list
+  -> KubernetesPolicyValidator.Validate               // policy check
   -> if IsDenied: return refusal text to model
   -> Build PlanEnvelope                        // stores detailed findings in the Kubernetes adapter payload
 ```
@@ -194,7 +194,7 @@ data:
 
 ---
 
-## K8sPolicyOptions Reference
+## KubernetesPolicyOptions Reference
 
 | Property | Default | Controls |
 |---|---|---|
@@ -209,16 +209,16 @@ data:
 | `DenyServiceTypeLoadBalancer` | `true` | `SERVICE_LOAD_BALANCER` rule |
 | `WarnOnConfigMapSecretLikeKeys` | `true` | `CONFIG_MAP_SECRET_LIKE_KEY` rule |
 
-`K8sPolicyOptions.Default` is used at all call sites. No env-var configuration for the demo.
+`KubernetesPolicyOptions.Default` is used at all call sites. No env-var configuration for the demo.
 
 ---
 
 ## Extending the Validator
 
-1. Add a new `bool` property to `K8sPolicyOptions` (default `true` for Deny, `true` for Warning).
+1. Add a new `bool` property to `KubernetesPolicyOptions` (default `true` for Deny, `true` for Warning).
 2. Add a new `const string` to `KubernetesAdapterConventions.PolicyCodes`.
-3. Add the check to the appropriate `Validate*` private method in `K8sPolicyValidator` (or create a new one for a new object type).
-4. Add a test in `K8sPolicyValidatorTests` following the `Validate_State_ExpectedResult` naming pattern, using an inline YAML manifest constant.
+3. Add the check to the appropriate `Validate*` private method in `KubernetesPolicyValidator` (or create a new one for a new object type).
+4. Add a test in `KubernetesPolicyValidatorTests` following the `Validate_State_ExpectedResult` naming pattern, using an inline YAML manifest constant.
 
 ---
 

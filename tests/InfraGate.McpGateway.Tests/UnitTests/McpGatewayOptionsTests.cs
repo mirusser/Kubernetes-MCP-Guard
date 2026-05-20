@@ -5,6 +5,7 @@ using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.RuntimeSafety;
+using Microsoft.Extensions.Configuration;
 
 namespace InfraGate.McpGateway.Tests.UnitTests;
 
@@ -68,6 +69,51 @@ public sealed class McpGatewayOptionsTests
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(McpGatewayOptions.FromEnvironment);
 
         Assert.Contains(RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, exception.Message);
+    }
+
+    [Fact]
+    public void FromConfiguration_UsesGeneratedAppSettingsValues()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [GatewayAuthConventions.ConfigurationKeys.OAuthAuthority] = OAuthAuthority,
+                [McpGatewayConventions.ConfigurationKeys.DownstreamAssembly] = DownstreamAssembly,
+                [McpGatewayConventions.ConfigurationKeys.GuardAuditRoot] = GuardAuditRoot,
+                [McpGatewayConventions.ConfigurationKeys.ApprovalRoot] = ApprovalRoot,
+                [McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl] = ApprovalBaseUrl,
+                [RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment] =
+                    RuntimeSafetyConventions.EnvironmentValues.Production
+            })
+            .Build();
+
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+
+        Assert.Equal(DownstreamAssembly, options.DownstreamAssembly);
+        Assert.Equal(GuardAuditRoot, options.GuardAuditRoot);
+        Assert.Equal(ApprovalRoot, options.ApprovalRoot);
+        Assert.Equal(ApprovalBaseUrl, options.ApprovalBaseUrl);
+        Assert.Equal(RuntimeMode.Production, options.RuntimeMode);
+        Assert.True(options.IsGuardAuditRootExplicit);
+        Assert.True(options.IsApprovalRootExplicit);
+    }
+
+    [Fact]
+    public void FromConfiguration_BindsFromGatewayAndApprovalSections()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [GatewayAuthConventions.ConfigurationKeys.OAuthAuthority] = OAuthAuthority,
+                [McpGatewayConventions.ConfigurationKeys.DownstreamAssembly] = "/app/server.dll",
+                [McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl] = "https://gateway.example.com"
+            })
+            .Build();
+
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+
+        Assert.Equal("/app/server.dll", options.DownstreamAssembly);
+        Assert.Equal("https://gateway.example.com", options.ApprovalBaseUrl);
     }
 
     [Fact]

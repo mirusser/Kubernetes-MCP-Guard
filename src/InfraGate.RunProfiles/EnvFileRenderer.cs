@@ -186,6 +186,7 @@ internal static class EnvFileRenderer
             !string.IsNullOrEmpty(host.BindAddress) ||
             !string.IsNullOrEmpty(host.BindPort) ||
             !string.IsNullOrEmpty(host.GatewayImage) ||
+            !string.IsNullOrEmpty(host.ConfigHostPath) ||
             !string.IsNullOrEmpty(host.KubeconfigHostPath) ||
             !string.IsNullOrEmpty(host.ApprovalHostPath) ||
             !string.IsNullOrEmpty(host.GuardAuditHostPath) ||
@@ -201,6 +202,12 @@ internal static class EnvFileRenderer
         AppendIfSet(builder, RunProfileConventions.Env.BindAddress, host.BindAddress);
         AppendIfSet(builder, RunProfileConventions.Env.BindPort, host.BindPort);
         AppendIfSet(builder, RunProfileConventions.Env.GatewayImage, host.GatewayImage);
+        if (!string.IsNullOrEmpty(host.ConfigHostPath))
+        {
+            builder.AppendLine($"{RunProfileConventions.Env.ConfigPath}={RunProfileConventions.RuntimeConfig.ContainerPath}");
+            builder.AppendLine($"{RunProfileConventions.Env.ConfigHostPath}={host.ConfigHostPath}");
+        }
+
         AppendIfSet(builder, RunProfileConventions.Env.KubeconfigHostPath, host.KubeconfigHostPath);
         AppendIfSet(builder, RunProfileConventions.Env.ApprovalHostPath, host.ApprovalHostPath);
         AppendIfSet(builder, RunProfileConventions.Env.GuardAuditHostPath, host.GuardAuditHostPath);

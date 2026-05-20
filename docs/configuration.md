@@ -66,7 +66,7 @@ Keycloak does not currently process RFC 8707 `resource` indicators for MCP as th
 
 ## Run Profiles
 
-`deploy/run-profiles.yaml` is the canonical source of truth for all runnable environment configuration. It defines named profiles (tiers) that compile into `.env` files consumed by Docker Compose via `--env-file`.
+`deploy/run-profiles.yaml` is the canonical source of truth for all runnable environment configuration. It defines named profiles (tiers) that compile into `.env` files for Docker Compose interpolation and appsettings JSON for .NET runtime binding.
 
 **CLI commands** (from repo root):
 
@@ -79,6 +79,7 @@ dotnet run --project src/InfraGate.RunProfiles -- validate
 
 # Generate an env file from a profile
 dotnet run --project src/InfraGate.RunProfiles -- generate <profile-name> \
+  [--format env|appsettings] \
   [--set section.field=value ...] \
   [--output path/to/output.env] \
   [--force]
@@ -90,14 +91,15 @@ dotnet run --project src/InfraGate.RunProfiles -- generate local-compose \
   --set "host.approvalHostPath=${REPO_ROOT}/.mcp-approvals" \
   --set "host.guardAuditHostPath=${REPO_ROOT}/.mcp-guardrails" \
   --set "host.dataProtectionHostPath=${REPO_ROOT}/.mcp-dataprotection-keys" \
+  --set "host.configHostPath=${REPO_ROOT}/deploy/generated/local-compose.appsettings.json" \
   --output deploy/generated/local-compose.env
 ```
 
-**Generated file transport**: `deploy/generated/*.env` files are gitignored. The only committed example is `deploy/local-oauth/release.env.example`, regenerated with `dotnet run --project src/InfraGate.RunProfiles -- generate smoke-release`.
+**Generated file transport**: `deploy/generated/*.env` and `deploy/generated/*.appsettings.json` files are gitignored. The committed no-SDK examples are `deploy/local-oauth/release.env.example` and `deploy/local-oauth/release.appsettings.json`, regenerated from the `smoke-release` profile.
 
 **Section inheritance**: profiles only inherit `defaults:` values for sections they explicitly declare. A profile must include `gateway: {}` to receive gateway defaults; omitting the key produces no gateway vars. This keeps test profiles free of Compose-only configuration.
 
-**`--set` overrides**: use `section.field=value` syntax. Section names match the YAML keys (`gateway`, `identityProvider`, `approvalAuthority`, `genericApprovalCore`, `host`). Overrides are applied after merging defaults and are required for host-path fields that must be absolute (Docker Compose resolves bind-mount paths relative to the Compose file directory).
+**`--set` overrides**: use `section.field=value` syntax. Section names match the YAML keys (`gateway`, `identityProvider`, `approvalAuthority`, `genericApprovalCore`, `host`). Overrides are applied after merging defaults. Use them for host-path fields when a run needs paths different from the profile defaults; `scripts/generate-env.sh` uses them to emit absolute repository-root paths for local Compose runs.
 
 **`--force`**: by default, `generate` refuses to overwrite an existing file. Pass `--force` when the generator must write to a system path (e.g., `/etc/infra-gate/development.env` from `scripts/setup-development-deploy.sh`).
 
@@ -143,6 +145,8 @@ To process this report and produce a structured remediation plan, use the `.agen
 | `KUBECONFIG` | Tests and local scripts | No | Tests fall back to `.kube/mcp-nginx-demo.config` when unset | `.kube/mcp-nginx-demo.config` | Kubeconfig used by live integration tests and runtime examples. | Use a generated service-account kubeconfig, not the admin kubeconfig. |
 | `TAG` | Docker Compose and smoke tests | No for development/demo; required by production Compose | `dev` in development deploy, `latest` in demo release Compose | `v0.1.0` | Image tag used by `deploy/compose/*.yaml`, `deploy/local-oauth/compose.release.yaml`, and `scripts/smoke-test-release.sh`. | Use the raw release tag when running production Compose manually; avoid floating tags for production. |
 | `INFRA_GATE_GATEWAY_IMAGE` | Docker Compose deploys | No | `ghcr.io/mirusser/kubernetes-mcp-guard-gateway` | `mirusser/kubernetes-mcp-guard-gateway` | Gateway image repository used by deployment Compose files. | Override only when deploying from Docker Hub or a private mirror. |
+| `INFRA_GATE_CONFIG_PATH` | `InfraGate.McpGateway`, `InfraGate.McpServer` | No | Unset | `/app/config/appsettings.InfraGate.json` | Container path to the generated InfraGate appsettings JSON file. Both gateway and server load this file via `IConfiguration` when set, using JSON values as defaults before environment variable overrides. When unset, standard .NET configuration providers apply. | Set from a profile-generated appsettings file mounted at a known container path. |
+| `INFRA_GATE_CONFIG_HOST_PATH` | Docker Compose deploys | No | `/etc/infra-gate/<environment>.appsettings.json` | `./release.appsettings.json` | Host path to the generated appsettings JSON file, mounted read-only into the gateway container at the path named by `INFRA_GATE_CONFIG_PATH`. | Use a profile-generated file kept alongside the env file. Readable by the Compose runtime user. |
 | `INFRA_GATE_KUBECONFIG_HOST_PATH` | Docker Compose deploys | No | `/etc/infra-gate/<environment>.kubeconfig` | `/etc/infra-gate/production.kubeconfig` | Host kubeconfig path mounted read-only into the gateway container as `/run/kube/infra-gate.config`. | Use a least-privilege kubeconfig; keep permissions tight on the host. |
 | `INFRA_GATE_APPROVAL_HOST_PATH` | Docker Compose deploys | No | `/var/lib/infra-gate/<environment>/approvals` | `/var/lib/infra-gate/production/approvals` | Host path mounted into the container as `/data/approvals`. | Use durable storage that is not group- or other-writable. |
 | `INFRA_GATE_GUARD_AUDIT_HOST_PATH` | Docker Compose deploys | No | `/var/lib/infra-gate/<environment>/guardrails` | `/var/lib/infra-gate/production/guardrails` | Host path mounted into the container as `/data/guardrails`. | Use durable storage with retention/monitoring appropriate for audit logs. |

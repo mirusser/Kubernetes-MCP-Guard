@@ -91,6 +91,7 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             BindAddress = profile.BindAddress ?? defaults.BindAddress,
             BindPort = profile.BindPort ?? defaults.BindPort,
             GatewayImage = profile.GatewayImage ?? defaults.GatewayImage,
+            ConfigHostPath = profile.ConfigHostPath ?? defaults.ConfigHostPath,
             KubeconfigHostPath = profile.KubeconfigHostPath ?? defaults.KubeconfigHostPath,
             ApprovalHostPath = profile.ApprovalHostPath ?? defaults.ApprovalHostPath,
             GuardAuditHostPath = profile.GuardAuditHostPath ?? defaults.GuardAuditHostPath,

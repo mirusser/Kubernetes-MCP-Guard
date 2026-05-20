@@ -10,17 +10,17 @@ public sealed class KubernetesPlanBuilderTests
 
     private static readonly PlanRequester TestRequester = new("test-subject", "oauth-jwt");
 
-    private static K8sPlanDryRun MakeDryRun(string ns, string name) =>
+    private static KubernetesPlanDryRun MakeDryRun(string ns, string name) =>
         new(
             "succeeded",
             DateTimeOffset.UtcNow,
-            [new K8sPlanDryRunObject($"apps/v1 Deployment {ns}/{name}", "{}")],
+            [new KubernetesPlanDryRunObject($"apps/v1 Deployment {ns}/{name}", "{}")],
             [],
             "Server-side dry-run succeeded.");
 
-    private static K8sPlanDiff MakeDiff(string ns, string name) =>
+    private static KubernetesPlanDiff MakeDiff(string ns, string name) =>
         new(
-            new K8sObjectRef("apps/v1", "Deployment", ns, name),
+            new KubernetesObjectRef("apps/v1", "Deployment", ns, name),
             "update",
             $"Update apps/v1 Deployment {ns}/{name}",
             "@@ -1 +1 @@",
@@ -30,20 +30,20 @@ public sealed class KubernetesPlanBuilderTests
             [],
             []);
 
-    private static string DryRunJson(K8sPlanDryRun dryRun) =>
+    private static string DryRunJson(KubernetesPlanDryRun dryRun) =>
         JsonSerializer.Serialize(dryRun, JsonOptions);
 
-    private static string DiffJson(K8sPlanDiff[] diffs) =>
+    private static string DiffJson(KubernetesPlanDiff[] diffs) =>
         JsonSerializer.Serialize(diffs, JsonOptions);
 
-    private static string ApplyEvidenceJson(K8sPlanDryRun dryRun) =>
+    private static string ApplyEvidenceJson(KubernetesPlanDryRun dryRun) =>
         JsonSerializer.Serialize(
-            new K8sApplyEvidence(dryRun, [], false, null),
+            new KubernetesApplyEvidence(dryRun, [], false, null),
             JsonOptions);
 
-    private static string ApplyEvidenceBlockedJson(K8sPlanDryRun dryRun, string refusal) =>
+    private static string ApplyEvidenceBlockedJson(KubernetesPlanDryRun dryRun, string refusal) =>
         JsonSerializer.Serialize(
-            new K8sApplyEvidence(dryRun, [], true, refusal),
+            new KubernetesApplyEvidence(dryRun, [], true, refusal),
             JsonOptions);
 
     [Fact]
@@ -655,6 +655,127 @@ public sealed class KubernetesPlanBuilderTests
         Assert.Contains("Diff evidence failed", result.Message, StringComparison.OrdinalIgnoreCase);
         Assert.NotNull(result.Audit);
         Assert.Equal(ApprovalConventions.AuditEvents.DiffFailed, result.Audit.EventName);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ScaleDeployment_WithFractionalDoubleReplicas_ReturnsFailed()
+    {
+        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["replicas"] = 3.5d
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Missing required arguments", result.Message);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ScaleDeployment_WithNonParseableStringReplicas_ReturnsFailed()
+    {
+        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["replicas"] = "abc"
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Missing required arguments", result.Message);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ScaleDeployment_WithNullReplicas_ReturnsFailed()
+    {
+        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["replicas"] = null
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Missing required arguments", result.Message);
+    }
+
+    [Fact]
+    public async Task BuildAsync_RestartDeployment_DryRunDeserializedAsNull_ReturnsFailed()
+    {
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_restart_deployment", "null");
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "restart_deployment",
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["name"] = "nginx" },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("dry-run failed", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task BuildAsync_RestartDeployment_DiffsDeserializedAsNull_ReturnsFailed()
+    {
+        var dryRun = MakeDryRun("demo", "nginx");
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_restart_deployment", DryRunJson(dryRun))
+            .With("diff_deployment", "null");
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "restart_deployment",
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["name"] = "nginx" },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Diff evidence failed", result.Message);
+        Assert.NotNull(result.Audit);
+        Assert.Equal(ApprovalConventions.AuditEvents.DiffFailed, result.Audit.EventName);
+    }
+
+    [Fact]
+    public async Task BuildAsync_SetDeploymentImage_DryRunDeserializedAsNull_ReturnsFailed()
+    {
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_set_deployment_image", "null");
+        var builder = new KubernetesPlanBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            "set_deployment_image",
+            new Dictionary<string, object?>
+            {
+                ["namespace"] = "demo",
+                ["name"] = "nginx",
+                ["container"] = "nginx",
+                ["image"] = "nginx:1.25"
+            },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("dry-run failed", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class FakeToolCaller : IToolCaller

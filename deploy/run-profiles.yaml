@@ -41,10 +41,11 @@ profiles:
       bindAddress: 127.0.0.1
       bindPort: "3001"
       gatewayImage: kubernetes-mcp-guard-gateway
-      kubeconfigHostPath: .kube/mcp-nginx-demo.compose.config
-      approvalHostPath: .mcp-approvals
-      guardAuditHostPath: .mcp-guardrails
-      dataProtectionHostPath: .mcp-dataprotection-keys
+      configHostPath: ../generated/local-compose.appsettings.json
+      kubeconfigHostPath: ../../.kube/mcp-nginx-demo.compose.config
+      approvalHostPath: ../../.mcp-approvals
+      guardAuditHostPath: ../../.mcp-guardrails
+      dataProtectionHostPath: ../../.mcp-dataprotection-keys
     domainAdapters:
       - name: kubernetesAdapter
         type: kubernetes
@@ -108,6 +109,7 @@ profiles:
       bindAddress: 127.0.0.1
       bindPort: "3001"
       gatewayImage: ghcr.io/mirusser/kubernetes-mcp-guard-gateway
+      configHostPath: /etc/infra-gate/development.appsettings.json
       kubeconfigHostPath: /etc/infra-gate/development.kubeconfig
       approvalHostPath: /var/lib/infra-gate/development/approvals
       guardAuditHostPath: /var/lib/infra-gate/development/guardrails
@@ -139,6 +141,7 @@ profiles:
       bindAddress: 127.0.0.1
       bindPort: "3001"
       gatewayImage: ghcr.io/mirusser/kubernetes-mcp-guard-gateway
+      configHostPath: /etc/infra-gate/production.appsettings.json
       kubeconfigHostPath: /etc/infra-gate/production.kubeconfig
       approvalHostPath: /var/lib/infra-gate/production/approvals
       guardAuditHostPath: /var/lib/infra-gate/production/guardrails
@@ -209,10 +212,11 @@ profiles:
       bindAddress: 127.0.0.1
       bindPort: "3001"
       gatewayImage: kubernetes-mcp-guard-gateway
-      kubeconfigHostPath: .kube/mcp-nginx-demo.compose.config
-      approvalHostPath: .mcp-approvals
-      guardAuditHostPath: .mcp-guardrails
-      dataProtectionHostPath: .mcp-dataprotection-keys
+      configHostPath: ../generated/smoke-local.appsettings.json
+      kubeconfigHostPath: ../../.kube/mcp-nginx-demo.compose.config
+      approvalHostPath: ../../.mcp-approvals
+      guardAuditHostPath: ../../.mcp-guardrails
+      dataProtectionHostPath: ../../.mcp-dataprotection-keys
     domainAdapters:
       - name: kubernetesAdapter
         type: kubernetes
@@ -240,10 +244,11 @@ profiles:
       bindAddress: 127.0.0.1
       bindPort: "3001"
       gatewayImage: ghcr.io/mirusser/kubernetes-mcp-guard-gateway
-      kubeconfigHostPath: .kube/mcp-nginx-demo.compose.config
-      approvalHostPath: .mcp-approvals
-      guardAuditHostPath: .mcp-guardrails
-      dataProtectionHostPath: .mcp-dataprotection-keys
+      configHostPath: ./release.appsettings.json
+      kubeconfigHostPath: ../../.kube/mcp-nginx-demo.compose.config
+      approvalHostPath: ../../.mcp-approvals
+      guardAuditHostPath: ../../.mcp-guardrails
+      dataProtectionHostPath: ../../.mcp-dataprotection-keys
     domainAdapters:
       - name: kubernetesAdapter
         type: kubernetes

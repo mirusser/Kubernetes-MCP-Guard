@@ -3,15 +3,28 @@ using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
+using InfraGate.McpGateway.Notifications;
 using InfraGate.Observability;
+using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
-var options = McpGatewayOptions.FromEnvironment();
-options.ValidateProductionSafety();
 var builder = WebApplication.CreateBuilder(args);
+AddInfraGateConfiguration(builder.Configuration, args);
+
+builder.Services.Configure<InfraGateGatewaySettings>(
+    builder.Configuration.GetSection("InfraGate:Gateway"));
+builder.Services.Configure<InfraGateAuthSettings>(
+    builder.Configuration.GetSection("InfraGate:Auth"));
+builder.Services.Configure<InfraGateApprovalSettings>(
+    builder.Configuration.GetSection("InfraGate:Approval"));
+
+var options = McpGatewayOptions.FromConfiguration(builder.Configuration);
+options.ValidateProductionSafety();
 
 builder.AddInfraGateObservability(opt => 
 {
@@ -20,9 +33,11 @@ builder.AddInfraGateObservability(opt =>
 });
 
 if (string.IsNullOrWhiteSpace(builder.Configuration[McpGatewayConventions.ConfigurationKeys.Urls]) &&
-    string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.AspNetCoreUrls)))
+    string.IsNullOrWhiteSpace(builder.Configuration[McpGatewayConventions.EnvironmentVariables.AspNetCoreUrls]))
 {
-    builder.WebHost.UseUrls(McpGatewayOptions.DefaultUrl);
+    string configuredUrls = builder.Configuration[McpGatewayConventions.ConfigurationKeys.AspNetCoreUrls] ??
+        McpGatewayOptions.DefaultUrl;
+    builder.WebHost.UseUrls(configuredUrls);
 }
 
 builder.Services.AddDataProtection()
@@ -67,13 +82,65 @@ else
     builder.Services.AddSingleton<IDownstreamServiceTokenProvider, NullDownstreamServiceTokenProvider>();
 }
 
+builder.Services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
+builder.Services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
+
 builder.Services
-    .AddMcpServer()
-    .WithHttpTransport()
+    .AddMcpServer(serverOptions =>
+    {
+        serverOptions.Capabilities = new ServerCapabilities
+        {
+            Resources = new ResourcesCapability { Subscribe = true }
+        };
+    })
+    .WithHttpTransport(transportOptions =>
+    {
+        // RunSessionHandler is experimental in ModelContextProtocol.AspNetCore 1.3.0.
+        // It runs before a session starts and its CancellationToken cancels on disconnect,
+        // giving us both the registration and cleanup hook in one place.
+#pragma warning disable MCPEXP002
+        transportOptions.RunSessionHandler = async (httpContext, server, ct) =>
+        {
+            var registry = httpContext.RequestServices.GetRequiredService<ISubscriptionRegistry>();
+            var id = server.SessionId;
+            if (id is not null)
+            {
+                registry.RegisterSession(id, new McpServerSessionNotifier(server));
+            }
+            try
+            {
+                await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            finally
+            {
+                if (id is not null)
+                {
+                    registry.RemoveSession(id);
+                }
+            }
+        };
+#pragma warning restore MCPEXP002
+    })
     .WithListToolsHandler((RequestContext<ListToolsRequestParams> request, CancellationToken ct) =>
         new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().ListToolsAsync(request.Params, ct)))
     .WithCallToolHandler((RequestContext<CallToolRequestParams> request, CancellationToken ct) =>
-        new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct)));
+    {
+        // Store session ID per-request so the dispatcher can retrieve it without a scoped dependency.
+        if (request.Services!.GetService<IHttpContextAccessor>() is { HttpContext: { } httpCtx })
+        {
+            httpCtx.Items[NotificationsConventions.McpSessionIdItemKey] = request.Server.SessionId;
+        }
+        return new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct));
+    })
+    .WithSubscribeToResourcesHandler((RequestContext<SubscribeRequestParams> request, CancellationToken ct) =>
+    {
+        // Subscriptions are managed implicitly by the gateway when challenges are created.
+        // This handler satisfies the MCP protocol handshake for clients that send subscribe requests.
+        return new ValueTask<EmptyResult>(new EmptyResult());
+    });
 
 var app = builder.Build();
 
@@ -84,3 +151,22 @@ app.MapMcp(McpGatewayConventions.McpPath)
     .RequireAuthorization(GatewayAuthConventions.Schemes.PolicyName);
 
 await app.RunAsync();
+
+static void AddInfraGateConfiguration(IConfigurationBuilder configuration, string[] args)
+{
+    string? configPath = Environment.GetEnvironmentVariable(RuntimeSafetyConventions.EnvironmentVariables.ConfigPath);
+    if (!string.IsNullOrWhiteSpace(configPath))
+    {
+        configuration.AddJsonFile(configPath, optional: false, reloadOnChange: false);
+        configuration.AddInfraGateEnvironmentVariables(mappings =>
+        {
+            RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
+            McpGatewayConventions.RegisterInfraGateEnvVarMappings(mappings);
+            GatewayAuthConventions.RegisterInfraGateEnvVarMappings(mappings);
+            // ApprovalRoot env var is shared; the gateway reads K8S_MCP_APPROVAL_ROOT
+            mappings.Map(ApprovalConventions.EnvironmentVariables.ApprovalRoot, McpGatewayConventions.ConfigurationKeys.ApprovalRoot);
+        });
+        configuration.AddEnvironmentVariables();
+        configuration.AddCommandLine(args);
+    }
+}

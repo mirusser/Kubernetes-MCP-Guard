@@ -6,6 +6,17 @@ namespace InfraGate.McpGateway;
 
 internal static class McpGatewayConventions
 {
+    public static void RegisterInfraGateEnvVarMappings(InfraGateEnvVarMappings mappings)
+    {
+        ArgumentNullException.ThrowIfNull(mappings);
+        mappings.Map(EnvironmentVariables.AspNetCoreUrls, ConfigurationKeys.AspNetCoreUrls);
+        mappings.Map(EnvironmentVariables.DownstreamAssembly, ConfigurationKeys.DownstreamAssembly);
+        mappings.Map(EnvironmentVariables.DownstreamProject, ConfigurationKeys.DownstreamProject);
+        mappings.Map(EnvironmentVariables.GuardAuditRoot, ConfigurationKeys.GuardAuditRoot);
+        mappings.Map(EnvironmentVariables.ApprovalBaseUrl, ConfigurationKeys.ApprovalBaseUrl);
+        mappings.Map(EnvironmentVariables.ApprovalChallengeTtlSeconds, ConfigurationKeys.ApprovalChallengeTtlSeconds);
+    }
+
     private const string LoopbackHttpScheme = "http";
     private const string LoopbackHost = "127.0.0.1";
     private const string UriSchemeSeparator = "://";
@@ -19,6 +30,13 @@ internal static class McpGatewayConventions
 
     public static class ConfigurationKeys
     {
+        public const string ApprovalBaseUrl = "InfraGate:Approval:BaseUrl";
+        public const string ApprovalChallengeTtlSeconds = "InfraGate:Approval:ChallengeTtlSeconds";
+        public const string ApprovalRoot = "InfraGate:Approval:Root";
+        public const string AspNetCoreUrls = "InfraGate:Gateway:AspNetCoreUrls";
+        public const string DownstreamAssembly = "InfraGate:Gateway:DownstreamAssembly";
+        public const string DownstreamProject = "InfraGate:Gateway:DownstreamProject";
+        public const string GuardAuditRoot = "InfraGate:Gateway:GuardAuditRoot";
         public const string Urls = "urls";
     }
 
