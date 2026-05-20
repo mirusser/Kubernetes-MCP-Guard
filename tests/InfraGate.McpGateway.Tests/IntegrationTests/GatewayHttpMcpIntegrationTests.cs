@@ -652,7 +652,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                     [KubernetesAdapterConventions.ToolArguments.TailLines] = 10
                 });
             
-            if (podLogsText.StartsWith("{"))
+            if (podLogsText.StartsWith('{'))
             {
                 AssertJsonProperty(podLogsText, "podName", podName);
             }

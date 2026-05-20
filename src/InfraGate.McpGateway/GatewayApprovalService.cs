@@ -55,34 +55,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         var granted = await approvalStore.GetGrantedPlanAsync(planId, cancellationToken);
         if (granted.IsGranted && granted.Envelope is not null && granted.Grant is not null)
         {
-            var decoded = planReviewAdapter.TryDecodeForReview(granted.Envelope, out var decodeError);
-            if (decoded is null)
-            {
-                var message = decodeError ?? $"Plan '{planId}' could not be decoded by the approval adapter.";
-                await WriteApplyDeniedAuditAsync(planId, message, cancellationToken);
-
-                return ApprovalGateResult.Refused(
-                    $"Refused: {message}",
-                    McpGatewayConventions.ApprovalReasonCodes.AdapterDecodeFailed);
-            }
-
-            var grantedAuthz = await authorizationCheck.EvaluateAsync(
-                new PlanAuthorizationContext(decoded.Envelope.Requester.Subject, requester.Subject),
-                cancellationToken).ConfigureAwait(false);
-            if (!grantedAuthz.IsAuthorized)
-            {
-                return ApprovalGateResult.Refused(
-                    "Refused: apply approval requires the same authenticated subject that requested the plan.",
-                    McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired);
-            }
-
-            var approvedRefusal = GetPlanReadinessRefusal(decoded, planId);
-            if (approvedRefusal is not null)
-            {
-                return ApprovalGateResult.Refused($"Refused: {approvedRefusal.Message}", approvedRefusal.ReasonCode);
-            }
-
-            return ApprovalGateResult.Approved();
+            return await GetGrantedApprovalResultAsync(planId, granted.Envelope, requester, cancellationToken);
         }
 
         if (!granted.IsGranted && granted.GrantExists)
@@ -92,6 +65,50 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
             return ApprovalGateResult.Refused($"Refused: {granted.Message}", granted.ReasonCode);
         }
 
+        return await HandlePendingPlanAsync(planId, requester, cancellationToken);
+    }
+
+    private async Task<ApprovalGateResult> GetGrantedApprovalResultAsync(
+        string planId,
+        PlanEnvelope envelope,
+        GatewayApprovalIdentity requester,
+        CancellationToken cancellationToken)
+    {
+        var decoded = planReviewAdapter.TryDecodeForReview(envelope, out var decodeError);
+        if (decoded is null)
+        {
+            var message = decodeError ?? $"Plan '{planId}' could not be decoded by the approval adapter.";
+            await WriteApplyDeniedAuditAsync(planId, message, cancellationToken);
+
+            return ApprovalGateResult.Refused(
+                $"Refused: {message}",
+                McpGatewayConventions.ApprovalReasonCodes.AdapterDecodeFailed);
+        }
+
+        var grantedAuthz = await authorizationCheck.EvaluateAsync(
+            new PlanAuthorizationContext(decoded.Envelope.Requester.Subject, requester.Subject),
+            cancellationToken).ConfigureAwait(false);
+        if (!grantedAuthz.IsAuthorized)
+        {
+            return ApprovalGateResult.Refused(
+                "Refused: apply approval requires the same authenticated subject that requested the plan.",
+                McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired);
+        }
+
+        var approvedRefusal = GetPlanReadinessRefusal(decoded, planId);
+        if (approvedRefusal is not null)
+        {
+            return ApprovalGateResult.Refused($"Refused: {approvedRefusal.Message}", approvedRefusal.ReasonCode);
+        }
+
+        return ApprovalGateResult.Approved();
+    }
+
+    private async Task<ApprovalGateResult> HandlePendingPlanAsync(
+        string planId,
+        GatewayApprovalIdentity requester,
+        CancellationToken cancellationToken)
+    {
         var pending = await approvalStore.GetPendingPlanAsync(planId, cancellationToken);
         if (!pending.IsPending || pending.Envelope is null || pending.Hash is null)
         {

@@ -596,44 +596,40 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
 
     private static bool TryGetInt(IReadOnlyDictionary<string, object?> args, string key, out int value)
     {
-        if (args.TryGetValue(key, out var raw))
+        if (!args.TryGetValue(key, out var raw))
         {
-            if (raw is int i)
-            {
+            value = 0;
+            return false;
+        }
+
+        switch (raw)
+        {
+            case int i:
                 value = i;
                 return true;
-            }
-
-            if (raw is long l)
-            {
+            case long l:
                 value = (int)l;
                 return true;
-            }
-
-            if (raw is double d && Math.Abs(d % 1) < 1e-10 && d >= int.MinValue && d <= int.MaxValue)
-            {
+            case double d when Math.Abs(d % 1) < 1e-10 && d >= int.MinValue && d <= int.MaxValue:
                 value = (int)d;
                 return true;
-            }
-
-            if (raw is string s && int.TryParse(s, out value))
-            {
+            case string s when int.TryParse(s, out value):
                 return true;
-            }
-
-            if (raw is JsonElement element)
-            {
-                if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out value))
-                {
-                    return true;
-                }
-
-                if (element.ValueKind == JsonValueKind.String && int.TryParse(element.GetString(), out value))
-                {
-                    return true;
-                }
-            }
+            case JsonElement element when TryGetIntFromJsonElement(element, out value):
+                return true;
         }
+
+        value = 0;
+        return false;
+    }
+
+    private static bool TryGetIntFromJsonElement(JsonElement element, out int value)
+    {
+        if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out value))
+            return true;
+
+        if (element.ValueKind == JsonValueKind.String && int.TryParse(element.GetString(), out value))
+            return true;
 
         value = 0;
         return false;

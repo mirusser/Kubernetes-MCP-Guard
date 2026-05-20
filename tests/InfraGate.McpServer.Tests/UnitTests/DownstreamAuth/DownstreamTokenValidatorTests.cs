@@ -267,7 +267,7 @@ public sealed class DownstreamTokenValidatorTests : IDisposable
         Assert.True(result.IsValid);
     }
 
-    private string CreateToken(
+    private static string CreateToken(
         string issuer,
         string audience,
         string scope,

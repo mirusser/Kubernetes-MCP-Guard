@@ -761,18 +761,18 @@ public sealed class RunProfileCliTests
             "K8S_MCP_ALLOWED_NAMESPACES"
         };
 
-    public static IEnumerable<object[]> ProfileKeySetData =>
-    [
-        ["local-compose", LocalComposeProfileKeys],
-        ["local-source-gateway", SourceGatewayProfileKeys],
-        ["development", ComposeStackProfileKeys],
-        ["production", ComposeStackProfileKeys],
-        ["test-integration", MinimalProfileKeys],
-        ["test-gateway-integration", MinimalProfileKeys],
-        ["test-safety-e2e", MinimalProfileKeys],
-        ["smoke-local", ComposeStackProfileKeys],
-        ["smoke-release", ComposeStackProfileKeys]
-    ];
+    public static TheoryData<string, HashSet<string>> ProfileKeySetData = new()
+    {
+        { "local-compose", LocalComposeProfileKeys },
+        { "local-source-gateway", SourceGatewayProfileKeys },
+        { "development", ComposeStackProfileKeys },
+        { "production", ComposeStackProfileKeys },
+        { "test-integration", MinimalProfileKeys },
+        { "test-gateway-integration", MinimalProfileKeys },
+        { "test-safety-e2e", MinimalProfileKeys },
+        { "smoke-local", ComposeStackProfileKeys },
+        { "smoke-release", ComposeStackProfileKeys }
+    };
 
     [Theory]
     [MemberData(nameof(ProfileKeySetData))]

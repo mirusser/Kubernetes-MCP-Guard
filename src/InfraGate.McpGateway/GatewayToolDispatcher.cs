@@ -205,24 +205,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         var gate = await approvals.EnsureApprovedOrCreateChallengeAsync(planId, ct);
         if (!gate.IsApproved)
         {
-            if (gate.Status is ApprovalGateStatus.ApprovalRequired)
-            {
-                var sessionId = CurrentSessionId;
-                if (sessionId is not null)
-                {
-                    subscriptionRegistry.SubscribeToPlan(sessionId, planId);
-                }
-            }
-
-            return gate.Status switch
-            {
-                ApprovalGateStatus.ApprovalRequired => new CallToolResult
-                {
-                    Content = [new TextContentBlock { Text = gate.Message }]
-                },
-                ApprovalGateStatus.Refused => ErrorResult(gate.Message),
-                _ => ErrorResult(gate.Message)
-            };
+            return HandleUnapprovedGate(gate, planId);
         }
 
         var preExecution = await preExecutionGate.EvaluateAsync(planId, domainAdapter, ct);
@@ -236,10 +219,41 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             return ErrorResult(preExecution.Message);
         }
 
+        return await ExecutePlanAsync(planId, preExecution.Envelope, preExecution.Grant, ct);
+    }
+
+    private CallToolResult HandleUnapprovedGate(ApprovalGateResult gate, string planId)
+    {
+        if (gate.Status is ApprovalGateStatus.ApprovalRequired)
+        {
+            var sessionId = CurrentSessionId;
+            if (sessionId is not null)
+            {
+                subscriptionRegistry.SubscribeToPlan(sessionId, planId);
+            }
+        }
+
+        return gate.Status switch
+        {
+            ApprovalGateStatus.ApprovalRequired => new CallToolResult
+            {
+                Content = [new TextContentBlock { Text = gate.Message }]
+            },
+            ApprovalGateStatus.Refused => ErrorResult(gate.Message),
+            _ => ErrorResult(gate.Message)
+        };
+    }
+
+    private async Task<CallToolResult> ExecutePlanAsync(
+        string planId,
+        PlanEnvelope envelope,
+        ApprovalGrant grant,
+        CancellationToken ct)
+    {
         DomainPlanExecutionResult executeResult;
         try
         {
-            executeResult = await domainAdapter.ExecuteAsync(preExecution.Envelope, ct);
+            executeResult = await domainAdapter.ExecuteAsync(envelope, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -249,7 +263,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
                     ApprovalConventions.AuditEvents.ApplyFailed,
                     new ApplyFailedPayload(
                         planId,
-                        preExecution.Envelope.Operation,
+                        envelope.Operation,
                         message)),
                 planId,
                 ct);
@@ -277,9 +291,9 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         }
 
         await approvalStore.MarkAppliedAsync(
-            preExecution.Envelope,
-            executeResult.TargetNamespace ?? GetNamespaceFromEnvelope(preExecution.Envelope),
-            preExecution.Grant,
+            envelope,
+            executeResult.TargetNamespace ?? GetNamespaceFromEnvelope(envelope),
+            grant,
             ct);
 
         return new CallToolResult
@@ -298,6 +312,8 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         };
     }
 
+    private static readonly string[] ApplyApprovedPlanRequiredArgs = ["planId"];
+
     private static Tool CreateApplyApprovedPlanTool()
     {
         return new Tool
@@ -311,7 +327,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
                 {
                     planId = new { type = "string", description = "PlanId returned by one of the request_* tools." }
                 },
-                required = new[] { "planId" }
+                required = ApplyApprovedPlanRequiredArgs
             })
         };
     }

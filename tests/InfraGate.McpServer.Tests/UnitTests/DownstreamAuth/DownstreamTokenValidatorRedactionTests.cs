@@ -199,7 +199,7 @@ public sealed class DownstreamTokenValidatorRedactionTests : IDisposable
         Assert.DoesNotContain(bearerToken, ex.Message, StringComparison.Ordinal);
     }
 
-    private string CreateToken(
+    private static string CreateToken(
         string issuer,
         string audience,
         string scope,

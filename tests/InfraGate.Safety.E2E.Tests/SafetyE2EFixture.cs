@@ -5,6 +5,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.DownstreamAuth;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
@@ -49,6 +50,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
     private readonly string guardAuditRoot;
     private readonly string namespaceName;
     private readonly string kubeconfigPath;
+    private readonly string? previousDownstreamAuthRequired;
 
     private KeycloakContainer? keycloakContainer;
     private TestServer? gatewayServer;
@@ -65,6 +67,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
         guardAuditRoot = Path.Combine(approvalRoot, "guardrails");
         namespaceName = Environment.GetEnvironmentVariable("K8S_MCP_ALLOWED_NAMESPACES") ?? DefaultNamespace;
         kubeconfigPath = ResolveKubeconfigPath(repoRoot);
+        previousDownstreamAuthRequired = Environment.GetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.Required);
     }
 
     public bool IsEnabled { get; private set; }
@@ -103,6 +106,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable(ApprovalConventions.EnvironmentVariables.ApprovalRoot, approvalRoot);
         Environment.SetEnvironmentVariable("K8S_MCP_ALLOWED_NAMESPACES", namespaceName);
         Environment.SetEnvironmentVariable(KubeconfigEnvVar, kubeconfigPath);
+        Environment.SetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.Required, "false");
 
         string realmJsonPath = Path.Combine(AppContext.BaseDirectory, "TestData", RealmJsonFileName);
         keycloakContainer = new KeycloakBuilder(KeycloakImage)
@@ -133,6 +137,10 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
         {
             await keycloakContainer.DisposeAsync();
         }
+
+        Environment.SetEnvironmentVariable(
+            DownstreamAuthConventions.EnvironmentVariables.Required,
+            previousDownstreamAuthRequired);
 
         try
         {

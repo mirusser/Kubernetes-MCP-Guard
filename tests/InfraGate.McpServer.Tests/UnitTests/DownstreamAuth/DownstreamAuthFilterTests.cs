@@ -265,7 +265,7 @@ public sealed class DownstreamAuthFilterTests : IDisposable
         Assert.Contains(DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired, ex.Message, StringComparison.Ordinal);
     }
 
-    private string CreateToken(
+    private static string CreateToken(
         string issuer,
         string audience,
         string scope,

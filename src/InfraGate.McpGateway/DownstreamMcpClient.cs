@@ -152,7 +152,7 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
         }
         catch (Exception ex) when (IsDownstreamAuthRejection(ex))
         {
-            logger.LogWarning("Downstream auth rejected; forcing token refresh and retrying once.");
+            logger.LogWarning(ex, "Downstream auth rejected; forcing token refresh and retrying once.");
             string refreshedToken = await tokenProvider.RefreshServiceTokenAsync(cancellationToken).ConfigureAwait(false);
             try
             {

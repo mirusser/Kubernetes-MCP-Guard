@@ -108,7 +108,7 @@ public sealed class KubernetesApprovalAdapterTests
     {
         var finding = new KubernetesPlanPolicyFinding("Warning", "IMAGE_LATEST_TAG", "apps/v1 Deployment demo/demo", "Avoid latest.");
 
-        var policyCheck = Assert.IsAssignableFrom<IDomainPolicyCheck>(finding);
+        var policyCheck = Assert.IsType<IDomainPolicyCheck>(finding, exactMatch: false);
 
         Assert.Equal("IMAGE_LATEST_TAG", policyCheck.Code);
         Assert.Equal("Avoid latest.", policyCheck.Message);

@@ -11,6 +11,7 @@ namespace InfraGate.McpGateway;
 
 internal static class GatewayApprovalEndpoints
 {
+    private const string TextHtmlContentType = "text/html";
     public static IEndpointRouteBuilder MapGatewayApprovalEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet(McpGatewayConventions.Approvals.LoginPath, Login);
@@ -29,7 +30,7 @@ internal static class GatewayApprovalEndpoints
 
                     return Results.Content(
                         RenderApprovalPage(page, renderer, tokens.RequestToken),
-                        "text/html",
+                        TextHtmlContentType,
                         Encoding.UTF8);
                 })
             .RequireAuthorization(GatewayAuthConventions.Schemes.ApprovalPolicyName);
@@ -50,7 +51,7 @@ internal static class GatewayApprovalEndpoints
 
                     var result = await approvals.ApproveChallengeAsync(challengeId, cancellationToken);
 
-                    return Results.Content(RenderDecisionPage(result), "text/html", Encoding.UTF8);
+                    return Results.Content(RenderDecisionPage(result), TextHtmlContentType, Encoding.UTF8);
                 })
             .RequireAuthorization(GatewayAuthConventions.Schemes.ApprovalPolicyName);
         endpoints.MapPost(
@@ -70,7 +71,7 @@ internal static class GatewayApprovalEndpoints
 
                     var result = await approvals.DenyChallengeAsync(challengeId, cancellationToken);
 
-                    return Results.Content(RenderDecisionPage(result), "text/html", Encoding.UTF8);
+                    return Results.Content(RenderDecisionPage(result), TextHtmlContentType, Encoding.UTF8);
                 })
             .RequireAuthorization(GatewayAuthConventions.Schemes.ApprovalPolicyName);
         endpoints.MapPost(
@@ -90,7 +91,7 @@ internal static class GatewayApprovalEndpoints
 
                     var result = await approvals.CancelChallengeAsync(challengeId, cancellationToken);
 
-                    return Results.Content(RenderDecisionPage(result), "text/html", Encoding.UTF8);
+                    return Results.Content(RenderDecisionPage(result), TextHtmlContentType, Encoding.UTF8);
                 })
             .RequireAuthorization(GatewayAuthConventions.Schemes.ApprovalPolicyName);
 

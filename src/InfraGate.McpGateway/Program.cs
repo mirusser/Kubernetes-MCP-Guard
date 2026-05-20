@@ -113,6 +113,7 @@ builder.Services
             }
             catch (OperationCanceledException)
             {
+                // Expected shutdown path — the infinite delay is cancelled during graceful shutdown.
             }
             finally
             {

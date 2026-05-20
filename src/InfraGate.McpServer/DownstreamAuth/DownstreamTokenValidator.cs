@@ -106,19 +106,18 @@ internal sealed class DownstreamTokenValidator
                 return ValidationResult.Fail($"Token is missing required scope '{options.Scope}'.");
             }
 
-            if (!string.IsNullOrWhiteSpace(options.GatewayClientId))
+            if (!string.IsNullOrWhiteSpace(options.GatewayClientId) &&
+                !HasExpectedClientId(result.ClaimsIdentity))
             {
-                if (!HasExpectedClientId(result.ClaimsIdentity))
-                {
-                    return ValidationResult.Fail(
-                        $"Token azp/client_id claim does not match the expected gateway client.");
-                }
+                return ValidationResult.Fail(
+                    $"Token azp/client_id claim does not match the expected gateway client.");
             }
 
             string clientId = result.ClaimsIdentity.FindFirst("azp")?.Value
                 ?? result.ClaimsIdentity.FindFirst("client_id")?.Value
                 ?? "(unknown)";
 
+            // Justification: CA1873 — all log arguments are already-computed simple scalars. Negligible evaluation cost.
             logger.LogInformation(
                 "Downstream auth validated, client={ClientId}",
                 clientId);

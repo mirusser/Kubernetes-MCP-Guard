@@ -62,16 +62,18 @@ public static class ApprovalConventions
 
     public static class AuditEvents
     {
+        private const string ExecutionBlockedValue = "execution.blocked";
+
         public const string PlanRequested = "plan.created";
         public const string PreExecutionGrantValidated = "pre_execution.grant.validated";
         public const string PreExecutionChecked = "pre_execution.checked";
         public const string ExecutionStarted = "execution.started";
         public const string PlanApplied = "execution.succeeded";
-        public const string ApplyDenied = "execution.blocked";
+        public const string ApplyDenied = ExecutionBlockedValue;
         public const string ApplyFailed = "execution.failed";
-        public const string DryRunFailed = "execution.blocked";
-        public const string DiffFailed = "execution.blocked";
-        public const string ApplyDriftDetected = "execution.blocked";
+        public const string DryRunFailed = ExecutionBlockedValue;
+        public const string DiffFailed = ExecutionBlockedValue;
+        public const string ApplyDriftDetected = ExecutionBlockedValue;
         public const string ApprovalChallengeCreated = "challenge.created";
         public const string ApprovalChallengeApproved = "challenge.approved";
         public const string ApprovalChallengeDenied = "challenge.denied";

@@ -112,6 +112,7 @@ internal sealed class ClientCredentialsDownstreamServiceTokenProvider : IDownstr
         tokenExpiry = now + TimeSpan.FromSeconds(expiresIn);
         cachedToken = DownstreamAuthConventions.BearerPrefix + accessToken;
 
+        // Justification: CA1873 — log argument is a simple DateTimeOffset. Negligible evaluation cost.
         logger.LogInformation(
             "Downstream service token acquired. Expires at {Expiry}",
             tokenExpiry);

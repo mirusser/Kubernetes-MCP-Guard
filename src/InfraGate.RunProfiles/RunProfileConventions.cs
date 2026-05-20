@@ -22,8 +22,8 @@ internal static class RunProfileConventions
 
     public static class Formats
     {
-        public const string AppSettings = "appsettings";
-        public const string Env = "env";
+        public const string AppSettingsName = "appsettings";
+        public const string EnvName = "env";
     }
 
     public static class GeneratedFile
