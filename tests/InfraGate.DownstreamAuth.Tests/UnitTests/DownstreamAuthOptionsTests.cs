@@ -207,7 +207,7 @@ public sealed class DownstreamAuthOptionsTests : IDisposable
     {
         var options = DownstreamAuthOptions.FromEnvironment();
 
-        Assert.False(options.Required);
+        Assert.True(options.Required);
         Assert.Equal(DownstreamAuthConventions.Defaults.Audience, options.Audience);
         Assert.Equal(DownstreamAuthConventions.Defaults.Scope, options.Scope);
         Assert.True(options.RequireHttpsMetadata);

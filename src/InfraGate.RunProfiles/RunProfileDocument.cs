@@ -32,7 +32,8 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             IdentityProvider = MergeIdentityProvider(profile.IdentityProvider, defaults.IdentityProvider),
             ApprovalAuthority = MergeApprovalAuthority(profile.ApprovalAuthority, defaults.ApprovalAuthority),
             GenericApprovalCore = profile.GenericApprovalCore ?? defaults.GenericApprovalCore,
-            Host = MergeHost(profile.Host, defaults.Host)
+            Host = MergeHost(profile.Host, defaults.Host),
+            DownstreamAuth = MergeDownstreamAuth(profile.DownstreamAuth, defaults.DownstreamAuth)
         };
     }
 
@@ -94,6 +95,25 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             ApprovalHostPath = profile.ApprovalHostPath ?? defaults.ApprovalHostPath,
             GuardAuditHostPath = profile.GuardAuditHostPath ?? defaults.GuardAuditHostPath,
             DataProtectionHostPath = profile.DataProtectionHostPath ?? defaults.DataProtectionHostPath
+        };
+    }
+
+    private static DownstreamAuthProfile? MergeDownstreamAuth(
+        DownstreamAuthProfile? profile,
+        DownstreamAuthProfile? defaults)
+    {
+        if (profile is null) return defaults;
+        if (defaults is null) return profile;
+        return profile with
+        {
+            Required = profile.Required ?? defaults.Required,
+            Authority = profile.Authority ?? defaults.Authority,
+            MetadataAddress = profile.MetadataAddress ?? defaults.MetadataAddress,
+            RequireHttpsMetadata = profile.RequireHttpsMetadata ?? defaults.RequireHttpsMetadata,
+            Audience = profile.Audience ?? defaults.Audience,
+            Scope = profile.Scope ?? defaults.Scope,
+            GatewayClientId = profile.GatewayClientId ?? defaults.GatewayClientId,
+            GatewayClientSecret = profile.GatewayClientSecret ?? defaults.GatewayClientSecret
         };
     }
 }

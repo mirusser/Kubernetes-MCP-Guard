@@ -37,7 +37,7 @@ graph LR
 
     Client -->|"/mcp + JWT"| Gateway
     Gateway --> Auth --> Guardrails
-    Guardrails -->|"stdio, no token"| K8sMcp --> Rbac --> K8s
+    Guardrails -->|"stdio + service token"| K8sMcp --> Rbac --> K8s
     Client -->|"receive approval URL"| Approval
     Approval -->|"cookie session"| Gateway
 ```
@@ -151,6 +151,33 @@ Set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` only for a localhost-only is
 For an external OAuth/OIDC issuer, use its issuer URL for `INFRA_GATE_OAUTH_AUTHORITY`. The gateway remains a resource server only; external issuer setup, users, clients, login, consent, PKCE policy, and token issuance stay outside the gateway. See [docs/production-oidc.md](production-oidc.md) for production OIDC guidance.
 
 For the supported Keycloak container path, the Compose file sets the internal metadata/token endpoints and approval redirect values for you.
+
+### Downstream stdio service token auth
+
+The gateway proves its identity to the downstream stdio server using a short-lived OAuth client-credentials token. This is a defense-in-depth measure — not the primary security boundary. The primary boundary is the trusted-launch model (containment, human approval, and per-action authorization described in the security controls section of `src/InfraGate.McpGateway/README.md`).
+
+The downstream auth settings are controlled by the `INFRA_GATE_DOWNSTREAM_AUTH_*` environment variables:
+
+| Variable | Purpose |
+|---|---|
+| `INFRA_GATE_DOWNSTREAM_AUTH_REQUIRED` | Set to `true` to enforce. Set to `false` to opt out (development only). |
+| `INFRA_GATE_DOWNSTREAM_AUTH_AUTHORITY` | OIDC issuer URL (e.g. `http://127.0.0.1:3010/realms/infra-gate`). |
+| `INFRA_GATE_DOWNSTREAM_AUTH_METADATA_ADDRESS` | Optional alternative metadata address for container-internal access. |
+| `INFRA_GATE_DOWNSTREAM_AUTH_REQUIRE_HTTPS_METADATA` | Set to `false` for localhost-only issuers in development. |
+| `INFRA_GATE_DOWNSTREAM_AUTH_AUDIENCE` | Expected audience on the service token (default: `urn:infra-gate:mcp-server`). |
+| `INFRA_GATE_DOWNSTREAM_AUTH_SCOPE` | Scope to request (default: `mcp:downstream`). |
+| `INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_ID` | Gateway service client ID (gateway side only; never passed to the server subprocess). |
+| `INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET` | Gateway service client secret (gateway side only; never passed to the server subprocess). |
+
+To disable downstream auth for local development without Keycloak:
+
+```bash
+export INFRA_GATE_DOWNSTREAM_AUTH_REQUIRED=false
+```
+
+The gateway excludes `INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_ID` and `INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET` from the subprocess environment allowlist. The server subprocess never receives the gateway's client credentials. The server receives only the shared fields (`INFRA_GATE_DOWNSTREAM_AUTH_REQUIRED`, `AUTHORITY`, `AUDIENCE`, `SCOPE`, `REQUIRE_HTTPS_METADATA`) to configure its JWT validator.
+
+Token values are redacted from guardrail audit logs. The `GATEWAY_CLIENT_SECRET` is never emitted to server-side run profiles or logged.
 
 Codex CLI HTTP MCP config:
 

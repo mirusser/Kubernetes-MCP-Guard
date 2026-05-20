@@ -583,6 +583,43 @@ public sealed class RunProfileCliTests
             "INFRA_GATE_DATA_PROTECTION_HOST_PATH"
         };
 
+    private static readonly HashSet<string> LocalComposeProfileKeys =
+        new(StringComparer.Ordinal)
+        {
+            "INFRA_GATE_ENVIRONMENT",
+            "ASPNETCORE_URLS",
+            "INFRA_GATE_DOWNSTREAM_ASSEMBLY",
+            "INFRA_GATE_GUARD_AUDIT_ROOT",
+            "INFRA_GATE_OAUTH_AUTHORITY",
+            "INFRA_GATE_OAUTH_METADATA_ADDRESS",
+            "INFRA_GATE_OAUTH_RESOURCE",
+            "INFRA_GATE_OAUTH_SCOPE",
+            "INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA",
+            "INFRA_GATE_APPROVAL_BASE_URL",
+            "INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID",
+            "INFRA_GATE_APPROVAL_OAUTH_CALLBACK_PATH",
+            "INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT",
+            "INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT",
+            "INFRA_GATE_DOWNSTREAM_AUTH_REQUIRED",
+            "INFRA_GATE_DOWNSTREAM_AUTH_AUTHORITY",
+            "INFRA_GATE_DOWNSTREAM_AUTH_METADATA_ADDRESS",
+            "INFRA_GATE_DOWNSTREAM_AUTH_REQUIRE_HTTPS_METADATA",
+            "INFRA_GATE_DOWNSTREAM_AUTH_AUDIENCE",
+            "INFRA_GATE_DOWNSTREAM_AUTH_SCOPE",
+            "INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_ID",
+            "INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET",
+            "K8S_MCP_APPROVAL_ROOT",
+            "KUBECONFIG",
+            "K8S_MCP_ALLOWED_NAMESPACES",
+            "INFRA_GATE_BIND_ADDRESS",
+            "INFRA_GATE_BIND_PORT",
+            "INFRA_GATE_GATEWAY_IMAGE",
+            "INFRA_GATE_KUBECONFIG_HOST_PATH",
+            "INFRA_GATE_APPROVAL_HOST_PATH",
+            "INFRA_GATE_GUARD_AUDIT_HOST_PATH",
+            "INFRA_GATE_DATA_PROTECTION_HOST_PATH"
+        };
+
     private static readonly HashSet<string> SourceGatewayProfileKeys =
         new(StringComparer.Ordinal)
         {
@@ -616,7 +653,7 @@ public sealed class RunProfileCliTests
 
     public static IEnumerable<object[]> ProfileKeySetData =>
     [
-        ["local-compose", ComposeStackProfileKeys],
+        ["local-compose", LocalComposeProfileKeys],
         ["local-source-gateway", SourceGatewayProfileKeys],
         ["development", ComposeStackProfileKeys],
         ["production", ComposeStackProfileKeys],
@@ -970,6 +1007,99 @@ public sealed class RunProfileCliTests
         Assert.Equal(
             committed.ReplaceLineEndings(),
             generated.ReplaceLineEndings());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithDownstreamAuthSection_EmitsDownstreamAuthEnvVars()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                downstreamAuth:
+                  required: "true"
+                  authority: http://127.0.0.1:3010/realms/infra-gate
+                  metadataAddress: http://keycloak:8080/realms/infra-gate/.well-known/openid-configuration
+                  requireHttpsMetadata: "false"
+                  audience: urn:infra-gate:mcp-server
+                  scope: mcp:downstream
+                  gatewayClientId: infra-gate-gateway-service
+                  gatewayClientSecret: gateway-service-secret
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--output", outputPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        HashSet<string> keys = ParseEnvKeys(await File.ReadAllTextAsync(outputPath));
+        Assert.Contains("INFRA_GATE_DOWNSTREAM_AUTH_REQUIRED", keys);
+        Assert.Contains("INFRA_GATE_DOWNSTREAM_AUTH_AUTHORITY", keys);
+        Assert.Contains("INFRA_GATE_DOWNSTREAM_AUTH_METADATA_ADDRESS", keys);
+        Assert.Contains("INFRA_GATE_DOWNSTREAM_AUTH_REQUIRE_HTTPS_METADATA", keys);
+        Assert.Contains("INFRA_GATE_DOWNSTREAM_AUTH_AUDIENCE", keys);
+        Assert.Contains("INFRA_GATE_DOWNSTREAM_AUTH_SCOPE", keys);
+        Assert.Contains("INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_ID", keys);
+        Assert.Contains("INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET", keys);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithDownstreamAuthWithoutClientSecret_DoesNotEmitClientSecretKey()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-stdio:
+                kind: mcp-stdio
+                downstreamAuth:
+                  required: "true"
+                  authority: http://127.0.0.1:3010/realms/infra-gate
+                  requireHttpsMetadata: "false"
+                  audience: urn:infra-gate:mcp-server
+                  scope: mcp:downstream
+                genericApprovalCore:
+                  approvalRoot: .mcp-approvals
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: .kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-stdio", "--config", configPath, "--output", outputPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        HashSet<string> keys = ParseEnvKeys(await File.ReadAllTextAsync(outputPath));
+        Assert.Contains("INFRA_GATE_DOWNSTREAM_AUTH_REQUIRED", keys);
+        Assert.Contains("INFRA_GATE_DOWNSTREAM_AUTH_AUTHORITY", keys);
+        Assert.DoesNotContain("INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_ID", keys);
+        Assert.DoesNotContain("INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET", keys);
     }
 
     private static string FindRepoRoot()

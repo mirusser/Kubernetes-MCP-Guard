@@ -9,4 +9,5 @@ internal sealed record RunProfile(
     ApprovalAuthorityProfile? ApprovalAuthority,
     GenericApprovalCoreProfile? GenericApprovalCore,
     IReadOnlyList<DomainAdapterProfile> DomainAdapters,
-    HostProfile? Host);
+    HostProfile? Host,
+    DownstreamAuthProfile? DownstreamAuth);
