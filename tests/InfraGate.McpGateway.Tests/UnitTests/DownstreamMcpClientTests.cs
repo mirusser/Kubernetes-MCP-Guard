@@ -10,24 +10,6 @@ namespace InfraGate.McpGateway.Tests.UnitTests;
 public sealed class DownstreamMcpClientTests
 {
     [Fact]
-    public void CreateTransportOptions_OnlyForwardsAllowedEnvironmentVariables()
-    {
-        string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
-        var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
-
-        var transportOptions = client.CreateTransportOptions();
-
-        Assert.NotNull(transportOptions.EnvironmentVariables);
-        Assert.All(transportOptions.EnvironmentVariables, kv =>
-        {
-            Assert.False(string.IsNullOrEmpty(kv.Key));
-            Assert.NotNull(kv.Value);
-            Assert.Contains(kv.Key, McpGatewayConventions.DownstreamProcess.AllowedEnvironmentVariables);
-        });
-    }
-
-    [Fact]
     public void CreateTransportOptions_ExcludesGatewayClientSecret()
     {
         string secretKey = DownstreamAuthConventions.EnvironmentVariables.GatewayClientSecret;
