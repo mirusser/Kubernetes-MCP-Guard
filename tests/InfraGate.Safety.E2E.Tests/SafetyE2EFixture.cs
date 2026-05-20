@@ -8,6 +8,7 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Builder;
@@ -488,6 +489,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                 services.AddRouting();
                 services.AddSingleton(options);
                 services.AddSingleton<IGuardrailAuditStore, GuardrailAuditStore>();
+                services.AddSingleton<IDownstreamServiceTokenProvider, NullDownstreamServiceTokenProvider>();
                 services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
                 services.AddSingleton<GuardedToolRunner>();
                 services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));

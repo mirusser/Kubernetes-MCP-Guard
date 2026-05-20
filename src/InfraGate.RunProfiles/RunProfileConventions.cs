@@ -32,6 +32,7 @@ internal static class RunProfileConventions
         public const string ApprovalAuthority = "approvalAuthority";
         public const string ApprovalRoot = "approvalRoot";
         public const string AspnetcoreUrls = "aspnetcoreUrls";
+        public const string Audience = "audience";
         public const string Authority = "authority";
         public const string BaseUrl = "baseUrl";
         public const string BindAddress = "bindAddress";
@@ -40,7 +41,10 @@ internal static class RunProfileConventions
         public const string Defaults = "defaults";
         public const string DomainAdapters = "domainAdapters";
         public const string DownstreamAssembly = "downstreamAssembly";
+        public const string DownstreamAuth = "downstreamAuth";
         public const string Gateway = "gateway";
+        public const string GatewayClientId = "gatewayClientId";
+        public const string GatewayClientSecret = "gatewayClientSecret";
         public const string GatewayImage = "gatewayImage";
         public const string GenericApprovalCore = "genericApprovalCore";
         public const string GuardAuditHostPath = "guardAuditHostPath";
@@ -60,6 +64,7 @@ internal static class RunProfileConventions
         public const string OauthTokenEndpoint = "oauthTokenEndpoint";
         public const string Profiles = "profiles";
         public const string RealmImport = "realmImport";
+        public const string Required = "required";
         public const string RequireHttpsMetadata = "requireHttpsMetadata";
         public const string Resource = "resource";
         public const string RuntimeMode = "runtimeMode";
@@ -83,6 +88,14 @@ internal static class RunProfileConventions
         public const string BindPort = "INFRA_GATE_BIND_PORT";
         public const string DataProtectionHostPath = "INFRA_GATE_DATA_PROTECTION_HOST_PATH";
         public const string DownstreamAssembly = "INFRA_GATE_DOWNSTREAM_ASSEMBLY";
+        public const string DownstreamAuthAudience = "INFRA_GATE_DOWNSTREAM_AUTH_AUDIENCE";
+        public const string DownstreamAuthAuthority = "INFRA_GATE_DOWNSTREAM_AUTH_AUTHORITY";
+        public const string DownstreamAuthGatewayClientId = "INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_ID";
+        public const string DownstreamAuthGatewayClientSecret = "INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET";
+        public const string DownstreamAuthMetadataAddress = "INFRA_GATE_DOWNSTREAM_AUTH_METADATA_ADDRESS";
+        public const string DownstreamAuthRequired = "INFRA_GATE_DOWNSTREAM_AUTH_REQUIRED";
+        public const string DownstreamAuthRequireHttpsMetadata = "INFRA_GATE_DOWNSTREAM_AUTH_REQUIRE_HTTPS_METADATA";
+        public const string DownstreamAuthScope = "INFRA_GATE_DOWNSTREAM_AUTH_SCOPE";
         public const string GatewayImage = "INFRA_GATE_GATEWAY_IMAGE";
         public const string GuardAuditHostPath = "INFRA_GATE_GUARD_AUDIT_HOST_PATH";
         public const string GuardAuditRoot = "INFRA_GATE_GUARD_AUDIT_ROOT";

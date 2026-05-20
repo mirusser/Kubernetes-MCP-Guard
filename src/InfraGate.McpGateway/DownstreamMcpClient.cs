@@ -1,22 +1,30 @@
 using InfraGate.Approvals;
+using InfraGate.DownstreamAuth;
+using InfraGate.McpGateway.DownstreamAuth;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
+using ModelContextProtocol;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
+using System.Text.Json.Nodes;
 
 namespace InfraGate.McpGateway;
 
-public sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, IAsyncDisposable
+internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, IAsyncDisposable
 {
     private readonly McpGatewayOptions options;
+    private readonly IDownstreamServiceTokenProvider tokenProvider;
     private readonly ILogger<DownstreamMcpClient> logger;
     private readonly SemaphoreSlim clientLock = new(1, 1);
     private readonly SemaphoreSlim callLock = new(1, 1);
     private McpClient? client;
 
-    public DownstreamMcpClient(McpGatewayOptions options, ILogger<DownstreamMcpClient> logger)
+    internal DownstreamMcpClient(
+        McpGatewayOptions options,
+        IDownstreamServiceTokenProvider tokenProvider,
+        ILogger<DownstreamMcpClient> logger)
     {
         this.options = options;
+        this.tokenProvider = tokenProvider;
         this.logger = logger;
     }
 
@@ -29,21 +37,31 @@ public sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, IAs
         await callLock.WaitAsync(cancellationToken);
         try
         {
-            var result = await mcpClient.CallToolAsync(toolName, arguments, cancellationToken: cancellationToken);
-
-            var text = string.Join(
-                Environment.NewLine,
-                result.Content.OfType<TextContentBlock>().Select(content => content.Text));
-
-            if (result.IsError == true)
+            return await WithAuthRetryAsync(async token =>
             {
-                logger.LogError("Downstream tool '{ToolName}' returned IsError=true. Args={ArgKeys}: {Text}",
+                var meta = BuildAuthMeta(token);
+                var requestOptions = meta is not null ? new RequestOptions { Meta = meta } : null;
+                var result = await mcpClient.CallToolAsync(
                     toolName,
-                    string.Join(",", arguments.Keys),
-                    text);
-            }
+                    arguments,
+                    progress: null,
+                    options: requestOptions,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
 
-            return text;
+                var text = string.Join(
+                    Environment.NewLine,
+                    result.Content.OfType<TextContentBlock>().Select(content => content.Text));
+
+                if (result.IsError == true)
+                {
+                    logger.LogError("Downstream tool '{ToolName}' returned IsError=true. Args={ArgKeys}: {Text}",
+                        toolName,
+                        string.Join(",", arguments.Keys),
+                        text);
+                }
+
+                return text;
+            }, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -54,15 +72,20 @@ public sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, IAs
     public async Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken)
     {
         var mcpClient = await GetClientAsync(cancellationToken);
-        var tools = await mcpClient.ListToolsAsync(cancellationToken: cancellationToken);
-        return tools
-            .Select(t => new DownstreamTool(
-                t.Name,
-                t.Description ?? string.Empty,
-                t.ProtocolTool.Annotations?.ReadOnlyHint ?? false,
-                t.ProtocolTool.Annotations?.DestructiveHint ?? false,
-                t.JsonSchema))
-            .ToList();
+        return await WithAuthRetryAsync(async token =>
+        {
+            var meta = BuildAuthMeta(token);
+            var requestOptions = meta is not null ? new RequestOptions { Meta = meta } : null;
+            var tools = await mcpClient.ListToolsAsync(requestOptions, cancellationToken: cancellationToken).ConfigureAwait(false);
+            return tools
+                .Select(t => new DownstreamTool(
+                    t.Name,
+                    t.Description ?? string.Empty,
+                    t.ProtocolTool.Annotations?.ReadOnlyHint ?? false,
+                    t.ProtocolTool.Annotations?.DestructiveHint ?? false,
+                    t.JsonSchema))
+                .ToList() as IReadOnlyList<DownstreamTool>;
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     Task<string> IToolCaller.CallAsync(
@@ -99,6 +122,11 @@ public sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, IAs
 
             var transport = new StdioClientTransport(CreateTransportOptions());
 
+            // TODO (Task 6 bootstrap gate): write "io.infragate.downstream.authorization: Bearer <token>\n"
+            // to the child process stdin BEFORE McpClient.CreateAsync fires the initialize request.
+            // StdioClientTransport does not expose stdin before connect; this requires a custom transport
+            // or process wrapper. The per-request _meta below covers listTools and callTool. The
+            // initialize gap is noted and deferred to a follow-up.
             client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken);
 
             return client;
@@ -107,6 +135,49 @@ public sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, IAs
         {
             clientLock.Release();
         }
+    }
+
+    internal static bool IsDownstreamAuthRejection(Exception ex)
+        => ex is McpException mcpEx
+           && mcpEx.Message.Contains(DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired);
+
+    internal async Task<T> WithAuthRetryAsync<T>(
+        Func<string, Task<T>> operation,
+        CancellationToken cancellationToken)
+    {
+        string token = await tokenProvider.GetServiceTokenAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await operation(token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (IsDownstreamAuthRejection(ex))
+        {
+            logger.LogWarning("Downstream auth rejected; forcing token refresh and retrying once.");
+            string refreshedToken = await tokenProvider.RefreshServiceTokenAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await operation(refreshedToken).ConfigureAwait(false);
+            }
+            catch (Exception retryEx) when (IsDownstreamAuthRejection(retryEx))
+            {
+                throw new McpException(
+                    $"Downstream service authentication failed after token refresh. " +
+                    $"Check {DownstreamAuthConventions.EnvironmentVariables.GatewayClientId} configuration.",
+                    retryEx);
+            }
+        }
+    }
+
+    internal static JsonObject? BuildAuthMeta(string token)
+    {
+        if (string.IsNullOrEmpty(token))
+        {
+            return null;
+        }
+
+        var meta = new JsonObject();
+        meta[DownstreamAuthConventions.MetaKey] = token;
+        return meta;
     }
 
     internal StdioClientTransportOptions CreateTransportOptions()
@@ -120,17 +191,12 @@ public sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, IAs
             : [options.DownstreamAssembly];
 
         var environmentVariables = new Dictionary<string, string?>();
-        foreach (string? key in Environment.GetEnvironmentVariables().Keys)
+        foreach (string name in McpGatewayConventions.DownstreamProcess.AllowedEnvironmentVariables)
         {
-            if (key is null)
-            {
-                continue;
-            }
-
-            string? value = Environment.GetEnvironmentVariable(key);
+            string? value = Environment.GetEnvironmentVariable(name);
             if (value is not null)
             {
-                environmentVariables[key] = value;
+                environmentVariables[name] = value;
             }
         }
 

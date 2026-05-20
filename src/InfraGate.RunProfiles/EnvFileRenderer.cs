@@ -20,6 +20,7 @@ internal static class EnvFileRenderer
         AppendIdentityProvider(builder, profile);
         AppendApprovalAuthority(builder, profile);
         AppendGenericApprovalCore(builder, profile);
+        AppendDownstreamAuth(builder, profile);
         AppendKubernetesAdapter(builder, profile);
         AppendHost(builder, profile);
 
@@ -120,6 +121,41 @@ internal static class EnvFileRenderer
         builder.AppendLine();
         builder.AppendLine("# Generic Approval Core");
         builder.AppendLine($"{RunProfileConventions.Env.ApprovalRoot}={profile.GenericApprovalCore.ApprovalRoot}");
+    }
+
+    private static void AppendDownstreamAuth(StringBuilder builder, RunProfile profile)
+    {
+        if (profile.DownstreamAuth is null)
+        {
+            return;
+        }
+
+        DownstreamAuthProfile da = profile.DownstreamAuth;
+        bool hasAnyValue =
+            !string.IsNullOrEmpty(da.Required) ||
+            !string.IsNullOrEmpty(da.Authority) ||
+            !string.IsNullOrEmpty(da.MetadataAddress) ||
+            !string.IsNullOrEmpty(da.RequireHttpsMetadata) ||
+            !string.IsNullOrEmpty(da.Audience) ||
+            !string.IsNullOrEmpty(da.Scope) ||
+            !string.IsNullOrEmpty(da.GatewayClientId) ||
+            !string.IsNullOrEmpty(da.GatewayClientSecret);
+
+        if (!hasAnyValue)
+        {
+            return;
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("# Downstream Auth");
+        AppendIfSet(builder, RunProfileConventions.Env.DownstreamAuthRequired, da.Required);
+        AppendIfSet(builder, RunProfileConventions.Env.DownstreamAuthAuthority, da.Authority);
+        AppendIfSet(builder, RunProfileConventions.Env.DownstreamAuthMetadataAddress, da.MetadataAddress);
+        AppendIfSet(builder, RunProfileConventions.Env.DownstreamAuthRequireHttpsMetadata, da.RequireHttpsMetadata);
+        AppendIfSet(builder, RunProfileConventions.Env.DownstreamAuthAudience, da.Audience);
+        AppendIfSet(builder, RunProfileConventions.Env.DownstreamAuthScope, da.Scope);
+        AppendIfSet(builder, RunProfileConventions.Env.DownstreamAuthGatewayClientId, da.GatewayClientId);
+        AppendIfSet(builder, RunProfileConventions.Env.DownstreamAuthGatewayClientSecret, da.GatewayClientSecret);
     }
 
     private static void AppendKubernetesAdapter(StringBuilder builder, RunProfile profile)

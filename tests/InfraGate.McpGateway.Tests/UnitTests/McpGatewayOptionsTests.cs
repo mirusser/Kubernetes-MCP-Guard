@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using InfraGate.Approvals;
+using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpGateway.Tests.UnitTests;
@@ -16,6 +18,8 @@ public sealed class McpGatewayOptionsTests
     private const string ApprovalRoot = "approvals";
     private const string GatewayResource = "https://gateway.example.com/mcp";
     private const string ApprovalBaseUrl = "https://gateway.example.com";
+    private const string DownstreamAuthority = "https://idp.example.com";
+    private const string DownstreamClientId = "infra-gate-gateway";
 
     [Fact]
     public void FromEnvironment_UsesDownstreamAssembly_WhenSet()
@@ -69,7 +73,7 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void CreateTransportOptions_UsesProjectRunArguments_WhenAssemblyUnset()
     {
-        var client = new DownstreamMcpClient(CreateOptions(), NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(CreateOptions(), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -87,7 +91,7 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void CreateTransportOptions_UsesAssemblyArgument_WhenAssemblySet()
     {
-        var client = new DownstreamMcpClient(CreateOptions(DownstreamAssembly), NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(CreateOptions(DownstreamAssembly), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -101,7 +105,7 @@ public sealed class McpGatewayOptionsTests
     [InlineData("  ")]
     public void CreateTransportOptions_FallsBackToProject_WhenAssemblyIsEmptyOrWhitespace(string assembly)
     {
-        var client = new DownstreamMcpClient(CreateOptions(assembly), NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(CreateOptions(assembly), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -219,6 +223,72 @@ public sealed class McpGatewayOptionsTests
         Assert.Contains(McpGatewayConventions.EnvironmentVariables.GuardAuditRoot, exception.Message);
     }
 
+    [Fact]
+    public void ProductionMode_WithDownstreamAuthRequired_False_RefusesStartup()
+    {
+        using var environment = SetProductionEnvironment(
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
+
+        var options = McpGatewayOptions.FromEnvironment();
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.Required, exception.Message);
+    }
+
+    [Fact]
+    public void ProductionMode_WithValidDownstreamAuth_AllowsStartup()
+    {
+        using var environment = SetProductionEnvironment();
+
+        var options = McpGatewayOptions.FromEnvironment();
+        Exception? exception = Record.Exception(options.ValidateProductionSafety);
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void DevelopmentMode_WithDownstreamAuthRequired_False_AllowsStartup()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
+            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
+
+        var options = McpGatewayOptions.FromEnvironment();
+        Exception? exception = Record.Exception(options.ValidateProductionSafety);
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void FromEnvironment_WithDownstreamAuthRequired_Absent_DefaultsToRequired()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
+            (DownstreamAuthConventions.EnvironmentVariables.Required, null));
+
+        var options = McpGatewayOptions.FromEnvironment();
+
+        Assert.True(options.DownstreamAuth?.Required);
+    }
+
+    [Fact]
+    public void FromEnvironment_PopulatesDownstreamAuth_FromEnvironment()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "true"),
+            (DownstreamAuthConventions.EnvironmentVariables.Authority, DownstreamAuthority),
+            (DownstreamAuthConventions.EnvironmentVariables.GatewayClientId, DownstreamClientId));
+
+        var options = McpGatewayOptions.FromEnvironment();
+
+        Assert.NotNull(options.DownstreamAuth);
+        Assert.True(options.DownstreamAuth.Required);
+        Assert.Equal(DownstreamAuthority, options.DownstreamAuth.Authority);
+        Assert.Equal(DownstreamClientId, options.DownstreamAuth.GatewayClientId);
+    }
+
     private static McpGatewayOptions CreateOptions(string? downstreamAssembly = null) =>
         new(
             new GatewayAuthOptions(OAuthAuthority),
@@ -245,7 +315,10 @@ public sealed class McpGatewayOptionsTests
             [GatewayAuthConventions.EnvironmentVariables.ApprovalOAuthTokenEndpoint] = OAuthAuthority + "/token",
             [McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl] = ApprovalBaseUrl,
             [McpGatewayConventions.EnvironmentVariables.GuardAuditRoot] = ProductionPath("guardrails"),
-            [ApprovalConventions.EnvironmentVariables.ApprovalRoot] = ProductionPath("approvals")
+            [ApprovalConventions.EnvironmentVariables.ApprovalRoot] = ProductionPath("approvals"),
+            [DownstreamAuthConventions.EnvironmentVariables.Required] = "true",
+            [DownstreamAuthConventions.EnvironmentVariables.Authority] = DownstreamAuthority,
+            [DownstreamAuthConventions.EnvironmentVariables.GatewayClientId] = DownstreamClientId
         };
 
         foreach (var item in overrides)

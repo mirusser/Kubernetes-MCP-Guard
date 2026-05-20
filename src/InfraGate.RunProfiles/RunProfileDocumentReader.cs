@@ -18,6 +18,7 @@ internal static class RunProfileDocumentReader
         new HashSet<string>(
             [
                 RunProfileConventions.YamlKeys.ApprovalAuthority,
+                RunProfileConventions.YamlKeys.DownstreamAuth,
                 RunProfileConventions.YamlKeys.Gateway,
                 RunProfileConventions.YamlKeys.GenericApprovalCore,
                 RunProfileConventions.YamlKeys.Host,
@@ -30,12 +31,27 @@ internal static class RunProfileDocumentReader
             [
                 RunProfileConventions.YamlKeys.ApprovalAuthority,
                 RunProfileConventions.YamlKeys.DomainAdapters,
+                RunProfileConventions.YamlKeys.DownstreamAuth,
                 RunProfileConventions.YamlKeys.Gateway,
                 RunProfileConventions.YamlKeys.GenericApprovalCore,
                 RunProfileConventions.YamlKeys.Host,
                 RunProfileConventions.YamlKeys.IdentityProvider,
                 RunProfileConventions.YamlKeys.Kind,
                 RunProfileConventions.YamlKeys.RuntimeMode
+            ],
+            StringComparer.Ordinal);
+
+    private static readonly IReadOnlySet<string> KnownDownstreamAuthKeys =
+        new HashSet<string>(
+            [
+                RunProfileConventions.YamlKeys.Audience,
+                RunProfileConventions.YamlKeys.Authority,
+                RunProfileConventions.YamlKeys.GatewayClientId,
+                RunProfileConventions.YamlKeys.GatewayClientSecret,
+                RunProfileConventions.YamlKeys.MetadataAddress,
+                RunProfileConventions.YamlKeys.Required,
+                RunProfileConventions.YamlKeys.RequireHttpsMetadata,
+                RunProfileConventions.YamlKeys.Scope
             ],
             StringComparer.Ordinal);
 
@@ -152,6 +168,7 @@ internal static class RunProfileDocumentReader
             GenericApprovalCoreProfile? genericApprovalCore = ReadGenericApprovalCore(profileNode);
             IReadOnlyList<DomainAdapterProfile> domainAdapters = ReadDomainAdapters(profileNode);
             HostProfile? host = ReadHost(profileNode);
+            DownstreamAuthProfile? downstreamAuth = ReadDownstreamAuth(profileNode);
 
             if (domainAdapters.Count != 1)
             {
@@ -168,7 +185,8 @@ internal static class RunProfileDocumentReader
                 approvalAuthority,
                 genericApprovalCore,
                 domainAdapters,
-                host));
+                host,
+                downstreamAuth));
         }
 
         return new RunProfileDocument(profiles) { Defaults = defaults };
@@ -195,7 +213,35 @@ internal static class RunProfileDocumentReader
             ReadIdentityProvider(mapping),
             ReadApprovalAuthority(mapping),
             ReadGenericApprovalCore(mapping),
-            ReadHost(mapping));
+            ReadHost(mapping),
+            ReadDownstreamAuth(mapping));
+    }
+
+    private static DownstreamAuthProfile? ReadDownstreamAuth(YamlMappingNode node)
+    {
+        if (!node.Children.TryGetValue(
+                new YamlScalarNode(RunProfileConventions.YamlKeys.DownstreamAuth),
+                out YamlNode? value))
+        {
+            return null;
+        }
+
+        if (value is not YamlMappingNode mapping)
+        {
+            throw new InvalidOperationException(
+                $"YAML key '{RunProfileConventions.YamlKeys.DownstreamAuth}' must be a mapping.");
+        }
+
+        ValidateKnownKeys(mapping, KnownDownstreamAuthKeys);
+        return new DownstreamAuthProfile(
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.Required),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.Authority),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.MetadataAddress),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.RequireHttpsMetadata),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.Audience),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.Scope),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.GatewayClientId),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.GatewayClientSecret));
     }
 
     private static GatewayProfile? ReadGateway(YamlMappingNode node)

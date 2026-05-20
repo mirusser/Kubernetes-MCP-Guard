@@ -5,4 +5,5 @@ internal sealed record ProfileDefaults(
     IdentityProviderProfile? IdentityProvider,
     ApprovalAuthorityProfile? ApprovalAuthority,
     GenericApprovalCoreProfile? GenericApprovalCore,
-    HostProfile? Host);
+    HostProfile? Host,
+    DownstreamAuthProfile? DownstreamAuth);

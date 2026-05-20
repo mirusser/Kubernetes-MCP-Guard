@@ -1,27 +1,125 @@
+using System.Text.Json.Nodes;
+using InfraGate.Approvals;
+using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.DownstreamAuth;
+using InfraGate.RuntimeSafety;
 using Microsoft.Extensions.Logging.Abstractions;
+using ModelContextProtocol;
 
 namespace InfraGate.McpGateway.Tests.UnitTests;
 
 public sealed class DownstreamMcpClientTests
 {
     [Fact]
-    public void CreateTransportOptions_ForwardsAllEnvironmentVariables()
+    public void CreateTransportOptions_ExcludesGatewayClientSecret()
+    {
+        string secretKey = DownstreamAuthConventions.EnvironmentVariables.GatewayClientSecret;
+        string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
+        var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
+        Environment.SetEnvironmentVariable(secretKey, "super-secret-value");
+        try
+        {
+            var transportOptions = client.CreateTransportOptions();
+
+            Assert.DoesNotContain(secretKey, transportOptions.EnvironmentVariables!.Keys);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(secretKey, null);
+        }
+    }
+
+    [Fact]
+    public void CreateTransportOptions_ExcludesGatewayClientId()
+    {
+        string clientIdKey = DownstreamAuthConventions.EnvironmentVariables.GatewayClientId;
+        string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
+        var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
+        Environment.SetEnvironmentVariable(clientIdKey, "infra-gate-gateway");
+        try
+        {
+            var transportOptions = client.CreateTransportOptions();
+
+            Assert.DoesNotContain(clientIdKey, transportOptions.EnvironmentVariables!.Keys);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(clientIdKey, null);
+        }
+    }
+
+    [Fact]
+    public void CreateTransportOptions_ExcludesGatewayOAuthAuthority()
+    {
+        string key = GatewayAuthConventions.EnvironmentVariables.OAuthAuthority;
+        string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
+        var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
+        Environment.SetEnvironmentVariable(key, "http://keycloak/realms/infra-gate");
+        try
+        {
+            var transportOptions = client.CreateTransportOptions();
+
+            Assert.DoesNotContain(key, transportOptions.EnvironmentVariables!.Keys);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(key, null);
+        }
+    }
+
+    [Theory]
+    [InlineData(RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, "Development")]
+    [InlineData(RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment, "Production")]
+    [InlineData(RuntimeSafetyConventions.EnvironmentVariables.AspNetCoreEnvironment, "Staging")]
+    public void CreateTransportOptions_PassesThroughAllowedVar_WhenSet(string envVarName, string envVarValue)
     {
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
-
-        var transportOptions = client.CreateTransportOptions();
-
-        Assert.NotNull(transportOptions.EnvironmentVariables);
-        Assert.NotEmpty(transportOptions.EnvironmentVariables);
-        Assert.All(transportOptions.EnvironmentVariables, kv =>
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
+        string? original = Environment.GetEnvironmentVariable(envVarName);
+        Environment.SetEnvironmentVariable(envVarName, envVarValue);
+        try
         {
-            Assert.False(string.IsNullOrEmpty(kv.Key));
-            Assert.NotNull(kv.Value);
-        });
+            var transportOptions = client.CreateTransportOptions();
+
+            Assert.Contains(envVarName, transportOptions.EnvironmentVariables!.Keys);
+            Assert.Equal(envVarValue, transportOptions.EnvironmentVariables![envVarName]);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVarName, original);
+        }
+    }
+
+    [Theory]
+    [InlineData(ApprovalConventions.EnvironmentVariables.ApprovalRoot, "/mnt/approvals")]
+    [InlineData(DownstreamAuthConventions.EnvironmentVariables.Required, "true")]
+    [InlineData(DownstreamAuthConventions.EnvironmentVariables.Authority, "http://keycloak/realms/infra-gate")]
+    [InlineData(DownstreamAuthConventions.EnvironmentVariables.Audience, "urn:infra-gate:mcp-server")]
+    [InlineData(DownstreamAuthConventions.EnvironmentVariables.Scope, "mcp:downstream")]
+    public void CreateTransportOptions_PassesThroughServerConfigVar_WhenSet(string envVarName, string envVarValue)
+    {
+        string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
+        var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
+        string? original = Environment.GetEnvironmentVariable(envVarName);
+        Environment.SetEnvironmentVariable(envVarName, envVarValue);
+        try
+        {
+            var transportOptions = client.CreateTransportOptions();
+
+            Assert.Contains(envVarName, transportOptions.EnvironmentVariables!.Keys);
+            Assert.Equal(envVarValue, transportOptions.EnvironmentVariables![envVarName]);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVarName, original);
+        }
     }
 
     [Fact]
@@ -30,7 +128,7 @@ public sealed class DownstreamMcpClientTests
         string downstreamProject = "/app/server/InfraGate.McpServer.dll";
 
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory(), downstreamAssembly: "/app/server/InfraGate.McpServer.dll");
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -44,7 +142,7 @@ public sealed class DownstreamMcpClientTests
     {
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -61,7 +159,7 @@ public sealed class DownstreamMcpClientTests
     {
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory(), downstreamAssembly: "   ");
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -80,7 +178,7 @@ public sealed class DownstreamMcpClientTests
         {
             string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
             var options = CreateOptions(downstreamProject, workingDirectory: workingDirectory);
-            var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+            var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
 
             var transportOptions = client.CreateTransportOptions();
 
@@ -97,7 +195,7 @@ public sealed class DownstreamMcpClientTests
     {
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -109,12 +207,191 @@ public sealed class DownstreamMcpClientTests
     {
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
         var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
-        var client = new DownstreamMcpClient(options, NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
         Assert.Equal(McpGatewayConventions.DownstreamProcess.Name, transportOptions.Name);
         Assert.Equal(McpGatewayConventions.DownstreamProcess.Command, transportOptions.Command);
+    }
+
+    [Fact]
+    public void BuildAuthMeta_WithBearerToken_ReturnsMetaWithAuthKey()
+    {
+        string token = "Bearer eyJhbGciOiJSUzI1NiJ9.test.sig";
+
+        var meta = DownstreamMcpClient.BuildAuthMeta(token);
+
+        Assert.NotNull(meta);
+        Assert.True(meta.ContainsKey(DownstreamAuthConventions.MetaKey));
+        Assert.Equal(token, meta[DownstreamAuthConventions.MetaKey]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    public void BuildAuthMeta_WithEmptyOrNullToken_ReturnsNull(string? token)
+    {
+        var meta = DownstreamMcpClient.BuildAuthMeta(token!);
+
+        Assert.Null(meta);
+    }
+
+    [Fact]
+    public void BuildAuthMeta_TokenValue_DoesNotAppearInMetaKeyName()
+    {
+        string token = "Bearer supersecrettoken";
+
+        var meta = DownstreamMcpClient.BuildAuthMeta(token);
+
+        Assert.NotNull(meta);
+        // The key must be the convention key, not the token value itself
+        string key = Assert.Single(meta!.Select(kv => kv.Key));
+        Assert.Equal(DownstreamAuthConventions.MetaKey, key);
+        Assert.DoesNotContain("supersecrettoken", key);
+    }
+
+    [Fact]
+    public void Constructor_AcceptsNullTokenProvider_ForDisabledAuthMode()
+    {
+        string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
+        var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
+
+        // NullDownstreamServiceTokenProvider is the disabled-auth provider (Required=false)
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
+
+        Assert.NotNull(client);
+    }
+
+    // --- IsDownstreamAuthRejection ---
+
+    [Fact]
+    public void IsDownstreamAuthRejection_McpExceptionWithAuthCode_ReturnsTrue()
+    {
+        var ex = new McpException($"{DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired}: token expired");
+
+        bool result = DownstreamMcpClient.IsDownstreamAuthRejection(ex);
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void IsDownstreamAuthRejection_McpExceptionWithUnrelatedMessage_ReturnsFalse()
+    {
+        var ex = new McpException("tool_not_found: no such tool");
+
+        bool result = DownstreamMcpClient.IsDownstreamAuthRejection(ex);
+
+        Assert.False(result);
+    }
+
+    [Theory]
+    [InlineData(typeof(InvalidOperationException))]
+    [InlineData(typeof(TimeoutException))]
+    [InlineData(typeof(OperationCanceledException))]
+    public void IsDownstreamAuthRejection_NonMcpException_ReturnsFalse(Type exceptionType)
+    {
+        var ex = (Exception)Activator.CreateInstance(exceptionType, "some message")!;
+
+        bool result = DownstreamMcpClient.IsDownstreamAuthRejection(ex);
+
+        Assert.False(result);
+    }
+
+    // --- WithAuthRetryAsync ---
+
+    [Fact]
+    public async Task WithAuthRetryAsync_SuccessOnFirstAttempt_ReturnsResultWithoutRefresh()
+    {
+        var tokenProvider = new FakeDownstreamServiceTokenProvider("first-token", "refreshed-token");
+        var downstreamClient = CreateDownstreamMcpClient(tokenProvider);
+        int callCount = 0;
+
+        string result = await downstreamClient.WithAuthRetryAsync(token =>
+        {
+            callCount++;
+            return Task.FromResult($"ok-{token}");
+        }, CancellationToken.None);
+
+        Assert.Equal("ok-first-token", result);
+        Assert.Equal(1, callCount);
+        Assert.Equal(0, tokenProvider.RefreshCallCount);
+    }
+
+    [Fact]
+    public async Task WithAuthRetryAsync_AuthRejectionOnFirstAttempt_RefreshesAndRetries()
+    {
+        var tokenProvider = new FakeDownstreamServiceTokenProvider("first-token", "refreshed-token");
+        var downstreamClient = CreateDownstreamMcpClient(tokenProvider);
+        int callCount = 0;
+
+        string result = await downstreamClient.WithAuthRetryAsync(token =>
+        {
+            callCount++;
+            if (callCount == 1)
+            {
+                throw new McpException($"{DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired}: expired");
+            }
+            return Task.FromResult($"ok-{token}");
+        }, CancellationToken.None);
+
+        Assert.Equal("ok-refreshed-token", result);
+        Assert.Equal(2, callCount);
+        Assert.Equal(1, tokenProvider.RefreshCallCount);
+    }
+
+    [Fact]
+    public async Task WithAuthRetryAsync_NonAuthExceptionOnFirstAttempt_DoesNotRetry()
+    {
+        var tokenProvider = new FakeDownstreamServiceTokenProvider("first-token", "refreshed-token");
+        var downstreamClient = CreateDownstreamMcpClient(tokenProvider);
+
+        await Assert.ThrowsAsync<McpException>(() => downstreamClient.WithAuthRetryAsync<string>(token =>
+        {
+            throw new McpException("tool_not_found: missing");
+        }, CancellationToken.None));
+
+        Assert.Equal(0, tokenProvider.RefreshCallCount);
+    }
+
+    [Fact]
+    public async Task WithAuthRetryAsync_AuthRejectionAfterRefresh_ThrowsMcpExceptionWithoutTokenContent()
+    {
+        string sensitiveToken = "Bearer super-secret-refreshed-token";
+        var tokenProvider = new FakeDownstreamServiceTokenProvider("first-token", sensitiveToken);
+        var downstreamClient = CreateDownstreamMcpClient(tokenProvider);
+
+        var ex = await Assert.ThrowsAsync<McpException>(() => downstreamClient.WithAuthRetryAsync<string>(token =>
+        {
+            throw new McpException($"{DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired}: rejected");
+        }, CancellationToken.None));
+
+        // The final exception message must NOT contain the token value
+        Assert.DoesNotContain(sensitiveToken, ex.Message);
+        // The message must reference the config key so operators know where to look
+        Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.GatewayClientId, ex.Message);
+    }
+
+    [Fact]
+    public async Task WithAuthRetryAsync_AuthRejectionAfterRefresh_WrapsOriginalException()
+    {
+        var tokenProvider = new FakeDownstreamServiceTokenProvider("first-token", "refreshed-token");
+        var downstreamClient = CreateDownstreamMcpClient(tokenProvider);
+
+        var ex = await Assert.ThrowsAsync<McpException>(() => downstreamClient.WithAuthRetryAsync<string>(token =>
+        {
+            throw new McpException($"{DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired}: rejected");
+        }, CancellationToken.None));
+
+        Assert.NotNull(ex.InnerException);
+        Assert.IsType<McpException>(ex.InnerException);
+    }
+
+    private static DownstreamMcpClient CreateDownstreamMcpClient(IDownstreamServiceTokenProvider tokenProvider)
+    {
+        string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
+        var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
+        return new DownstreamMcpClient(options, tokenProvider, NullLogger<DownstreamMcpClient>.Instance);
     }
 
     private static McpGatewayOptions CreateOptions(
@@ -137,5 +414,28 @@ public sealed class DownstreamMcpClientTests
             ApprovalBaseUrl: null,
             ApprovalChallengeTtl: McpGatewayOptions.DefaultApprovalChallengeTtl,
             DownstreamAssembly: downstreamAssembly);
+    }
+}
+
+internal sealed class FakeDownstreamServiceTokenProvider : IDownstreamServiceTokenProvider
+{
+    private readonly string initialToken;
+    private readonly string refreshedToken;
+
+    public int RefreshCallCount { get; private set; }
+
+    internal FakeDownstreamServiceTokenProvider(string initialToken, string refreshedToken)
+    {
+        this.initialToken = initialToken;
+        this.refreshedToken = refreshedToken;
+    }
+
+    public Task<string> GetServiceTokenAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(initialToken);
+
+    public Task<string> RefreshServiceTokenAsync(CancellationToken cancellationToken)
+    {
+        RefreshCallCount++;
+        return Task.FromResult(refreshedToken);
     }
 }

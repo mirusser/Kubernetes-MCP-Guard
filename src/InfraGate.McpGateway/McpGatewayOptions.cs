@@ -1,5 +1,6 @@
 using System.Globalization;
 using InfraGate.Approvals;
+using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway.Auth;
 using InfraGate.RuntimeSafety;
 
@@ -16,7 +17,8 @@ public sealed record McpGatewayOptions(
     string? DownstreamAssembly = null,
     RuntimeMode RuntimeMode = RuntimeMode.Development,
     bool IsGuardAuditRootExplicit = true,
-    bool IsApprovalRootExplicit = true)
+    bool IsApprovalRootExplicit = true,
+    DownstreamAuthOptions? DownstreamAuth = null)
 {
     public const string DefaultUrl = McpGatewayConventions.DefaultUrl;
     public static readonly TimeSpan DefaultApprovalChallengeTtl = TimeSpan.FromMinutes(15);
@@ -28,6 +30,7 @@ public sealed record McpGatewayOptions(
     public static McpGatewayOptions FromEnvironment()
     {
         var auth = GatewayAuthOptions.FromEnvironment();
+        var downstreamAuth = DownstreamAuthOptions.FromEnvironment();
         RuntimeMode runtimeMode = RuntimeModeResolver.FromEnvironment();
         string workingDirectory = Directory.GetCurrentDirectory();
         string downstreamProject =
@@ -65,7 +68,8 @@ public sealed record McpGatewayOptions(
             downstreamAssembly,
             runtimeMode,
             isGuardAuditRootExplicit,
-            isApprovalRootExplicit);
+            isApprovalRootExplicit,
+            downstreamAuth);
     }
 
     public void ValidateProductionSafety()
@@ -74,6 +78,16 @@ public sealed record McpGatewayOptions(
         {
             return;
         }
+
+        var downstreamAuth = DownstreamAuth ?? new DownstreamAuthOptions();
+        if (!downstreamAuth.Required)
+        {
+            throw new InvalidOperationException(
+                $"{DownstreamAuthConventions.EnvironmentVariables.Required} must not be false in Production mode. " +
+                $"Downstream authentication is required for production deployments.");
+        }
+
+        downstreamAuth.Validate();
 
         if (!Auth.OAuthRequireHttpsMetadata)
         {

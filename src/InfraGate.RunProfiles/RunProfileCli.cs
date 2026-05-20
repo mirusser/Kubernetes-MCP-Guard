@@ -237,6 +237,12 @@ internal static class RunProfileCli
 
         return section switch
         {
+            RunProfileConventions.YamlKeys.DownstreamAuth => profile with
+            {
+                DownstreamAuth = ApplyDownstreamAuthOverride(
+                    profile.DownstreamAuth ?? new DownstreamAuthProfile(null, null, null, null, null, null, null, null),
+                    field, value, path)
+            },
             RunProfileConventions.YamlKeys.Gateway => profile with
             {
                 Gateway = ApplyGatewayOverride(
@@ -265,6 +271,21 @@ internal static class RunProfileCli
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };
     }
+
+    private static DownstreamAuthProfile ApplyDownstreamAuthOverride(
+        DownstreamAuthProfile profile, string field, string value, string path) =>
+        field switch
+        {
+            RunProfileConventions.YamlKeys.Required => profile with { Required = value },
+            RunProfileConventions.YamlKeys.Authority => profile with { Authority = value },
+            RunProfileConventions.YamlKeys.MetadataAddress => profile with { MetadataAddress = value },
+            RunProfileConventions.YamlKeys.RequireHttpsMetadata => profile with { RequireHttpsMetadata = value },
+            RunProfileConventions.YamlKeys.Audience => profile with { Audience = value },
+            RunProfileConventions.YamlKeys.Scope => profile with { Scope = value },
+            RunProfileConventions.YamlKeys.GatewayClientId => profile with { GatewayClientId = value },
+            RunProfileConventions.YamlKeys.GatewayClientSecret => profile with { GatewayClientSecret = value },
+            _ => throw new InvalidOperationException($"Unknown --set path: {path}")
+        };
 
     private static GatewayProfile ApplyGatewayOverride(
         GatewayProfile profile, string field, string value, string path) =>

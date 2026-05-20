@@ -6,9 +6,11 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using InfraGate.Approvals;
+using InfraGate.DownstreamAuth;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.DownstreamAuth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Builder;
@@ -214,8 +216,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         using var environment = EnvironmentVariableScope.Set(
             ("KUBECONFIG", kubeconfig),
             ("K8S_MCP_APPROVAL_ROOT", Path.Combine(testRoot, "approvals")),
-            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName));
-        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), NullLogger<DownstreamMcpClient>.Instance);
+            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
+        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
 
         var result = await downstream.CallToolAsync(
@@ -248,8 +251,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         using var environment = EnvironmentVariableScope.Set(
             ("KUBECONFIG", kubeconfig),
             ("K8S_MCP_APPROVAL_ROOT", approvalRoot),
-            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName));
-        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), NullLogger<DownstreamMcpClient>.Instance);
+            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
+        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(downstream, audit, CreateGatewayOptions(serverProject, testRoot, repoRoot));
         await using var client = await CreateHttpMcpClientAsync(server);
@@ -337,8 +341,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         using var environment = EnvironmentVariableScope.Set(
             ("KUBECONFIG", kubeconfig),
             ("K8S_MCP_APPROVAL_ROOT", approvalRoot),
-            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName));
-        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), NullLogger<DownstreamMcpClient>.Instance);
+            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
+        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(downstream, audit, CreateGatewayOptions(serverProject, testRoot, repoRoot));
         await using var client = await CreateHttpMcpClientAsync(server);
@@ -374,8 +379,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         using var environment = EnvironmentVariableScope.Set(
             ("KUBECONFIG", kubeconfig),
             ("K8S_MCP_APPROVAL_ROOT", approvalRoot),
-            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName));
-        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), NullLogger<DownstreamMcpClient>.Instance);
+            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
+        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(downstream, audit, CreateGatewayOptions(serverProject, testRoot, repoRoot));
         await using var client = await CreateHttpMcpClientAsync(server);
