@@ -27,7 +27,7 @@ builder.AddInfraGateObservability(opt =>
 
 mcpOptions.ValidateProductionSafety();
 builder.Services.AddSingleton(mcpOptions);
-builder.Services.AddDownstreamAuth(mcpOptions.DownstreamAuth);
+builder.Services.AddDownstreamAuth(mcpOptions.DownstreamAuth ?? InfraGate.DownstreamAuth.DownstreamAuthOptions.FromEnvironment());
 builder.Services.AddSingleton<IKubernetes>(_ =>
 {
     var config = new KubernetesConfigProvider(mcpOptions).Create();

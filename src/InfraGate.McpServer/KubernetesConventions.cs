@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.DownstreamAuth;
 using InfraGate.KubernetesAdapter;
 using InfraGate.RuntimeSafety;
 
@@ -15,6 +16,17 @@ internal static class KubernetesConventions
         mappings.Map(EnvironmentVariables.ApprovalRoot, ConfigurationKeys.ApprovalRoot);
         mappings.Map(EnvironmentVariables.AllowedNamespaces, ConfigurationKeys.AllowedNamespaces);
         mappings.Map(EnvironmentVariables.LogPath, ConfigurationKeys.LogPath);
+        RegisterDownstreamAuthMappings(mappings);
+    }
+
+    private static void RegisterDownstreamAuthMappings(InfraGateEnvVarMappings mappings)
+    {
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Required, DownstreamAuthConventions.ConfigurationKeys.Required);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Authority, DownstreamAuthConventions.ConfigurationKeys.Authority);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.MetadataAddress, DownstreamAuthConventions.ConfigurationKeys.MetadataAddress);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata, DownstreamAuthConventions.ConfigurationKeys.RequireHttpsMetadata);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Audience, DownstreamAuthConventions.ConfigurationKeys.Audience);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Scope, DownstreamAuthConventions.ConfigurationKeys.Scope);
     }
 
     public const string ServiceName = "infra-gate-mcp";

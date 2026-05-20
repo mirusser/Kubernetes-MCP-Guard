@@ -30,4 +30,16 @@ public static class DownstreamAuthConventions
         public const string GatewayClientId = "INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_ID";
         public const string GatewayClientSecret = "INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET";
     }
+
+    public static class ConfigurationKeys
+    {
+        public const string Required = "InfraGate:DownstreamAuth:Required";
+        public const string Authority = "InfraGate:DownstreamAuth:Authority";
+        public const string MetadataAddress = "InfraGate:DownstreamAuth:MetadataAddress";
+        public const string RequireHttpsMetadata = "InfraGate:DownstreamAuth:RequireHttpsMetadata";
+        public const string Audience = "InfraGate:DownstreamAuth:Audience";
+        public const string Scope = "InfraGate:DownstreamAuth:Scope";
+        public const string GatewayClientId = "InfraGate:DownstreamAuth:GatewayClientId";
+        public const string GatewayClientSecret = "InfraGate:DownstreamAuth:GatewayClientSecret";
+    }
 }

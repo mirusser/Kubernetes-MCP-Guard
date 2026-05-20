@@ -15,6 +15,19 @@ internal static class McpGatewayConventions
         mappings.Map(EnvironmentVariables.GuardAuditRoot, ConfigurationKeys.GuardAuditRoot);
         mappings.Map(EnvironmentVariables.ApprovalBaseUrl, ConfigurationKeys.ApprovalBaseUrl);
         mappings.Map(EnvironmentVariables.ApprovalChallengeTtlSeconds, ConfigurationKeys.ApprovalChallengeTtlSeconds);
+        RegisterDownstreamAuthMappings(mappings);
+    }
+
+    private static void RegisterDownstreamAuthMappings(InfraGateEnvVarMappings mappings)
+    {
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Required, DownstreamAuthConventions.ConfigurationKeys.Required);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Authority, DownstreamAuthConventions.ConfigurationKeys.Authority);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.MetadataAddress, DownstreamAuthConventions.ConfigurationKeys.MetadataAddress);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata, DownstreamAuthConventions.ConfigurationKeys.RequireHttpsMetadata);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Audience, DownstreamAuthConventions.ConfigurationKeys.Audience);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Scope, DownstreamAuthConventions.ConfigurationKeys.Scope);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.GatewayClientId, DownstreamAuthConventions.ConfigurationKeys.GatewayClientId);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.GatewayClientSecret, DownstreamAuthConventions.ConfigurationKeys.GatewayClientSecret);
     }
 
     private const string LoopbackHttpScheme = "http";

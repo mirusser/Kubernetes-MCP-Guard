@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -25,6 +26,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
+using ModelContextProtocol;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -238,6 +240,127 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         Assert.Equal("PATCH", dryRun.Method);
         Assert.Contains("dryRun=All", dryRun.Query);
         Assert.Contains("fieldValidation=Strict", dryRun.Query);
+    }
+
+    [Fact]
+    public async Task AuthenticatedStdio_ToolDiscovery_SucceedsWithValidToken()
+    {
+        var repoRoot = FindRepoRoot();
+        var serverProject = Path.Combine(repoRoot, "src", "InfraGate.McpServer", "InfraGate.McpServer.csproj");
+        var testRoot = Path.Combine(Path.GetTempPath(), "infra-gate-gateway-tests", Guid.NewGuid().ToString("N"));
+        await using var k8sApi = new TestKubernetesApi(_ => TestResponse.Json("{}"));
+        var kubeconfig = await WriteKubeconfigAsync(testRoot, k8sApi.Url);
+        await using var oidcServer = new FakeOidcMetadataServer();
+        var tokenProvider = new LocalJwtTokenProvider(
+            oidcServer.Url,
+            oidcServer.SigningKey,
+            DownstreamAuthConventions.Defaults.Audience,
+            DownstreamAuthConventions.Defaults.Scope);
+        using var environment = EnvironmentVariableScope.Set(
+            ("KUBECONFIG", kubeconfig),
+            ("K8S_MCP_APPROVAL_ROOT", Path.Combine(testRoot, "approvals")),
+            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "true"),
+            (DownstreamAuthConventions.EnvironmentVariables.Authority, oidcServer.Url),
+            (DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata, "false"),
+            (DownstreamAuthConventions.EnvironmentVariables.Audience, DownstreamAuthConventions.Defaults.Audience),
+            (DownstreamAuthConventions.EnvironmentVariables.Scope, DownstreamAuthConventions.Defaults.Scope));
+        var authOptions = new DownstreamAuthOptions
+        {
+            Required = true,
+            Authority = oidcServer.Url,
+            RequireHttpsMetadata = false,
+            Audience = DownstreamAuthConventions.Defaults.Audience,
+            Scope = DownstreamAuthConventions.Defaults.Scope,
+            GatewayClientId = "test-gateway-client"
+        };
+        var options = new McpGatewayOptions(
+            new GatewayAuthOptions(
+                Issuer,
+                Resource,
+                Scope,
+                OAuthRequireHttpsMetadata: false,
+                OAuthMetadataAddress: null,
+                ApprovalOAuthClientId: GatewayAuthConventions.DefaultApprovalOAuthClientId,
+                ApprovalOAuthAuthorizationEndpoint: Issuer + "/authorize",
+                ApprovalOAuthTokenEndpoint: Issuer + "/token"),
+            serverProject,
+            Path.Combine(testRoot, "guardrails"),
+            repoRoot,
+            Path.Combine(testRoot, "approvals"),
+            ApprovalBaseUrl: null,
+            McpGatewayOptions.DefaultApprovalChallengeTtl,
+            DownstreamAuth: authOptions);
+        await using var downstream = new DownstreamMcpClient(options, tokenProvider, NullLogger<DownstreamMcpClient>.Instance);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+
+        var tools = await downstream.ListToolsAsync(timeout.Token);
+
+        Assert.NotEmpty(tools);
+        Assert.Contains(tools, t => t.Name == "get_allowed_namespaces");
+    }
+
+    [Fact]
+    public async Task AuthenticatedStdio_ToolExecution_FailsWithoutAuthToken()
+    {
+        var repoRoot = FindRepoRoot();
+        var serverProject = Path.Combine(repoRoot, "src", "InfraGate.McpServer", "InfraGate.McpServer.csproj");
+        var testRoot = Path.Combine(Path.GetTempPath(), "infra-gate-gateway-tests", Guid.NewGuid().ToString("N"));
+        await using var k8sApi = new TestKubernetesApi(_ => TestResponse.Json("{}"));
+        var kubeconfig = await WriteKubeconfigAsync(testRoot, k8sApi.Url);
+        await using var oidcServer = new FakeOidcMetadataServer();
+        var tokenProvider = new NoTokenDownstreamServiceTokenProvider();
+        using var environment = EnvironmentVariableScope.Set(
+            ("KUBECONFIG", kubeconfig),
+            ("K8S_MCP_APPROVAL_ROOT", Path.Combine(testRoot, "approvals")),
+            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "true"),
+            (DownstreamAuthConventions.EnvironmentVariables.Authority, oidcServer.Url),
+            (DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata, "false"),
+            (DownstreamAuthConventions.EnvironmentVariables.Audience, DownstreamAuthConventions.Defaults.Audience),
+            (DownstreamAuthConventions.EnvironmentVariables.Scope, DownstreamAuthConventions.Defaults.Scope));
+        var authOptions = new DownstreamAuthOptions
+        {
+            Required = true,
+            Authority = oidcServer.Url,
+            RequireHttpsMetadata = false,
+            Audience = DownstreamAuthConventions.Defaults.Audience,
+            Scope = DownstreamAuthConventions.Defaults.Scope,
+            GatewayClientId = "test-gateway-client"
+        };
+        var options = new McpGatewayOptions(
+            new GatewayAuthOptions(
+                Issuer,
+                Resource,
+                Scope,
+                OAuthRequireHttpsMetadata: false,
+                OAuthMetadataAddress: null,
+                ApprovalOAuthClientId: GatewayAuthConventions.DefaultApprovalOAuthClientId,
+                ApprovalOAuthAuthorizationEndpoint: Issuer + "/authorize",
+                ApprovalOAuthTokenEndpoint: Issuer + "/token"),
+            serverProject,
+            Path.Combine(testRoot, "guardrails"),
+            repoRoot,
+            Path.Combine(testRoot, "approvals"),
+            ApprovalBaseUrl: null,
+            McpGatewayOptions.DefaultApprovalChallengeTtl,
+            DownstreamAuth: authOptions);
+        await using var downstream = new DownstreamMcpClient(options, tokenProvider, NullLogger<DownstreamMcpClient>.Instance);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+
+        var result = await downstream.CallToolAsync(
+            KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
+            new Dictionary<string, object?>
+            {
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                [KubernetesAdapterConventions.ToolArguments.Manifest] = CleanConfigMapManifest
+            },
+            timeout.Token);
+
+        Assert.NotEmpty(result);
+        Assert.True(
+            IsDownstreamAuthFailure(result),
+            $"Expected downstream auth rejection in result, got: {result}");
     }
 
     [Fact]
@@ -1170,6 +1293,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         throw new InvalidOperationException("Could not locate repository root.");
     }
 
+    private static bool IsDownstreamAuthFailure(string result) =>
+        result.Contains(DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired, StringComparison.Ordinal);
+
     [GeneratedRegex(@"(?:PlanId:\s+|Approval plan\s+')(?<id>[0-9a-z-]+)", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
     private static partial Regex PlanIdPattern();
 
@@ -1493,5 +1619,161 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
         public static TestResponse Json(string body, int statusCode, IReadOnlyDictionary<string, string[]>? headers = null) =>
             new(statusCode, "application/json", body, headers ?? new Dictionary<string, string[]>());
+    }
+
+    private sealed class FakeOidcMetadataServer : IAsyncDisposable
+    {
+        private readonly HttpListener listener = new();
+        private readonly RsaSecurityKey signingKey;
+        private readonly string jwksJson;
+        private readonly Task listenTask;
+
+        public FakeOidcMetadataServer()
+        {
+            var rsa = RSA.Create(2048);
+            signingKey = new RsaSecurityKey(rsa) { KeyId = "test-oidc-kid" };
+            var jwk = JsonWebKeyConverter.ConvertFromRSASecurityKey(new RsaSecurityKey(rsa.ExportParameters(false)));
+            jwk.Kid = signingKey.KeyId;
+            jwk.Use = "sig";
+            jwk.Alg = SecurityAlgorithms.RsaSha256;
+            jwksJson = JsonSerializer.Serialize(new { keys = new[] { jwk } });
+
+            Url = $"http://127.0.0.1:{GetFreePort()}";
+            listener.Prefixes.Add($"{Url}/");
+            listener.Start();
+            listenTask = Task.Run(ListenAsync);
+        }
+
+        public string Url { get; }
+        public SecurityKey SigningKey => signingKey;
+
+        public async ValueTask DisposeAsync()
+        {
+            listener.Stop();
+            listener.Close();
+
+            try
+            {
+                await listenTask.WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or TimeoutException)
+            {
+            }
+        }
+
+        private async Task ListenAsync()
+        {
+            while (listener.IsListening)
+            {
+                HttpListenerContext context;
+                try
+                {
+                    context = await listener.GetContextAsync();
+                }
+                catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException)
+                {
+                    break;
+                }
+
+                await HandleAsync(context);
+            }
+        }
+
+        private async Task HandleAsync(HttpListenerContext context)
+        {
+            var path = context.Request.Url?.AbsolutePath ?? string.Empty;
+            string body;
+            int statusCode = (int)HttpStatusCode.OK;
+
+            if (path == "/.well-known/openid-configuration")
+            {
+                body = JsonSerializer.Serialize(new
+                {
+                    issuer = Url,
+                    token_endpoint = $"{Url}/token",
+                    jwks_uri = $"{Url}/jwks"
+                });
+            }
+            else if (path == "/jwks")
+            {
+                body = jwksJson;
+            }
+            else
+            {
+                body = "{}";
+                statusCode = (int)HttpStatusCode.NotFound;
+            }
+
+            var responseBody = Encoding.UTF8.GetBytes(body);
+            context.Response.StatusCode = statusCode;
+            context.Response.ContentType = "application/json";
+            context.Response.ContentLength64 = responseBody.Length;
+            await context.Response.OutputStream.WriteAsync(responseBody);
+            context.Response.Close();
+        }
+
+        private static int GetFreePort()
+        {
+            using var socket = new TcpListener(IPAddress.Loopback, port: 0);
+            socket.Start();
+
+            return ((IPEndPoint)socket.LocalEndpoint).Port;
+        }
+    }
+
+    private sealed class NoTokenDownstreamServiceTokenProvider : IDownstreamServiceTokenProvider
+    {
+        public Task<string> GetServiceTokenAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(string.Empty);
+
+        public Task<string> RefreshServiceTokenAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(string.Empty);
+    }
+
+    private sealed class LocalJwtTokenProvider : IDownstreamServiceTokenProvider
+    {
+        private readonly string issuer;
+        private readonly SecurityKey signingKey;
+        private readonly string audience;
+        private readonly string scope;
+        private readonly JsonWebTokenHandler handler = new();
+        private readonly SigningCredentials credentials;
+
+        public LocalJwtTokenProvider(string issuer, SecurityKey signingKey, string audience, string scope)
+        {
+            this.issuer = issuer;
+            this.signingKey = signingKey;
+            this.audience = audience;
+            this.scope = scope;
+            credentials = new SigningCredentials(signingKey, SecurityAlgorithms.RsaSha256);
+        }
+
+        public Task<string> GetServiceTokenAsync(CancellationToken cancellationToken)
+        {
+            var token = CreateToken();
+
+            return Task.FromResult($"{DownstreamAuthConventions.BearerPrefix}{token}");
+        }
+
+        public Task<string> RefreshServiceTokenAsync(CancellationToken cancellationToken) =>
+            GetServiceTokenAsync(cancellationToken);
+
+        private string CreateToken()
+        {
+            var descriptor = new SecurityTokenDescriptor
+            {
+                Issuer = issuer,
+                Audience = audience,
+                Expires = DateTime.UtcNow.AddMinutes(5),
+                Claims = new Dictionary<string, object>
+                {
+                    ["scope"] = scope,
+                    ["azp"] = "test-gateway-client"
+                },
+                SigningCredentials = credentials
+            };
+
+            return handler.CreateToken(descriptor);
+        }
     }
 }

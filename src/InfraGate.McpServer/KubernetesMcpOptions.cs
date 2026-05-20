@@ -63,6 +63,10 @@ public sealed record KubernetesMcpOptions(
 
         RuntimeMode runtimeMode = RuntimeModeResolver.FromConfiguration(configuration);
 
+        var downstreamAuth = configuration
+            .GetSection("InfraGate:DownstreamAuth")
+            .Get<DownstreamAuthOptions>();
+
         var k8sSettings = configuration
             .GetSection("InfraGate:Kubernetes")
             .Get<InfraGateKubernetesSettings>();
@@ -90,7 +94,8 @@ public sealed record KubernetesMcpOptions(
             hasExplicitAllowedNamespaces,
             kubeConfig,
             isInClusterConfigEnabled,
-            logPath);
+            logPath,
+            downstreamAuth);
     }
 
     public void ValidateProductionSafety()

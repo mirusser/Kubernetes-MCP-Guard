@@ -78,6 +78,9 @@ public sealed record McpGatewayOptions(
         ArgumentNullException.ThrowIfNull(configuration);
 
         var auth = GatewayAuthOptions.FromConfiguration(configuration);
+        var downstreamAuth = configuration
+            .GetSection("InfraGate:DownstreamAuth")
+            .Get<DownstreamAuthOptions>();
         RuntimeMode runtimeMode = RuntimeModeResolver.FromConfiguration(configuration);
         string workingDirectory = Directory.GetCurrentDirectory();
 
@@ -119,7 +122,8 @@ public sealed record McpGatewayOptions(
             downstreamAssembly,
             runtimeMode,
             isGuardAuditRootExplicit,
-            isApprovalRootExplicit);
+            isApprovalRootExplicit,
+            downstreamAuth);
     }
 
     public void ValidateProductionSafety()
