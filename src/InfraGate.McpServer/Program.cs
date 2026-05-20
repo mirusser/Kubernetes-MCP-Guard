@@ -1,4 +1,5 @@
 using InfraGate.McpServer;
+using InfraGate.McpServer.DownstreamAuth;
 using InfraGate.Observability;
 using k8s;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +21,7 @@ builder.AddInfraGateObservability(opt =>
 
 mcpOptions.ValidateProductionSafety();
 builder.Services.AddSingleton(mcpOptions);
+builder.Services.AddDownstreamAuth(mcpOptions.DownstreamAuth);
 builder.Services.AddSingleton<IKubernetes>(_ =>
 {
     var config = new KubernetesConfigProvider(mcpOptions).Create();
@@ -34,6 +36,8 @@ builder.Services
     .WithToolsFromAssembly()
     .WithRequestFilters(filters =>
     {
+        filters.AddListToolsFilter(DownstreamAuthFilter.ListTools());
+        filters.AddCallToolFilter(DownstreamAuthFilter.CallTool());
         filters.AddCallToolFilter(next => (request, cancellationToken) =>
         {
             var services = request.Services;
