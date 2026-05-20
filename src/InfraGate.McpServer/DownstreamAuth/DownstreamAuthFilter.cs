@@ -60,7 +60,7 @@ internal static class DownstreamAuthFilter
             logger?.LogWarning("Downstream auth rejected: {Reason}", result.FailureReason);
 
             throw new McpException(
-                $"downstream_auth_required: {result.FailureReason}");
+                $"{DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired}: {result.FailureReason}");
         }
 
         return await next(request, cancellationToken).ConfigureAwait(false);

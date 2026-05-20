@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using InfraGate.DownstreamAuth;
 using InfraGate.McpServer.DownstreamAuth;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Protocol;
@@ -100,5 +101,18 @@ public sealed class DownstreamAuthFilterTests
 
         // Assert: null Services treated as no validator — pass through
         Assert.Equal(expectedResult, result);
+    }
+
+    /// <summary>
+    /// Verify that the error code constant is the value that the filter uses in exceptions.
+    /// The filter formats errors as "{ErrorCode}: {reason}". This test confirms the constant
+    /// is correctly placed and matches the expected value for Task 7 (gateway retry detection).
+    /// </summary>
+    [Fact]
+    public void ErrorCodeConstant_HasExpectedValue()
+    {
+        // This constant is used by the filter in the McpException message
+        // and will be referenced by gateway retry detection logic (Task 7).
+        Assert.Equal("downstream_auth_required", DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired);
     }
 }

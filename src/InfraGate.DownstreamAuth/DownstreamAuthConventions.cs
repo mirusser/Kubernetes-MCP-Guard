@@ -6,6 +6,11 @@ public static class DownstreamAuthConventions
     public const string BootstrapLineKey = MetaKey;
     public const string BearerPrefix = "Bearer ";
 
+    public static class ErrorCodes
+    {
+        public const string DownstreamAuthRequired = "downstream_auth_required";
+    }
+
     public static class Defaults
     {
         public const string Scope = "mcp:downstream";
