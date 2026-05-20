@@ -52,7 +52,14 @@ public sealed class DownstreamAuthOptionsTests : IDisposable
     [Fact]
     public void Validate_WhenRequiredAndMissingAuthority_Throws()
     {
-        var options = AllRequiredFields() with { Authority = string.Empty };
+        var options = new DownstreamAuthOptions
+        {
+            Required = true,
+            Authority = string.Empty,
+            Audience = "urn:infra-gate:mcp-server",
+            Scope = "mcp:downstream",
+            GatewayClientId = "infra-gate-gateway-service",
+        };
 
         var exception = Assert.Throws<InvalidOperationException>(() => options.Validate());
 
@@ -62,7 +69,14 @@ public sealed class DownstreamAuthOptionsTests : IDisposable
     [Fact]
     public void Validate_WhenRequiredAndMissingAudience_Throws()
     {
-        var options = AllRequiredFields() with { Audience = string.Empty };
+        var options = new DownstreamAuthOptions
+        {
+            Required = true,
+            Authority = "https://auth.example.com",
+            Audience = string.Empty,
+            Scope = "mcp:downstream",
+            GatewayClientId = "infra-gate-gateway-service",
+        };
 
         var exception = Assert.Throws<InvalidOperationException>(() => options.Validate());
 
@@ -72,7 +86,14 @@ public sealed class DownstreamAuthOptionsTests : IDisposable
     [Fact]
     public void Validate_WhenRequiredAndMissingScope_Throws()
     {
-        var options = AllRequiredFields() with { Scope = string.Empty };
+        var options = new DownstreamAuthOptions
+        {
+            Required = true,
+            Authority = "https://auth.example.com",
+            Audience = "urn:infra-gate:mcp-server",
+            Scope = string.Empty,
+            GatewayClientId = "infra-gate-gateway-service",
+        };
 
         var exception = Assert.Throws<InvalidOperationException>(() => options.Validate());
 
@@ -82,7 +103,14 @@ public sealed class DownstreamAuthOptionsTests : IDisposable
     [Fact]
     public void Validate_WhenRequiredAndMissingGatewayClientId_Throws()
     {
-        var options = AllRequiredFields() with { GatewayClientId = string.Empty };
+        var options = new DownstreamAuthOptions
+        {
+            Required = true,
+            Authority = "https://auth.example.com",
+            Audience = "urn:infra-gate:mcp-server",
+            Scope = "mcp:downstream",
+            GatewayClientId = string.Empty,
+        };
 
         var exception = Assert.Throws<InvalidOperationException>(() => options.Validate());
 
@@ -92,7 +120,15 @@ public sealed class DownstreamAuthOptionsTests : IDisposable
     [Fact]
     public void Validate_WhenRequiredAndGatewayClientSecretIsNull_Succeeds()
     {
-        var options = AllRequiredFields() with { GatewayClientSecret = null };
+        var options = new DownstreamAuthOptions
+        {
+            Required = true,
+            Authority = "https://auth.example.com",
+            Audience = "urn:infra-gate:mcp-server",
+            Scope = "mcp:downstream",
+            GatewayClientId = "infra-gate-gateway-service",
+            GatewayClientSecret = null,
+        };
 
         Exception? exception = Record.Exception(() => options.Validate());
 
@@ -149,8 +185,8 @@ public sealed class DownstreamAuthOptionsTests : IDisposable
         SetEnv(DownstreamAuthConventions.EnvironmentVariables.Authority, "https://auth.example.com");
         SetEnv(DownstreamAuthConventions.EnvironmentVariables.MetadataAddress, "https://auth.example.com/.well-known/openid-configuration");
         SetEnv(DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata, "false");
-        SetEnv(DownstreamAuthConventions.EnvironmentVariables.Audience, "urn:infra-gate:mcp-server");
-        SetEnv(DownstreamAuthConventions.EnvironmentVariables.Scope, "mcp:downstream");
+        SetEnv(DownstreamAuthConventions.EnvironmentVariables.Audience, DownstreamAuthConventions.Defaults.Audience);
+        SetEnv(DownstreamAuthConventions.EnvironmentVariables.Scope, DownstreamAuthConventions.Defaults.Scope);
         SetEnv(DownstreamAuthConventions.EnvironmentVariables.GatewayClientId, "infra-gate-gateway-service");
         SetEnv(DownstreamAuthConventions.EnvironmentVariables.GatewayClientSecret, "supersecret");
 
@@ -160,8 +196,8 @@ public sealed class DownstreamAuthOptionsTests : IDisposable
         Assert.Equal("https://auth.example.com", options.Authority);
         Assert.Equal("https://auth.example.com/.well-known/openid-configuration", options.MetadataAddress);
         Assert.False(options.RequireHttpsMetadata);
-        Assert.Equal("urn:infra-gate:mcp-server", options.Audience);
-        Assert.Equal("mcp:downstream", options.Scope);
+        Assert.Equal(DownstreamAuthConventions.Defaults.Audience, options.Audience);
+        Assert.Equal(DownstreamAuthConventions.Defaults.Scope, options.Scope);
         Assert.Equal("infra-gate-gateway-service", options.GatewayClientId);
         Assert.Equal("supersecret", options.GatewayClientSecret);
     }

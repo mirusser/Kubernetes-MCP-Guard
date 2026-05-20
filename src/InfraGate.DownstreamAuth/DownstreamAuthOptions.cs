@@ -1,6 +1,6 @@
 namespace InfraGate.DownstreamAuth;
 
-public sealed record DownstreamAuthOptions
+public sealed class DownstreamAuthOptions
 {
     public bool Required { get; init; }
     public string Authority { get; init; } = string.Empty;
@@ -41,23 +41,7 @@ public sealed record DownstreamAuthOptions
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(Authority))
-        {
-            throw new InvalidOperationException(
-                $"Downstream auth is required but {DownstreamAuthConventions.EnvironmentVariables.Authority} is not configured.");
-        }
-
-        if (string.IsNullOrWhiteSpace(Audience))
-        {
-            throw new InvalidOperationException(
-                $"Downstream auth is required but {DownstreamAuthConventions.EnvironmentVariables.Audience} is not configured.");
-        }
-
-        if (string.IsNullOrWhiteSpace(Scope))
-        {
-            throw new InvalidOperationException(
-                $"Downstream auth is required but {DownstreamAuthConventions.EnvironmentVariables.Scope} is not configured.");
-        }
+        ValidateSharedFields();
 
         if (string.IsNullOrWhiteSpace(GatewayClientId))
         {
@@ -73,6 +57,11 @@ public sealed record DownstreamAuthOptions
             return;
         }
 
+        ValidateSharedFields();
+    }
+
+    private void ValidateSharedFields()
+    {
         if (string.IsNullOrWhiteSpace(Authority))
         {
             throw new InvalidOperationException(

@@ -3,8 +3,8 @@ namespace InfraGate.DownstreamAuth;
 public static class DownstreamAuthConventions
 {
     public const string MetaKey = "io.infragate.downstream.authorization";
-    public const string BootstrapLineKey = "io.infragate.downstream.authorization";
-    public const string BearerScheme = "Bearer ";
+    public const string BootstrapLineKey = MetaKey;
+    public const string BearerPrefix = "Bearer ";
 
     public static class Defaults
     {
