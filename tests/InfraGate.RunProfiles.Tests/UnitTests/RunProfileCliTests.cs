@@ -1454,6 +1454,283 @@ public sealed class RunProfileCliTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_GenerateWithoutProfileName_ReturnsError()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-stdio:
+                kind: mcp-stdio
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: .kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "--config", configPath, "--output", outputPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Profile name is required.", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithMalformedAppSettingsFile_ReturnsErrorWithoutForce()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                gateway:
+                  aspnetcoreUrls: http://0.0.0.0:3001
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.appsettings.json");
+        await File.WriteAllTextAsync(outputPath, "not-valid-json{{{");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--format", "appsettings", "--output", outputPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Will not overwrite", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithMalformedEnvFile_ReturnsErrorWithoutForce()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-stdio:
+                kind: mcp-stdio
+                runtimeMode: Development
+                genericApprovalCore:
+                  approvalRoot: .mcp-approvals
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: .kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        await File.WriteAllTextAsync(outputPath, "# Some unrelated env file\nKEY=value\n");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-stdio", "--config", configPath, "--output", outputPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Will not overwrite", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetDownstreamAuthField_OverridesValue()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                downstreamAuth:
+                  required: "true"
+                  authority: http://original/auth
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--output", outputPath,
+             "--set", "downstreamAuth.audience=urn:custom-audience"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        Assert.Contains("INFRA_GATE_DOWNSTREAM_AUTH_AUDIENCE=urn:custom-audience", content, StringComparison.Ordinal);
+        Assert.Contains("INFRA_GATE_DOWNSTREAM_AUTH_AUTHORITY=http://original/auth", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetIdentityProviderField_OverridesValue()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                identityProvider:
+                  authority: http://127.0.0.1:3010/realms/original
+                  metadataAddress: http://original/metadata
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--output", outputPath,
+             "--set", "identityProvider.realmImport=custom-realm.json"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        Assert.Contains("INFRA_GATE_OAUTH_AUTHORITY=http://127.0.0.1:3010/realms/original", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetUnknownDownstreamAuthField_ReturnsError()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                downstreamAuth:
+                  required: "true"
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--output", outputPath,
+             "--set", "downstreamAuth.unknownField=value"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("downstreamAuth.unknownField", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetUnknownGatewayField_ReturnsError()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                gateway:
+                  aspnetcoreUrls: http://0.0.0.0:3001
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--output", outputPath,
+             "--set", "gateway.unknownField=value"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("gateway.unknownField", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetUnknownHostField_ReturnsError()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                host:
+                  bindAddress: 127.0.0.1
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--output", outputPath,
+             "--set", "host.unknownField=value"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("host.unknownField", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_GenerateWithDownstreamAuthWithoutClientSecret_DoesNotEmitClientSecretKey()
     {
         string configPath = await WriteConfigAsync(

@@ -20,3 +20,5 @@ src/InfraGate.McpGateway/.mcp-guardrails/audit.jsonl
 /deploy/generated
 .claude/
 .claire/
+.claude.json
+.codegraph/
