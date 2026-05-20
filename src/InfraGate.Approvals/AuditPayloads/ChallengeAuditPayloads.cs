@@ -11,7 +11,7 @@ public interface IChallengeAuditPayload
     string PlanId { get; }
 }
 
-public sealed record ApprovalChallengeCreatedPayload(
+public sealed record class ApprovalChallengeCreatedPayload(
     string Id,
     string PlanId,
     string PendingPlanHash,
@@ -19,7 +19,7 @@ public sealed record ApprovalChallengeCreatedPayload(
     string? RequesterAuthenticationType,
     DateTimeOffset ExpiresAtUtc) : IChallengeAuditPayload;
 
-public sealed record ApprovalChallengeApprovedPayload(
+public sealed record class ApprovalChallengeApprovedPayload(
     string Id,
     string PlanId,
     string PendingPlanHash,
@@ -27,7 +27,7 @@ public sealed record ApprovalChallengeApprovedPayload(
     string? ApproverSubject,
     DateTimeOffset DecidedAt) : IChallengeAuditPayload;
 
-public sealed record ApprovalChallengeDeniedPayload(
+public sealed record class ApprovalChallengeDeniedPayload(
     string Id,
     string PlanId,
     string PendingPlanHash,
@@ -35,14 +35,14 @@ public sealed record ApprovalChallengeDeniedPayload(
     string? ApproverSubject,
     DateTimeOffset DecidedAt) : IChallengeAuditPayload;
 
-public sealed record ApprovalChallengeExpiredPayload(
+public sealed record class ApprovalChallengeExpiredPayload(
     string Id,
     string PlanId,
     string PendingPlanHash,
     string RequesterSubject,
     DateTimeOffset ExpiresAtUtc) : IChallengeAuditPayload;
 
-public sealed record ApprovalChallengeRejectedPayload(
+public sealed record class ApprovalChallengeRejectedPayload(
     string Id,
     string PlanId,
     string PendingPlanHash,
@@ -50,7 +50,7 @@ public sealed record ApprovalChallengeRejectedPayload(
     string? ApproverSubject,
     string Reason) : IChallengeAuditPayload;
 
-public sealed record ApprovalChallengeCanceledPayload(
+public sealed record class ApprovalChallengeCanceledPayload(
     string Id,
     string PlanId,
     string PendingPlanHash,

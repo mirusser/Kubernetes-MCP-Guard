@@ -1,6 +1,6 @@
 namespace InfraGate.McpGateway;
 
-internal sealed record InfraGateGatewaySettings
+internal sealed record class InfraGateGatewaySettings
 {
     public string? AspNetCoreUrls { get; init; }
     public string? DownstreamAssembly { get; init; }

@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace InfraGate.Approvals;
 
-public sealed record PlanEnvelope
+public sealed record class PlanEnvelope
 {
     public PlanEnvelope() { }
 

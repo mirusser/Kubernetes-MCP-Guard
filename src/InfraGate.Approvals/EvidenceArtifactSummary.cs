@@ -1,6 +1,6 @@
 namespace InfraGate.Approvals;
 
-public sealed record EvidenceArtifactSummary(
+public sealed record class EvidenceArtifactSummary(
     string Type,
     ApprovalDigest Digest,
     string? Reference,

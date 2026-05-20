@@ -1,9 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
   </PropertyGroup>
@@ -30,6 +27,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\InfraGate.Approvals\InfraGate.Approvals.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.DownstreamAuth\InfraGate.DownstreamAuth.csproj" />
+    <ProjectReference Include="..\..\src\InfraGate.KubernetesAdapter\InfraGate.KubernetesAdapter.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.McpGateway.Auth\InfraGate.McpGateway.Auth.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.McpGateway\InfraGate.McpGateway.csproj" />
   </ItemGroup>

@@ -1,6 +1,6 @@
 namespace InfraGate.Approvals;
 
-public sealed record ExecutionReusePolicy(string Type)
+public sealed record class ExecutionReusePolicy(string Type)
 {
     public ExecutionReusePolicy()
         : this(string.Empty)

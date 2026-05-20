@@ -1,6 +1,6 @@
 namespace InfraGate.RunProfiles;
 
-internal sealed record DownstreamAuthProfile(
+internal sealed record class DownstreamAuthProfile(
     string? Required,
     string? Authority,
     string? MetadataAddress,

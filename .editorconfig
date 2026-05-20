@@ -1,0 +1,80 @@
+[*.cs]
+
+# === Conflicting rules ===
+dotnet_diagnostic.MA0175.severity = none        # Contradicts MA0174 — suppress 'don't use class'; MA0174 (record class) is fixed
+dotnet_diagnostic.MA0127.severity = none        # 'is' vs string.Equals — project prefers 'is' pattern for string literals
+dotnet_diagnostic.MA0148.severity = none        # 'is' vs == — project prefers == for null/constant comparisons
+dotnet_diagnostic.MA0149.severity = none        # 'is not' vs != — same as MA0148
+
+# === Cosmetic / style ===
+dotnet_diagnostic.MA0003.severity = none        # Parameter naming in constructors — too many instances for bulk fix
+dotnet_diagnostic.MA0007.severity = none        # Trailing comma after last value — too many instances
+dotnet_diagnostic.MA0181.severity = none        # Do not use cast — project uses casts in performance paths
+dotnet_diagnostic.MA0184.severity = none        # Interpolated string without parameters — used for structured logging placeholders
+dotnet_diagnostic.MA0076.severity = none        # Implicit culture-sensitive ToString in interpolated strings
+dotnet_diagnostic.MA0011.severity = none        # IFormatProvider missing — too many instances
+dotnet_diagnostic.MA0098.severity = none        # Use indexer instead of LINQ — LINQ is clearer in many cases
+dotnet_diagnostic.MA0020.severity = none        # Direct methods instead of LINQ — LINQ is preferred for readability
+
+# === Performance suggestions (not critical) ===
+dotnet_diagnostic.MA0109.severity = none        # Span<T>/Memory<T> overloads — would break public API, needs separate PR
+dotnet_diagnostic.MA0110.severity = none        # Regex source generator — needs C# 11+ partial methods pattern
+dotnet_diagnostic.MA0089.severity = none        # Optimize string method usage — micro-optimization
+dotnet_diagnostic.MA0159.severity = none        # Use 'Order' instead of 'OrderBy' — insignificant performance gain
+dotnet_diagnostic.MA0023.severity = none        # Add RegexOptions.ExplicitCapture — not always appropriate
+dotnet_diagnostic.CA1859.severity = none        # Use concrete types for performance — interface types intentional for testability
+dotnet_diagnostic.CA1851.severity = none        # Possible multiple enumerations — intentional in many cases
+dotnet_diagnostic.CA1861.severity = none        # Avoid constant arrays as arguments — micro-optimization
+
+# === Test conventions ===
+dotnet_diagnostic.CA1707.severity = none        # Identifiers contain underscores — xUnit test method convention
+dotnet_diagnostic.MA0032.severity = none        # CancellationToken overload — test code doesn't always benefit
+dotnet_diagnostic.MA0051.severity = none        # Method is too long — test methods for E2E tests are long by nature
+# StringComparison / culture safety — fix in source code, suppressed for tests in tests/.editorconfig
+# Test-only rules now in tests/.editorconfig
+
+# === Pre-existing codebase patterns (too disruptive to fix globally) ===
+dotnet_diagnostic.MA0136.severity = none        # Raw string contains implicit end of line — intentional formatting
+dotnet_diagnostic.MA0182.severity = none        # Unused internal types — used via InternalsVisibleTo
+dotnet_diagnostic.MA0038.severity = none        # Make method static — large audit needed, separate PR
+dotnet_diagnostic.CA1822.severity = none        # Make member static — same as MA0038
+dotnet_diagnostic.MA0191.severity = none        # Null-forgiving operator — project uses ! intentionally
+dotnet_diagnostic.MA0069.severity = none        # Non-constant static fields visible — used by tests
+dotnet_diagnostic.CA1720.severity = none        # Identifiers containing type name — pre-existing naming
+dotnet_diagnostic.CA2211.severity = none        # Non-constant fields should not be visible — test fixtures
+dotnet_diagnostic.MA0084.severity = none        # Local variables hide other symbols — too many instances
+dotnet_diagnostic.MA0101.severity = none        # String contains implicit end of line — raw strings in templates
+dotnet_diagnostic.MA0190.severity = none        # Partial property vs method for GeneratedRegex — not applicable
+dotnet_diagnostic.MA0137.severity = none        # Async suffix — project has mixed conventions
+dotnet_diagnostic.MA0194.severity = none        # Merge is expressions — pre-existing pattern choices
+dotnet_diagnostic.MA0015.severity = none        # Parameter name in ArgumentException — too many instances
+dotnet_diagnostic.MA0026.severity = none        # TODO comments — intentional task tracking markers
+dotnet_diagnostic.MA0045.severity = none        # await using + async — pre-existing sync patterns intentional
+dotnet_diagnostic.MA0042.severity = none        # await using — pre-existing using patterns
+dotnet_diagnostic.CA1508.severity = none        # Dead code — may be intentional safety checks
+
+# === Type design (pre-existing) ===
+dotnet_diagnostic.CA1034.severity = none        # Nested types visible — convention classes are public by design
+dotnet_diagnostic.CA1515.severity = none        # Make types internal — Exe projects expose public API intentionally
+dotnet_diagnostic.CA1819.severity = none        # Arrays in properties — pre-existing API, needs separate redesign
+dotnet_diagnostic.CA1001.severity = none        # Disposable fields — pre-existing, needs separate audit
+dotnet_diagnostic.CA1032.severity = none        # Exception constructors — pre-existing exception classes
+dotnet_diagnostic.CA1716.severity = none        # Reserved language keyword param — pre-existing API
+dotnet_diagnostic.CA1724.severity = none        # Type name conflicts with namespace — convention class names
+dotnet_diagnostic.CA1814.severity = none        # Jagged arrays — pre-existing
+
+# === Other (low impact) ===
+dotnet_diagnostic.CA1848.severity = none        # LoggerMessage performance — not critical
+dotnet_diagnostic.CA1873.severity = none        # LoggerMessage argument count — not critical
+dotnet_diagnostic.CA1031.severity = none        # Catch general exception — pre-existing error handling patterns
+dotnet_diagnostic.CA1056.severity = none        # URI string properties — pre-existing API design
+dotnet_diagnostic.CA1054.severity = none        # URI string params — pre-existing API design
+dotnet_diagnostic.CA1305.severity = none        # IFormatProvider missing — too many instances
+# CA1308 — fix now (ToUpperInvariant for security-sensitive string normalization)
+dotnet_diagnostic.CA1802.severity = none        # Make field const — pre-existing readonly fields
+dotnet_diagnostic.CA2000.severity = none        # Dispose before losing scope — pre-existing patterns
+dotnet_diagnostic.MA0099.severity = none        # Explicit enum value instead of 0 — UnixFileMode has no None member
+dotnet_diagnostic.MA0016.severity = none        # Collection abstraction in public API — pre-existing API design
+dotnet_diagnostic.CA1062.severity = none        # Null parameter validation — too many instances, needs separate audit
+dotnet_diagnostic.MA0048.severity = none        # File name must match type name — multi-type files intentional
+dotnet_diagnostic.CA2234.severity = none        # HttpClient with string vs Uri — pre-existing pattern

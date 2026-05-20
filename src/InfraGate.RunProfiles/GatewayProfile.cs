@@ -1,6 +1,6 @@
 namespace InfraGate.RunProfiles;
 
-internal sealed record GatewayProfile(
+internal sealed record class GatewayProfile(
     string? AspnetcoreUrls,
     string? DownstreamAssembly,
     string? GuardAuditRoot);

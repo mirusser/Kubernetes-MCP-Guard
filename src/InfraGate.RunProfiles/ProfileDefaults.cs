@@ -1,6 +1,6 @@
 namespace InfraGate.RunProfiles;
 
-internal sealed record ProfileDefaults(
+internal sealed record class ProfileDefaults(
     GatewayProfile? Gateway,
     IdentityProviderProfile? IdentityProvider,
     ApprovalAuthorityProfile? ApprovalAuthority,

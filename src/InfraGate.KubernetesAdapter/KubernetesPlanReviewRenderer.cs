@@ -85,7 +85,7 @@ public sealed class KubernetesPlanReviewRenderer : IPlanReviewRenderer
             ? "<p>None</p>"
             : ("<ul>" + string.Join(string.Empty,
                 plan.PolicyFindings.Select(finding =>
-                    $"<li><span class=\"badge badge-{Html(finding.Severity.ToLowerInvariant())}\">{Html(finding.Severity)}</span> [{Html(finding.Code)}] {Html(finding.Message)} <span class=\"kv-label\">{Html(finding.ObjectRef)}</span></li>")) + "</ul>");
+                    $"<li><span class=\"badge badge-{Html(finding.Severity.ToUpperInvariant())}\">{Html(finding.Severity)}</span> [{Html(finding.Code)}] {Html(finding.Message)} <span class=\"kv-label\">{Html(finding.ObjectRef)}</span></li>")) + "</ul>");
 
         return $"""
                 <section class="card" data-section="policy-findings">

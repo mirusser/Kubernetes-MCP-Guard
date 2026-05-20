@@ -30,7 +30,7 @@ public interface IPlanAuditPayload
     string PlanId { get; }
 }
 
-public sealed record PlanRequestedPayload(
+public sealed record class PlanRequestedPayload(
     string PlanId,
     string Operation,
     string Namespace,
@@ -38,7 +38,7 @@ public sealed record PlanRequestedPayload(
     ApprovalDigest IntentDigest,
     ApprovalDigest ReviewDigest) : IPlanAuditPayload;
 
-public sealed record PreExecutionGrantValidatedPayload(
+public sealed record class PreExecutionGrantValidatedPayload(
     string PlanId,
     string GrantId,
     string SourceChallengeId,
@@ -50,19 +50,19 @@ public sealed record PreExecutionGrantValidatedPayload(
     ExecutionReusePolicy ExecutionReusePolicy,
     DateTimeOffset ExpiresAtUtc) : IPlanAuditPayload;
 
-public sealed record PreExecutionCheckedPayload(
+public sealed record class PreExecutionCheckedPayload(
     string PlanId,
     string Operation,
     string AdapterId,
     JsonElement AdapterPayload) : IPlanAuditPayload;
 
-public sealed record ExecutionStartedPayload(
+public sealed record class ExecutionStartedPayload(
     string PlanId,
     string Operation,
     string AdapterId,
     JsonElement AdapterPayload) : IPlanAuditPayload;
 
-public sealed record ApprovalGrantIssuedPayload(
+public sealed record class ApprovalGrantIssuedPayload(
     string PlanId,
     string GrantId,
     string SourceChallengeId,
@@ -72,28 +72,28 @@ public sealed record ApprovalGrantIssuedPayload(
     ApprovalDigest ReviewDigest,
     DateTimeOffset ExpiresAtUtc) : IPlanAuditPayload;
 
-public sealed record PlanAppliedPayload(
+public sealed record class PlanAppliedPayload(
     string PlanId,
     string Operation,
     string Namespace,
     string Hash) : IPlanAuditPayload;
 
-public sealed record ApplyDeniedPayload(
+public sealed record class ApplyDeniedPayload(
     string PlanId,
     string Message) : IPlanAuditPayload;
 
-public sealed record ApplyFailedPayload(
+public sealed record class ApplyFailedPayload(
     string PlanId,
     string Operation,
     string Message) : IPlanAuditPayload;
 
-public sealed record ApplyDriftDetectedPayload(
+public sealed record class ApplyDriftDetectedPayload(
     string PlanId,
     string Operation,
     string Namespace,
     string Message) : IPlanAuditPayload;
 
-public sealed record DryRunFailedPayload(
+public sealed record class DryRunFailedPayload(
     string Phase,
     string PlanId,
     string Operation,
@@ -101,7 +101,7 @@ public sealed record DryRunFailedPayload(
     string[] Objects,
     string Message) : IPlanAuditPayload;
 
-public sealed record DiffFailedPayload(
+public sealed record class DiffFailedPayload(
     string PlanId,
     string Operation,
     string Namespace,

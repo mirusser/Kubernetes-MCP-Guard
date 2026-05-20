@@ -1,6 +1,6 @@
 namespace InfraGate.Approvals;
 
-public sealed record PlanBuildResult(
+public sealed record class PlanBuildResult(
     bool Succeeded,
     PlanEnvelope? Envelope,
     string PlanId,

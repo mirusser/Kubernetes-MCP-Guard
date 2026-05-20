@@ -1,6 +1,6 @@
 namespace InfraGate.Approvals;
 
-public sealed record ApprovalChallenge(
+public sealed record class ApprovalChallenge(
     string Id,
     string PlanId,
     string PendingPlanHash,

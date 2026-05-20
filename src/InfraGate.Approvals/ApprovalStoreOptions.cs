@@ -1,3 +1,3 @@
 namespace InfraGate.Approvals;
 
-public sealed record ApprovalStoreOptions(string ApprovalRoot);
+public sealed record class ApprovalStoreOptions(string ApprovalRoot);

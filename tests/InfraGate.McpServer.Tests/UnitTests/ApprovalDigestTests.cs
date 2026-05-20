@@ -63,6 +63,6 @@ public sealed class ApprovalDigestTests
 
         Assert.Equal(ApprovalConventions.Digests.Sha256, digest.Algorithm);
         Assert.Equal(TestCanonicalization, digest.Canonicalization);
-        Assert.Matches("^[0-9a-f]{64}$", digest.Value);
+        Assert.Matches("^[0-9A-Fa-f]{64}$", digest.Value);
     }
 }

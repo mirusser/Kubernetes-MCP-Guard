@@ -7,7 +7,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace InfraGate.McpGateway;
 
-public sealed record McpGatewayOptions(
+public sealed record class McpGatewayOptions(
     GatewayAuthOptions Auth,
     string DownstreamProject,
     string GuardAuditRoot,

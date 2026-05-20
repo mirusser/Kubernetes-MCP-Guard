@@ -1,6 +1,6 @@
 namespace InfraGate.Approvals;
 
-public sealed record ApprovalPolicy(string Type)
+public sealed record class ApprovalPolicy(string Type)
 {
     public ApprovalPolicy()
         : this(string.Empty)

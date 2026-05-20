@@ -5,7 +5,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace InfraGate.McpServer;
 
-public sealed record KubernetesMcpOptions(
+public sealed record class KubernetesMcpOptions(
     IReadOnlySet<string> AllowedNamespaces,
     string ApprovalRoot,
     RuntimeMode RuntimeMode = RuntimeMode.Development,

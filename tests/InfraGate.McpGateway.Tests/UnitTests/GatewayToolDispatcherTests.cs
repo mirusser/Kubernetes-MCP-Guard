@@ -431,7 +431,7 @@ public sealed class GatewayToolDispatcherTests
             throw new NotSupportedException();
     }
 
-    private sealed record TestContext(
+    private sealed record class TestContext(
         IGatewayToolDispatcher Dispatcher,
         ApprovalStore Store,
         FakeDownstream Downstream);

@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 
 namespace InfraGate.Approvals;
 
-public sealed record ApprovalDigest(string Algorithm, string Canonicalization, string Value)
+public sealed record class ApprovalDigest(string Algorithm, string Canonicalization, string Value)
 {
     public static ApprovalDigest ComputeSha256(string canonicalization, object? value)
     {
@@ -14,6 +14,6 @@ public sealed record ApprovalDigest(string Algorithm, string Canonicalization, s
         return new ApprovalDigest(
             ApprovalConventions.Digests.Sha256,
             canonicalization,
-            Convert.ToHexString(hash).ToLowerInvariant());
+            Convert.ToHexString(hash).ToUpperInvariant());
     }
 }

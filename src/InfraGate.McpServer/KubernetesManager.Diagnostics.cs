@@ -27,14 +27,14 @@ public sealed partial class KubernetesManager
             var deployment = await client.AppsV1.ReadNamespacedDeploymentAsync(
                 name,
                 namespaceName,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
             var selector = FormatLabelSelector(deployment.Spec?.Selector);
             V1ReplicaSet[] replicaSets = string.IsNullOrWhiteSpace(selector)
                 ? []
                 : (await client.AppsV1.ListNamespacedReplicaSetAsync(
                     namespaceName,
                     labelSelector: selector,
-                    cancellationToken: cancellationToken)).Items
+                    cancellationToken: cancellationToken).ConfigureAwait(false)).Items
                 .Take(KubernetesConventions.MaxDiagnosticsRelatedItems)
                 .ToArray();
             V1Pod[] pods = string.IsNullOrWhiteSpace(selector)
@@ -42,7 +42,7 @@ public sealed partial class KubernetesManager
                 : (await client.CoreV1.ListNamespacedPodAsync(
                     namespaceName,
                     labelSelector: selector,
-                    cancellationToken: cancellationToken)).Items
+                    cancellationToken: cancellationToken).ConfigureAwait(false)).Items
                 .Take(KubernetesConventions.MaxDiagnosticsRelatedItems)
                 .ToArray();
             var relatedObjects = RelatedRefs(
@@ -53,7 +53,7 @@ public sealed partial class KubernetesManager
                 pods.Select(pod => new RelatedObjectRef(
                     KubernetesConventions.KubernetesResources.Pod,
                     pod.Metadata?.Name ?? string.Empty)));
-            var events = await ReadRelatedEventSummariesAsync(namespaceName, relatedObjects, limit, cancellationToken);
+            var events = await ReadRelatedEventSummariesAsync(namespaceName, relatedObjects, limit, cancellationToken).ConfigureAwait(false);
 
             return JsonSerializer.Serialize(new
             {
@@ -93,9 +93,9 @@ public sealed partial class KubernetesManager
             var pod = await client.CoreV1.ReadNamespacedPodAsync(
                 podName,
                 namespaceName,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
             var relatedObjects = RelatedRefs(new RelatedObjectRef(KubernetesConventions.KubernetesResources.Pod, podName));
-            var events = await ReadRelatedEventSummariesAsync(namespaceName, relatedObjects, limit, cancellationToken);
+            var events = await ReadRelatedEventSummariesAsync(namespaceName, relatedObjects, limit, cancellationToken).ConfigureAwait(false);
 
             return JsonSerializer.Serialize(new
             {
@@ -132,14 +132,14 @@ public sealed partial class KubernetesManager
             var service = await client.CoreV1.ReadNamespacedServiceAsync(
                 name,
                 namespaceName,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
             var selector = FormatMatchLabelsSelector(service.Spec?.Selector);
             V1Pod[] pods = string.IsNullOrWhiteSpace(selector)
                 ? []
                 : (await client.CoreV1.ListNamespacedPodAsync(
                     namespaceName,
                     labelSelector: selector,
-                    cancellationToken: cancellationToken)).Items
+                    cancellationToken: cancellationToken).ConfigureAwait(false)).Items
                 .Take(KubernetesConventions.MaxDiagnosticsRelatedItems)
                 .ToArray();
             var relatedObjects = RelatedRefs(
@@ -147,7 +147,7 @@ public sealed partial class KubernetesManager
                 pods.Select(pod => new RelatedObjectRef(
                     KubernetesConventions.KubernetesResources.Pod,
                     pod.Metadata?.Name ?? string.Empty)));
-            var events = await ReadRelatedEventSummariesAsync(namespaceName, relatedObjects, limit, cancellationToken);
+            var events = await ReadRelatedEventSummariesAsync(namespaceName, relatedObjects, limit, cancellationToken).ConfigureAwait(false);
 
             return JsonSerializer.Serialize(new
             {
@@ -176,7 +176,7 @@ public sealed partial class KubernetesManager
         var events = await client.EventsV1.ListNamespacedEventAsync(
             namespaceName,
             limit: KubernetesConventions.MaxEventLimit,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return events.Items
             .Where(k8sEvent => k8sEvent.Regarding is not null &&
@@ -333,5 +333,5 @@ public sealed partial class KubernetesManager
             : $"{key} {operatorText} ({string.Join(",", values)})";
     }
 
-    private sealed record RelatedObjectRef(string Kind, string Name);
+    private sealed record class RelatedObjectRef(string Kind, string Name);
 }

@@ -1,3 +1,3 @@
 namespace InfraGate.Approvals;
 
-public sealed record ApprovalPlanResult(PlanEnvelope Envelope, string PendingPath, string Hash);
+public sealed record class ApprovalPlanResult(PlanEnvelope Envelope, string PendingPath, string Hash);

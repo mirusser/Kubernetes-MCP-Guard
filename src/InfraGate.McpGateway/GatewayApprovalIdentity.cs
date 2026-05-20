@@ -1,3 +1,3 @@
 namespace InfraGate.McpGateway;
 
-internal sealed record GatewayApprovalIdentity(string Subject, string DisplayName, string? AuthenticationType);
+internal sealed record class GatewayApprovalIdentity(string Subject, string DisplayName, string? AuthenticationType);

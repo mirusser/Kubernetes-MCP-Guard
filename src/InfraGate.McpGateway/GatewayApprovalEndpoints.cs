@@ -25,7 +25,7 @@ internal static class GatewayApprovalEndpoints
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
                 {
-                    var page = await approvals.GetApprovalPageAsync(challengeId, cancellationToken);
+                    var page = await approvals.GetApprovalPageAsync(challengeId, cancellationToken).ConfigureAwait(false);
                     var tokens = antiforgery.GetAndStoreTokens(context);
 
                     return Results.Content(
@@ -43,13 +43,13 @@ internal static class GatewayApprovalEndpoints
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
                 {
-                    var validation = await ValidateAntiforgeryAsync(context, antiforgery);
+                    var validation = await ValidateAntiforgeryAsync(context, antiforgery).ConfigureAwait(false);
                     if (validation is not null)
                     {
                         return validation;
                     }
 
-                    var result = await approvals.ApproveChallengeAsync(challengeId, cancellationToken);
+                    var result = await approvals.ApproveChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
 
                     return Results.Content(RenderDecisionPage(result), TextHtmlContentType, Encoding.UTF8);
                 })
@@ -63,13 +63,13 @@ internal static class GatewayApprovalEndpoints
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
                 {
-                    var validation = await ValidateAntiforgeryAsync(context, antiforgery);
+                    var validation = await ValidateAntiforgeryAsync(context, antiforgery).ConfigureAwait(false);
                     if (validation is not null)
                     {
                         return validation;
                     }
 
-                    var result = await approvals.DenyChallengeAsync(challengeId, cancellationToken);
+                    var result = await approvals.DenyChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
 
                     return Results.Content(RenderDecisionPage(result), TextHtmlContentType, Encoding.UTF8);
                 })
@@ -83,13 +83,13 @@ internal static class GatewayApprovalEndpoints
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
                 {
-                    var validation = await ValidateAntiforgeryAsync(context, antiforgery);
+                    var validation = await ValidateAntiforgeryAsync(context, antiforgery).ConfigureAwait(false);
                     if (validation is not null)
                     {
                         return validation;
                     }
 
-                    var result = await approvals.CancelChallengeAsync(challengeId, cancellationToken);
+                    var result = await approvals.CancelChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
 
                     return Results.Content(RenderDecisionPage(result), TextHtmlContentType, Encoding.UTF8);
                 })
@@ -115,7 +115,7 @@ internal static class GatewayApprovalEndpoints
     {
         try
         {
-            await antiforgery.ValidateRequestAsync(context);
+            await antiforgery.ValidateRequestAsync(context).ConfigureAwait(false);
             return null;
         }
         catch (AntiforgeryValidationException)

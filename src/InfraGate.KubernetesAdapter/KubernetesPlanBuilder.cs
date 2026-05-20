@@ -10,13 +10,13 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
 
     private static readonly IReadOnlyList<FreshnessCheck> ManifestFreshnessChecks =
     [
-        new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.LiveDrift, new Dictionary<string, string>()),
-        new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun, new Dictionary<string, string>())
+        new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.LiveDrift, new Dictionary<string, string>(StringComparer.Ordinal)),
+        new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun, new Dictionary<string, string>(StringComparer.Ordinal))
     ];
 
     private static readonly IReadOnlyList<FreshnessCheck> DeploymentFreshnessChecks =
     [
-        new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun, new Dictionary<string, string>())
+        new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun, new Dictionary<string, string>(StringComparer.Ordinal))
     ];
 
     public Task<PlanBuildResult> BuildAsync(
@@ -56,7 +56,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
 
         var applyEvidenceJson = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.EvidenceArguments.Namespace] = namespaceName,
                 [KubernetesAdapterConventions.EvidenceArguments.Manifest] = manifest
@@ -97,7 +97,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
 
         var diffJson = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.DiffManifest,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.EvidenceArguments.Namespace] = namespaceName,
                 [KubernetesAdapterConventions.EvidenceArguments.Manifest] = manifest
@@ -140,7 +140,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         var payload = new KubernetesPlanPayload(
             namespaceName,
             $"Apply {objectCount} supported Kubernetes object(s) in namespace '{namespaceName}'.",
-            new Dictionary<string, string>
+            new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.PlanParameters.ObjectCount] = objectCount.ToString()
             },
@@ -174,7 +174,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
 
         var dryRunJson = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.DryRunDeleteManifest,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.EvidenceArguments.Namespace] = namespaceName,
                 [KubernetesAdapterConventions.EvidenceArguments.Manifest] = manifest
@@ -191,7 +191,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
 
         var diffJson = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.DiffManifest,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.EvidenceArguments.Namespace] = namespaceName,
                 [KubernetesAdapterConventions.EvidenceArguments.Manifest] = manifest
@@ -233,7 +233,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         var payload = new KubernetesPlanPayload(
             namespaceName,
             $"Delete {objects.Length} supported Kubernetes object(s) from namespace '{namespaceName}'.",
-            new Dictionary<string, string>
+            new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.PlanParameters.ObjectCount] = objects.Length.ToString()
             },
@@ -267,7 +267,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
 
         var dryRunJson = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.DryRunScaleDeployment,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.EvidenceArguments.Namespace] = namespaceName,
                 [KubernetesAdapterConventions.EvidenceArguments.Name] = name,
@@ -285,7 +285,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
 
         var diffJson = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.DiffDeployment,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.EvidenceArguments.Namespace] = namespaceName,
                 [KubernetesAdapterConventions.EvidenceArguments.Name] = name,
@@ -313,7 +313,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         var payload = new KubernetesPlanPayload(
             namespaceName,
             $"Scale Deployment '{name}' in namespace '{namespaceName}' to {replicas} replicas.",
-            new Dictionary<string, string>
+            new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.PlanParameters.Name] = name,
                 [KubernetesAdapterConventions.PlanParameters.Replicas] = replicas.ToString()
@@ -346,7 +346,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
 
         var dryRunJson = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.DryRunRestartDeployment,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.EvidenceArguments.Namespace] = namespaceName,
                 [KubernetesAdapterConventions.EvidenceArguments.Name] = name
@@ -363,7 +363,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
 
         var diffJson = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.DiffDeployment,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.EvidenceArguments.Namespace] = namespaceName,
                 [KubernetesAdapterConventions.EvidenceArguments.Name] = name,
@@ -391,7 +391,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         var payload = new KubernetesPlanPayload(
             namespaceName,
             $"Restart Deployment '{name}' in namespace '{namespaceName}'.",
-            new Dictionary<string, string>
+            new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.PlanParameters.Name] = name,
                 [KubernetesAdapterConventions.PlanParameters.RestartedAtUtc] = restartedAtUtc
@@ -439,7 +439,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
 
         var dryRunJson = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.DryRunSetDeploymentImage,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.EvidenceArguments.Namespace] = namespaceName,
                 [KubernetesAdapterConventions.EvidenceArguments.Name] = name,
@@ -458,7 +458,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
 
         var diffJson = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.DiffDeployment,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.EvidenceArguments.Namespace] = namespaceName,
                 [KubernetesAdapterConventions.EvidenceArguments.Name] = name,
@@ -487,7 +487,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         var payload = new KubernetesPlanPayload(
             namespaceName,
             $"Update Deployment '{name}' container '{container}' image to '{image}'.",
-            new Dictionary<string, string>
+            new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.PlanParameters.Name] = name,
                 [KubernetesAdapterConventions.PlanParameters.Container] = container,

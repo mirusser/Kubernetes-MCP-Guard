@@ -1,6 +1,6 @@
 namespace InfraGate.RunProfiles;
 
-internal sealed record RunProfile(
+internal sealed record class RunProfile(
     string Name,
     string Kind,
     string? RuntimeMode,

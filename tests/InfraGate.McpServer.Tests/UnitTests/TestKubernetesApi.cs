@@ -86,9 +86,9 @@ internal sealed class TestKubernetesApi : IAsyncDisposable
     }
 }
 
-internal sealed record CapturedRequest(string Method, string Path, string Query, string Body);
+internal sealed record class CapturedRequest(string Method, string Path, string Query, string Body);
 
-internal sealed record TestResponse(int StatusCode, string ContentType, string Body)
+internal sealed record class TestResponse(int StatusCode, string ContentType, string Body)
 {
     public static TestResponse Json(string body, int statusCode = (int)HttpStatusCode.OK) =>
         new(statusCode, "application/json", body);

@@ -1,6 +1,6 @@
 namespace InfraGate.Approvals;
 
-public sealed record ApprovalGrant(
+public sealed record class ApprovalGrant(
     string Id,
     string PlanId,
     string RequesterSubject,

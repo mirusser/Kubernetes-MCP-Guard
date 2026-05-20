@@ -151,7 +151,7 @@ app.MapGatewayApprovalEndpoints();
 app.MapMcp(McpGatewayConventions.McpPath)
     .RequireAuthorization(GatewayAuthConventions.Schemes.PolicyName);
 
-await app.RunAsync();
+await app.RunAsync().ConfigureAwait(false);
 
 static void AddInfraGateConfiguration(IConfigurationBuilder configuration, string[] args)
 {

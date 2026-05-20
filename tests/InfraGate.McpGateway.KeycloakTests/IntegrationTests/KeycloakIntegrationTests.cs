@@ -456,7 +456,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             new Dictionary<string, string?>
             {
                 [KeycloakParameters.Username] = username,
-                [KeycloakParameters.Exact] = bool.TrueString.ToLowerInvariant()
+                [KeycloakParameters.Exact] = bool.TrueString.ToUpperInvariant()
             });
         var response = await http.GetAsync(usersUri, cancellationToken);
         response.EnsureSuccessStatusCode();

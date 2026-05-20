@@ -207,8 +207,8 @@ internal static class KubernetesApprovalAdapter
         IReadOnlyDictionary<string, string>? left,
         IReadOnlyDictionary<string, string>? right)
     {
-        left ??= new Dictionary<string, string>();
-        right ??= new Dictionary<string, string>();
+        left ??= new Dictionary<string, string>(StringComparer.Ordinal);
+        right ??= new Dictionary<string, string>(StringComparer.Ordinal);
 
         if (left.Count != right.Count)
         {

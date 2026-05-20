@@ -1,6 +1,6 @@
 namespace InfraGate.Approvals;
 
-public sealed record PendingPlanResult(
+public sealed record class PendingPlanResult(
     bool IsPending,
     PlanEnvelope? Envelope,
     string? Hash,

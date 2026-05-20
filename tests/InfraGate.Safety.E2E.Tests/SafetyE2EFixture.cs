@@ -405,7 +405,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
 
     // PlanId is always a 32-char lowercase hex string (16 random bytes, hex-encoded).
     // Extracting by format rather than by surrounding text avoids brittleness when response messages change.
-    [System.Text.RegularExpressions.GeneratedRegex(@"\b[0-9a-f]{32}\b", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    [System.Text.RegularExpressions.GeneratedRegex(@"\b[0-9A-Fa-f]{32}\b", System.Text.RegularExpressions.RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial System.Text.RegularExpressions.Regex PlanIdPattern();
 
     public static string ParsePlanId(string text) =>
@@ -418,7 +418,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
             ? match.Groups["id"].Value
             : throw new InvalidOperationException("Could not extract an approval challenge id from the text.");
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"https?://[^/]+/approvals/(?<id>[0-9a-f]+)", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    [System.Text.RegularExpressions.GeneratedRegex(@"https?://[^/]+/approvals/(?<id>[0-9A-Fa-f]+)", System.Text.RegularExpressions.RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial System.Text.RegularExpressions.Regex ChallengeIdPattern();
 
     public static string ParseAntiforgeryToken(string html)

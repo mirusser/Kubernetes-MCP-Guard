@@ -23,7 +23,7 @@ public sealed class KubernetesPlanExecutor(
         var plan = decodeResult.Plan;
         var payload = plan.Payload;
 
-        var driftBlock = await CheckLiveDriftAsync(plan, payload, ct);
+        var driftBlock = await CheckLiveDriftAsync(plan, payload, ct).ConfigureAwait(false);
         if (driftBlock is not null)
         {
             var audit = ApplyDriftDetectedAudit(plan, driftBlock.Message, payload);
@@ -41,7 +41,7 @@ public sealed class KubernetesPlanExecutor(
                 policyBlock.ReasonCode);
         }
 
-        var dryRunBlock = await RunPreExecuteDryRunAsync(plan, payload, ct);
+        var dryRunBlock = await RunPreExecuteDryRunAsync(plan, payload, ct).ConfigureAwait(false);
         if (dryRunBlock is not null)
         {
             var audit = DryRunFailedAudit(plan, dryRunBlock.Message, payload);
@@ -92,7 +92,7 @@ public sealed class KubernetesPlanExecutor(
                         JsonOptions))),
             ct).ConfigureAwait(false);
 
-        return await DispatchAsync(plan.Operation, payload, ct);
+        return await DispatchAsync(plan.Operation, payload, ct).ConfigureAwait(false);
     }
 
     private async Task<ResultFailure?> CheckLiveDriftAsync(KubernetesPlan plan, KubernetesPlanPayload payload, CancellationToken ct)
@@ -105,7 +105,7 @@ public sealed class KubernetesPlanExecutor(
         var diffsJson = JsonSerializer.Serialize(payload.Diffs, JsonOptions);
         var result = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
                 [KubernetesAdapterConventions.EvidenceArguments.Operation] = plan.Operation,
@@ -124,42 +124,42 @@ public sealed class KubernetesPlanExecutor(
         plan.Operation switch
         {
             KubernetesAdapterConventions.PlanOperations.Apply =>
-                await CheckApplyDryRunAsync(plan.Id, payload, ct),
+                await CheckApplyDryRunAsync(plan.Id, payload, ct).ConfigureAwait(false),
             KubernetesAdapterConventions.PlanOperations.Delete =>
                 await CheckSimpleDryRunAsync(
                     KubernetesAdapterConventions.EvidenceTools.DryRunDeleteManifest,
-                    new Dictionary<string, object?>
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
                     {
                         [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
                         [KubernetesAdapterConventions.EvidenceArguments.Manifest] = payload.Manifest ?? string.Empty
                     },
                     plan.Id,
-                    ct),
+                    ct).ConfigureAwait(false),
             KubernetesAdapterConventions.PlanOperations.Scale =>
                 await CheckSimpleDryRunAsync(
                     KubernetesAdapterConventions.EvidenceTools.DryRunScaleDeployment,
-                    new Dictionary<string, object?>
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
                     {
                         [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
                         [KubernetesAdapterConventions.EvidenceArguments.Name] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Name, string.Empty),
                         [KubernetesAdapterConventions.EvidenceArguments.Replicas] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Replicas, "0")
                     },
                     plan.Id,
-                    ct),
+                    ct).ConfigureAwait(false),
             KubernetesAdapterConventions.PlanOperations.Restart =>
                 await CheckSimpleDryRunAsync(
                     KubernetesAdapterConventions.EvidenceTools.DryRunRestartDeployment,
-                    new Dictionary<string, object?>
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
                     {
                         [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
                         [KubernetesAdapterConventions.EvidenceArguments.Name] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Name, string.Empty)
                     },
                     plan.Id,
-                    ct),
+                    ct).ConfigureAwait(false),
             KubernetesAdapterConventions.PlanOperations.SetImage =>
                 await CheckSimpleDryRunAsync(
                     KubernetesAdapterConventions.EvidenceTools.DryRunSetDeploymentImage,
-                    new Dictionary<string, object?>
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
                     {
                         [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
                         [KubernetesAdapterConventions.EvidenceArguments.Name] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Name, string.Empty),
@@ -167,7 +167,7 @@ public sealed class KubernetesPlanExecutor(
                         [KubernetesAdapterConventions.EvidenceArguments.Image] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Image, string.Empty)
                     },
                     plan.Id,
-                    ct),
+                    ct).ConfigureAwait(false),
             _ => null
         };
 
@@ -196,7 +196,7 @@ public sealed class KubernetesPlanExecutor(
     {
         var evidenceJson = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
-            new Dictionary<string, object?>
+            new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
                 [KubernetesAdapterConventions.EvidenceArguments.Manifest] = payload.Manifest ?? string.Empty
@@ -276,7 +276,7 @@ public sealed class KubernetesPlanExecutor(
             KubernetesAdapterConventions.PlanOperations.Apply =>
                 toolCaller.CallAsync(
                     KubernetesAdapterConventions.MutationTools.ApplyManifest,
-                    new Dictionary<string, object?>
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
                     {
                         [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
                         [KubernetesAdapterConventions.EvidenceArguments.Manifest] = payload.Manifest ?? string.Empty
@@ -285,7 +285,7 @@ public sealed class KubernetesPlanExecutor(
             KubernetesAdapterConventions.PlanOperations.Delete =>
                 toolCaller.CallAsync(
                     KubernetesAdapterConventions.MutationTools.DeleteManifest,
-                    new Dictionary<string, object?>
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
                     {
                         [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
                         [KubernetesAdapterConventions.EvidenceArguments.Manifest] = payload.Manifest ?? string.Empty
@@ -294,7 +294,7 @@ public sealed class KubernetesPlanExecutor(
             KubernetesAdapterConventions.PlanOperations.Scale =>
                 toolCaller.CallAsync(
                     KubernetesAdapterConventions.MutationTools.ScaleDeployment,
-                    new Dictionary<string, object?>
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
                     {
                         [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
                         [KubernetesAdapterConventions.EvidenceArguments.Name] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Name, string.Empty),
@@ -304,7 +304,7 @@ public sealed class KubernetesPlanExecutor(
             KubernetesAdapterConventions.PlanOperations.Restart =>
                 toolCaller.CallAsync(
                     KubernetesAdapterConventions.MutationTools.RestartDeployment,
-                    new Dictionary<string, object?>
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
                     {
                         [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
                         [KubernetesAdapterConventions.EvidenceArguments.Name] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Name, string.Empty)
@@ -313,7 +313,7 @@ public sealed class KubernetesPlanExecutor(
             KubernetesAdapterConventions.PlanOperations.SetImage =>
                 toolCaller.CallAsync(
                     KubernetesAdapterConventions.MutationTools.SetDeploymentImage,
-                    new Dictionary<string, object?>
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
                     {
                         [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
                         [KubernetesAdapterConventions.EvidenceArguments.Name] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Name, string.Empty),
@@ -350,5 +350,5 @@ public sealed class KubernetesPlanExecutor(
     private static string[] FormatObjects(KubernetesPlanPayload payload) =>
         payload.Objects.Select(obj => $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}").ToArray();
 
-    private sealed record ResultFailure(string Message, string ReasonCode);
+    private sealed record class ResultFailure(string Message, string ReasonCode);
 }

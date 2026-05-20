@@ -1,6 +1,6 @@
 namespace InfraGate.Approvals;
 
-public sealed record ChallengeOutcome(
+public sealed record class ChallengeOutcome(
     string Status,
     string? ActorSubject,
     DateTimeOffset DecidedAtUtc,

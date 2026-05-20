@@ -77,7 +77,7 @@ using (var probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
     try
     {
         var k8sClient = app.Services.GetRequiredService<IKubernetes>();
-        var version = await k8sClient.Version.GetCodeAsync(probeCts.Token);
+        var version = await k8sClient.Version.GetCodeAsync(probeCts.Token).ConfigureAwait(false);
         // Justification: CA1873 — log argument is a simple string property access. Negligible evaluation cost.
         appLogger.LogInformation(
             "Kubernetes connectivity OK — server version: {GitVersion}",
@@ -91,7 +91,7 @@ using (var probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
     }
 }
 
-await app.RunAsync();
+await app.RunAsync().ConfigureAwait(false);
 
 static void AddInfraGateConfiguration(IConfigurationBuilder configuration, string[] args)
 {

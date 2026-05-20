@@ -37,7 +37,7 @@ public sealed partial class KubernetesManager
                 fieldSelector: fieldSelector,
                 labelSelector: labelSelector,
                 limit: limit,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return JsonSerializer.Serialize(new
             {
@@ -75,6 +75,7 @@ public sealed partial class KubernetesManager
 
         try
         {
+#pragma warning disable MA0004, CA2007
             await using var logStream = await client.CoreV1.ReadNamespacedPodLogAsync(
                 podName,
                 namespaceName,
@@ -84,9 +85,10 @@ public sealed partial class KubernetesManager
                 limitBytes: KubernetesConventions.LogLimitBytes,
                 previous: previous,
                 tailLines: tailLines,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+#pragma warning restore MA0004, CA2007
             using var reader = new StreamReader(logStream);
-            var log = await reader.ReadToEndAsync(cancellationToken);
+            var log = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
 
             return JsonSerializer.Serialize(new
             {
@@ -123,7 +125,7 @@ public sealed partial class KubernetesManager
         try
         {
             var normalizedKind = kind.Trim();
-            return await ReadResourceSummaryAsync(namespaceName, normalizedKind, name, cancellationToken);
+            return await ReadResourceSummaryAsync(namespaceName, normalizedKind, name, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -171,7 +173,7 @@ public sealed partial class KubernetesManager
         var deployment = await client.AppsV1.ReadNamespacedDeploymentAsync(
             name,
             namespaceName,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return JsonSerializer.Serialize(DeploymentResourceSummary(namespaceName, deployment), KubernetesManagerHelpers.JsonOptions);
     }
@@ -184,7 +186,7 @@ public sealed partial class KubernetesManager
         var replicaSet = await client.AppsV1.ReadNamespacedReplicaSetAsync(
             name,
             namespaceName,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return JsonSerializer.Serialize(ReplicaSetResourceSummary(namespaceName, replicaSet), KubernetesManagerHelpers.JsonOptions);
     }
@@ -197,7 +199,7 @@ public sealed partial class KubernetesManager
         var pod = await client.CoreV1.ReadNamespacedPodAsync(
             name,
             namespaceName,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return JsonSerializer.Serialize(PodResourceSummary(namespaceName, pod), KubernetesManagerHelpers.JsonOptions);
     }
@@ -210,7 +212,7 @@ public sealed partial class KubernetesManager
         var service = await client.CoreV1.ReadNamespacedServiceAsync(
             name,
             namespaceName,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return JsonSerializer.Serialize(new
         {
@@ -233,7 +235,7 @@ public sealed partial class KubernetesManager
         var configMap = await client.CoreV1.ReadNamespacedConfigMapAsync(
             name,
             namespaceName,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return JsonSerializer.Serialize(new
         {
@@ -478,7 +480,7 @@ public sealed partial class KubernetesManager
         };
     }
 
-    private sealed record PodStatusFields(
+    private sealed record class PodStatusFields(
         string? Phase,
         string? Reason,
         string? Message,

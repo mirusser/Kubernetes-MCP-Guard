@@ -1296,7 +1296,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
     [GeneratedRegex(@"(?:PlanId:\s+|Approval plan\s+')(?<id>[0-9a-z-]+)", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
     private static partial Regex PlanIdPattern();
 
-    [GeneratedRegex(@"https?://[^/]+/approvals/(?<id>[0-9a-f]+)", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
+    [GeneratedRegex(@"https?://[^/]+/approvals/(?<id>[0-9A-Fa-f]+)", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
     private static partial Regex ChallengeIdPattern();
 
     [GeneratedRegex(@"name=""__RequestVerificationToken"" value=""(?<token>[^""]+)""", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
@@ -1471,7 +1471,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         }
     }
 
-    private sealed record DownstreamCall(string ToolName, IReadOnlyDictionary<string, object?> Arguments);
+    private sealed record class DownstreamCall(string ToolName, IReadOnlyDictionary<string, object?> Arguments);
 
     private sealed class InMemoryAuditStore : IGuardrailAuditStore
     {
@@ -1603,9 +1603,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         }
     }
 
-    private sealed record CapturedRequest(string Method, string Path, string Query, string Body);
+    private sealed record class CapturedRequest(string Method, string Path, string Query, string Body);
 
-    private sealed record TestResponse(
+    private sealed record class TestResponse(
         int StatusCode,
         string ContentType,
         string Body,

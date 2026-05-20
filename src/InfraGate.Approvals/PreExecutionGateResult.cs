@@ -2,7 +2,7 @@ using InfraGate.Approvals.AuditPayloads;
 
 namespace InfraGate.Approvals;
 
-public sealed record PreExecutionGateResult(
+public sealed record class PreExecutionGateResult(
     bool IsPassed,
     string Message,
     PlanEnvelope? Envelope,

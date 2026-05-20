@@ -2,4 +2,4 @@ using InfraGate.Approvals;
 
 namespace InfraGate.McpGateway;
 
-public sealed record PlanAuthorizationContext(string RequesterSubject, string ActorSubject) : IAuthorizationContext;
+public sealed record class PlanAuthorizationContext(string RequesterSubject, string ActorSubject) : IAuthorizationContext;

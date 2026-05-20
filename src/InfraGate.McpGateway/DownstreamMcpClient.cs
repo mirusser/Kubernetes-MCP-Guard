@@ -33,8 +33,8 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
         IReadOnlyDictionary<string, object?> arguments,
         CancellationToken cancellationToken)
     {
-        var mcpClient = await GetClientAsync(cancellationToken);
-        await callLock.WaitAsync(cancellationToken);
+        var mcpClient = await GetClientAsync(cancellationToken).ConfigureAwait(false);
+        await callLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             return await WithAuthRetryAsync(async token =>
@@ -71,7 +71,7 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
 
     public async Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken)
     {
-        var mcpClient = await GetClientAsync(cancellationToken);
+        var mcpClient = await GetClientAsync(cancellationToken).ConfigureAwait(false);
         return await WithAuthRetryAsync(async token =>
         {
             var meta = BuildAuthMeta(token);
@@ -98,7 +98,7 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
     {
         if (client is not null)
         {
-            await client.DisposeAsync();
+            await client.DisposeAsync().ConfigureAwait(false);
         }
 
         clientLock.Dispose();
@@ -112,7 +112,7 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
             return client;
         }
 
-        await clientLock.WaitAsync(cancellationToken);
+        await clientLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             if (client is not null)
@@ -127,7 +127,7 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
             // StdioClientTransport does not expose stdin before connect; this requires a custom transport
             // or process wrapper. The per-request _meta below covers listTools and callTool. The
             // initialize gap is noted and deferred to a follow-up.
-            client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken);
+            client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return client;
         }
@@ -139,7 +139,7 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
 
     internal static bool IsDownstreamAuthRejection(Exception ex)
         => ex is McpException mcpEx
-           && mcpEx.Message.Contains(DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired);
+           && mcpEx.Message.Contains(DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired, StringComparison.Ordinal);
 
     internal async Task<T> WithAuthRetryAsync<T>(
         Func<string, Task<T>> operation,
@@ -190,7 +190,7 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
             ]
             : [options.DownstreamAssembly];
 
-        var environmentVariables = new Dictionary<string, string?>();
+        var environmentVariables = new Dictionary<string, string?>(StringComparer.Ordinal);
         foreach (string name in McpGatewayConventions.DownstreamProcess.AllowedEnvironmentVariables)
         {
             string? value = Environment.GetEnvironmentVariable(name);

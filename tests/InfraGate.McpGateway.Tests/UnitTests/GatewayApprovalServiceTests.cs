@@ -762,7 +762,7 @@ public sealed class GatewayApprovalServiceTests
     private static ApprovalDigest CreateDigest(string value) =>
         new(ApprovalConventions.Digests.Sha256, "test.canonicalization.v1", value);
 
-    private sealed record TestContext(
+    private sealed record class TestContext(
         IGatewayApprovalService Service,
         ApprovalStore Store,
         ApprovalChallengeStore Challenges,
