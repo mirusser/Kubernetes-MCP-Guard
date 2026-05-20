@@ -129,8 +129,7 @@ public sealed class DryRunFailureTests(SafetyE2EFixture fixture)
                 [McpGatewayConventions.ToolArguments.PlanId] = planId
             });
         var challengeId = SafetyE2EFixture.ParseChallengeId(approvalRequired);
-        var approvalResponse = await fixture.ApproveChallengeInBrowserAsync(challengeId, client.Subject);
-        Assert.Contains("was approved", approvalResponse, StringComparison.Ordinal);
+        await fixture.ApproveChallengeInBrowserAsync(challengeId, client.Subject);
 
         var applyText = await client.CallToolAsync(
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,

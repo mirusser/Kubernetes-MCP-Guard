@@ -29,7 +29,7 @@ public sealed class ModifiedPendingPlanTests(SafetyE2EFixture fixture)
             var approvals = fixture.GetApprovalService();
             var challengeResult = await approvals.EnsureApprovedOrCreateChallengeAsync(planId, CancellationToken.None);
             Assert.False(challengeResult.IsApproved);
-            var challengeId = ExtractChallengeId(challengeResult.Message);
+            var challengeId = challengeResult.ChallengeId!;
             var pendingPath = fixture.ApprovalStore.GetPendingPath(planId);
 
             await File.AppendAllTextAsync(pendingPath, Environment.NewLine, CancellationToken.None);
@@ -38,7 +38,7 @@ public sealed class ModifiedPendingPlanTests(SafetyE2EFixture fixture)
             var challenge = await fixture.ChallengeStore.GetAsync(challengeId, CancellationToken.None);
 
             Assert.False(result.Succeeded);
-            Assert.Contains("pending plan changed", result.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(ApprovalConventions.ResultReasonCodes.PendingPlanChanged, result.ReasonCode);
             Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
             Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
 
@@ -55,11 +55,4 @@ public sealed class ModifiedPendingPlanTests(SafetyE2EFixture fixture)
             fixture.ClearAuthenticatedSubject();
         }
     }
-
-    private static string ExtractChallengeId(string message) =>
-        message
-            .Split(Environment.NewLine)
-            .Single(line => line.StartsWith("Approval URL:", StringComparison.Ordinal))
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .Last();
 }

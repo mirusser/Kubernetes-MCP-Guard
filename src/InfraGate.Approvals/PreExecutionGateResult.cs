@@ -6,15 +6,16 @@ public sealed record PreExecutionGateResult(
     bool IsPassed,
     string Message,
     PlanEnvelope? Envelope,
-    ApprovalGrant? Grant)
+    ApprovalGrant? Grant,
+    string? ReasonCode = null)
 {
     public PlanAudit? Audit { get; init; }
 
     public static PreExecutionGateResult Passed(PlanEnvelope envelope, ApprovalGrant grant) =>
         new(true, "Pre-execution gates passed.", envelope, grant);
 
-    public static PreExecutionGateResult Blocked(string planId, string message) =>
-        new(false, message, Envelope: null, Grant: null)
+    public static PreExecutionGateResult Blocked(string planId, string message, string? reasonCode = null) =>
+        new(false, message, Envelope: null, Grant: null, reasonCode)
         {
             Audit = new PlanAudit(
                 ApprovalConventions.AuditEvents.ApplyDenied,
@@ -22,7 +23,7 @@ public sealed record PreExecutionGateResult(
         };
 
     public static PreExecutionGateResult Blocked(DomainPlanExecutionResult domainResult, string planId) =>
-        new(false, domainResult.Message, Envelope: null, Grant: null)
+        new(false, domainResult.Message, Envelope: null, Grant: null, domainResult.ReasonCode)
         {
             Audit = domainResult.Audit ?? new PlanAudit(
                 ApprovalConventions.AuditEvents.ApplyDenied,

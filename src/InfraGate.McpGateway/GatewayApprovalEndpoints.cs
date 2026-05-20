@@ -151,27 +151,27 @@ internal static class GatewayApprovalEndpoints
     private static string RenderPlanSummaryCard(ApprovalChallenge challenge, IPlanReview planReview)
     {
         return $"""
-                <section class="card">
+                <section class="card" data-section="plan-summary">
                   <h2>Plan Summary</h2>
                   <div class="kv-grid">
                     <span class="kv-label">Plan ID</span>
-                    <span class="kv-value"><code>{Html(planReview.Envelope.Id)}</code></span>
+                    <span class="kv-value" data-field="plan-id"><code>{Html(planReview.Envelope.Id)}</code></span>
                     <span class="kv-label">Operation</span>
-                    <span class="kv-value">{Html(planReview.Envelope.Operation)}</span>
+                    <span class="kv-value" data-field="operation">{Html(planReview.Envelope.Operation)}</span>
                     <span class="kv-label">Intent Digest</span>
-                    <span class="kv-value"><code>{Html(planReview.Envelope.IntentDigest.Value)}</code></span>
+                    <span class="kv-value" data-field="intent-digest"><code>{Html(planReview.Envelope.IntentDigest.Value)}</code></span>
                     <span class="kv-label">Review Digest</span>
-                    <span class="kv-value"><code>{Html(planReview.Envelope.ReviewDigest.Value)}</code></span>
+                    <span class="kv-value" data-field="review-digest"><code>{Html(planReview.Envelope.ReviewDigest.Value)}</code></span>
                     <span class="kv-label">Requester</span>
-                    <span class="kv-value">{Html(challenge.RequesterSubject)}</span>
+                    <span class="kv-value" data-field="requester">{Html(challenge.RequesterSubject)}</span>
                     <span class="kv-label">Requester Auth</span>
-                    <span class="kv-value">{Html(challenge.RequesterAuthenticationType ?? "Unknown")}</span>
+                    <span class="kv-value" data-field="requester-auth">{Html(challenge.RequesterAuthenticationType ?? "Unknown")}</span>
                     <span class="kv-label">Challenge Status</span>
-                    <span class="kv-value"><span class="badge badge-{Html(challenge.Status)}">{Html(challenge.Status)}</span></span>
+                    <span class="kv-value" data-field="status"><span class="badge badge-{Html(challenge.Status)}">{Html(challenge.Status)}</span></span>
                     <span class="kv-label">Challenge Created</span>
-                    <span class="kv-value">{Html(challenge.CreatedAtUtc.ToString("O"))}</span>
+                    <span class="kv-value" data-field="created-at">{Html(challenge.CreatedAtUtc.ToString("O"))}</span>
                     <span class="kv-label">Expires</span>
-                    <span class="kv-value">{Html(challenge.ExpiresAtUtc.ToString("O"))}</span>
+                    <span class="kv-value" data-field="expires-at">{Html(challenge.ExpiresAtUtc.ToString("O"))}</span>
                   </div>
                 </section>
                 """;
@@ -180,18 +180,18 @@ internal static class GatewayApprovalEndpoints
     private static string RenderActionsCard(string challengeId, string token, string approveDisabled)
     {
         return $"""
-                <section class="card actions-card">
-                  <form method="post" action="{McpGatewayConventions.Approvals.PathPrefix}/{Html(challengeId)}/approve">
+                <section class="card actions-card" data-section="approval-actions">
+                  <form method="post" action="{McpGatewayConventions.Approvals.PathPrefix}/{Html(challengeId)}/approve" data-action="approve">
                     <input type="hidden" name="{McpGatewayConventions.Approvals.RequestVerificationToken}" value="{token}">
-                    <button type="submit" class="approve"{approveDisabled}>Approve</button>
+                    <button type="submit" class="approve" data-action="approve"{approveDisabled}>Approve</button>
                   </form>
-                  <form method="post" action="{McpGatewayConventions.Approvals.PathPrefix}/{Html(challengeId)}/deny">
+                  <form method="post" action="{McpGatewayConventions.Approvals.PathPrefix}/{Html(challengeId)}/deny" data-action="deny">
                     <input type="hidden" name="{McpGatewayConventions.Approvals.RequestVerificationToken}" value="{token}">
-                    <button type="submit" class="deny">Deny</button>
+                    <button type="submit" class="deny" data-action="deny">Deny</button>
                   </form>
-                  <form method="post" action="{McpGatewayConventions.Approvals.PathPrefix}/{Html(challengeId)}/cancel">
+                  <form method="post" action="{McpGatewayConventions.Approvals.PathPrefix}/{Html(challengeId)}/cancel" data-action="cancel">
                     <input type="hidden" name="{McpGatewayConventions.Approvals.RequestVerificationToken}" value="{token}">
-                    <button type="submit" class="cancel">Cancel</button>
+                    <button type="submit" class="cancel" data-action="cancel">Cancel</button>
                   </form>
                 </section>
                 """;

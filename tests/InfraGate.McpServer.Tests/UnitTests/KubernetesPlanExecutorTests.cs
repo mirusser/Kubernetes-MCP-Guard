@@ -202,7 +202,7 @@ public sealed class KubernetesPlanExecutorTests
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("drift", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.LiveDrift, result.ReasonCode);
         Assert.NotNull(result.Audit);
         Assert.Equal(ApprovalConventions.AuditEvents.ApplyDriftDetected, result.Audit.EventName);
         Assert.DoesNotContain(KubernetesAdapterConventions.MutationTools.ApplyManifest, toolCaller.CalledTools);
@@ -222,7 +222,7 @@ public sealed class KubernetesPlanExecutorTests
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("dry-run", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.PreExecuteDryRunFailed, result.ReasonCode);
         Assert.NotNull(result.Audit);
         Assert.Equal(ApprovalConventions.AuditEvents.DryRunFailed, result.Audit.EventName);
         Assert.DoesNotContain(KubernetesAdapterConventions.MutationTools.ApplyManifest, toolCaller.CalledTools);
@@ -246,7 +246,7 @@ public sealed class KubernetesPlanExecutorTests
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("policy", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked, result.ReasonCode);
         Assert.DoesNotContain(KubernetesAdapterConventions.MutationTools.ApplyManifest, toolCaller.CalledTools);
     }
 
@@ -320,7 +320,7 @@ public sealed class KubernetesPlanExecutorTests
         var result = await executor.ExecuteAsync(badEnvelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
-        Assert.Contains("unsupported adapter", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.UnsupportedAdapter, result.ReasonCode);
         Assert.Empty(toolCaller.CalledTools);
     }
 

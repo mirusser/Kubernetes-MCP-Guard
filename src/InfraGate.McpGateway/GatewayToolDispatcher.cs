@@ -205,7 +205,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         var gate = await approvals.EnsureApprovedOrCreateChallengeAsync(planId, ct);
         if (!gate.IsApproved)
         {
-            if (!gate.Message.Contains("Refused:", StringComparison.Ordinal))
+            if (gate.Status is ApprovalGateStatus.ApprovalRequired)
             {
                 var sessionId = CurrentSessionId;
                 if (sessionId is not null)
@@ -214,9 +214,15 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
                 }
             }
 
-            return gate.Message.Contains("Refused:", StringComparison.Ordinal)
-                ? ErrorResult(gate.Message)
-                : new CallToolResult { Content = [new TextContentBlock { Text = gate.Message }] };
+            return gate.Status switch
+            {
+                ApprovalGateStatus.ApprovalRequired => new CallToolResult
+                {
+                    Content = [new TextContentBlock { Text = gate.Message }]
+                },
+                ApprovalGateStatus.Refused => ErrorResult(gate.Message),
+                _ => ErrorResult(gate.Message)
+            };
         }
 
         var preExecution = await preExecutionGate.EvaluateAsync(planId, domainAdapter, ct);

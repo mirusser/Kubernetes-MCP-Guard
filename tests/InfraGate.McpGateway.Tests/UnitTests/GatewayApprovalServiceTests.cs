@@ -24,8 +24,11 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.Contains("Approval required.", result.Message);
-        Assert.Contains("Approval URL: http://gateway.test/approvals/", result.Message);
+        Assert.Equal(ApprovalGateStatus.ApprovalRequired, result.Status);
+        Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.ApprovalRequired, result.ReasonCode);
+        Assert.StartsWith("http://gateway.test/approvals/", result.ApprovalUrl, StringComparison.Ordinal);
+        Assert.NotNull(result.ChallengeId);
+        Assert.NotNull(result.ExpiresAtUtc);
         Assert.False(File.Exists(context.Store.GetGrantPath(plan.Id)));
     }
 
@@ -40,7 +43,9 @@ public sealed class GatewayApprovalServiceTests
 
         Assert.False(first.IsApproved);
         Assert.False(second.IsApproved);
-        Assert.Equal(ApprovalUrl(first.Message), ApprovalUrl(second.Message));
+        Assert.Equal(ApprovalGateStatus.ApprovalRequired, second.Status);
+        Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.ApprovalRequired, second.ReasonCode);
+        Assert.Equal(first.ApprovalUrl, second.ApprovalUrl);
         Assert.Single(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
     }
 
@@ -50,9 +55,7 @@ public sealed class GatewayApprovalServiceTests
         var context = CreateContext();
         var plan = await CreatePendingPlanAsync(context.Store);
         var first = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
-        string firstChallengeId = ApprovalUrl(first.Message)
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .Last();
+        string firstChallengeId = first.ChallengeId!;
         var challenge = await context.Challenges.GetAsync(firstChallengeId, CancellationToken.None);
         await context.Challenges.SaveAsync(
             challenge! with { ExpiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1) },
@@ -61,7 +64,9 @@ public sealed class GatewayApprovalServiceTests
         var second = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(second.IsApproved);
-        Assert.NotEqual(ApprovalUrl(first.Message), ApprovalUrl(second.Message));
+        Assert.Equal(ApprovalGateStatus.ApprovalRequired, second.Status);
+        Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.ApprovalRequired, second.ReasonCode);
+        Assert.NotEqual(first.ApprovalUrl, second.ApprovalUrl);
         Assert.Equal(2, Directory.EnumerateFiles(context.Store.ChallengesDirectory).Count());
     }
 
@@ -75,6 +80,8 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
+        Assert.Equal(ApprovalGateStatus.Refused, result.Status);
+        Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.AuthenticatedSubjectRequired, result.ReasonCode);
         Assert.Contains("authenticated OAuth subject", result.Message);
         Assert.Empty(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
     }
@@ -93,7 +100,7 @@ public sealed class GatewayApprovalServiceTests
         Assert.True(approved.Succeeded);
         Assert.True(File.Exists(context.Store.GetGrantPath(plan.Id)));
         Assert.False(reused.Succeeded);
-        Assert.Contains("already approved", reused.Message);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.ChallengeAlreadyTerminal, reused.ReasonCode);
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
         Assert.Equal(ApprovalConventions.ChallengeOutcomeStatuses.Approved, challenge?.Outcome?.Status);
     }
@@ -109,7 +116,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("authenticated OAuth subject", result.Message);
+        Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.AuthenticatedSubjectRequired, result.ReasonCode);
         Assert.False(File.Exists(context.Store.GetGrantPath(plan.Id)));
     }
 
@@ -121,7 +128,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.ApproveChallengeAsync("abc123", CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("not found", result.Message);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.ChallengeNotFound, result.ReasonCode);
     }
 
     [Fact]
@@ -133,7 +140,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("No pending plan exists", result.Message);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.PlanNotPending, result.ReasonCode);
     }
 
     [Fact]
@@ -147,7 +154,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("missing recorded evidence data", result.Message);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.MissingReviewEvidence, result.ReasonCode);
         Assert.False(File.Exists(context.Store.GetGrantPath(plan.Id)));
     }
 
@@ -165,7 +172,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("missing recorded evidence data", result.Message);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.MissingReviewEvidence, result.ReasonCode);
         Assert.False(File.Exists(context.Store.GetGrantPath(plan.Id)));
     }
 
@@ -182,7 +189,9 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.Contains("Approval URL:", result.Message);
+        Assert.Equal(ApprovalGateStatus.ApprovalRequired, result.Status);
+        Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.ApprovalRequired, result.ReasonCode);
+        Assert.NotNull(result.ApprovalUrl);
     }
 
     [Fact]
@@ -198,7 +207,7 @@ public sealed class GatewayApprovalServiceTests
 
         Assert.True(approved.Succeeded);
         Assert.False(result.IsApproved);
-        Assert.Contains("review digest", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.DigestChanged, result.ReasonCode);
         string audit = await File.ReadAllTextAsync(context.Store.AuditPath, CancellationToken.None);
         Assert.Contains($@"""eventName"": ""{ApprovalConventions.AuditEvents.ApplyDenied}""", audit);
         Assert.Contains($"\"planId\": \"{plan.Id}\"", audit);
@@ -216,7 +225,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("same authenticated subject", result.Message);
+        Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired, result.ReasonCode);
         Assert.False(File.Exists(context.Store.GetGrantPath(plan.Id)));
     }
 
@@ -231,7 +240,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("pending plan changed", result.Message);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.PendingPlanChanged, result.ReasonCode);
         Assert.False(File.Exists(context.Store.GetGrantPath(plan.Id)));
     }
 
@@ -250,7 +259,7 @@ public sealed class GatewayApprovalServiceTests
         var updated = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("expired", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.ChallengeExpired, result.ReasonCode);
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Expired, updated?.Status);
     }
 
@@ -263,7 +272,8 @@ public sealed class GatewayApprovalServiceTests
             "00000000-0000-0000-0000-000000000000", CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.StartsWith("Refused:", result.Message, StringComparison.Ordinal);
+        Assert.Equal(ApprovalGateStatus.Refused, result.Status);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.PlanNotPending, result.ReasonCode);
     }
 
     [Fact]
@@ -275,7 +285,8 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.Contains("missing recorded evidence data", result.Message);
+        Assert.Equal(ApprovalGateStatus.Refused, result.Status);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.MissingReviewEvidence, result.ReasonCode);
         Assert.Empty(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
     }
 
@@ -292,7 +303,8 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.Contains("missing recorded evidence data", result.Message);
+        Assert.Equal(ApprovalGateStatus.Refused, result.Status);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.MissingReviewEvidence, result.ReasonCode);
     }
 
     [Fact]
@@ -311,7 +323,8 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.Contains("missing recorded evidence data", result.Message);
+        Assert.Equal(ApprovalGateStatus.Refused, result.Status);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.MissingReviewEvidence, result.ReasonCode);
     }
 
     [Fact]
@@ -326,7 +339,8 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.Contains("missing recorded evidence data", result.Message);
+        Assert.Equal(ApprovalGateStatus.Refused, result.Status);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.MissingReviewEvidence, result.ReasonCode);
         Assert.Empty(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
     }
 
@@ -339,8 +353,8 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.StartsWith("Refused:", result.Message, StringComparison.Ordinal);
-        Assert.Contains("not started", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(ApprovalGateStatus.Refused, result.Status);
+        Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.PlanNotStarted, result.ReasonCode);
         Assert.Empty(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
     }
 
@@ -354,8 +368,8 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
 
         Assert.False(result.IsApproved);
-        Assert.StartsWith("Refused:", result.Message, StringComparison.Ordinal);
-        Assert.Contains("expired", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(ApprovalGateStatus.Refused, result.Status);
+        Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.PlanExpired, result.ReasonCode);
         Assert.Empty(Directory.EnumerateFiles(context.Store.ChallengesDirectory));
     }
 
@@ -367,8 +381,7 @@ public sealed class GatewayApprovalServiceTests
         var plan = await CreatePendingPlanAsync(context.Store, createdAtUtc: DateTimeOffset.UtcNow.AddMinutes(-55));
 
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
-        string challengeId = ApprovalUrl(result.Message).Split('/').Last();
-        var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
+        var challenge = await context.Challenges.GetAsync(result.ChallengeId!, CancellationToken.None);
 
         Assert.False(result.IsApproved);
         Assert.NotNull(challenge);
@@ -384,8 +397,7 @@ public sealed class GatewayApprovalServiceTests
         var plan = await CreatePendingPlanAsync(context.Store);
 
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(plan.Id, CancellationToken.None);
-        string challengeId = ApprovalUrl(result.Message).Split('/').Last();
-        var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
+        var challenge = await context.Challenges.GetAsync(result.ChallengeId!, CancellationToken.None);
 
         Assert.False(result.IsApproved);
         Assert.NotNull(challenge);
@@ -423,7 +435,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("pending plan changed", result.Message);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.PendingPlanChanged, result.ReasonCode);
         Assert.False(File.Exists(context.Store.GetGrantPath(plan.Id)));
     }
 
@@ -450,7 +462,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.DenyChallengeAsync("abc123", CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("not found", result.Message);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.ChallengeNotFound, result.ReasonCode);
     }
 
     [Fact]
@@ -464,7 +476,7 @@ public sealed class GatewayApprovalServiceTests
         var result = await context.Service.DenyChallengeAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("authenticated OAuth subject", result.Message);
+        Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.AuthenticatedSubjectRequired, result.ReasonCode);
     }
 
     [Fact]
@@ -479,7 +491,7 @@ public sealed class GatewayApprovalServiceTests
 
         Assert.True(denied.Succeeded);
         Assert.False(reused.Succeeded);
-        Assert.Contains("already denied", reused.Message);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.ChallengeAlreadyTerminal, reused.ReasonCode);
     }
 
     [Fact]
@@ -494,7 +506,7 @@ public sealed class GatewayApprovalServiceTests
         var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("same authenticated subject", result.Message);
+        Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired, result.ReasonCode);
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Rejected, challenge?.Status);
         Assert.Equal(ApprovalConventions.ChallengeOutcomeStatuses.Rejected, challenge?.Outcome?.Status);
     }
@@ -531,7 +543,7 @@ public sealed class GatewayApprovalServiceTests
 
         Assert.True(canceled.Succeeded);
         Assert.False(reused.Succeeded);
-        Assert.Contains("already canceled", reused.Message);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.ChallengeAlreadyTerminal, reused.ReasonCode);
     }
 
     [Fact]
@@ -549,7 +561,7 @@ public sealed class GatewayApprovalServiceTests
         var updated = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("already expired", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.ChallengeExpired, result.ReasonCode);
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Expired, updated?.Status);
     }
 
@@ -565,7 +577,7 @@ public sealed class GatewayApprovalServiceTests
         var challenge = await context.Challenges.GetAsync(challengeId, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("same authenticated subject", result.Message);
+        Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired, result.ReasonCode);
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Rejected, challenge?.Status);
         Assert.Equal(ApprovalConventions.ChallengeOutcomeStatuses.Rejected, challenge?.Outcome?.Status);
     }
@@ -582,7 +594,7 @@ public sealed class GatewayApprovalServiceTests
 
         Assert.True(canceled.Succeeded);
         Assert.False(approved.Succeeded);
-        Assert.Contains("already canceled", approved.Message);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.ChallengeAlreadyTerminal, approved.ReasonCode);
         Assert.False(File.Exists(context.Store.GetGrantPath(plan.Id)));
     }
 
@@ -650,17 +662,8 @@ public sealed class GatewayApprovalServiceTests
     {
         var result = await context.Service.EnsureApprovedOrCreateChallengeAsync(planId, CancellationToken.None);
 
-        return ApprovalUrl(result.Message)
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .Last();
+        return result.ChallengeId!;
     }
-
-    private static string ApprovalUrl(string message) =>
-        message
-            .Split(Environment.NewLine)
-            .Single(line => line.StartsWith("Approval URL:", StringComparison.Ordinal))
-            .Substring("Approval URL:".Length)
-            .Trim();
 
     private static async Task<string> CreateStoredChallengeAsync(TestContext context, string planId, string pendingPlanHash)
     {

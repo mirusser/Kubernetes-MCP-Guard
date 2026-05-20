@@ -72,16 +72,15 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
         var tokenPageText = await tokenPage.Content.ReadAsStringAsync();
         SafetyE2EFixture.AddResponseCookies(browser, tokenPage);
 
-        var result = await SafetyE2EFixture.PostApprovalAsync(
+        await SafetyE2EFixture.PostApprovalAsync(
             browser,
             originalChallengeId,
             SafetyE2EFixture.ParseAntiforgeryToken(tokenPageText));
         var originalChallenge = await fixture.ChallengeStore.GetAsync(originalChallengeId, CancellationToken.None);
 
-        Assert.Contains("Approval Failed", result, StringComparison.Ordinal);
-        Assert.Contains("same authenticated subject", result, StringComparison.OrdinalIgnoreCase);
         Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
-        Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, originalChallenge?.Status);
+        Assert.Equal(ApprovalConventions.ChallengeStatuses.Rejected, originalChallenge?.Status);
+        Assert.Equal(ApprovalConventions.ChallengeOutcomeStatuses.Rejected, originalChallenge?.Outcome?.Status);
 
         var auditEvents = await fixture.ReadAuditEventsAsync();
         Assert.Contains(auditEvents, evt =>
@@ -117,7 +116,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
         {
             var firstResult = await fixture.GetApprovalService().EnsureApprovedOrCreateChallengeAsync(planId, CancellationToken.None);
             Assert.False(firstResult.IsApproved);
-            challengeId = ExtractChallengeId(firstResult.Message);
+            challengeId = firstResult.ChallengeId!;
         }
         finally
         {
@@ -131,7 +130,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
             var challenge = await fixture.ChallengeStore.GetAsync(challengeId, CancellationToken.None);
 
             Assert.False(result.Succeeded);
-            Assert.Contains("same authenticated subject", result.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired, result.ReasonCode);
             Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
             Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
         }
@@ -192,16 +191,15 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
         var tokenPageText = await tokenPage.Content.ReadAsStringAsync();
         SafetyE2EFixture.AddResponseCookies(browser, tokenPage);
 
-        var result = await SafetyE2EFixture.PostApprovalAsync(
+        await SafetyE2EFixture.PostApprovalAsync(
             browser,
             originalChallengeId,
             SafetyE2EFixture.ParseAntiforgeryToken(tokenPageText));
         var originalChallenge = await fixture.ChallengeStore.GetAsync(originalChallengeId, CancellationToken.None);
 
-        Assert.Contains("Approval Failed", result, StringComparison.Ordinal);
-        Assert.Contains("same authenticated subject", result, StringComparison.OrdinalIgnoreCase);
         Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
-        Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, originalChallenge?.Status);
+        Assert.Equal(ApprovalConventions.ChallengeStatuses.Rejected, originalChallenge?.Status);
+        Assert.Equal(ApprovalConventions.ChallengeOutcomeStatuses.Rejected, originalChallenge?.Outcome?.Status);
 
         var auditEvents = await fixture.ReadAuditEventsAsync();
         Assert.Contains(auditEvents, evt =>
@@ -243,7 +241,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
             var challenge = await fixture.ChallengeStore.GetAsync(challengeId, CancellationToken.None);
 
             Assert.False(result.Succeeded);
-            Assert.Contains("same authenticated subject", result.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired, result.ReasonCode);
             Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
             Assert.NotEqual(ApprovalConventions.ChallengeStatuses.Approved, challenge?.Status);
         }
@@ -252,13 +250,6 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
             fixture.ClearAuthenticatedSubject();
         }
     }
-
-    private static string ExtractChallengeId(string message) =>
-        message
-            .Split(Environment.NewLine)
-            .Single(line => line.StartsWith("Approval URL:", StringComparison.Ordinal))
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .Last();
 
     private static KubernetesPlanPayload CreateRestartPayload()
     {

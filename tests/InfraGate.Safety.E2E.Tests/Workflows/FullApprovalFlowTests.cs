@@ -32,12 +32,10 @@ public sealed class FullApprovalFlowTests(SafetyE2EFixture fixture)
                 [McpGatewayConventions.ToolArguments.PlanId] = planId
             });
 
-        Assert.Contains("Approval required.", approvalRequired, StringComparison.Ordinal);
-        Assert.Contains("Approval URL:", approvalRequired, StringComparison.Ordinal);
+        var challengeId = SafetyE2EFixture.ParseChallengeId(approvalRequired);
         Assert.DoesNotContain("Applied plan:", approvalRequired, StringComparison.Ordinal);
         Assert.False(File.Exists(fixture.ApprovalStore.GetAppliedPath(planId)));
 
-        var challengeId = SafetyE2EFixture.ParseChallengeId(approvalRequired);
         using var unauthenticatedBrowser = fixture.CreateApprovalBrowser();
         var unauthenticatedPage = await unauthenticatedBrowser.GetAsync($"/approvals/{challengeId}");
         Assert.Equal(HttpStatusCode.Redirect, unauthenticatedPage.StatusCode);
@@ -51,18 +49,17 @@ public sealed class FullApprovalFlowTests(SafetyE2EFixture fixture)
         page.EnsureSuccessStatusCode();
         var pageText = await page.Content.ReadAsStringAsync();
         Assert.Contains($"<code>{planId}</code>", pageText, StringComparison.Ordinal);
-        Assert.Contains("Intent Digest", pageText, StringComparison.Ordinal);
-        Assert.Contains("Review Digest", pageText, StringComparison.Ordinal);
+        Assert.Contains("data-field=\"intent-digest\"", pageText, StringComparison.Ordinal);
+        Assert.Contains("data-field=\"review-digest\"", pageText, StringComparison.Ordinal);
         Assert.Contains("Server-side dry-run: succeeded", pageText, StringComparison.Ordinal);
-        Assert.Contains("<h2>Diff</h2>", pageText, StringComparison.Ordinal);
+        Assert.Contains("data-section=\"diff\"", pageText, StringComparison.Ordinal);
         Assert.Contains($"{fixture.Namespace}/nginx-demo", pageText, StringComparison.Ordinal);
 
         SafetyE2EFixture.AddResponseCookies(browser, page);
-        var approvalResponse = await SafetyE2EFixture.PostApprovalAsync(
+        await SafetyE2EFixture.PostApprovalAsync(
             browser,
             challengeId,
             SafetyE2EFixture.ParseAntiforgeryToken(pageText));
-        Assert.Contains("was approved", approvalResponse, StringComparison.Ordinal);
         Assert.True(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
 
         var acceptedResult = await client.CallToolAsync(

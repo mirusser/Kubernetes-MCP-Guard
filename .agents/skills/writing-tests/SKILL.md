@@ -13,14 +13,27 @@ Each runtime project has a matching test project under `tests/`:
 |---|---|
 | `InfraGate.McpServer` | `InfraGate.McpServer.Tests` |
 | `InfraGate.McpGateway` | `InfraGate.McpGateway.Tests` |
+| `InfraGate.RuntimeSafety` | `InfraGate.RuntimeSafety.Tests` |
+| `InfraGate.Observability` | `InfraGate.Observability.Tests` |
+| `InfraGate.RunProfiles` | `InfraGate.RunProfiles.Tests` |
 | (gateway + auth OIDC integration) | `InfraGate.McpGateway.KeycloakTests` |
+| (full approval-flow safety E2E) | `InfraGate.Safety.E2E.Tests` |
 
 Tests are split by scope:
 
 - `UnitTests/` — no network, no Kubernetes, no filesystem (or temp-path only).
-- `IntegrationTests/` — require a real cluster; opt-in, not run by default.
+- `IntegrationTests/` — may require TestHost, a fake downstream server, or opt-in external dependencies.
+- Safety E2E and Keycloak tests are opt-in categories; do not make the default test run depend on Docker, Keycloak, or a live Kubernetes cluster.
 
 Add new test files to the appropriate subdirectory.
+
+## Assertion Surface
+
+Prefer assertions on behavior contracts, not presentation text. When code returns a typed result, assert the stable fields first.
+
+Do not assert user-facing prose such as approval/refusal sentences etc. unless the test is specifically about rendering, CLI/external protocol output, redaction text, or a documented wire contract. If parsing is unavoidable, parse by format (URL path, plan-id pattern, JSON field, form token) rather than by label text like `Approval URL:`.
+
+Use convention constants for contract strings.
 
 ## Naming
 

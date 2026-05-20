@@ -406,10 +406,12 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
             : throw new InvalidOperationException("Could not extract a PlanId from the text.");
 
     public static string ParseChallengeId(string text) =>
-        text.Split(Environment.NewLine)
-            .Single(line => line.StartsWith("Approval URL:", StringComparison.Ordinal))
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .Last();
+        ChallengeIdPattern().Match(text) is { Success: true } match
+            ? match.Groups["id"].Value
+            : throw new InvalidOperationException("Could not extract an approval challenge id from the text.");
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"https?://[^/]+/approvals/(?<id>[0-9a-f]+)", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex ChallengeIdPattern();
 
     public static string ParseAntiforgeryToken(string html)
     {

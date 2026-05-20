@@ -12,9 +12,10 @@
 - `AuditPayloadsTests.cs`: serialisation shape for every approval-audit payload record — locks field names, ordering, and PlanId-vs-Id conventions.
 - `KubernetesMcpOptionsTests.cs`: allowed namespace parsing defaults and comma-separated values.
 - `KubernetesToolsTests.cs`: MCP tool delegation, argument forwarding to KubernetesManager, and plan-unaware live-drift evidence arguments.
-- `KubernetesPlanBuilderTests.cs`: Kubernetes adapter plan creation, freshness policy declarations, dry-run evidence, diff evidence, and policy refusal behavior.
-- `KubernetesPlanExecutorTests.cs`: Kubernetes adapter pre-execution checks, drift blocking, pre-execution dry-run blocking, policy blocking, and raw execution dispatch.
+- `KubernetesPlanBuilderTests.cs`: Kubernetes adapter plan creation, freshness policy declarations, dry-run evidence, diff evidence, policy refusal behavior, and adapter-owned reason codes.
+- `KubernetesPlanExecutorTests.cs`: Kubernetes adapter pre-execution checks, drift blocking, pre-execution dry-run blocking, policy blocking, raw execution dispatch, and blocked-result reason codes.
 - `KubernetesPlanReviewTests.cs`: review evidence requirements for manifest plans and dry-run-only Deployment operations.
+- `KubernetesPlanReviewRendererTests.cs`: semantic review-rendering sections for objects, submitted manifests, policy findings, dry-run results, and diffs.
 
 ## Running Tests
 
