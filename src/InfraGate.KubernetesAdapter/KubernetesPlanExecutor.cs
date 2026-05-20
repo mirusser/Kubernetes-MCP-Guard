@@ -17,7 +17,7 @@ public sealed class KubernetesPlanExecutor(
         var decodeResult = KubernetesApprovalAdapter.Decode(envelope);
         if (!decodeResult.Succeeded || decodeResult.Plan is null)
         {
-            return DomainPlanExecutionResult.Blocked(decodeResult.Message);
+            return DomainPlanExecutionResult.Blocked(decodeResult.Message, decodeResult.ReasonCode);
         }
 
         var plan = decodeResult.Plan;
@@ -26,25 +26,26 @@ public sealed class KubernetesPlanExecutor(
         var driftBlock = await CheckLiveDriftAsync(plan, payload, ct);
         if (driftBlock is not null)
         {
-            var audit = ApplyDriftDetectedAudit(plan, driftBlock, payload);
-            return DomainPlanExecutionResult.Blocked(driftBlock, audit);
+            var audit = ApplyDriftDetectedAudit(plan, driftBlock.Message, payload);
+            return DomainPlanExecutionResult.Blocked(driftBlock.Message, audit, driftBlock.ReasonCode);
         }
 
         var policyBlock = CheckSetDeploymentImagePolicy(plan, payload);
         if (policyBlock is not null)
         {
             return DomainPlanExecutionResult.Blocked(
-                policyBlock,
+                policyBlock.Message,
                 new PlanAudit(
                     ApprovalConventions.AuditEvents.ApplyDenied,
-                    new ApplyDeniedPayload(plan.Id, policyBlock)));
+                    new ApplyDeniedPayload(plan.Id, policyBlock.Message)),
+                policyBlock.ReasonCode);
         }
 
         var dryRunBlock = await RunPreExecuteDryRunAsync(plan, payload, ct);
         if (dryRunBlock is not null)
         {
-            var audit = DryRunFailedAudit(plan, dryRunBlock, payload);
-            return DomainPlanExecutionResult.Blocked(dryRunBlock, audit);
+            var audit = DryRunFailedAudit(plan, dryRunBlock.Message, payload);
+            return DomainPlanExecutionResult.Blocked(dryRunBlock.Message, audit, dryRunBlock.ReasonCode);
         }
 
         await auditPublisher.PublishAsync(
@@ -70,7 +71,7 @@ public sealed class KubernetesPlanExecutor(
         var decodeResult = KubernetesApprovalAdapter.Decode(envelope);
         if (!decodeResult.Succeeded || decodeResult.Plan is null)
         {
-            return DomainPlanExecutionResult.Blocked(decodeResult.Message);
+            return DomainPlanExecutionResult.Blocked(decodeResult.Message, decodeResult.ReasonCode);
         }
 
         var plan = decodeResult.Plan;
@@ -94,7 +95,7 @@ public sealed class KubernetesPlanExecutor(
         return await DispatchAsync(plan.Operation, payload, ct);
     }
 
-    private async Task<string?> CheckLiveDriftAsync(KubernetesPlan plan, KubernetesPlanPayload payload, CancellationToken ct)
+    private async Task<ResultFailure?> CheckLiveDriftAsync(KubernetesPlan plan, KubernetesPlanPayload payload, CancellationToken ct)
     {
         if (payload.Diffs.Length == 0)
         {
@@ -114,10 +115,12 @@ public sealed class KubernetesPlanExecutor(
 
         return string.Equals(result, KubernetesAdapterConventions.DriftCheckResults.NoDrift, StringComparison.Ordinal)
             ? null
-            : $"Plan '{plan.Id}' cannot be executed: live Kubernetes state has drifted. {result}";
+            : new ResultFailure(
+                $"Plan '{plan.Id}' cannot be executed: live Kubernetes state has drifted. {result}",
+                KubernetesAdapterConventions.ResultReasonCodes.LiveDrift);
     }
 
-    private async Task<string?> RunPreExecuteDryRunAsync(KubernetesPlan plan, KubernetesPlanPayload payload, CancellationToken ct) =>
+    private async Task<ResultFailure?> RunPreExecuteDryRunAsync(KubernetesPlan plan, KubernetesPlanPayload payload, CancellationToken ct) =>
         plan.Operation switch
         {
             KubernetesAdapterConventions.PlanOperations.Apply =>
@@ -168,7 +171,7 @@ public sealed class KubernetesPlanExecutor(
             _ => null
         };
 
-    private static string? CheckSetDeploymentImagePolicy(KubernetesPlan plan, KubernetesPlanPayload payload)
+    private static ResultFailure? CheckSetDeploymentImagePolicy(KubernetesPlan plan, KubernetesPlanPayload payload)
     {
         if (plan.Operation is not KubernetesAdapterConventions.PlanOperations.SetImage)
         {
@@ -183,11 +186,13 @@ public sealed class KubernetesPlanExecutor(
             KubernetesPolicyOptions.Default);
 
         return policyResult.IsDenied
-            ? $"Plan '{plan.Id}' blocked by policy:{Environment.NewLine}{policyResult.FormatRefusal()}"
+            ? new ResultFailure(
+                $"Plan '{plan.Id}' blocked by policy:{Environment.NewLine}{policyResult.FormatRefusal()}",
+                KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked)
             : null;
     }
 
-    private async Task<string?> CheckApplyDryRunAsync(string planId, KubernetesPlanPayload payload, CancellationToken ct)
+    private async Task<ResultFailure?> CheckApplyDryRunAsync(string planId, KubernetesPlanPayload payload, CancellationToken ct)
     {
         var evidenceJson = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
@@ -205,23 +210,29 @@ public sealed class KubernetesPlanExecutor(
         }
         catch (JsonException)
         {
-            return $"Pre-execute dry-run failed for plan '{planId}': {evidenceJson}";
+            return new ResultFailure(
+                $"Pre-execute dry-run failed for plan '{planId}': {evidenceJson}",
+                KubernetesAdapterConventions.ResultReasonCodes.PreExecuteDryRunFailed);
         }
 
         if (evidence is null)
         {
-            return $"Pre-execute dry-run for plan '{planId}' returned an empty result.";
+            return new ResultFailure(
+                $"Pre-execute dry-run for plan '{planId}' returned an empty result.",
+                KubernetesAdapterConventions.ResultReasonCodes.PreExecuteDryRunFailed);
         }
 
         if (evidence.PolicyBlocked)
         {
-            return $"Plan '{planId}' blocked by policy:{Environment.NewLine}{evidence.PolicyRefusal}";
+            return new ResultFailure(
+                $"Plan '{planId}' blocked by policy:{Environment.NewLine}{evidence.PolicyRefusal}",
+                KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked);
         }
 
         return null;
     }
 
-    private async Task<string?> CheckSimpleDryRunAsync(
+    private async Task<ResultFailure?> CheckSimpleDryRunAsync(
         string toolName,
         IReadOnlyDictionary<string, object?> arguments,
         string planId,
@@ -236,11 +247,15 @@ public sealed class KubernetesPlanExecutor(
         }
         catch (JsonException)
         {
-            return $"Pre-execute dry-run failed for plan '{planId}': {dryRunJson}";
+            return new ResultFailure(
+                $"Pre-execute dry-run failed for plan '{planId}': {dryRunJson}",
+                KubernetesAdapterConventions.ResultReasonCodes.PreExecuteDryRunFailed);
         }
 
         return dryRun is null
-            ? $"Pre-execute dry-run failed for plan '{planId}': {dryRunJson}"
+            ? new ResultFailure(
+                $"Pre-execute dry-run failed for plan '{planId}': {dryRunJson}",
+                KubernetesAdapterConventions.ResultReasonCodes.PreExecuteDryRunFailed)
             : null;
     }
 
@@ -249,7 +264,9 @@ public sealed class KubernetesPlanExecutor(
         var message = await DispatchMutationAsync(operation, payload, ct).ConfigureAwait(false);
 
         return IsUnsupportedOperationMessage(message)
-            ? DomainPlanExecutionResult.Blocked(message)
+            ? DomainPlanExecutionResult.Blocked(
+                message,
+                KubernetesAdapterConventions.ResultReasonCodes.UnsupportedOperation)
             : DomainPlanExecutionResult.Success(message, payload.Namespace);
     }
 
@@ -332,4 +349,6 @@ public sealed class KubernetesPlanExecutor(
 
     private static string[] FormatObjects(KubernetesPlanPayload payload) =>
         payload.Objects.Select(obj => $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}").ToArray();
+
+    private sealed record ResultFailure(string Message, string ReasonCode);
 }

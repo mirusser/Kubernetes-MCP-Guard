@@ -100,11 +100,18 @@ public sealed class GatewayApprovalEndpointsTests
 
         var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
 
+        Assert.Contains("data-section=\"plan-summary\"", result);
+        Assert.Contains("data-field=\"plan-id\"", result);
         Assert.Contains(plan.Envelope.Id, result);
+        Assert.Contains("data-field=\"operation\"", result);
         Assert.Contains(plan.Envelope.Operation, result);
+        Assert.Contains("data-field=\"intent-digest\"", result);
         Assert.Contains(plan.Envelope.IntentDigest.Value, result);
+        Assert.Contains("data-field=\"review-digest\"", result);
         Assert.Contains(plan.Envelope.ReviewDigest.Value, result);
+        Assert.Contains("data-field=\"requester\"", result);
         Assert.Contains(challenge.RequesterSubject, result);
+        Assert.Contains("data-field=\"expires-at\"", result);
         Assert.Contains(challenge.ExpiresAtUtc.ToString("O"), result);
     }
 
@@ -128,7 +135,7 @@ public sealed class GatewayApprovalEndpointsTests
         var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
 
         Assert.Contains($"/approvals/{challenge.Id}/cancel", result);
-        Assert.Contains("<button type=\"submit\" class=\"cancel\">Cancel</button>", result);
+        Assert.Contains("data-action=\"cancel\"", result);
     }
 
     [Fact]
@@ -139,7 +146,7 @@ public sealed class GatewayApprovalEndpointsTests
 
         var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
 
-        Assert.Contains("<button type=\"submit\" class=\"approve\" disabled>", result);
+        Assert.Contains("data-action=\"approve\" disabled", result);
     }
 
     [Fact]
@@ -150,7 +157,7 @@ public sealed class GatewayApprovalEndpointsTests
 
         var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
 
-        Assert.Contains("Challenge Created", result);
+        Assert.Contains("data-field=\"created-at\"", result);
         Assert.Contains(challenge.CreatedAtUtc.ToString("O"), result);
     }
 
@@ -162,8 +169,8 @@ public sealed class GatewayApprovalEndpointsTests
 
         var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
 
-        Assert.Contains("Challenge Status", result);
-        Assert.Contains("<span class=\"badge badge-pending\">pending</span>", result);
+        Assert.Contains("data-field=\"status\"", result);
+        Assert.Contains(">pending</span>", result);
     }
 
     [Fact]
@@ -174,8 +181,8 @@ public sealed class GatewayApprovalEndpointsTests
 
         var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
 
-        Assert.Contains("<section class=\"card\">", result);
-        Assert.Contains("<h2>Plan Summary</h2>", result);
+        Assert.Contains("data-section=\"plan-summary\"", result);
+        Assert.Contains("data-section=\"approval-actions\"", result);
     }
 
     [Fact]
@@ -186,9 +193,9 @@ public sealed class GatewayApprovalEndpointsTests
 
         var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
 
-        Assert.Contains("class=\"kv-grid\"", result);
-        Assert.Contains("class=\"kv-label\"", result);
-        Assert.Contains("class=\"kv-value\"", result);
+        Assert.Contains("data-field=\"plan-id\"", result);
+        Assert.Contains("data-field=\"operation\"", result);
+        Assert.Contains("data-field=\"status\"", result);
     }
 
     [Fact]
@@ -208,7 +215,7 @@ public sealed class GatewayApprovalEndpointsTests
 
         var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
 
-        Assert.Contains("Requester Auth", result);
+        Assert.Contains("data-field=\"requester-auth\"", result);
         Assert.Contains("OAuth", result);
     }
 

@@ -119,4 +119,26 @@ public static class ApprovalConventions
     {
         public const string RoundTrip = "O";
     }
+
+    public static class ResultReasonCodes
+    {
+        public const string ChallengeAlreadyTerminal = "approval.challenge.already_terminal";
+        public const string ChallengeExpired = "approval.challenge.expired";
+        public const string ChallengeInvalid = "approval.challenge.invalid";
+        public const string ChallengeNotFound = "approval.challenge.not_found";
+        public const string DigestChanged = "approval.challenge.digest_changed";
+        public const string GrantExpired = "approval.grant.expired";
+        public const string InvalidGrant = "approval.grant.invalid";
+        public const string InvalidPlanId = "approval.plan.invalid_id";
+        public const string MissingReviewEvidence = "approval.review_evidence.missing";
+        public const string PendingPlanChanged = "approval.challenge.pending_plan_changed";
+        public const string PlanAlreadyApplied = "approval.plan.already_applied";
+        public const string PlanExpired = "approval.plan.expired";
+        public const string PlanNotApproved = "approval.plan.not_approved";
+        public const string PlanNotPending = "approval.plan.not_pending";
+        public const string PlanNotStarted = "approval.plan.not_started";
+        public const string PlanReadFailed = "approval.plan.read_failed";
+        public const string PlanUnsupportedFormat = "approval.plan.unsupported_format";
+        public const string RequesterChanged = "approval.challenge.requester_changed";
+    }
 }

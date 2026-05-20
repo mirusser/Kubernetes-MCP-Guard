@@ -86,7 +86,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("dry-run failed", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed, result.ReasonCode);
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("policy", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked, result.ReasonCode);
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("dry-run failed", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed, result.ReasonCode);
     }
 
     [Fact]
@@ -547,7 +547,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("empty result", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed, result.ReasonCode);
         Assert.NotNull(result.Audit);
         Assert.Equal(ApprovalConventions.AuditEvents.DiffFailed, result.Audit.EventName);
     }
@@ -568,7 +568,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("empty result", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceEmpty, result.ReasonCode);
         Assert.NotNull(result.Audit);
         Assert.Equal(ApprovalConventions.AuditEvents.DiffFailed, result.Audit.EventName);
     }
@@ -587,7 +587,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("dry-run failed", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed, result.ReasonCode);
     }
 
     [Fact]
@@ -606,7 +606,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("empty result", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceEmpty, result.ReasonCode);
     }
 
     [Fact]
@@ -628,7 +628,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("dry-run failed", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed, result.ReasonCode);
     }
 
     [Fact]
@@ -652,7 +652,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("Diff evidence failed", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceFailed, result.ReasonCode);
         Assert.NotNull(result.Audit);
         Assert.Equal(ApprovalConventions.AuditEvents.DiffFailed, result.Audit.EventName);
     }
@@ -674,7 +674,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("Missing required arguments", result.Message);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.MissingArguments, result.ReasonCode);
     }
 
     [Fact]

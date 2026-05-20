@@ -82,7 +82,8 @@ internal static class KubernetesApprovalAdapter
         if (!string.Equals(envelope.AdapterId, KubernetesAdapterConventions.AdapterId, StringComparison.Ordinal))
         {
             return KubernetesPlanDecodeResult.Failed(
-                $"Plan '{envelope.Id}' uses unsupported adapter '{envelope.AdapterId}'.");
+                $"Plan '{envelope.Id}' uses unsupported adapter '{envelope.AdapterId}'.",
+                KubernetesAdapterConventions.ResultReasonCodes.UnsupportedAdapter);
         }
 
         KubernetesPlanPayload? payload;
@@ -93,26 +94,31 @@ internal static class KubernetesApprovalAdapter
         catch (JsonException ex)
         {
             return KubernetesPlanDecodeResult.Failed(
-                $"Plan '{envelope.Id}' Kubernetes payload could not be read: {ex.Message}");
+                $"Plan '{envelope.Id}' Kubernetes payload could not be read: {ex.Message}",
+                KubernetesAdapterConventions.ResultReasonCodes.PayloadReadFailed);
         }
 
         if (payload is null)
         {
-            return KubernetesPlanDecodeResult.Failed($"Plan '{envelope.Id}' Kubernetes payload could not be read.");
+            return KubernetesPlanDecodeResult.Failed(
+                $"Plan '{envelope.Id}' Kubernetes payload could not be read.",
+                KubernetesAdapterConventions.ResultReasonCodes.PayloadReadFailed);
         }
 
         var expectedIntentDigest = ComputeIntentDigest(envelope.Operation, payload);
         if (envelope.IntentDigest != expectedIntentDigest)
         {
             return KubernetesPlanDecodeResult.Failed(
-                $"Plan '{envelope.Id}' Kubernetes intent digest no longer matches the payload.");
+                $"Plan '{envelope.Id}' Kubernetes intent digest no longer matches the payload.",
+                KubernetesAdapterConventions.ResultReasonCodes.IntentDigestChanged);
         }
 
         var expectedArtifacts = BuildEvidenceArtifacts(payload);
         if (!SameEvidenceArtifacts(envelope.EvidenceArtifacts, expectedArtifacts))
         {
             return KubernetesPlanDecodeResult.Failed(
-                $"Plan '{envelope.Id}' Kubernetes evidence artifact summaries no longer match the payload.");
+                $"Plan '{envelope.Id}' Kubernetes evidence artifact summaries no longer match the payload.",
+                KubernetesAdapterConventions.ResultReasonCodes.EvidenceDigestChanged);
         }
 
         return KubernetesPlanDecodeResult.Success(new KubernetesPlan(envelope, payload));

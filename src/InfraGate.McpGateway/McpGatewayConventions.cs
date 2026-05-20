@@ -76,6 +76,16 @@ internal static class McpGatewayConventions
         public const string RequestVerificationToken = "__RequestVerificationToken";
     }
 
+    public static class ApprovalReasonCodes
+    {
+        public const string AdapterDecodeFailed = "gateway.approval.adapter_decode_failed";
+        public const string ApprovalRequired = "gateway.approval.required";
+        public const string AuthenticatedSubjectRequired = "gateway.approval.authenticated_subject_required";
+        public const string PlanExpired = "gateway.approval.plan_expired";
+        public const string PlanNotStarted = "gateway.approval.plan_not_started";
+        public const string SameSubjectRequired = "gateway.approval.same_subject_required";
+    }
+
     public static class ToolNames
     {
         public const string RequestToolPrefix = "request_";

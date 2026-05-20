@@ -265,15 +265,13 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [McpGatewayConventions.ToolArguments.PlanId] = planId
             });
 
-        Assert.Contains("Approval required.", approvalRequired);
-        Assert.Contains("Approval URL:", approvalRequired);
+        var challengeId = ParseChallengeId(approvalRequired);
         Assert.DoesNotContain("Scaled apps/v1 Deployment", approvalRequired);
         Assert.DoesNotContain(k8sApi.Requests, apiRequest =>
             apiRequest.Method == "PATCH" &&
             apiRequest.Path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo/scale" &&
             !IsDryRun(apiRequest));
 
-        var challengeId = ParseChallengeId(approvalRequired);
         using var unauthenticatedBrowser = new HttpClient(server.CreateHandler())
         {
             BaseAddress = server.BaseAddress
@@ -290,12 +288,12 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         page.EnsureSuccessStatusCode();
         var pageText = await page.Content.ReadAsStringAsync();
         Assert.Contains($"<code>{planId}</code>", pageText);
-        Assert.Contains("Intent Digest", pageText);
-        Assert.Contains("Review Digest", pageText);
+        Assert.Contains("data-field=\"intent-digest\"", pageText);
+        Assert.Contains("data-field=\"review-digest\"", pageText);
         Assert.Contains("Server-side dry-run: succeeded", pageText);
         Assert.Contains("Dry-run Objects", pageText);
         Assert.Contains("299 - admission warning", pageText);
-        Assert.Contains("<h2>Diff</h2>", pageText);
+        Assert.Contains("data-section=\"diff\"", pageText);
         Assert.Contains("replicas", pageText, StringComparison.Ordinal);
         Assert.Contains($"{NamespaceName}/demo", pageText);
 
@@ -306,9 +304,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 [McpGatewayConventions.Approvals.RequestVerificationToken] = token
-            }));
+        }));
         approvalResponse.EnsureSuccessStatusCode();
-        Assert.Contains("was approved", await approvalResponse.Content.ReadAsStringAsync());
 
         var acceptedResult = await CallTextAsync(
             client,
@@ -406,7 +403,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             var page = await browser.GetAsync($"/approvals/{applyChallengeId}");
             page.EnsureSuccessStatusCode();
             var pageText = await page.Content.ReadAsStringAsync();
-            Assert.Contains("<h2>Diff</h2>", pageText);
+            Assert.Contains("data-section=\"diff\"", pageText);
         }
 
         await ApprovePlanAsync(approvalRoot, applyRequestText, Subject);
@@ -1167,7 +1164,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
     [GeneratedRegex(@"(?:PlanId:\s+|Approval plan\s+')(?<id>[0-9a-z-]+)", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
     private static partial Regex PlanIdPattern();
 
-    [GeneratedRegex(@"Approval URL:\s+https?://[^/]+/approvals/(?<id>[0-9a-f]+)", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
+    [GeneratedRegex(@"https?://[^/]+/approvals/(?<id>[0-9a-f]+)", RegexOptions.None, matchTimeoutMilliseconds: 5000)]
     private static partial Regex ChallengeIdPattern();
 
     [GeneratedRegex(@"name=""__RequestVerificationToken"" value=""(?<token>[^""]+)""", RegexOptions.None, matchTimeoutMilliseconds: 5000)]

@@ -9,9 +9,9 @@
 - `ResponseSanitizationTests.cs`: manifest-block redaction, suspicious JSON value redaction, suspicious text line redaction, and clean text passthrough.
 - `GuardedToolRunnerTests.cs`: downstream forwarding, request warnings, response redaction, audit identity capture for OAuth users, requester injection, and unauthenticated refusal.
 - `GuardrailAuditStoreTests.cs`: JSONL audit output without credential leakage.
-- `GatewayApprovalServiceTests.cs`: approval URL creation, same-subject enforcement, dry-run data requirements, hash-drift rejection, denial, cancellation, and Single-Execution challenge behavior.
+- `GatewayApprovalServiceTests.cs`: approval URL creation, typed gate status, reason-code contracts, same-subject enforcement, dry-run data requirements, hash-drift rejection, denial, cancellation, and Single-Execution challenge behavior.
 - `GatewayToolDispatcherTests.cs`: raw destructive tool refusal, domain-target audit storage, generic pre-execution gating, and blocked domain execution without applied markers.
-- `GatewayHttpMcpIntegrationTests.cs`: real HTTP MCP transport wiring with OAuth auth, fake-downstream forwarding, guardrail audit capture, response redaction, downstream stdio startup smoke coverage, dry-run rendering, out-of-band approval forwarding, and an opt-in live gateway-to-Kubernetes flow.
+- `GatewayHttpMcpIntegrationTests.cs`: real HTTP MCP transport wiring with OAuth auth, fake-downstream forwarding, guardrail audit capture, response redaction, downstream stdio startup smoke coverage, semantic dry-run/diff rendering, out-of-band approval forwarding, and an opt-in live gateway-to-Kubernetes flow.
 - `McpGatewayOptionsTests.cs`: downstream assembly defaults and subprocess arguments.
 
 ## Running Tests

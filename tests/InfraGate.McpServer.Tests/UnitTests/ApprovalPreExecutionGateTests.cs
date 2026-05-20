@@ -30,6 +30,21 @@ public sealed class ApprovalPreExecutionGateTests
         Assert.Equal(created.Envelope.ReviewDigest, payload.ReviewDigest);
     }
 
+    [Fact]
+    public async Task EvaluateAsync_MissingPendingPlan_ReturnsReasonCode()
+    {
+        var store = CreateStore();
+        var gate = new ApprovalPreExecutionGate(store);
+
+        var result = await gate.EvaluateAsync(
+            ApprovalStore.NewPlanId(),
+            new PassingDomainPlanExecutor(),
+            CancellationToken.None);
+
+        Assert.False(result.IsPassed);
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.PlanNotPending, result.ReasonCode);
+    }
+
     private static ApprovalStore CreateStore()
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-pre-execution-tests", Guid.NewGuid().ToString("N"));
