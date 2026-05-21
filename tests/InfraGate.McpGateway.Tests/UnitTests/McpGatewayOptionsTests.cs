@@ -119,7 +119,7 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void CreateTransportOptions_UsesProjectRunArguments_WhenAssemblyUnset()
     {
-        var client = new DownstreamMcpClient(CreateOptions(), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(CreateOptions(), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -137,7 +137,7 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void CreateTransportOptions_UsesAssemblyArgument_WhenAssemblySet()
     {
-        var client = new DownstreamMcpClient(CreateOptions(DownstreamAssembly), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(CreateOptions(DownstreamAssembly), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 
@@ -151,7 +151,7 @@ public sealed class McpGatewayOptionsTests
     [InlineData("  ")]
     public void CreateTransportOptions_FallsBackToProject_WhenAssemblyIsEmptyOrWhitespace(string assembly)
     {
-        var client = new DownstreamMcpClient(CreateOptions(assembly), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
+        var client = new DownstreamMcpClient(CreateOptions(assembly), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
 
         var transportOptions = client.CreateTransportOptions();
 

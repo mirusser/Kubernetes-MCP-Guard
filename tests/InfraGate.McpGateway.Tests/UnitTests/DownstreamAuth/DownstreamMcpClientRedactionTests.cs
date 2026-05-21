@@ -2,6 +2,7 @@ using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
+using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol;
 
 namespace InfraGate.McpGateway.Tests.UnitTests.DownstreamAuth;
@@ -96,6 +97,6 @@ public sealed class DownstreamMcpClientRedactionTests
             ApprovalChallengeTtl: McpGatewayOptions.DefaultApprovalChallengeTtl,
             DownstreamAssembly: null);
 
-        return new DownstreamMcpClient(options, tokenProvider, logger);
+        return new DownstreamMcpClient(options, tokenProvider, logger, NullLoggerFactory.Instance);
     }
 }
