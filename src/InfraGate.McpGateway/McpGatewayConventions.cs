@@ -1,3 +1,5 @@
+using InfraGate.Approvals;
+using InfraGate.DownstreamAuth;
 using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpGateway;
@@ -13,6 +15,19 @@ internal static class McpGatewayConventions
         mappings.Map(EnvironmentVariables.GuardAuditRoot, ConfigurationKeys.GuardAuditRoot);
         mappings.Map(EnvironmentVariables.ApprovalBaseUrl, ConfigurationKeys.ApprovalBaseUrl);
         mappings.Map(EnvironmentVariables.ApprovalChallengeTtlSeconds, ConfigurationKeys.ApprovalChallengeTtlSeconds);
+        RegisterDownstreamAuthMappings(mappings);
+    }
+
+    private static void RegisterDownstreamAuthMappings(InfraGateEnvVarMappings mappings)
+    {
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Required, DownstreamAuthConventions.ConfigurationKeys.Required);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Authority, DownstreamAuthConventions.ConfigurationKeys.Authority);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.MetadataAddress, DownstreamAuthConventions.ConfigurationKeys.MetadataAddress);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata, DownstreamAuthConventions.ConfigurationKeys.RequireHttpsMetadata);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Audience, DownstreamAuthConventions.ConfigurationKeys.Audience);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Scope, DownstreamAuthConventions.ConfigurationKeys.Scope);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.GatewayClientId, DownstreamAuthConventions.ConfigurationKeys.GatewayClientId);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.GatewayClientSecret, DownstreamAuthConventions.ConfigurationKeys.GatewayClientSecret);
     }
 
     private const string LoopbackHttpScheme = "http";
@@ -63,6 +78,49 @@ internal static class McpGatewayConventions
         public const string Command = "dotnet";
         public const string RunArgument = "run";
         public const string ProjectArgument = "--project";
+
+        /// <summary>
+        /// Explicit allowlist of environment variable names that are safe to pass to the downstream server subprocess.
+        /// An allowlist is used (rather than a denylist) so that new secrets added to the gateway in the future
+        /// are excluded by default rather than leaking automatically.
+        /// </summary>
+        public static readonly IReadOnlySet<string> AllowedEnvironmentVariables =
+            new HashSet<string>(StringComparer.Ordinal)
+            {
+                // .NET / OS runtime — required for dotnet to run
+                "PATH",
+                "HOME",
+                "DOTNET_ROOT",
+                "DOTNET_MULTILEVEL_LOOKUP",
+                "TMPDIR",
+                "TMP",
+                "TEMP",
+
+                // Runtime environment signals — server reads these to determine its mode
+                RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment,
+                RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment,
+                RuntimeSafetyConventions.EnvironmentVariables.AspNetCoreEnvironment,
+                RuntimeSafetyConventions.EnvironmentVariables.ConfigPath,
+
+                // Kubernetes access — server needs these to connect to the cluster
+                "KUBECONFIG",
+                "K8S_MCP_USE_IN_CLUSTER",
+
+                // Server domain config — approval root, namespaces, logging
+                ApprovalConventions.EnvironmentVariables.ApprovalRoot,
+                "K8S_MCP_ALLOWED_NAMESPACES",
+                "K8S_MCP_LOG_PATH",
+
+                // Downstream auth (server-side validation config only — no gateway credentials)
+                DownstreamAuthConventions.EnvironmentVariables.Required,
+                DownstreamAuthConventions.EnvironmentVariables.Authority,
+                DownstreamAuthConventions.EnvironmentVariables.MetadataAddress,
+                DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata,
+                DownstreamAuthConventions.EnvironmentVariables.Audience,
+                DownstreamAuthConventions.EnvironmentVariables.Scope,
+                // GatewayClientId and GatewayClientSecret are intentionally excluded:
+                // they are gateway-only credentials and must never reach the server subprocess.
+            };
     }
 
     public static class Approvals

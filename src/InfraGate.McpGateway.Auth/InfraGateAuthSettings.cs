@@ -1,6 +1,6 @@
 namespace InfraGate.McpGateway.Auth;
 
-public sealed record InfraGateAuthSettings
+public sealed record class InfraGateAuthSettings
 {
     public string? OAuthAuthority { get; init; }
     public string? OAuthMetadataAddress { get; init; }

@@ -25,23 +25,23 @@ public sealed partial class KubernetesManager
             var deployments = await client.AppsV1.ListNamespacedDeploymentAsync(
                 namespaceName,
                 labelSelector: labelSelector,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
             var services = await client.CoreV1.ListNamespacedServiceAsync(
                 namespaceName,
                 labelSelector: labelSelector,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
             var configMaps = await client.CoreV1.ListNamespacedConfigMapAsync(
                 namespaceName,
                 labelSelector: labelSelector,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
             var pods = await client.CoreV1.ListNamespacedPodAsync(
                 namespaceName,
                 labelSelector: labelSelector,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
             var replicaSets = await client.AppsV1.ListNamespacedReplicaSetAsync(
                 namespaceName,
                 labelSelector: labelSelector,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             if (logger.IsEnabled(LogLevel.Information))
             {

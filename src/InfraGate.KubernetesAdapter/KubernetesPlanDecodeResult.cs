@@ -1,6 +1,6 @@
 namespace InfraGate.KubernetesAdapter;
 
-public sealed record KubernetesPlanDecodeResult(
+public sealed record class KubernetesPlanDecodeResult(
     bool Succeeded,
     KubernetesPlan? Plan,
     string Message,

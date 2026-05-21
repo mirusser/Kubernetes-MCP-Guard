@@ -1,12 +1,13 @@
 using System.Globalization;
 using InfraGate.Approvals;
+using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway.Auth;
 using InfraGate.RuntimeSafety;
 using Microsoft.Extensions.Configuration;
 
 namespace InfraGate.McpGateway;
 
-public sealed record McpGatewayOptions(
+public sealed record class McpGatewayOptions(
     GatewayAuthOptions Auth,
     string DownstreamProject,
     string GuardAuditRoot,
@@ -17,7 +18,8 @@ public sealed record McpGatewayOptions(
     string? DownstreamAssembly = null,
     RuntimeMode RuntimeMode = RuntimeMode.Development,
     bool IsGuardAuditRootExplicit = true,
-    bool IsApprovalRootExplicit = true)
+    bool IsApprovalRootExplicit = true,
+    DownstreamAuthOptions? DownstreamAuth = null)
 {
     public const string DefaultUrl = McpGatewayConventions.DefaultUrl;
     public static readonly TimeSpan DefaultApprovalChallengeTtl = TimeSpan.FromMinutes(15);
@@ -29,6 +31,7 @@ public sealed record McpGatewayOptions(
     public static McpGatewayOptions FromEnvironment()
     {
         var auth = GatewayAuthOptions.FromEnvironment();
+        var downstreamAuth = DownstreamAuthOptions.FromEnvironment();
         RuntimeMode runtimeMode = RuntimeModeResolver.FromEnvironment();
         string workingDirectory = Directory.GetCurrentDirectory();
         string downstreamProject =
@@ -66,7 +69,8 @@ public sealed record McpGatewayOptions(
             downstreamAssembly,
             runtimeMode,
             isGuardAuditRootExplicit,
-            isApprovalRootExplicit);
+            isApprovalRootExplicit,
+            downstreamAuth);
     }
 
     public static McpGatewayOptions FromConfiguration(IConfiguration configuration)
@@ -74,6 +78,9 @@ public sealed record McpGatewayOptions(
         ArgumentNullException.ThrowIfNull(configuration);
 
         var auth = GatewayAuthOptions.FromConfiguration(configuration);
+        var downstreamAuth = configuration
+            .GetSection("InfraGate:DownstreamAuth")
+            .Get<DownstreamAuthOptions>();
         RuntimeMode runtimeMode = RuntimeModeResolver.FromConfiguration(configuration);
         string workingDirectory = Directory.GetCurrentDirectory();
 
@@ -115,7 +122,8 @@ public sealed record McpGatewayOptions(
             downstreamAssembly,
             runtimeMode,
             isGuardAuditRootExplicit,
-            isApprovalRootExplicit);
+            isApprovalRootExplicit,
+            downstreamAuth);
     }
 
     public void ValidateProductionSafety()
@@ -124,6 +132,16 @@ public sealed record McpGatewayOptions(
         {
             return;
         }
+
+        var downstreamAuth = DownstreamAuth ?? new DownstreamAuthOptions();
+        if (!downstreamAuth.Required)
+        {
+            throw new InvalidOperationException(
+                $"{DownstreamAuthConventions.EnvironmentVariables.Required} must not be false in Production mode. " +
+                $"Downstream authentication is required for production deployments.");
+        }
+
+        downstreamAuth.Validate();
 
         if (!Auth.OAuthRequireHttpsMetadata)
         {

@@ -1,3 +1,3 @@
 namespace InfraGate.RunProfiles;
 
-internal sealed record GenericApprovalCoreProfile(string ApprovalRoot);
+internal sealed record class GenericApprovalCoreProfile(string ApprovalRoot);

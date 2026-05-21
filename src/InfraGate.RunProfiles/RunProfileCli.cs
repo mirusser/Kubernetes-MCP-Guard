@@ -49,64 +49,8 @@ internal static class RunProfileCli
 
         if (string.Equals(command, RunProfileConventions.Commands.Generate, StringComparison.Ordinal))
         {
-            string profileName;
-                string outputPath;
-                string format;
-                bool force;
-                IReadOnlyList<(string Path, string Value)> setOverrides;
-                RunProfile profile;
-                try
-                {
-                    profileName = GetRequiredProfileName(args);
-                    outputPath = GetRequiredOption(args, RunProfileConventions.Options.Output);
-                    format = GetGenerateFormat(args);
-                    force = HasFlag(args, RunProfileConventions.Options.Force);
-                    setOverrides = GetSetOverrides(args);
-                    profile = document.FindProfileWithDefaults(profileName, document.Defaults);
-                    profile = ApplySetOverrides(profile, setOverrides);
-            }
-            catch (InvalidOperationException ex)
-            {
-                await error.WriteLineAsync(ex.Message).ConfigureAwait(false);
-                return 1;
-            }
-
-            if (File.Exists(outputPath) && !force)
-            {
-                string existingContent = await File.ReadAllTextAsync(outputPath, cancellationToken).ConfigureAwait(false);
-                if (!IsGeneratedForProfile(existingContent, profileName))
-                {
-                    await error.WriteLineAsync(
-                        $"Will not overwrite '{outputPath}': not generated for profile '{profileName}'. Use --force to overwrite.").ConfigureAwait(false);
-                    return 1;
-                }
-            }
-
-            string generatedText;
-            try
-            {
-                generatedText = format switch
-                {
-                    RunProfileConventions.Formats.AppSettings => AppSettingsRenderer.Render(Path.GetFileName(configPath), profile),
-                    RunProfileConventions.Formats.Env => EnvFileRenderer.Render(Path.GetFileName(configPath), profile),
-                    _ => throw new InvalidOperationException($"Unsupported format: {format}")
-                };
-            }
-            catch (InvalidOperationException ex)
-            {
-                await error.WriteLineAsync(ex.Message).ConfigureAwait(false);
-                return 1;
-            }
-
-            string? outputDirectory = Path.GetDirectoryName(outputPath);
-            if (!string.IsNullOrWhiteSpace(outputDirectory))
-            {
-                Directory.CreateDirectory(outputDirectory);
-            }
-
-            await File.WriteAllTextAsync(outputPath, generatedText, cancellationToken).ConfigureAwait(false);
-            await output.WriteLineAsync($"Generated {outputPath}").ConfigureAwait(false);
-            return 0;
+            return await HandleGenerateCommandAsync(args, document, configPath, output, error, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         foreach (RunProfile profile in document.Profiles)
@@ -117,35 +61,93 @@ internal static class RunProfileCli
         return 0;
     }
 
-    private static bool HasFlag(IReadOnlyList<string> args, string flag)
+    private static async Task<int> HandleGenerateCommandAsync(
+        IReadOnlyList<string> args,
+        RunProfileDocument document,
+        string configPath,
+        TextWriter output,
+        TextWriter error,
+        CancellationToken cancellationToken)
     {
-        foreach (string arg in args)
+        string profileName;
+        string outputPath;
+        string format;
+        bool force;
+        IReadOnlyList<(string Path, string Value)> setOverrides;
+        RunProfile profile;
+        try
         {
-            if (string.Equals(arg, flag, StringComparison.Ordinal))
+            profileName = GetRequiredProfileName(args);
+            outputPath = GetRequiredOption(args, RunProfileConventions.Options.Output);
+            format = GetGenerateFormat(args);
+            force = HasFlag(args, RunProfileConventions.Options.Force);
+            setOverrides = GetSetOverrides(args);
+            profile = document.FindProfileWithDefaults(profileName, document.Defaults);
+            profile = ApplySetOverrides(profile, setOverrides);
+        }
+        catch (InvalidOperationException ex)
+        {
+            await error.WriteLineAsync(ex.Message).ConfigureAwait(false);
+            return 1;
+        }
+
+        if (File.Exists(outputPath) && !force)
+        {
+            string existingContent = await File.ReadAllTextAsync(outputPath, cancellationToken).ConfigureAwait(false);
+            if (!IsGeneratedForProfile(existingContent, profileName))
             {
-                return true;
+                await error.WriteLineAsync(
+                    $"Will not overwrite '{outputPath}': not generated for profile '{profileName}'. Use --force to overwrite.").ConfigureAwait(false);
+                return 1;
             }
         }
 
-        return false;
+        string generatedText;
+        try
+        {
+            generatedText = format switch
+            {
+                RunProfileConventions.Formats.AppSettingsName => AppSettingsRenderer.Render(Path.GetFileName(configPath), profile),
+                RunProfileConventions.Formats.EnvName => EnvFileRenderer.Render(Path.GetFileName(configPath), profile),
+                _ => throw new InvalidOperationException($"Unsupported format: {format}")
+            };
+        }
+        catch (InvalidOperationException ex)
+        {
+            await error.WriteLineAsync(ex.Message).ConfigureAwait(false);
+            return 1;
+        }
+
+        string? outputDirectory = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrWhiteSpace(outputDirectory))
+        {
+            Directory.CreateDirectory(outputDirectory);
+        }
+
+        await File.WriteAllTextAsync(outputPath, generatedText, cancellationToken).ConfigureAwait(false);
+        await output.WriteLineAsync($"Generated {outputPath}").ConfigureAwait(false);
+        return 0;
     }
+
+    private static bool HasFlag(IReadOnlyList<string> args, string flag) =>
+        args.Any(arg => string.Equals(arg, flag, StringComparison.Ordinal));
 
     private static string GetGenerateFormat(IReadOnlyList<string> args)
     {
         string? format = GetOption(args, RunProfileConventions.Options.Format);
         if (format is null)
         {
-            return RunProfileConventions.Formats.Env;
+            return RunProfileConventions.Formats.EnvName;
         }
 
-        if (string.Equals(format, RunProfileConventions.Formats.Env, StringComparison.Ordinal) ||
-            string.Equals(format, RunProfileConventions.Formats.AppSettings, StringComparison.Ordinal))
+        if (string.Equals(format, RunProfileConventions.Formats.EnvName, StringComparison.Ordinal) ||
+            string.Equals(format, RunProfileConventions.Formats.AppSettingsName, StringComparison.Ordinal))
         {
             return format;
         }
 
         throw new InvalidOperationException(
-            $"{RunProfileConventions.Options.Format} must be '{RunProfileConventions.Formats.Env}' or '{RunProfileConventions.Formats.AppSettings}'.");
+            $"{RunProfileConventions.Options.Format} must be '{RunProfileConventions.Formats.EnvName}' or '{RunProfileConventions.Formats.AppSettingsName}'.");
     }
 
     private static bool IsGeneratedForProfile(string content, string profileName) =>
@@ -243,10 +245,12 @@ internal static class RunProfileCli
     private static IReadOnlyList<(string Path, string Value)> GetSetOverrides(IReadOnlyList<string> args)
     {
         var overrides = new List<(string, string)>();
-        for (int i = 1; i < args.Count; i++)
+        int i = 1;
+        while (i < args.Count)
         {
             if (!string.Equals(args[i], RunProfileConventions.Options.Set, StringComparison.Ordinal))
             {
+                i++;
                 continue;
             }
 
@@ -264,6 +268,7 @@ internal static class RunProfileCli
             }
 
             overrides.Add((assignment[..eq], assignment[(eq + 1)..]));
+            i++;
         }
 
         return overrides;
@@ -294,6 +299,12 @@ internal static class RunProfileCli
 
         return section switch
         {
+            RunProfileConventions.YamlKeys.DownstreamAuth => profile with
+            {
+                DownstreamAuth = ApplyDownstreamAuthOverride(
+                    profile.DownstreamAuth ?? new DownstreamAuthProfile(null, null, null, null, null, null, null, null),
+                    field, value, path)
+            },
             RunProfileConventions.YamlKeys.Gateway => profile with
             {
                 Gateway = ApplyGatewayOverride(
@@ -322,6 +333,21 @@ internal static class RunProfileCli
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };
     }
+
+    private static DownstreamAuthProfile ApplyDownstreamAuthOverride(
+        DownstreamAuthProfile profile, string field, string value, string path) =>
+        field switch
+        {
+            RunProfileConventions.YamlKeys.Required => profile with { Required = value },
+            RunProfileConventions.YamlKeys.Authority => profile with { Authority = value },
+            RunProfileConventions.YamlKeys.MetadataAddress => profile with { MetadataAddress = value },
+            RunProfileConventions.YamlKeys.RequireHttpsMetadata => profile with { RequireHttpsMetadata = value },
+            RunProfileConventions.YamlKeys.Audience => profile with { Audience = value },
+            RunProfileConventions.YamlKeys.Scope => profile with { Scope = value },
+            RunProfileConventions.YamlKeys.GatewayClientId => profile with { GatewayClientId = value },
+            RunProfileConventions.YamlKeys.GatewayClientSecret => profile with { GatewayClientSecret = value },
+            _ => throw new InvalidOperationException($"Unknown --set path: {path}")
+        };
 
     private static GatewayProfile ApplyGatewayOverride(
         GatewayProfile profile, string field, string value, string path) =>

@@ -1,6 +1,6 @@
 namespace InfraGate.RunProfiles;
 
-internal sealed record HostProfile(
+internal sealed record class HostProfile(
     string? BindAddress,
     string? BindPort,
     string? GatewayImage,

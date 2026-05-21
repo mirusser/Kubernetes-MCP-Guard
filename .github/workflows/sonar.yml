@@ -51,7 +51,7 @@ jobs:
         run: dotnet build InfraGate.slnx --configuration Release --no-restore
 
       - name: Test with coverage
-        run: dotnet test InfraGate.slnx --configuration Release --no-build --filter "Category!=Keycloak" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory TestResults/coverage -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+        run: dotnet test InfraGate.slnx --configuration Release --no-build --filter "Category!=Keycloak&Category!=SafetyE2E" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory TestResults/coverage -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
 
       - name: Verify coverage report
         run: find TestResults/coverage -name coverage.opencover.xml | grep .

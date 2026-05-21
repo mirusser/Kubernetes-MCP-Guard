@@ -1,6 +1,6 @@
 namespace InfraGate.KubernetesAdapter;
 
-public sealed record KubernetesPlanPayload
+public sealed record class KubernetesPlanPayload
 {
     public KubernetesPlanPayload() { }
 

@@ -1,3 +1,3 @@
 namespace InfraGate.McpGateway;
 
-public sealed record ApprovalDecisionResult(bool Succeeded, string Message, string? ReasonCode = null);
+public sealed record class ApprovalDecisionResult(bool Succeeded, string Message, string? ReasonCode = null);

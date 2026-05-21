@@ -2,7 +2,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace InfraGate.McpGateway.Auth;
 
-public sealed record GatewayAuthOptions(
+public sealed record class GatewayAuthOptions(
     string OAuthAuthority,
     string OAuthResource = GatewayAuthConventions.DefaultOAuthResource,
     string OAuthScope = GatewayAuthConventions.DefaultOAuthScope,

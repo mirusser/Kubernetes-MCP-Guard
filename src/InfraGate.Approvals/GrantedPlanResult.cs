@@ -1,6 +1,6 @@
 namespace InfraGate.Approvals;
 
-public sealed record GrantedPlanResult(
+public sealed record class GrantedPlanResult(
     bool IsGranted,
     bool GrantExists,
     PlanEnvelope? Envelope,

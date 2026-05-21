@@ -52,7 +52,7 @@ public sealed class KubernetesExecutionService
         {
             try
             {
-                await ApplyObjectAsync(obj, cancellationToken);
+                await ApplyObjectAsync(obj, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -91,7 +91,7 @@ public sealed class KubernetesExecutionService
         var messages = new List<string>();
         foreach (var obj in parsed.ObjectRefs)
         {
-            messages.Add(await DeleteObjectAsync(obj, cancellationToken));
+            messages.Add(await DeleteObjectAsync(obj, cancellationToken).ConfigureAwait(false));
         }
 
         return string.Join(Environment.NewLine, messages);
@@ -116,7 +116,7 @@ public sealed class KubernetesExecutionService
                 name,
                 namespaceName,
                 fieldManager: KubernetesManagerHelpers.FieldManager,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return $"Scaled {KubernetesConventions.KubernetesResources.DeploymentDisplayName} {namespaceName}/{name} to {replicas} replicas.";
         }
@@ -147,7 +147,7 @@ public sealed class KubernetesExecutionService
                 name,
                 namespaceName,
                 fieldManager: KubernetesManagerHelpers.FieldManager,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return $"Restarted {KubernetesConventions.KubernetesResources.DeploymentDisplayName} {namespaceName}/{name} at {restartedAtUtc}.";
         }
@@ -181,7 +181,7 @@ public sealed class KubernetesExecutionService
                 name,
                 namespaceName,
                 fieldManager: KubernetesManagerHelpers.FieldManager,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return $"Updated {KubernetesConventions.KubernetesResources.DeploymentDisplayName} {namespaceName}/{name} container '{container}' image to '{image}'.";
         }
@@ -194,17 +194,17 @@ public sealed class KubernetesExecutionService
 
     private async Task ApplyObjectAsync(IKubernetesObject<V1ObjectMeta> obj, CancellationToken cancellationToken)
     {
-        if (await TryApplyDeploymentAsync(obj, cancellationToken))
+        if (await TryApplyDeploymentAsync(obj, cancellationToken).ConfigureAwait(false))
         {
             return;
         }
 
-        if (await TryApplyServiceAsync(obj, cancellationToken))
+        if (await TryApplyServiceAsync(obj, cancellationToken).ConfigureAwait(false))
         {
             return;
         }
 
-        if (await TryApplyConfigMapAsync(obj, cancellationToken))
+        if (await TryApplyConfigMapAsync(obj, cancellationToken).ConfigureAwait(false))
         {
             return;
         }
@@ -221,7 +221,7 @@ public sealed class KubernetesExecutionService
             return false;
         }
 
-        await ApplyDeploymentAsync(deployment, cancellationToken);
+        await ApplyDeploymentAsync(deployment, cancellationToken).ConfigureAwait(false);
         return true;
     }
 
@@ -234,7 +234,7 @@ public sealed class KubernetesExecutionService
             return false;
         }
 
-        await ApplyServiceAsync(service, cancellationToken);
+        await ApplyServiceAsync(service, cancellationToken).ConfigureAwait(false);
         return true;
     }
 
@@ -247,7 +247,7 @@ public sealed class KubernetesExecutionService
             return false;
         }
 
-        await ApplyConfigMapAsync(configMap, cancellationToken);
+        await ApplyConfigMapAsync(configMap, cancellationToken).ConfigureAwait(false);
         return true;
     }
 
@@ -285,19 +285,19 @@ public sealed class KubernetesExecutionService
                     await client.AppsV1.DeleteNamespacedDeploymentAsync(
                         obj.Name,
                         obj.Namespace,
-                        cancellationToken: cancellationToken);
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
                     break;
                 case (KubernetesConventions.KubernetesResources.V1, KubernetesConventions.KubernetesResources.Service):
                     await client.CoreV1.DeleteNamespacedServiceAsync(
                         obj.Name,
                         obj.Namespace,
-                        cancellationToken: cancellationToken);
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
                     break;
                 case (KubernetesConventions.KubernetesResources.V1, KubernetesConventions.KubernetesResources.ConfigMap):
                     await client.CoreV1.DeleteNamespacedConfigMapAsync(
                         obj.Name,
                         obj.Namespace,
-                        cancellationToken: cancellationToken);
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
                     break;
                 default:
                     return $"Skipped unsupported {obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}.";
@@ -329,7 +329,7 @@ public sealed class KubernetesExecutionService
                 {
                     metadata = new
                     {
-                        annotations = new Dictionary<string, string>
+                        annotations = new Dictionary<string, string>(StringComparer.Ordinal)
                         {
                             [KubernetesManagerHelpers.RestartedAtAnnotation] = restartedAtUtc
                         }

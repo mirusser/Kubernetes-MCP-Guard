@@ -30,7 +30,7 @@ internal static class KubernetesDiffService
 
         foreach (var obj in objects)
         {
-            var liveJson = await ReadComparableLiveJsonAsync(client, operation, obj, cancellationToken);
+            var liveJson = await ReadComparableLiveJsonAsync(client, operation, obj, cancellationToken).ConfigureAwait(false);
             var proposedJson = ProposedJson(operation, obj, dryRunByObject);
             diffs.Add(BuildDiff(obj, liveJson, proposedJson));
         }
@@ -51,7 +51,7 @@ internal static class KubernetesDiffService
 
         foreach (var diff in diffs)
         {
-            var liveJson = await ReadComparableLiveJsonAsync(client, operation, diff.Object, cancellationToken);
+            var liveJson = await ReadComparableLiveJsonAsync(client, operation, diff.Object, cancellationToken).ConfigureAwait(false);
             var normalizedLiveJson = liveJson is null ? null : KubernetesObjectNormalizer.NormalizeJson(liveJson);
 
             if (SameJson(diff.LiveObjectJson, normalizedLiveJson))
@@ -116,8 +116,8 @@ internal static class KubernetesDiffService
                 KubernetesConventions.MutationOperations.Scale => await client.AppsV1.ReadNamespacedDeploymentScaleAsync(
                     obj.Name,
                     obj.Namespace,
-                    cancellationToken: cancellationToken),
-                _ => await ReadLiveObjectAsync(client, obj, cancellationToken)
+                    cancellationToken: cancellationToken).ConfigureAwait(false),
+                _ => await ReadLiveObjectAsync(client, obj, cancellationToken).ConfigureAwait(false)
             };
 
             return JsonSerializer.Serialize(liveObject, JsonOptions);
@@ -152,7 +152,7 @@ internal static class KubernetesDiffService
         await client.AppsV1.ReadNamespacedDeploymentAsync(
             obj.Name,
             obj.Namespace,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
     private static async Task<object> ReadServiceAsync(
         IKubernetes client,
@@ -161,7 +161,7 @@ internal static class KubernetesDiffService
         await client.CoreV1.ReadNamespacedServiceAsync(
             obj.Name,
             obj.Namespace,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
     private static async Task<object> ReadConfigMapAsync(
         IKubernetes client,
@@ -170,7 +170,7 @@ internal static class KubernetesDiffService
         await client.CoreV1.ReadNamespacedConfigMapAsync(
             obj.Name,
             obj.Namespace,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
     private static bool IsNotFound(Exception ex)
     {
@@ -463,7 +463,7 @@ internal static class KubernetesDiffService
     private static string FormatObjectRef(KubernetesObjectRef obj) =>
         $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}";
 
-    private sealed record PathChanges(
+    private sealed record class PathChanges(
         string[] AddedPaths,
         string[] RemovedPaths,
         string[] ChangedPaths);

@@ -7,15 +7,8 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
 
     public RunProfile FindProfile(string name)
     {
-        foreach (RunProfile profile in Profiles)
-        {
-            if (string.Equals(profile.Name, name, StringComparison.Ordinal))
-            {
-                return profile;
-            }
-        }
-
-        throw new InvalidOperationException($"Unknown Run Profile: {name}");
+        return Profiles.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException($"Unknown Run Profile: {name}");
     }
 
     public RunProfile FindProfileWithDefaults(string name, ProfileDefaults? defaults)
@@ -32,7 +25,8 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             IdentityProvider = MergeIdentityProvider(profile.IdentityProvider, defaults.IdentityProvider),
             ApprovalAuthority = MergeApprovalAuthority(profile.ApprovalAuthority, defaults.ApprovalAuthority),
             GenericApprovalCore = profile.GenericApprovalCore ?? defaults.GenericApprovalCore,
-            Host = MergeHost(profile.Host, defaults.Host)
+            Host = MergeHost(profile.Host, defaults.Host),
+            DownstreamAuth = MergeDownstreamAuth(profile.DownstreamAuth, defaults.DownstreamAuth)
         };
     }
 
@@ -95,6 +89,25 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             ApprovalHostPath = profile.ApprovalHostPath ?? defaults.ApprovalHostPath,
             GuardAuditHostPath = profile.GuardAuditHostPath ?? defaults.GuardAuditHostPath,
             DataProtectionHostPath = profile.DataProtectionHostPath ?? defaults.DataProtectionHostPath
+        };
+    }
+
+    private static DownstreamAuthProfile? MergeDownstreamAuth(
+        DownstreamAuthProfile? profile,
+        DownstreamAuthProfile? defaults)
+    {
+        if (profile is null) return defaults;
+        if (defaults is null) return profile;
+        return profile with
+        {
+            Required = profile.Required ?? defaults.Required,
+            Authority = profile.Authority ?? defaults.Authority,
+            MetadataAddress = profile.MetadataAddress ?? defaults.MetadataAddress,
+            RequireHttpsMetadata = profile.RequireHttpsMetadata ?? defaults.RequireHttpsMetadata,
+            Audience = profile.Audience ?? defaults.Audience,
+            Scope = profile.Scope ?? defaults.Scope,
+            GatewayClientId = profile.GatewayClientId ?? defaults.GatewayClientId,
+            GatewayClientSecret = profile.GatewayClientSecret ?? defaults.GatewayClientSecret
         };
     }
 }

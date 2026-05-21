@@ -9,6 +9,7 @@ TestResults/
 coverage-report/
 deploy/generated/*.env
 .sonarqube/
+.sonarqube-local/
 actions-runner/
 .mcp.json
 .idea/
@@ -17,3 +18,7 @@ src/InfraGate.McpGateway/.mcp-guardrails/audit.jsonl
 .mcp-logs/mcp-server.log
 .agents/Reports/sonarcloud-report.zip
 /deploy/generated
+.claude/
+.claire/
+.claude.json
+.codegraph/

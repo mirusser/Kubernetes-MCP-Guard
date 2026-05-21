@@ -1,3 +1,3 @@
 namespace InfraGate.McpGateway;
 
-public sealed record GuardrailFinding(string Location, string Category);
+public sealed record class GuardrailFinding(string Location, string Category);

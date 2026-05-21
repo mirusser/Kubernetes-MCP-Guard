@@ -7,13 +7,13 @@ public sealed class DownstreamToolRegistry(IDownstreamMcpClient downstream)
 
     public async Task<IReadOnlyList<DownstreamTool>> GetReadOnlyAsync(CancellationToken ct)
     {
-        var all = await GetAllAsync(ct);
+        var all = await GetAllAsync(ct).ConfigureAwait(false);
         return all.Where(t => t.IsReadOnly).ToList();
     }
 
     public async Task<IReadOnlyList<DownstreamTool>> GetDestructiveAsync(CancellationToken ct)
     {
-        var all = await GetAllAsync(ct);
+        var all = await GetAllAsync(ct).ConfigureAwait(false);
         return all.Where(t => t.IsDestructive).ToList();
     }
 
@@ -24,7 +24,7 @@ public sealed class DownstreamToolRegistry(IDownstreamMcpClient downstream)
             return tools;
         }
 
-        await initLock.WaitAsync(ct);
+        await initLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             if (tools is not null)
@@ -32,7 +32,7 @@ public sealed class DownstreamToolRegistry(IDownstreamMcpClient downstream)
                 return tools;
             }
 
-            tools = await downstream.ListToolsAsync(ct);
+            tools = await downstream.ListToolsAsync(ct).ConfigureAwait(false);
             return tools;
         }
         finally

@@ -14,7 +14,7 @@ public sealed class ApprovalStoreTests
     {
         string planId = ApprovalStore.NewPlanId();
 
-        Assert.Matches("^[0-9a-f]{32}$", planId);
+        Assert.Matches("^[0-9A-Fa-f]{32}$", planId);
         Assert.DoesNotMatch("^\\d{14}-", planId);
     }
 

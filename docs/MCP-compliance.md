@@ -41,7 +41,7 @@ sequenceDiagram
     Client->>Gateway: POST /mcp (JSON-RPC + JWT Bearer)
     Note over Gateway: JWT issuer/audience/lifetime/signature/scope validation
     Gateway->>Gateway: GuardedToolRunner scans request arguments
-    Gateway->>Downstream: Start or reuse stdio McpServer (no token passthrough)
+    Gateway->>Downstream: Start or reuse stdio McpServer
     Note over Downstream: KubernetesTools tool handlers
 
     alt Read/status or approved apply tool
@@ -99,7 +99,7 @@ The MCP Authorization standard is built heavily on Draft OAuth 2.1, emphasizing 
 
 ### D. Token Passthrough Prevention
 * **Methods:** `DownstreamMcpClient.GetClientAsync`
-* **Implementation:** The spec warns against forwarding access tokens to downstream services. The `McpGateway` acts as a true structural firewall: it fully terminates the OAuth JWT and initiates a `StdioClientTransport` to the `InfraGate.McpServer`. No tokens or network contexts are passed to the downstream worker, structurally eliminating Token Passthrough vulnerabilities.
+* **Implementation:** The spec warns against forwarding user access tokens to downstream services. The `McpGateway` acts as a true structural firewall: it fully terminates the OAuth JWT and initiates a `StdioClientTransport` to the `InfraGate.McpServer`. The user's OAuth JWT is never forwarded, structurally preventing user-token-passthrough vulnerabilities. When downstream auth is configured (release and production paths), a separate gateway client-credentials service token authenticates downstream calls as defense-in-depth.
 
 ### E. Open Redirection & Localhost Risks
 * **Methods:** Keycloak OIDC Dynamic Client Registration policies.

@@ -90,6 +90,7 @@ public sealed class AppSettingsRendererTests
             null,
             null,
             [],
+            null,
             null);
 
         string result = AppSettingsRenderer.Render("config.yaml", profile);
@@ -111,6 +112,7 @@ public sealed class AppSettingsRendererTests
             null,
             null,
             [new DomainAdapterProfile("k8s", "kubernetes", null)],
+            null,
             null);
 
         string result = AppSettingsRenderer.Render("config.yaml", profile);
@@ -226,5 +228,6 @@ public sealed class AppSettingsRendererTests
             null,
             [new DomainAdapterProfile("k8s", "kubernetes",
                 new KubernetesAdapterProfile("/run/kube/config", ["default"]))],
+            null,
             null);
 }

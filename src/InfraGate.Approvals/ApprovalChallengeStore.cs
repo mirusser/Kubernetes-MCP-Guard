@@ -49,7 +49,7 @@ public sealed class ApprovalChallengeStore : IApprovalChallengeStore
             IntentDigest: intentDigest,
             ReviewDigest: reviewDigest);
 
-        await SaveAsync(challenge, cancellationToken);
+        await SaveAsync(challenge, cancellationToken).ConfigureAwait(false);
 
         return challenge;
     }
@@ -67,7 +67,7 @@ public sealed class ApprovalChallengeStore : IApprovalChallengeStore
             return null;
         }
 
-        var json = await File.ReadAllTextAsync(path, cancellationToken);
+        var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
 
         return JsonSerializer.Deserialize<ApprovalChallenge>(json, jsonOptions);
     }
@@ -88,7 +88,7 @@ public sealed class ApprovalChallengeStore : IApprovalChallengeStore
                      "*" + ApprovalConventions.Storage.JsonExtension))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var json = await File.ReadAllTextAsync(path, cancellationToken);
+            var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
             var challenge = JsonSerializer.Deserialize<ApprovalChallenge>(json, jsonOptions);
             if (challenge is not null &&
                 IsApprovedForSubject(challenge, planId, pendingPlanHash, subject))
@@ -122,7 +122,7 @@ public sealed class ApprovalChallengeStore : IApprovalChallengeStore
                      "*" + ApprovalConventions.Storage.JsonExtension))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var json = await File.ReadAllTextAsync(path, cancellationToken);
+            var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
             var challenge = JsonSerializer.Deserialize<ApprovalChallenge>(json, jsonOptions);
             if (challenge is not null &&
                 IsPendingForSubject(challenge, planId, pendingPlanHash, subject, intentDigest, reviewDigest, now))
@@ -137,11 +137,11 @@ public sealed class ApprovalChallengeStore : IApprovalChallengeStore
     public async Task SaveAsync(ApprovalChallenge challenge, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(ChallengeDirectory);
-        await storeLock.WaitAsync(cancellationToken);
+        await storeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var json = JsonSerializer.Serialize(challenge, jsonOptions);
-            await File.WriteAllTextAsync(GetChallengePath(challenge.Id), json, cancellationToken);
+            await File.WriteAllTextAsync(GetChallengePath(challenge.Id), json, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -157,7 +157,7 @@ public sealed class ApprovalChallengeStore : IApprovalChallengeStore
         var bytes = new byte[ChallengeIdByteCount];
         RandomNumberGenerator.Fill(bytes);
 
-        return Convert.ToHexString(bytes).ToLowerInvariant();
+        return Convert.ToHexString(bytes).ToUpperInvariant();
     }
 
     private static bool IsSafeChallengeId(string challengeId)
@@ -167,7 +167,7 @@ public sealed class ApprovalChallengeStore : IApprovalChallengeStore
             return false;
         }
 
-        return challengeId.All(c => c is >= 'a' and <= 'z' || c is >= '0' and <= '9');
+        return challengeId.All(c => c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9'));
     }
 
     private static bool IsApprovedForSubject(

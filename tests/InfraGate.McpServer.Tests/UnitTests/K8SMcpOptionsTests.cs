@@ -1,3 +1,4 @@
+using InfraGate.DownstreamAuth;
 using InfraGate.McpServer;
 using InfraGate.RuntimeSafety;
 using Microsoft.Extensions.Configuration;
@@ -7,6 +8,7 @@ namespace InfraGate.McpServer.Tests.UnitTests;
 public sealed class KubernetesMcpOptionsTests
 {
     private const string DefaultApprovalRootDirectory = ".mcp-approvals";
+    private const string DownstreamAuthority = "https://idp.example.com";
 
     [Fact]
     public void Constructor_UsesOptionalDefaults_WhenFlagsOmitted()
@@ -204,6 +206,71 @@ public sealed class KubernetesMcpOptionsTests
         Assert.Null(exception);
     }
 
+    [Fact]
+    public void ProductionMode_WithDownstreamAuthRequired_False_RefusesStartup()
+    {
+        using var environment = SetProductionEnvironment(
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
+
+        var options = KubernetesMcpOptions.FromEnvironment();
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.Required, exception.Message);
+    }
+
+    [Fact]
+    public void ProductionMode_WithValidDownstreamAuth_AllowsStartup()
+    {
+        using var environment = SetProductionEnvironment();
+
+        var options = KubernetesMcpOptions.FromEnvironment();
+        Exception? exception = Record.Exception(options.ValidateProductionSafety);
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void DevelopmentMode_WithDownstreamAuthRequired_False_AllowsStartup()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"),
+            (KubernetesConventions.EnvironmentVariables.ApprovalRoot, null),
+            (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null),
+            (KubernetesConventions.EnvironmentVariables.KubeConfig, null),
+            (KubernetesConventions.EnvironmentVariables.UseInClusterConfig, null));
+
+        var options = KubernetesMcpOptions.FromEnvironment();
+        Exception? exception = Record.Exception(options.ValidateProductionSafety);
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void FromEnvironment_WithDownstreamAuthRequired_Absent_DefaultsToRequired()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (DownstreamAuthConventions.EnvironmentVariables.Required, null));
+
+        var options = KubernetesMcpOptions.FromEnvironment();
+
+        Assert.True(options.DownstreamAuth?.Required);
+    }
+
+    [Fact]
+    public void FromEnvironment_PopulatesDownstreamAuth_FromEnvironment()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "true"),
+            (DownstreamAuthConventions.EnvironmentVariables.Authority, DownstreamAuthority));
+
+        var options = KubernetesMcpOptions.FromEnvironment();
+
+        Assert.NotNull(options.DownstreamAuth);
+        Assert.True(options.DownstreamAuth.Required);
+        Assert.Equal(DownstreamAuthority, options.DownstreamAuth.Authority);
+    }
+
     private static EnvironmentVariableScope SetProductionEnvironment(params (string Name, string? Value)[] overrides)
     {
         var variables = new Dictionary<string, string?>(StringComparer.Ordinal)
@@ -213,7 +280,9 @@ public sealed class KubernetesMcpOptionsTests
             [KubernetesConventions.EnvironmentVariables.ApprovalRoot] = ProductionPath("approvals"),
             [KubernetesConventions.EnvironmentVariables.AllowedNamespaces] = "mcp-nginx-demo",
             [KubernetesConventions.EnvironmentVariables.KubeConfig] = ProductionPath("kubeconfig"),
-            [KubernetesConventions.EnvironmentVariables.UseInClusterConfig] = null
+            [KubernetesConventions.EnvironmentVariables.UseInClusterConfig] = null,
+            [DownstreamAuthConventions.EnvironmentVariables.Required] = "true",
+            [DownstreamAuthConventions.EnvironmentVariables.Authority] = DownstreamAuthority
         };
 
         foreach (var item in overrides)

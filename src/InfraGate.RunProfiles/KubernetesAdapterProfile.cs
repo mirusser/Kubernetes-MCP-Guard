@@ -1,3 +1,3 @@
 namespace InfraGate.RunProfiles;
 
-internal sealed record KubernetesAdapterProfile(string KubeConfig, IReadOnlyList<string> AllowedNamespaces);
+internal sealed record class KubernetesAdapterProfile(string KubeConfig, IReadOnlyList<string> AllowedNamespaces);

@@ -1,10 +1,11 @@
 using InfraGate.Approvals;
+using InfraGate.DownstreamAuth;
 using InfraGate.RuntimeSafety;
 using Microsoft.Extensions.Configuration;
 
 namespace InfraGate.McpServer;
 
-public sealed record KubernetesMcpOptions(
+public sealed record class KubernetesMcpOptions(
     IReadOnlySet<string> AllowedNamespaces,
     string ApprovalRoot,
     RuntimeMode RuntimeMode = RuntimeMode.Development,
@@ -12,7 +13,8 @@ public sealed record KubernetesMcpOptions(
     bool HasExplicitAllowedNamespaces = true,
     string? KubeConfig = null,
     bool IsInClusterConfigEnabled = false,
-    string? LogPath = null)
+    string? LogPath = null,
+    DownstreamAuthOptions? DownstreamAuth = null)
 {
     public const string DefaultNamespace = KubernetesConventions.DefaultNamespace;
     private static readonly IReadOnlySet<string> DeniedApprovalRootNames =
@@ -26,6 +28,7 @@ public sealed record KubernetesMcpOptions(
     public static KubernetesMcpOptions FromEnvironment()
     {
         RuntimeMode runtimeMode = RuntimeModeResolver.FromEnvironment();
+        var downstreamAuth = DownstreamAuthOptions.FromEnvironment();
         string? approvalRootValue = Environment.GetEnvironmentVariable(KubernetesConventions.EnvironmentVariables.ApprovalRoot);
         bool isApprovalRootExplicit = !string.IsNullOrWhiteSpace(approvalRootValue);
         string approvalRoot = string.IsNullOrWhiteSpace(approvalRootValue)
@@ -50,7 +53,8 @@ public sealed record KubernetesMcpOptions(
             hasExplicitAllowedNamespaces,
             kubeConfig,
             isInClusterConfigEnabled,
-            logPath);
+            logPath,
+            downstreamAuth);
     }
 
     public static KubernetesMcpOptions FromConfiguration(IConfiguration configuration)
@@ -58,6 +62,10 @@ public sealed record KubernetesMcpOptions(
         ArgumentNullException.ThrowIfNull(configuration);
 
         RuntimeMode runtimeMode = RuntimeModeResolver.FromConfiguration(configuration);
+
+        var downstreamAuth = configuration
+            .GetSection("InfraGate:DownstreamAuth")
+            .Get<DownstreamAuthOptions>();
 
         var k8sSettings = configuration
             .GetSection("InfraGate:Kubernetes")
@@ -86,7 +94,8 @@ public sealed record KubernetesMcpOptions(
             hasExplicitAllowedNamespaces,
             kubeConfig,
             isInClusterConfigEnabled,
-            logPath);
+            logPath,
+            downstreamAuth);
     }
 
     public void ValidateProductionSafety()
@@ -102,6 +111,16 @@ public sealed record KubernetesMcpOptions(
         {
             return;
         }
+
+        var downstreamAuth = DownstreamAuth ?? new DownstreamAuthOptions();
+        if (!downstreamAuth.Required)
+        {
+            throw new InvalidOperationException(
+                $"{DownstreamAuthConventions.EnvironmentVariables.Required} must not be false in Production mode. " +
+                $"Downstream authentication is required for production deployments.");
+        }
+
+        downstreamAuth.ValidateForServer();
 
         if (!HasExplicitKubeConfig && !IsInClusterConfigEnabled)
         {

@@ -1,3 +1,3 @@
 namespace InfraGate.Approvals;
 
-public sealed record FreshnessCheck(string Type, IReadOnlyDictionary<string, string> Parameters);
+public sealed record class FreshnessCheck(string Type, IReadOnlyDictionary<string, string> Parameters);

@@ -1,6 +1,6 @@
 namespace InfraGate.RuntimeSafety;
 
-internal sealed record InfraGateRuntimeSettings
+internal sealed record class InfraGateRuntimeSettings
 {
     public string? Environment { get; init; }
 }

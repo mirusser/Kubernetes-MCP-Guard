@@ -1,14 +1,14 @@
 # Tool Permissions Matrix
 
-This document lists the 14 MCP tools exposed by Kubernetes MCP Guard and their associated Kubernetes RBAC permissions, required OAuth scope, and approval requirements. See [docs/security-model.md](security-model.md) for the broader threat model and boundary discussion.
+This document lists the 22 MCP tools exposed by Kubernetes MCP Guard and their associated Kubernetes RBAC permissions, required OAuth scope, and approval requirements. See [docs/security-model.md](security-model.md) for the broader threat model and boundary discussion.
 
 ## Common Properties
 
-All 14 tools require the `mcp:tools` OAuth scope at the gateway. All Kubernetes-facing operations are namespace-scoped by the MCP server namespace allow-list and by Kubernetes RBAC. Kubernetes RBAC is enforced independently by the Kubernetes API server.
+All 22 tools require the `mcp:tools` OAuth scope at the gateway. All Kubernetes-facing operations are namespace-scoped by the MCP server namespace allow-list and by Kubernetes RBAC. Kubernetes RBAC is enforced independently by the Kubernetes API server.
 
 `ReadOnly` and `Destructive` are MCP tool annotations, not RBAC claims. They are useful client metadata, but they are not the enforcement mechanism.
 
-## Read-Only Tools (8 tools)
+## Read-Only Diagnostic Tools (8 tools)
 
 | MCP Tool | MCP Annotation | K8s Verbs | K8s Resources | Approval Required | Bounds / Notes |
 |---|---|---|---|---|---|
@@ -21,9 +21,24 @@ All 14 tools require the `mcp:tools` OAuth scope at the gateway. All Kubernetes-
 | `get_pod_diagnostics` | `ReadOnly = true` | `get`, `list` | Pod, Events | No | Events default 50, max 100 |
 | `get_service_diagnostics` | `ReadOnly = true` | `get`, `list` | Service, Pod, Events | No | Related Pods capped at 50; events default 50, max 100 |
 
+## Evidence Tools (8 tools)
+
+These read-only tools compute server-side dry-run results, diffs, and drift checks. They are used internally by plan creation and execution, and are also exposed directly to MCP clients for diagnostics.
+
+| MCP Tool | MCP Annotation | K8s Verbs | K8s Resources | Approval Required | Bounds / Notes |
+|---|---|---|---|---|---|
+| `dry_run_apply_manifest` | `ReadOnly = true` | `create`, `update`, `patch` with `dryRun=All` | Deployment, Service, or ConfigMap | No | Same manifest allow-list as `request_apply_manifest` |
+| `dry_run_delete_manifest` | `ReadOnly = true` | `delete` with `dryRun=All` | Deployment, Service, or ConfigMap | No | Same manifest allow-list |
+| `dry_run_scale_deployment` | `ReadOnly = true` | `update`, `patch` with `dryRun=All` | Deployment `scale` subresource | No | Replicas bounded 0-5 |
+| `dry_run_restart_deployment` | `ReadOnly = true` | `update`, `patch` with `dryRun=All` | Deployment | No | Server-side dry-run of rollout restart |
+| `dry_run_set_deployment_image` | `ReadOnly = true` | `get`, `update`, `patch` with `dryRun=All` | Deployment | No | Server-side dry-run of container image update |
+| `diff_manifest` | `ReadOnly = true` | `get` | Deployment, Service, or ConfigMap | No | Computes diff between live state and proposed manifest |
+| `check_live_drift` | `ReadOnly = true` | `get` | Deployments, Services, ConfigMaps | No | Checks live state drift against recorded plan diffs |
+| `diff_deployment` | `ReadOnly = true` | `get` | Deployment | No | Computes diff for a Deployment mutation (scale/restart/set-image) |
+
 ## Plan Mutation Tools (5 tools)
 
-These tools create pending plans. They run Kubernetes `dryRun=All` first, but they do not persist Kubernetes writes. All require `mcp:tools`, are namespace-scoped, and use `Destructive = false`.
+These tools create pending plans. They run Kubernetes `dryRun=All` first, but they do not persist Kubernetes writes. All require `mcp:tools` and are namespace-scoped.
 
 | MCP Tool | K8s Verbs at Request Time | K8s Resources at Request Time | Approval Required at Request Time | Bounds / Notes |
 |---|---|---|---|---|
@@ -47,7 +62,7 @@ Local direct-stdio server experiments must use an Approval Grant for execution a
 | delete, from `request_delete_manifest` | `delete` | Deployment, Service, or ConfigMap |
 | scale, from `request_scale_deployment` | `update`, `patch` | Deployment `scale` subresource |
 | restart, from `request_restart_deployment` | `update`, `patch` | Deployment |
-| set-image, from `request_set_deployment_image` | `get`, `update`, `patch` | Deployment |
+| set-image, from `request_set_deployment_image` | `update`, `patch` | Deployment |
 
 ## Notes
 

@@ -35,7 +35,7 @@ public sealed class ApprovalStore
         Span<byte> bytes = stackalloc byte[PlanIdRandomByteCount];
         RandomNumberGenerator.Fill(bytes);
 
-        return Convert.ToHexString(bytes).ToLowerInvariant();
+        return Convert.ToHexString(bytes).ToUpperInvariant();
     }
 
     public async Task<ApprovalPlanResult> CreatePlanAsync<TPayload>(
@@ -47,9 +47,9 @@ public sealed class ApprovalStore
 
         var pendingPath = GetPendingPath(envelope.Id);
         var json = JsonSerializer.Serialize(envelope, jsonOptions);
-        await File.WriteAllTextAsync(pendingPath, json, cancellationToken);
+        await File.WriteAllTextAsync(pendingPath, json, cancellationToken).ConfigureAwait(false);
 
-        var hash = await ComputeSha256Async(pendingPath, cancellationToken);
+        var hash = await ComputeSha256Async(pendingPath, cancellationToken).ConfigureAwait(false);
         await WriteAuditAsync(
             ApprovalConventions.AuditEvents.PlanRequested,
             new PlanRequestedPayload(
@@ -57,9 +57,9 @@ public sealed class ApprovalStore
                 envelope.Operation,
                 targetNamespace,
                 hash,
-                envelope.IntentDigest,
-                envelope.ReviewDigest),
-            cancellationToken);
+            envelope.IntentDigest,
+            envelope.ReviewDigest),
+        cancellationToken).ConfigureAwait(false);
 
         return new ApprovalPlanResult(ToUntypedEnvelope(envelope), pendingPath, hash);
     }
@@ -73,9 +73,9 @@ public sealed class ApprovalStore
 
         var pendingPath = GetPendingPath(envelope.Id);
         var json = JsonSerializer.Serialize(envelope, jsonOptions);
-        await File.WriteAllTextAsync(pendingPath, json, cancellationToken);
+        await File.WriteAllTextAsync(pendingPath, json, cancellationToken).ConfigureAwait(false);
 
-        var hash = await ComputeSha256Async(pendingPath, cancellationToken);
+        var hash = await ComputeSha256Async(pendingPath, cancellationToken).ConfigureAwait(false);
         await WriteAuditAsync(
             ApprovalConventions.AuditEvents.PlanRequested,
             new PlanRequestedPayload(
@@ -83,9 +83,9 @@ public sealed class ApprovalStore
                 envelope.Operation,
                 targetNamespace,
                 hash,
-                envelope.IntentDigest,
-                envelope.ReviewDigest),
-            cancellationToken);
+            envelope.IntentDigest,
+            envelope.ReviewDigest),
+        cancellationToken).ConfigureAwait(false);
 
         return new ApprovalPlanResult(envelope, pendingPath, hash);
     }
@@ -117,7 +117,7 @@ public sealed class ApprovalStore
                 reasonCode: ApprovalConventions.ResultReasonCodes.PlanAlreadyApplied);
         }
 
-        var grant = await GetGrantAsync(planId, cancellationToken);
+        var grant = await GetGrantAsync(planId, cancellationToken).ConfigureAwait(false);
         if (grant is null)
         {
             return GrantedPlanResult.MissingGrant(
@@ -125,7 +125,7 @@ public sealed class ApprovalStore
                 ApprovalConventions.ResultReasonCodes.PlanNotApproved);
         }
 
-        var read = await ReadEnvelopeAsync(planId, pendingPath, cancellationToken);
+        var read = await ReadEnvelopeAsync(planId, pendingPath, cancellationToken).ConfigureAwait(false);
         if (read.Envelope is null)
         {
             return GrantedPlanResult.Denied(read.Message, reasonCode: read.ReasonCode);
@@ -163,8 +163,8 @@ public sealed class ApprovalStore
                 ApprovalConventions.ResultReasonCodes.PlanAlreadyApplied);
         }
 
-        var actualHash = await ComputeSha256Async(pendingPath, cancellationToken);
-        var read = await ReadEnvelopeAsync(planId, pendingPath, cancellationToken);
+        var actualHash = await ComputeSha256Async(pendingPath, cancellationToken).ConfigureAwait(false);
+        var read = await ReadEnvelopeAsync(planId, pendingPath, cancellationToken).ConfigureAwait(false);
 
         return read.Envelope is null
             ? PendingPlanResult.Denied(read.Message, read.ReasonCode)
@@ -192,11 +192,11 @@ public sealed class ApprovalStore
             appliedAtUtc = DateTimeOffset.UtcNow
         }, jsonOptions);
 
-        await File.WriteAllTextAsync(appliedPath, json, cancellationToken);
+        await File.WriteAllTextAsync(appliedPath, json, cancellationToken).ConfigureAwait(false);
         await WriteAuditAsync(
             ApprovalConventions.AuditEvents.PlanApplied,
             new PlanAppliedPayload(envelope.Id, envelope.Operation, targetNamespace, grant.ReviewDigest.Value),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<ApprovalGrant> CreateGrantAsync(
@@ -221,7 +221,7 @@ public sealed class ApprovalStore
             envelope.ValidUntilUtc);
 
         var json = JsonSerializer.Serialize(grant, jsonOptions);
-        await File.WriteAllTextAsync(GetGrantPath(envelope.Id), json, cancellationToken);
+        await File.WriteAllTextAsync(GetGrantPath(envelope.Id), json, cancellationToken).ConfigureAwait(false);
         await WriteAuditAsync(
             ApprovalConventions.AuditEvents.GrantIssued,
             new ApprovalGrantIssuedPayload(
@@ -232,8 +232,8 @@ public sealed class ApprovalStore
                 approverSubject,
                 envelope.IntentDigest,
                 envelope.ReviewDigest,
-                grant.ExpiresAtUtc),
-            cancellationToken);
+            grant.ExpiresAtUtc),
+        cancellationToken).ConfigureAwait(false);
 
         return grant;
     }
@@ -251,7 +251,7 @@ public sealed class ApprovalStore
             return null;
         }
 
-        var json = await File.ReadAllTextAsync(path, cancellationToken);
+        var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
 
         return JsonSerializer.Deserialize<ApprovalGrant>(json, jsonOptions);
     }
@@ -278,11 +278,14 @@ public sealed class ApprovalStore
 
     public static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
     {
-        await using var stream = File.OpenRead(path);
-        using var sha = SHA256.Create();
-        var hash = await sha.ComputeHashAsync(stream, cancellationToken);
+        var stream = File.OpenRead(path);
+        await using (stream.ConfigureAwait(false))
+        {
+            using var sha = SHA256.Create();
+            var hash = await sha.ComputeHashAsync(stream, cancellationToken).ConfigureAwait(false);
 
-        return Convert.ToHexString(hash).ToLowerInvariant();
+            return Convert.ToHexString(hash).ToUpperInvariant();
+        }
     }
 
     private void EnsureDirectories()
@@ -298,7 +301,7 @@ public sealed class ApprovalStore
         var bytes = new byte[GrantIdByteCount];
         RandomNumberGenerator.Fill(bytes);
 
-        return Convert.ToHexString(bytes).ToLowerInvariant();
+        return Convert.ToHexString(bytes).ToUpperInvariant();
     }
 
     private static bool IsSafePlanId(string planId)
@@ -308,7 +311,7 @@ public sealed class ApprovalStore
             return false;
         }
 
-        return planId.All(c => c is >= 'a' and <= 'z' || c is >= '0' and <= '9' || c == '-');
+        return planId.All(c => c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9') or '-');
     }
 
     private async Task<EnvelopeReadResult> ReadEnvelopeAsync(
@@ -316,7 +319,7 @@ public sealed class ApprovalStore
         string pendingPath,
         CancellationToken cancellationToken)
     {
-        var json = await File.ReadAllTextAsync(pendingPath, cancellationToken);
+        var json = await File.ReadAllTextAsync(pendingPath, cancellationToken).ConfigureAwait(false);
         PlanEnvelope? envelope;
         try
         {
@@ -477,9 +480,9 @@ public sealed class ApprovalStore
             payload);
     }
 
-    private sealed record ResultFailure(string Message, string ReasonCode);
+    private sealed record class ResultFailure(string Message, string ReasonCode);
 
-    private sealed record EnvelopeReadResult(PlanEnvelope? Envelope, string Message, string? ReasonCode)
+    private sealed record class EnvelopeReadResult(PlanEnvelope? Envelope, string Message, string? ReasonCode)
     {
         public static EnvelopeReadResult Success(PlanEnvelope envelope) =>
             new(envelope, "Read.", ReasonCode: null);

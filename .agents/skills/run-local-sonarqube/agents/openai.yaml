@@ -1,0 +1,4 @@
+interface:
+  display_name: "Run Local SonarQube"
+  short_description: "Run local SonarQube scans"
+  default_prompt: "Use $run-local-sonarqube to run the local SonarQube scan and save the JSON report."

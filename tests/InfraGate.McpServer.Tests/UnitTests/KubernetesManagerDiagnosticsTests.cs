@@ -394,6 +394,6 @@ public sealed class KubernetesManagerDiagnosticsTests
         return Uri.UnescapeDataString(query.Replace("+", " ", StringComparison.Ordinal));
     }
 
-    private sealed record ManagerContext(KubernetesManager Manager, string ApprovalRoot);
+    private sealed record class ManagerContext(KubernetesManager Manager, string ApprovalRoot);
 
 }

@@ -1,6 +1,6 @@
 namespace InfraGate.McpGateway;
 
-public sealed record GuardrailAuditEvent(
+public sealed record class GuardrailAuditEvent(
     string ToolName,
     string Direction,
     string Action,

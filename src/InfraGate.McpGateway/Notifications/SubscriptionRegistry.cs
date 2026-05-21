@@ -5,10 +5,10 @@ namespace InfraGate.McpGateway.Notifications;
 internal sealed class SubscriptionRegistry : ISubscriptionRegistry
 {
     // sessionId → notifier
-    private readonly ConcurrentDictionary<string, ISessionNotifier> sessions = new();
+    private readonly ConcurrentDictionary<string, ISessionNotifier> sessions = new(StringComparer.Ordinal);
 
     // planId → set of sessionIds
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> planSubscriptions = new();
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> planSubscriptions = new(StringComparer.Ordinal);
 
     public void RegisterSession(string sessionId, ISessionNotifier notifier) =>
         sessions[sessionId] = notifier;
@@ -35,7 +35,7 @@ internal sealed class SubscriptionRegistry : ISubscriptionRegistry
             return;
         }
 
-        var subscribers = planSubscriptions.GetOrAdd(planId, _ => new ConcurrentDictionary<string, byte>());
+        var subscribers = planSubscriptions.GetOrAdd(planId, _ => new ConcurrentDictionary<string, byte>(StringComparer.Ordinal));
         subscribers.TryAdd(sessionId, 0);
     }
 

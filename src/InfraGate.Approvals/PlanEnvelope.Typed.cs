@@ -1,6 +1,6 @@
 namespace InfraGate.Approvals;
 
-public sealed record PlanEnvelope<TPayload>(
+public sealed record class PlanEnvelope<TPayload>(
     string Id,
     string Profile,
     string AdapterId,

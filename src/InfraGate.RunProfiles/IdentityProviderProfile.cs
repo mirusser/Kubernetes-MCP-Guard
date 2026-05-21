@@ -1,6 +1,6 @@
 namespace InfraGate.RunProfiles;
 
-internal sealed record IdentityProviderProfile(
+internal sealed record class IdentityProviderProfile(
     string? RealmImport,
     string? Authority,
     string? MetadataAddress,

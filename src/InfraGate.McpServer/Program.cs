@@ -1,4 +1,5 @@
 using InfraGate.McpServer;
+using InfraGate.McpServer.DownstreamAuth;
 using InfraGate.Observability;
 using InfraGate.RuntimeSafety;
 using k8s;
@@ -26,6 +27,7 @@ builder.AddInfraGateObservability(opt =>
 
 mcpOptions.ValidateProductionSafety();
 builder.Services.AddSingleton(mcpOptions);
+builder.Services.AddDownstreamAuth(mcpOptions.DownstreamAuth ?? InfraGate.DownstreamAuth.DownstreamAuthOptions.FromEnvironment());
 builder.Services.AddSingleton<IKubernetes>(_ =>
 {
     var config = new KubernetesConfigProvider(mcpOptions).Create();
@@ -42,6 +44,8 @@ builder.Services
     .WithToolsFromAssembly()
     .WithRequestFilters(filters =>
     {
+        filters.AddListToolsFilter(DownstreamAuthFilter.ListTools());
+        filters.AddCallToolFilter(DownstreamAuthFilter.CallTool());
         filters.AddCallToolFilter(next => (request, cancellationToken) =>
         {
             var services = request.Services;
@@ -59,6 +63,14 @@ builder.Services
 var app = builder.Build();
 
 var appLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("InfraGate.McpServer");
+var bootstrapInput = Console.OpenStandardInput();
+if (!await DownstreamStdioBootstrapGate.ValidateAsync(app.Services, bootstrapInput, appLogger, CancellationToken.None)
+        .ConfigureAwait(false))
+{
+    Environment.ExitCode = 1;
+    return;
+}
+
 var k8sOptions = app.Services.GetRequiredService<KubernetesMcpOptions>();
 if (appLogger.IsEnabled(LogLevel.Information))
 {
@@ -73,7 +85,7 @@ using (var probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
     try
     {
         var k8sClient = app.Services.GetRequiredService<IKubernetes>();
-        var version = await k8sClient.Version.GetCodeAsync(probeCts.Token);
+        var version = await k8sClient.Version.GetCodeAsync(probeCts.Token).ConfigureAwait(false);
         // Justification: CA1873 — log argument is a simple string property access. Negligible evaluation cost.
         appLogger.LogInformation(
             "Kubernetes connectivity OK — server version: {GitVersion}",
@@ -87,7 +99,8 @@ using (var probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
     }
 }
 
-await app.RunAsync();
+await app.RunAsync().ConfigureAwait(false);
+GC.KeepAlive(bootstrapInput);
 
 static void AddInfraGateConfiguration(IConfigurationBuilder configuration, string[] args)
 {

@@ -2,7 +2,7 @@ using InfraGate.Approvals;
 
 namespace InfraGate.McpGateway;
 
-public sealed record ApprovalPageModel(
+public sealed record class ApprovalPageModel(
     bool CanDecide,
     string? Error,
     ApprovalChallenge? Challenge,

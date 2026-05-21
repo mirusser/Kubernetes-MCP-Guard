@@ -1,3 +1,3 @@
 namespace InfraGate.McpGateway.Auth;
 
-public sealed record GatewayAuditIdentity(string? Subject, string? AuthenticationType);
+public sealed record class GatewayAuditIdentity(string? Subject, string? AuthenticationType);

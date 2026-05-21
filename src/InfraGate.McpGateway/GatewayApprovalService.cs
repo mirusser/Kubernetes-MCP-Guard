@@ -52,47 +52,64 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 McpGatewayConventions.ApprovalReasonCodes.AuthenticatedSubjectRequired);
         }
 
-        var granted = await approvalStore.GetGrantedPlanAsync(planId, cancellationToken);
+        var granted = await approvalStore.GetGrantedPlanAsync(planId, cancellationToken).ConfigureAwait(false);
         if (granted.IsGranted && granted.Envelope is not null && granted.Grant is not null)
         {
-            var decoded = planReviewAdapter.TryDecodeForReview(granted.Envelope, out var decodeError);
-            if (decoded is null)
-            {
-                var message = decodeError ?? $"Plan '{planId}' could not be decoded by the approval adapter.";
-                await WriteApplyDeniedAuditAsync(planId, message, cancellationToken);
-
-                return ApprovalGateResult.Refused(
-                    $"Refused: {message}",
-                    McpGatewayConventions.ApprovalReasonCodes.AdapterDecodeFailed);
-            }
-
-            var grantedAuthz = await authorizationCheck.EvaluateAsync(
-                new PlanAuthorizationContext(decoded.Envelope.Requester.Subject, requester.Subject),
-                cancellationToken).ConfigureAwait(false);
-            if (!grantedAuthz.IsAuthorized)
-            {
-                return ApprovalGateResult.Refused(
-                    "Refused: apply approval requires the same authenticated subject that requested the plan.",
-                    McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired);
-            }
-
-            var approvedRefusal = GetPlanReadinessRefusal(decoded, planId);
-            if (approvedRefusal is not null)
-            {
-                return ApprovalGateResult.Refused($"Refused: {approvedRefusal.Message}", approvedRefusal.ReasonCode);
-            }
-
-            return ApprovalGateResult.Approved();
+            return await GetGrantedApprovalResultAsync(planId, granted.Envelope, requester, cancellationToken).ConfigureAwait(false);
         }
 
         if (!granted.IsGranted && granted.GrantExists)
         {
-            await WriteApplyDeniedAuditAsync(planId, granted.Message, cancellationToken);
+            await WriteApplyDeniedAuditAsync(planId, granted.Message, cancellationToken).ConfigureAwait(false);
 
             return ApprovalGateResult.Refused($"Refused: {granted.Message}", granted.ReasonCode);
         }
 
-        var pending = await approvalStore.GetPendingPlanAsync(planId, cancellationToken);
+        return await HandlePendingPlanAsync(planId, requester, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ApprovalGateResult> GetGrantedApprovalResultAsync(
+        string planId,
+        PlanEnvelope envelope,
+        GatewayApprovalIdentity requester,
+        CancellationToken cancellationToken)
+    {
+        var decoded = planReviewAdapter.TryDecodeForReview(envelope, out var decodeError);
+        if (decoded is null)
+        {
+            var message = decodeError ?? $"Plan '{planId}' could not be decoded by the approval adapter.";
+            await WriteApplyDeniedAuditAsync(planId, message, cancellationToken).ConfigureAwait(false);
+
+            return ApprovalGateResult.Refused(
+                $"Refused: {message}",
+                McpGatewayConventions.ApprovalReasonCodes.AdapterDecodeFailed);
+        }
+
+        var grantedAuthz = await authorizationCheck.EvaluateAsync(
+            new PlanAuthorizationContext(decoded.Envelope.Requester.Subject, requester.Subject),
+            cancellationToken).ConfigureAwait(false);
+        if (!grantedAuthz.IsAuthorized)
+        {
+            return ApprovalGateResult.Refused(
+                "Refused: apply approval requires the same authenticated subject that requested the plan.",
+                McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired);
+        }
+
+        var approvedRefusal = GetPlanReadinessRefusal(decoded, planId);
+        if (approvedRefusal is not null)
+        {
+            return ApprovalGateResult.Refused($"Refused: {approvedRefusal.Message}", approvedRefusal.ReasonCode);
+        }
+
+        return ApprovalGateResult.Approved();
+    }
+
+    private async Task<ApprovalGateResult> HandlePendingPlanAsync(
+        string planId,
+        GatewayApprovalIdentity requester,
+        CancellationToken cancellationToken)
+    {
+        var pending = await approvalStore.GetPendingPlanAsync(planId, cancellationToken).ConfigureAwait(false);
         if (!pending.IsPending || pending.Envelope is null || pending.Hash is null)
         {
             return ApprovalGateResult.Refused($"Refused: {pending.Message}", pending.ReasonCode);
@@ -128,7 +145,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
             requester.Subject,
             pending.Envelope.IntentDigest,
             pending.Envelope.ReviewDigest,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         if (existingChallenge is not null)
         {
             var approvalUrl = CreateApprovalUrl(existingChallenge.Id);
@@ -169,7 +186,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
             effectiveTtl,
             pending.Envelope.IntentDigest,
             pending.Envelope.ReviewDigest,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         await approvalStore.WriteAuditAsync(
             ApprovalConventions.AuditEvents.ApprovalChallengeCreated,
             new ApprovalChallengeCreatedPayload(
@@ -179,7 +196,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 challenge.RequesterSubject,
                 challenge.RequesterAuthenticationType,
                 challenge.ExpiresAtUtc),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         var challengeApprovalUrl = CreateApprovalUrl(challenge.Id);
         return ApprovalGateResult.RequiresApproval(
@@ -209,7 +226,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         string challengeId,
         CancellationToken cancellationToken)
     {
-        var validation = await ValidatePendingChallengeAsync(challengeId, cancellationToken);
+        var validation = await ValidatePendingChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
 
         return validation.Error is not null
             ? new ApprovalPageModel(false, validation.Error, validation.Challenge, validation.PlanReview)
@@ -220,7 +237,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         string challengeId,
         CancellationToken cancellationToken)
     {
-        var validation = await ValidatePendingChallengeAsync(challengeId, cancellationToken);
+        var validation = await ValidatePendingChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
         if (validation.Error is not null ||
             validation.Challenge is null ||
             validation.PlanReview is null)
@@ -237,7 +254,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
             validation.PlanReview.Envelope,
             approver.Subject,
             validation.Challenge.Id,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         var updated = validation.Challenge with
         {
             Status = ApprovalConventions.ChallengeStatuses.Approved,
@@ -250,7 +267,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 Reason: null,
                 grant.Id)
         };
-        await challengeStore.SaveAsync(updated, cancellationToken);
+        await challengeStore.SaveAsync(updated, cancellationToken).ConfigureAwait(false);
         await notificationDispatcher.NotifyPlanApprovedAsync(updated.PlanId, cancellationToken).ConfigureAwait(false);
         await approvalStore.WriteAuditAsync(
             ApprovalConventions.AuditEvents.ApprovalChallengeApproved,
@@ -261,7 +278,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 updated.RequesterSubject,
                 updated.ApproverSubject,
                 decidedAt),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         return new ApprovalDecisionResult(
             true,
@@ -272,7 +289,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         string challengeId,
         CancellationToken cancellationToken)
     {
-        var challenge = await challengeStore.GetAsync(challengeId, cancellationToken);
+        var challenge = await challengeStore.GetAsync(challengeId, cancellationToken).ConfigureAwait(false);
         if (challenge is null)
         {
             return new ApprovalDecisionResult(
@@ -304,7 +321,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 challenge,
                 approver.Subject,
                 "Approver subject did not match requester subject.",
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             return new ApprovalDecisionResult(
                 false,
@@ -325,7 +342,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 Reason: null,
                 GrantId: null)
         };
-        await challengeStore.SaveAsync(denied, cancellationToken);
+        await challengeStore.SaveAsync(denied, cancellationToken).ConfigureAwait(false);
         await approvalStore.WriteAuditAsync(
             ApprovalConventions.AuditEvents.ApprovalChallengeDenied,
             new ApprovalChallengeDeniedPayload(
@@ -335,7 +352,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 denied.RequesterSubject,
                 denied.ApproverSubject,
                 decidedAt),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         return new ApprovalDecisionResult(true, $"Plan '{denied.PlanId}' was denied.");
     }
@@ -344,7 +361,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         string challengeId,
         CancellationToken cancellationToken)
     {
-        var challenge = await challengeStore.GetAsync(challengeId, cancellationToken);
+        var challenge = await challengeStore.GetAsync(challengeId, cancellationToken).ConfigureAwait(false);
         if (challenge is null)
         {
             return new ApprovalDecisionResult(
@@ -372,7 +389,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
 
         if (challenge.ExpiresAtUtc <= DateTimeOffset.UtcNow)
         {
-            var expired = await ExpireChallengeAsync(challenge, cancellationToken);
+            var expired = await ExpireChallengeAsync(challenge, cancellationToken).ConfigureAwait(false);
 
             return new ApprovalDecisionResult(
                 false,
@@ -386,7 +403,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 challenge,
                 actor.Subject,
                 "Canceling subject did not match requester subject.",
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             return new ApprovalDecisionResult(
                 false,
@@ -407,7 +424,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 Reason: null,
                 GrantId: null)
         };
-        await challengeStore.SaveAsync(canceled, cancellationToken);
+        await challengeStore.SaveAsync(canceled, cancellationToken).ConfigureAwait(false);
         await approvalStore.WriteAuditAsync(
             ApprovalConventions.AuditEvents.ApprovalChallengeCanceled,
             new ApprovalChallengeCanceledPayload(
@@ -417,7 +434,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 canceled.RequesterSubject,
                 canceled.Outcome.ActorSubject,
                 decidedAt),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         return new ApprovalDecisionResult(true, $"Plan '{canceled.PlanId}' approval challenge was canceled.");
     }
@@ -426,7 +443,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         string challengeId,
         CancellationToken cancellationToken)
     {
-        var challenge = await challengeStore.GetAsync(challengeId, cancellationToken);
+        var challenge = await challengeStore.GetAsync(challengeId, cancellationToken).ConfigureAwait(false);
         if (challenge is null)
         {
             return ChallengeValidation.Invalid(
@@ -444,7 +461,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
 
         if (challenge.ExpiresAtUtc <= DateTimeOffset.UtcNow)
         {
-            var expired = await ExpireChallengeAsync(challenge, cancellationToken);
+            var expired = await ExpireChallengeAsync(challenge, cancellationToken).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
                 "Approval challenge expired. Ask the MCP client to request a new approval URL.",
@@ -467,7 +484,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 challenge,
                 approver.Subject,
                 "Approver subject did not match requester subject.",
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
                 "Approval requires the same authenticated subject that requested the plan.",
@@ -475,14 +492,14 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 challenge);
         }
 
-        var pending = await approvalStore.GetPendingPlanAsync(challenge.PlanId, cancellationToken);
+        var pending = await approvalStore.GetPendingPlanAsync(challenge.PlanId, cancellationToken).ConfigureAwait(false);
         if (!pending.IsPending || pending.Envelope is null || pending.Hash is null)
         {
             await WriteChallengeRejectedAuditAsync(
                 challenge,
                 approver.Subject,
                 pending.Message,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
                 pending.Message,
@@ -498,7 +515,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 challenge,
                 approver.Subject,
                 message,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
                 message,
@@ -513,7 +530,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 challenge,
                 approver.Subject,
                 message,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
                 message,
@@ -529,7 +546,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 challenge,
                 approver.Subject,
                 errorMessage,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
                 errorMessage,
@@ -544,7 +561,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 challenge,
                 approver.Subject,
                 message,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
                 message,
@@ -560,7 +577,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 challenge,
                 approver.Subject,
                 message,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
                 message,
@@ -591,7 +608,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 reason,
                 GrantId: null)
         };
-        await challengeStore.SaveAsync(rejected, cancellationToken);
+        await challengeStore.SaveAsync(rejected, cancellationToken).ConfigureAwait(false);
         await approvalStore.WriteAuditAsync(
             ApprovalConventions.AuditEvents.ApprovalChallengeRejected,
             new ApprovalChallengeRejectedPayload(
@@ -601,7 +618,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 challenge.RequesterSubject,
                 approverSubject,
                 reason),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ApprovalChallenge> ExpireChallengeAsync(
@@ -620,7 +637,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 "Challenge TTL expired.",
                 GrantId: null)
         };
-        await challengeStore.SaveAsync(expired, cancellationToken);
+        await challengeStore.SaveAsync(expired, cancellationToken).ConfigureAwait(false);
         await approvalStore.WriteAuditAsync(
             ApprovalConventions.AuditEvents.ApprovalChallengeExpired,
             new ApprovalChallengeExpiredPayload(
@@ -629,7 +646,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 expired.PendingPlanHash,
                 expired.RequesterSubject,
                 expired.ExpiresAtUtc),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         return expired;
     }
@@ -644,7 +661,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
             await approvalStore.WriteAuditAsync(
                 ApprovalConventions.AuditEvents.ApplyDenied,
                 new ApplyDeniedPayload(planId, message),
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
         }
         catch (IOException ex)
         {
@@ -696,7 +713,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
     private static string MissingEvidenceMessage(string planId) =>
         $"Plan '{planId}' is missing recorded evidence data. Ask the MCP client to re-request the plan.";
 
-    private sealed record ChallengeValidation(
+    private sealed record class ChallengeValidation(
         string? Error,
         string? ReasonCode,
         ApprovalChallenge? Challenge,
@@ -713,5 +730,5 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
             new(error, reasonCode, challenge, planReview);
     }
 
-    private sealed record ResultFailure(string Message, string ReasonCode);
+    private sealed record class ResultFailure(string Message, string ReasonCode);
 }

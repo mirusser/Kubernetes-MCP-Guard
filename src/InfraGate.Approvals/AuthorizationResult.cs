@@ -1,6 +1,6 @@
 namespace InfraGate.Approvals;
 
-public sealed record AuthorizationResult(bool IsAuthorized, string? Reason)
+public sealed record class AuthorizationResult(bool IsAuthorized, string? Reason)
 {
     public static AuthorizationResult Authorized() => new(true, null);
 

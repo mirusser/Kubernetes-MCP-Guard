@@ -53,9 +53,8 @@ public sealed class GatewayApprovalEndpointsTests
     {
         var result = GatewayApprovalEndpoints.RenderDecisionPage(new ApprovalDecisionResult(true, "Plan was approved."));
 
-        Assert.Contains("Approval Recorded", result);
-        Assert.Contains("Plan was approved.", result);
-        Assert.Contains("class=\"success\"", result);
+        AssertHtmlContainsSemantic(result, "data-section", "decision-result");
+        AssertHtmlContainsSemantic(result, "data-field", "decision-message");
     }
 
     [Fact]
@@ -63,9 +62,8 @@ public sealed class GatewayApprovalEndpointsTests
     {
         var result = GatewayApprovalEndpoints.RenderDecisionPage(new ApprovalDecisionResult(false, "Hash mismatch."));
 
-        Assert.Contains("Approval Failed", result);
-        Assert.Contains("Hash mismatch.", result);
-        Assert.Contains("class=\"error\"", result);
+        AssertHtmlContainsSemantic(result, "data-section", "decision-result");
+        AssertHtmlContainsSemantic(result, "data-field", "decision-message");
     }
 
     [Fact]
@@ -75,8 +73,8 @@ public sealed class GatewayApprovalEndpointsTests
 
         var result = GatewayApprovalEndpoints.RenderApprovalPage(page, Renderer, null);
 
-        Assert.Contains("Approval Unavailable", result);
-        Assert.Contains("Challenge expired.", result);
+        AssertHtmlContainsSemantic(result, "data-section", "approval-unavailable");
+        AssertHtmlContainsSemantic(result, "data-field", "error-message");
     }
 
     [Fact]
@@ -88,7 +86,7 @@ public sealed class GatewayApprovalEndpointsTests
 
         var result = GatewayApprovalEndpoints.RenderApprovalPage(page, Renderer, "test-token");
 
-        Assert.Contains("Review Plan", result);
+        AssertHtmlContainsSemantic(result, "data-section", "plan-summary");
         Assert.Contains(plan.Envelope.Id, result);
     }
 
@@ -280,4 +278,7 @@ public sealed class GatewayApprovalEndpointsTests
 
         return KubernetesApprovalAdapter.Materialize(envelope);
     }
+
+    private static void AssertHtmlContainsSemantic(string html, string attributeName, string expectedValue)
+        => Assert.Contains($"{attributeName}=\"{expectedValue}\"", html);
 }

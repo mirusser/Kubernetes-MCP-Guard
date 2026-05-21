@@ -65,7 +65,8 @@
             "openid",
             "profile",
             "email",
-            "mcp:tools"
+            "mcp:tools",
+            "mcp:downstream"
           ]
         }
       },
@@ -115,7 +116,8 @@
     "address",
     "phone",
     "microprofile-jwt",
-    "mcp:tools"
+    "mcp:tools",
+    "mcp:downstream"
   ],
   "clientScopes": [
     {
@@ -344,6 +346,28 @@
           }
         }
       ]
+    },
+    {
+      "name": "mcp:downstream",
+      "description": "Downstream MCP server access for gateway service identity",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.introspection": "true",
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "downstream-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "urn:infra-gate:mcp-server",
+            "access.token.claim": "true"
+          }
+        }
+      ]
     }
   ],
   "clients": [
@@ -418,6 +442,23 @@
       "optionalClientScopes": [
         "offline_access"
       ]
+    },
+    {
+      "clientId": "infra-gate-gateway-service",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "gateway-service-secret",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "defaultClientScopes": [
+        "basic",
+        "mcp:downstream"
+      ],
+      "optionalClientScopes": []
     },
     {
       "clientId": "infra-gate-approval-ui",

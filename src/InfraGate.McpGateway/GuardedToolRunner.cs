@@ -39,19 +39,19 @@ public sealed partial class GuardedToolRunner
         IReadOnlyDictionary<string, object?> arguments,
         CancellationToken cancellationToken)
     {
-        bool requestHasFindings = await AuditRequestAsync(toolName, arguments, cancellationToken);
+        bool requestHasFindings = await AuditRequestAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
 
         string downstreamText;
         try
         {
-            downstreamText = await downstream.CallToolAsync(toolName, arguments, cancellationToken);
+            downstreamText = await downstream.CallToolAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Downstream call to '{ToolName}' threw an exception", toolName);
             return $"Tool call failed: {ex.GetType().Name}: {ex.Message}";
         }
-        var response = await SanitizeAndAuditResponseAsync(toolName, arguments, downstreamText, cancellationToken);
+        var response = await SanitizeAndAuditResponseAsync(toolName, arguments, downstreamText, cancellationToken).ConfigureAwait(false);
 
         return !requestHasFindings && !response.HasFindings
             ? response.Text
@@ -79,7 +79,7 @@ public sealed partial class GuardedToolRunner
                 ExtractPlanId(arguments, null),
                 auditIdentity.Subject,
                 auditIdentity.AuthenticationType),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
 
         return true;
     }
@@ -107,7 +107,7 @@ public sealed partial class GuardedToolRunner
                     ExtractPlanId(arguments, response.Text),
                     auditIdentity.Subject,
                     auditIdentity.AuthenticationType),
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
         }
 
         return response;
@@ -146,5 +146,5 @@ public sealed partial class GuardedToolRunner
         matchTimeoutMilliseconds: McpGatewayConventions.RegexTimeoutMilliseconds)]
     private static partial Regex PlanIdRegex();
 
-    private sealed record AuditIdentity(string? Subject, string? AuthenticationType);
+    private sealed record class AuditIdentity(string? Subject, string? AuthenticationType);
 }

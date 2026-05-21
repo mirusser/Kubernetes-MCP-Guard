@@ -180,7 +180,7 @@ public static class KubernetesPolicyValidator
     }
 
     private static bool IsLatestOrImplicitImageTag(string? image) =>
-        string.IsNullOrEmpty(image) || !image.Contains(':') || image.EndsWith(":latest", StringComparison.Ordinal);
+        string.IsNullOrEmpty(image) || !image.Contains(':', StringComparison.Ordinal) || image.EndsWith(":latest", StringComparison.Ordinal);
 
     private static void ValidateService(
         V1Service service,
@@ -225,8 +225,8 @@ public static class KubernetesPolicyValidator
 
     private static bool IsSecretLikeKey(string key)
     {
-        var lower = key.ToLowerInvariant();
-        return SecretLikeKeys.Any(pattern => lower.Contains(pattern, StringComparison.Ordinal));
+        var upper = key.ToUpperInvariant();
+        return SecretLikeKeys.Any(pattern => upper.Contains(pattern.ToUpperInvariant(), StringComparison.Ordinal));
     }
 
     private static string ObjectRef(IKubernetesObject<V1ObjectMeta> obj) =>

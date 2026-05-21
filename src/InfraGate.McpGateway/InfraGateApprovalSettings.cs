@@ -1,6 +1,6 @@
 namespace InfraGate.McpGateway;
 
-internal sealed record InfraGateApprovalSettings
+internal sealed record class InfraGateApprovalSettings
 {
     public string? Root { get; init; }
     public string? BaseUrl { get; init; }

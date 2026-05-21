@@ -51,13 +51,13 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
     {
         var tools = new List<Tool>();
 
-        var readOnly = await registry.GetReadOnlyAsync(ct);
+        var readOnly = await registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
         foreach (var dt in readOnly)
         {
             tools.Add(CreateForwardedTool(dt));
         }
 
-        var destructive = await registry.GetDestructiveAsync(ct);
+        var destructive = await registry.GetDestructiveAsync(ct).ConfigureAwait(false);
         foreach (var dt in destructive)
         {
             var requestName = McpGatewayConventions.ToolNames.RequestToolPrefix + dt.Name;
@@ -82,23 +82,23 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
     {
         string toolName = request.Name;
 
-        if (toolName == McpGatewayConventions.ToolNames.ApplyApprovedPlan)
+        if (toolName.Equals(McpGatewayConventions.ToolNames.ApplyApprovedPlan, StringComparison.Ordinal))
         {
-            return await HandleApplyApprovedPlanAsync(request, ct);
+            return await HandleApplyApprovedPlanAsync(request, ct).ConfigureAwait(false);
         }
 
         if (toolName.StartsWith(McpGatewayConventions.ToolNames.RequestToolPrefix, StringComparison.Ordinal))
         {
-            return await HandleRequestMutationAsync(toolName, request, ct);
+            return await HandleRequestMutationAsync(toolName, request, ct).ConfigureAwait(false);
         }
 
-        var readOnlyTools = await registry.GetReadOnlyAsync(ct);
+        var readOnlyTools = await registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
         if (readOnlyTools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal)))
         {
-            return await HandleReadOnlyAsync(toolName, request, ct);
+            return await HandleReadOnlyAsync(toolName, request, ct).ConfigureAwait(false);
         }
 
-        var destructiveTools = await registry.GetDestructiveAsync(ct);
+        var destructiveTools = await registry.GetDestructiveAsync(ct).ConfigureAwait(false);
         if (destructiveTools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal)))
         {
             return ErrorResult(
@@ -116,7 +116,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         CancellationToken ct)
     {
         var arguments = ConvertArguments(request.Arguments);
-        var result = await guardedRunner.CallAsync(toolName, arguments, ct);
+        var result = await guardedRunner.CallAsync(toolName, arguments, ct).ConfigureAwait(false);
 
         return new CallToolResult
         {
@@ -144,13 +144,13 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         }
 
         var args = ConvertArguments(request.Arguments);
-        bool requestHasFindings = await guardedRunner.AuditRequestAsync(toolName, args, ct);
+        bool requestHasFindings = await guardedRunner.AuditRequestAsync(toolName, args, ct).ConfigureAwait(false);
 
         var planResult = await domainAdapter.BuildAsync(
             mutationToolName,
             args,
             new PlanRequester(identity.Subject, identity.AuthenticationType),
-            ct);
+            ct).ConfigureAwait(false);
 
         if (!planResult.Succeeded || planResult.Envelope is null)
         {
@@ -162,10 +162,10 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
             if (planResult.Audit is { } audit)
             {
-                await WritePlanAuditAsync(audit, mutationToolName, ct);
+                await WritePlanAuditAsync(audit, mutationToolName, ct).ConfigureAwait(false);
             }
 
-            var sanitized = await guardedRunner.SanitizeAndAuditResponseAsync(toolName, args, planResult.Message, ct);
+            var sanitized = await guardedRunner.SanitizeAndAuditResponseAsync(toolName, args, planResult.Message, ct).ConfigureAwait(false);
             var errorText = requestHasFindings || sanitized.HasFindings
                 ? GuardedToolRunner.FormatWarningResponse(sanitized.Text)
                 : sanitized.Text;
@@ -176,7 +176,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         await approvalStore.CreatePlanAsync(
             planResult.Envelope,
             planResult.TargetNamespace,
-            ct);
+            ct).ConfigureAwait(false);
 
         var message = $"Approval plan '{planResult.PlanId}' created. To execute, submit with execute_approved_plan(planId=\"{planResult.PlanId}\").";
         if (requestHasFindings)
@@ -202,44 +202,58 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             return ErrorResult("Missing required argument: planId.");
         }
 
-        var gate = await approvals.EnsureApprovedOrCreateChallengeAsync(planId, ct);
+        var gate = await approvals.EnsureApprovedOrCreateChallengeAsync(planId, ct).ConfigureAwait(false);
         if (!gate.IsApproved)
         {
-            if (gate.Status is ApprovalGateStatus.ApprovalRequired)
-            {
-                var sessionId = CurrentSessionId;
-                if (sessionId is not null)
-                {
-                    subscriptionRegistry.SubscribeToPlan(sessionId, planId);
-                }
-            }
-
-            return gate.Status switch
-            {
-                ApprovalGateStatus.ApprovalRequired => new CallToolResult
-                {
-                    Content = [new TextContentBlock { Text = gate.Message }]
-                },
-                ApprovalGateStatus.Refused => ErrorResult(gate.Message),
-                _ => ErrorResult(gate.Message)
-            };
+            return HandleUnapprovedGate(gate, planId);
         }
 
-        var preExecution = await preExecutionGate.EvaluateAsync(planId, domainAdapter, ct);
+        var preExecution = await preExecutionGate.EvaluateAsync(planId, domainAdapter, ct).ConfigureAwait(false);
         if (!preExecution.IsPassed || preExecution.Envelope is null || preExecution.Grant is null)
         {
             if (preExecution.Audit is { } audit)
             {
-                await WritePlanAuditAsync(audit, planId, ct);
+                await WritePlanAuditAsync(audit, planId, ct).ConfigureAwait(false);
             }
 
             return ErrorResult(preExecution.Message);
         }
 
+        return await ExecutePlanAsync(planId, preExecution.Envelope, preExecution.Grant, ct).ConfigureAwait(false);
+    }
+
+    private CallToolResult HandleUnapprovedGate(ApprovalGateResult gate, string planId)
+    {
+        if (gate.Status is ApprovalGateStatus.ApprovalRequired)
+        {
+            var sessionId = CurrentSessionId;
+            if (sessionId is not null)
+            {
+                subscriptionRegistry.SubscribeToPlan(sessionId, planId);
+            }
+        }
+
+        return gate.Status switch
+        {
+            ApprovalGateStatus.ApprovalRequired => new CallToolResult
+            {
+                Content = [new TextContentBlock { Text = gate.Message }]
+            },
+            ApprovalGateStatus.Refused => ErrorResult(gate.Message),
+            _ => ErrorResult(gate.Message)
+        };
+    }
+
+    private async Task<CallToolResult> ExecutePlanAsync(
+        string planId,
+        PlanEnvelope envelope,
+        ApprovalGrant grant,
+        CancellationToken ct)
+    {
         DomainPlanExecutionResult executeResult;
         try
         {
-            executeResult = await domainAdapter.ExecuteAsync(preExecution.Envelope, ct);
+            executeResult = await domainAdapter.ExecuteAsync(envelope, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -249,10 +263,10 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
                     ApprovalConventions.AuditEvents.ApplyFailed,
                     new ApplyFailedPayload(
                         planId,
-                        preExecution.Envelope.Operation,
+                        envelope.Operation,
                         message)),
                 planId,
-                ct);
+                ct).ConfigureAwait(false);
 
             logger.LogWarning(ex, "Approved plan {PlanId} execution failed.", planId);
 
@@ -263,24 +277,24 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         {
             if (executeResult.Audit is { } audit)
             {
-                await WritePlanAuditAsync(audit, planId, ct);
+                await WritePlanAuditAsync(audit, planId, ct).ConfigureAwait(false);
             }
             else
             {
                 await approvalStore.WriteAuditAsync(
                     ApprovalConventions.AuditEvents.ApplyDenied,
                     new ApplyDeniedPayload(planId, executeResult.Message),
-                    ct);
+                    ct).ConfigureAwait(false);
             }
 
             return ErrorResult(executeResult.Message);
         }
 
         await approvalStore.MarkAppliedAsync(
-            preExecution.Envelope,
-            executeResult.TargetNamespace ?? GetNamespaceFromEnvelope(preExecution.Envelope),
-            preExecution.Grant,
-            ct);
+            envelope,
+            executeResult.TargetNamespace ?? GetNamespaceFromEnvelope(envelope),
+            grant,
+            ct).ConfigureAwait(false);
 
         return new CallToolResult
         {
@@ -298,6 +312,8 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         };
     }
 
+    private static readonly string[] ApplyApprovedPlanRequiredArgs = ["planId"];
+
     private static Tool CreateApplyApprovedPlanTool()
     {
         return new Tool
@@ -311,7 +327,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
                 {
                     planId = new { type = "string", description = "PlanId returned by one of the request_* tools." }
                 },
-                required = new[] { "planId" }
+                required = ApplyApprovedPlanRequiredArgs
             })
         };
     }
@@ -320,10 +336,10 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
     {
         if (args is null || args.Count == 0)
         {
-            return new Dictionary<string, object?>();
+            return new Dictionary<string, object?>(StringComparer.Ordinal);
         }
 
-        var result = new Dictionary<string, object?>(args.Count);
+        var result = new Dictionary<string, object?>(args.Count, StringComparer.Ordinal);
         foreach (var (key, element) in args)
         {
             result[key] = JsonElementToObject(element);
@@ -348,7 +364,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
     {
         try
         {
-            await approvalStore.WriteAuditAsync(audit.EventName, audit.Payload, ct);
+            await approvalStore.WriteAuditAsync(audit.EventName, audit.Payload, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

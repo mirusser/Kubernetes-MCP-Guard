@@ -1,6 +1,6 @@
 namespace InfraGate.McpServer;
 
-internal sealed record InfraGateKubernetesSettings
+internal sealed record class InfraGateKubernetesSettings
 {
     public string? KubeConfig { get; init; }
     public bool? UseInClusterConfig { get; init; }

@@ -51,7 +51,7 @@ public sealed class KubernetesEvidenceService
             .Select(f => new KubernetesPlanPolicyFinding(f.Severity.ToString(), f.Code, f.ObjectRef, f.Message))
             .ToArray();
 
-        var dryRunResult = await DryRunApplyManifestAsync(parsed.Objects, cancellationToken);
+        var dryRunResult = await DryRunApplyManifestAsync(parsed.Objects, cancellationToken).ConfigureAwait(false);
         if (!dryRunResult.Succeeded || dryRunResult.DryRun is null)
         {
             return dryRunResult.Message;
@@ -87,7 +87,7 @@ public sealed class KubernetesEvidenceService
             return ex.Message;
         }
 
-        var result = await DryRunDeleteManifestAsync(parsed.ObjectRefs, cancellationToken);
+        var result = await DryRunDeleteManifestAsync(parsed.ObjectRefs, cancellationToken).ConfigureAwait(false);
         return result.Succeeded && result.DryRun is not null
             ? JsonSerializer.Serialize(result.DryRun, KubernetesManagerHelpers.JsonOptions)
             : result.Message;
@@ -105,7 +105,7 @@ public sealed class KubernetesEvidenceService
             return validation;
         }
 
-        var result = await DryRunScaleDeploymentAsync(namespaceName, name, replicas, cancellationToken);
+        var result = await DryRunScaleDeploymentAsync(namespaceName, name, replicas, cancellationToken).ConfigureAwait(false);
         return result.Succeeded && result.DryRun is not null
             ? JsonSerializer.Serialize(result.DryRun, KubernetesManagerHelpers.JsonOptions)
             : result.Message;
@@ -123,7 +123,7 @@ public sealed class KubernetesEvidenceService
         }
 
         var restartedAtUtc = DateTimeOffset.UtcNow.ToString(ApprovalConventions.DateTimeFormats.RoundTrip);
-        var result = await DryRunRestartDeploymentAsync(namespaceName, name, restartedAtUtc, cancellationToken);
+        var result = await DryRunRestartDeploymentAsync(namespaceName, name, restartedAtUtc, cancellationToken).ConfigureAwait(false);
         return result.Succeeded && result.DryRun is not null
             ? JsonSerializer.Serialize(result.DryRun, KubernetesManagerHelpers.JsonOptions)
             : result.Message;
@@ -145,7 +145,7 @@ public sealed class KubernetesEvidenceService
             return validation;
         }
 
-        var result = await DryRunSetDeploymentImageAsync(namespaceName, name, container, image, cancellationToken);
+        var result = await DryRunSetDeploymentImageAsync(namespaceName, name, container, image, cancellationToken).ConfigureAwait(false);
         return result.Succeeded && result.DryRun is not null
             ? JsonSerializer.Serialize(result.DryRun, KubernetesManagerHelpers.JsonOptions)
             : result.Message;
@@ -180,7 +180,7 @@ public sealed class KubernetesEvidenceService
 
         try
         {
-            var drift = await KubernetesDiffService.FindDriftAsync(client, operation, diffs, cancellationToken);
+            var drift = await KubernetesDiffService.FindDriftAsync(client, operation, diffs, cancellationToken).ConfigureAwait(false);
             return drift ?? KubernetesConventions.DriftCheckResult.NoDrift;
         }
         catch (Exception ex)
@@ -211,7 +211,7 @@ public sealed class KubernetesEvidenceService
             return ex.Message;
         }
 
-        var dryRunResult = await DryRunApplyManifestAsync(parsed.Objects, cancellationToken);
+        var dryRunResult = await DryRunApplyManifestAsync(parsed.Objects, cancellationToken).ConfigureAwait(false);
         if (!dryRunResult.Succeeded || dryRunResult.DryRun is null)
         {
             return dryRunResult.Message;
@@ -224,7 +224,7 @@ public sealed class KubernetesEvidenceService
                 KubernetesConventions.MutationOperations.Apply,
                 parsed.ObjectRefs,
                 dryRunResult.DryRun.Objects,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             return JsonSerializer.Serialize(diffs, KubernetesManagerHelpers.JsonOptions);
         }
@@ -255,14 +255,14 @@ public sealed class KubernetesEvidenceService
             DryRunResult dryRunResult = operation switch
             {
                 KubernetesConventions.MutationOperations.Scale
-                    => await DryRunScaleDeploymentAsync(namespaceName, name, replicas ?? 1, cancellationToken),
+                    => await DryRunScaleDeploymentAsync(namespaceName, name, replicas ?? 1, cancellationToken).ConfigureAwait(false),
                 KubernetesConventions.MutationOperations.Restart
                     => await DryRunRestartDeploymentAsync(
                         namespaceName, name,
                         DateTimeOffset.UtcNow.ToString(ApprovalConventions.DateTimeFormats.RoundTrip),
-                        cancellationToken),
+                        cancellationToken).ConfigureAwait(false),
                 KubernetesConventions.MutationOperations.SetImage
-                    => await DryRunSetDeploymentImageAsync(namespaceName, name, container ?? string.Empty, image ?? string.Empty, cancellationToken),
+                    => await DryRunSetDeploymentImageAsync(namespaceName, name, container ?? string.Empty, image ?? string.Empty, cancellationToken).ConfigureAwait(false),
                 _ => throw new InvalidOperationException($"Unsupported operation '{operation}' for deployment diff.")
             };
 
@@ -299,7 +299,7 @@ public sealed class KubernetesEvidenceService
 
             foreach (var obj in objects)
             {
-                var result = await DryRunApplyObjectAsync(obj, cancellationToken);
+                var result = await DryRunApplyObjectAsync(obj, cancellationToken).ConfigureAwait(false);
                 dryRunObjects.Add(result.Object);
                 warnings.AddRange(result.Warnings);
             }
@@ -324,7 +324,7 @@ public sealed class KubernetesEvidenceService
 
             foreach (var obj in objects)
             {
-                var result = await DryRunDeleteObjectAsync(obj, cancellationToken);
+                var result = await DryRunDeleteObjectAsync(obj, cancellationToken).ConfigureAwait(false);
                 dryRunObjects.Add(result.Object);
                 warnings.AddRange(result.Warnings);
             }
@@ -353,7 +353,7 @@ public sealed class KubernetesEvidenceService
                 dryRun: KubernetesConventions.KubernetesApi.DryRunAll,
                 fieldManager: KubernetesManagerHelpers.FieldManager,
                 fieldValidation: KubernetesConventions.KubernetesApi.FieldValidationStrict,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             var dryRunObject = CaptureDryRunObject(
                 KubernetesConventions.KubernetesResources.DeploymentRef(namespaceName, name),
@@ -383,7 +383,7 @@ public sealed class KubernetesEvidenceService
                 dryRun: KubernetesConventions.KubernetesApi.DryRunAll,
                 fieldManager: KubernetesManagerHelpers.FieldManager,
                 fieldValidation: KubernetesConventions.KubernetesApi.FieldValidationStrict,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             var dryRunObject = CaptureDryRunObject(
                 KubernetesConventions.KubernetesResources.DeploymentRef(namespaceName, name),
@@ -414,7 +414,7 @@ public sealed class KubernetesEvidenceService
                 dryRun: KubernetesConventions.KubernetesApi.DryRunAll,
                 fieldManager: KubernetesManagerHelpers.FieldManager,
                 fieldValidation: KubernetesConventions.KubernetesApi.FieldValidationStrict,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             var dryRunObject = CaptureDryRunObject(
                 KubernetesConventions.KubernetesResources.DeploymentRef(namespaceName, name),
@@ -442,7 +442,7 @@ public sealed class KubernetesEvidenceService
                 dryRun: KubernetesConventions.KubernetesApi.DryRunAll,
                 fieldManager: KubernetesManagerHelpers.FieldManager,
                 fieldValidation: KubernetesConventions.KubernetesApi.FieldValidationStrict,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return CaptureDryRunResult(deployment, response);
         }
@@ -456,7 +456,7 @@ public sealed class KubernetesEvidenceService
                 dryRun: KubernetesConventions.KubernetesApi.DryRunAll,
                 fieldManager: KubernetesManagerHelpers.FieldManager,
                 fieldValidation: KubernetesConventions.KubernetesApi.FieldValidationStrict,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return CaptureDryRunResult(service, response);
         }
@@ -470,7 +470,7 @@ public sealed class KubernetesEvidenceService
                 dryRun: KubernetesConventions.KubernetesApi.DryRunAll,
                 fieldManager: KubernetesManagerHelpers.FieldManager,
                 fieldValidation: KubernetesConventions.KubernetesApi.FieldValidationStrict,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return CaptureDryRunResult(configMap, response);
         }
@@ -491,7 +491,7 @@ public sealed class KubernetesEvidenceService
                     obj.Namespace,
                     body: CreateDryRunDeleteOptions(),
                     dryRun: KubernetesConventions.KubernetesApi.DryRunAll,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 return CaptureDryRunResult(obj, response);
             }
@@ -502,7 +502,7 @@ public sealed class KubernetesEvidenceService
                     obj.Namespace,
                     body: CreateDryRunDeleteOptions(),
                     dryRun: KubernetesConventions.KubernetesApi.DryRunAll,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 return CaptureDryRunResult(obj, response);
             }
@@ -513,7 +513,7 @@ public sealed class KubernetesEvidenceService
                     obj.Namespace,
                     body: CreateDryRunDeleteOptions(),
                     dryRun: KubernetesConventions.KubernetesApi.DryRunAll,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 return CaptureDryRunResult(obj, response);
             }
@@ -546,7 +546,7 @@ public sealed class KubernetesEvidenceService
                 {
                     metadata = new
                     {
-                        annotations = new Dictionary<string, string>
+                        annotations = new Dictionary<string, string>(StringComparer.Ordinal)
                         {
                             [KubernetesManagerHelpers.RestartedAtAnnotation] = restartedAtUtc
                         }
@@ -609,11 +609,11 @@ public sealed class KubernetesEvidenceService
     private static string FormatObjectRef(IKubernetesObject<V1ObjectMeta> obj) =>
         $"{obj.ApiVersion} {obj.Kind} {obj.Metadata.NamespaceProperty}/{obj.Metadata.Name}";
 
-    private sealed record DryRunObjectResult(
+    private sealed record class DryRunObjectResult(
         KubernetesPlanDryRunObject Object,
         string[] Warnings);
 
-    private sealed record DryRunResult(
+    private sealed record class DryRunResult(
         bool Succeeded,
         KubernetesPlanDryRun? DryRun,
         string Message)

@@ -1,3 +1,4 @@
+using InfraGate.DownstreamAuth;
 using InfraGate.McpServer;
 using InfraGate.RuntimeSafety;
 using k8s;
@@ -140,6 +141,14 @@ public sealed class KubernetesConfigProviderTests
         Assert.Contains(KubernetesConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
     }
 
+    private static DownstreamAuthOptions ValidDownstreamAuth => new()
+    {
+        Required = true,
+        Authority = "https://idp.example.com",
+        Audience = DownstreamAuthConventions.Defaults.Audience,
+        Scope = DownstreamAuthConventions.Defaults.Scope
+    };
+
     private static KubernetesMcpOptions CreateOptions(
         RuntimeMode runtimeMode = RuntimeMode.Development,
         string? kubeConfig = null,
@@ -151,7 +160,8 @@ public sealed class KubernetesConfigProviderTests
             IsApprovalRootExplicit: true,
             HasExplicitAllowedNamespaces: true,
             kubeConfig,
-            isInClusterConfigEnabled);
+            isInClusterConfigEnabled,
+            DownstreamAuth: ValidDownstreamAuth);
 
     private static string ProductionPath(string fileName)
     {

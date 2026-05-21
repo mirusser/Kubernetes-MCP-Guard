@@ -12,7 +12,7 @@ public sealed class KubernetesPlanReviewRenderer : IPlanReviewRenderer
     public string RenderApprovalRequiredMessage(IPlanReview planReview, string approvalUrl, DateTimeOffset expiresAtUtc) =>
         RenderApprovalRequiredMessage((KubernetesPlan)planReview, approvalUrl, expiresAtUtc);
 
-    private string RenderReviewContent(KubernetesPlan plan)
+    private static string RenderReviewContent(KubernetesPlan plan)
     {
         var sb = new StringBuilder();
         sb.Append(RenderObjectsCard(plan));
@@ -29,7 +29,7 @@ public sealed class KubernetesPlanReviewRenderer : IPlanReviewRenderer
         return sb.ToString();
     }
 
-    private string RenderApprovalRequiredMessage(KubernetesPlan plan, string approvalUrl, DateTimeOffset expiresAtUtc)
+    private static string RenderApprovalRequiredMessage(KubernetesPlan plan, string approvalUrl, DateTimeOffset expiresAtUtc)
     {
         var objects = string.Join(
             Environment.NewLine,
@@ -85,7 +85,7 @@ public sealed class KubernetesPlanReviewRenderer : IPlanReviewRenderer
             ? "<p>None</p>"
             : ("<ul>" + string.Join(string.Empty,
                 plan.PolicyFindings.Select(finding =>
-                    $"<li><span class=\"badge badge-{Html(finding.Severity.ToLowerInvariant())}\">{Html(finding.Severity)}</span> [{Html(finding.Code)}] {Html(finding.Message)} <span class=\"kv-label\">{Html(finding.ObjectRef)}</span></li>")) + "</ul>");
+                    $"<li><span class=\"badge badge-{Html(finding.Severity.ToUpperInvariant())}\">{Html(finding.Severity)}</span> [{Html(finding.Code)}] {Html(finding.Message)} <span class=\"kv-label\">{Html(finding.ObjectRef)}</span></li>")) + "</ul>");
 
         return $"""
                 <section class="card" data-section="policy-findings">

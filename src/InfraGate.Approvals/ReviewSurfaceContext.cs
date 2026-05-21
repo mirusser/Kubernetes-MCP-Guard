@@ -1,3 +1,3 @@
 namespace InfraGate.Approvals;
 
-public sealed record ReviewSurfaceContext(string Surface, string Renderer);
+public sealed record class ReviewSurfaceContext(string Surface, string Renderer);

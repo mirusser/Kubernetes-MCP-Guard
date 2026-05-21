@@ -24,10 +24,10 @@ public sealed class GuardrailAuditStore(McpGatewayOptions options) : IGuardrailA
         };
         var line = JsonSerializer.Serialize(entry, JsonOptions) + Environment.NewLine;
 
-        await writeLock.WaitAsync(cancellationToken);
+        await writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await File.AppendAllTextAsync(path, line, cancellationToken);
+            await File.AppendAllTextAsync(path, line, cancellationToken).ConfigureAwait(false);
         }
         finally
         {

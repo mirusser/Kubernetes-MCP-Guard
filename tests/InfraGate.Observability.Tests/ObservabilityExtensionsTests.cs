@@ -38,6 +38,7 @@ public sealed class ObservabilityExtensionsTests
         using var host = builder.Build();
 
         var logger = host.Services.GetRequiredService<ILogger<ObservabilityExtensionsTests>>();
+        // Justification: CA1873 — log argument is a constant. Negligible evaluation cost.
         logger.LogInformation("Test message {Id}", 42);
 
         Assert.True(File.Exists(logPath), $"Log file not created at '{logPath}'");

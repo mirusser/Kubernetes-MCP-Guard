@@ -75,7 +75,7 @@ flowchart TB
     Client -. "OAuth discovery/login + DCR" .-> Keycloak
     Browser -. "approval OAuth login" .-> Keycloak
     Auth -. "JWKS / issuer metadata" .-> Keycloak
-    Downstream -->|"stdio, no bearer token"| Server
+    Downstream -->|"stdio, user JWT terminated"| Server
     Guardrails --> GuardAudit
     Gateway -->|"plan builder + executor seams"| Adapter
     Adapter -->|"calls evidence/raw mutation tools"| Downstream
@@ -161,8 +161,8 @@ sequenceDiagram
     Note over GW: GatewayToolDispatcher delegates read-only calls to GuardedToolRunner<br/>ignore-instructions / reveal-prompts<br/>tool-use / secret-exfiltration<br/>authority-override
 
     Note over GW,Svr: Token passthrough prevention
-    GW->>Svr: forward tool call<br/>(StdioClientTransport, no token)
-    Note over GW,Svr: DownstreamMcpClient.GetClientAsync<br/>OAuth JWT terminated at gateway
+    GW->>Svr: forward tool call<br/>(StdioClientTransport)
+    Note over GW,Svr: DownstreamMcpClient.GetClientAsync<br/>OAuth JWT terminated at gateway<br/>downstream service token via separate client-credentials when configured
 
     Note over Svr: KubernetesTools tool handlers
     Svr->>Svr: validate namespace in allowed list

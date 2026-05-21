@@ -1,0 +1,18 @@
+[*.cs]
+
+# Test projects don't need ConfigureAwait(false) — no SynchronizationContext
+dotnet_diagnostic.MA0004.severity = none
+dotnet_diagnostic.CA2007.severity = none
+
+# StringComparison is noisy in xunit Assert.Contains calls
+dotnet_diagnostic.MA0001.severity = none
+dotnet_diagnostic.MA0002.severity = none
+dotnet_diagnostic.CA1307.severity = none
+dotnet_diagnostic.MA0074.severity = none
+
+# Miscellaneous test-only suppressions
+dotnet_diagnostic.MA0006.severity = none
+dotnet_diagnostic.CA1812.severity = none
+dotnet_diagnostic.MA0032.severity = none
+dotnet_diagnostic.CA1711.severity = none        # xUnit Collection fixtures end in 'Collection'
+dotnet_diagnostic.CA5399.severity = none        # Testcontainers HttpClient doesn't need CRL check

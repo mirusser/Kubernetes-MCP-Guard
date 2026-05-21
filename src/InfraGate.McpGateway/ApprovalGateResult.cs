@@ -1,6 +1,6 @@
 namespace InfraGate.McpGateway;
 
-public sealed record ApprovalGateResult(
+public sealed record class ApprovalGateResult(
     ApprovalGateStatus Status,
     string Message,
     string? ReasonCode = null,

@@ -9,7 +9,7 @@ description: Run all available tests in the repository, correctly accounting for
 
 | Tier | What runs | Prerequisites | Command |
 |------|-----------|---------------|---------|
-| **1** | All unit tests | .NET 10 SDK | `dotnet test InfraGate.slnx --filter "Category!=Keycloak"` |
+| **1** | All unit tests | .NET 10 SDK | `dotnet test InfraGate.slnx --filter "Category!=Keycloak&Category!=SafetyE2E"` |
 | **2** | Keycloak integration | .NET 10 + Docker | `dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj --filter "Category=Keycloak"` |
 | **3** | McpServer integration | + K8s cluster + kubeconfig | `INFRA_GATE_RUN_INTEGRATION=1 dotnet test tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj` |
 | **4** | Gateway integration | + K8s cluster + kubeconfig | `INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --filter "Category!=Keycloak"` |
@@ -39,7 +39,7 @@ There are three ways tests are gated:
 | `Category=Keycloak` | `KeycloakIntegrationTests.cs` | Only when `--filter "Category=Keycloak"` is passed |
 | `Category=SafetyE2E` | All Safety E2E workflow tests | Only when `--filter "Category=SafetyE2E"` is passed |
 
-Tests with `Category=Keycloak` are **excluded** by the default filter `Category!=Keycloak`. Tests with `Category=SafetyE2E` have no `!=` exclusion — they are guarded by an env var (see below).
+Tests with `Category=Keycloak` and `Category=SafetyE2E` are **excluded** by the default filter `Category!=Keycloak&Category!=SafetyE2E`. Safety E2E tests are additionally guarded by the `INFRA_GATE_RUN_SAFETY_E2E` env var — without it, they return immediately as no-ops.
 
 ### 2. Environment variable gates
 
@@ -71,13 +71,8 @@ Two test projects use `Testcontainers.Keycloak` which starts a Keycloak containe
 **What it covers:** All unit tests that don't need Docker or K8s. Also includes RuntimeSafety and approval store tests.
 
 ```bash
-dotnet test InfraGate.slnx --filter "Category!=Keycloak"
+dotnet test InfraGate.slnx --filter "Category!=Keycloak&Category!=SafetyE2E"
 ```
-
-**Test projects exercised:**
-- `InfraGate.McpServer.Tests` (253 unit tests)
-- `InfraGate.McpGateway.Tests` (166 unit tests)
-- `InfraGate.RuntimeSafety.Tests`
 
 **Prerequisites:**
 - .NET 10 SDK (`dotnet --version` must report 10.x)
@@ -199,7 +194,7 @@ kubectl --kubeconfig .kube/mcp-nginx-demo.config apply -f examples/failing-deplo
 ./scripts/coverage.sh
 ```
 
-> **Note:** The coverage script runs `dotnet test InfraGate.slnx` without `Category!=Keycloak` filter. If Docker is available, Keycloak tests will execute; if not, they will fail. The CI workflow (`sonar.yml`) adds `--filter "Category!=Keycloak"` explicitly.
+> **Note:** The coverage script runs `dotnet test InfraGate.slnx` without `Category!=Keycloak` filter. If Docker is available, Keycloak tests and Safety E2E tests will execute; if not, they will fail. The CI workflow (`sonar.yml`) adds `--filter "Category!=Keycloak&Category!=SafetyE2E"` explicitly.
 
 **Prerequisites:**
 - .NET 10 SDK
@@ -340,11 +335,11 @@ docker compose -f deploy/local-oauth/compose.release.yaml config >/dev/null
 
 | CI workflow | Runs on | Test tiers covered | Filter |
 |-------------|---------|-------------------|--------|
-| `unit-tests.yml` | Every PR/push `main`/`dev` | 1 | `Category!=Keycloak` |
+| `unit-tests.yml` | Every PR/push `main`/`dev` | 1 | `Category!=Keycloak&Category!=SafetyE2E` |
 | `keycloak-tests.yml` | Every PR/push `main`/`dev` | 2 | `Category=Keycloak` |
 | `integration-tests.yml` | Every PR/push `main`/`dev` (self-hosted) | 3 + 4 | (env-var gated) |
 | `safety-e2e.yml` | Manual `workflow_dispatch` only | 5 | `Category=SafetyE2E` |
-| `sonar.yml` | Every PR/push `main`/`dev` | 6 | `Category!=Keycloak` |
+| `sonar.yml` | Every PR/push `main`/`dev` | 6 | `Category!=Keycloak&Category!=SafetyE2E` |
 
 Tiers 7 and 8 (compose smoke) are local-only smoke tests run against the full Keycloak + Gateway compose stack. They are not part of any CI workflow — run them before merging if your changes touch the Dockerfile, compose files, volume mounts, `create-demo-kubeconfig.sh`, or DataProtection setup.
 

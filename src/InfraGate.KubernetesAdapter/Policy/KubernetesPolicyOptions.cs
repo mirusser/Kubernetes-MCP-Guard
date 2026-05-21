@@ -1,7 +1,7 @@
 namespace InfraGate.KubernetesAdapter.Policy;
 
 // Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
-public sealed record KubernetesPolicyOptions
+public sealed record class KubernetesPolicyOptions
 {
     public bool DenyPrivilegedContainers { get; init; } = true;
     public bool DenyHostPathVolumes { get; init; } = true;

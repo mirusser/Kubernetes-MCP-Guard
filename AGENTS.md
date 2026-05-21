@@ -93,6 +93,27 @@ Reusable skill definitions live in [.agents/skills/](.agents/skills/). Load the 
 - [verify-readme-docs](.agents/skills/verify-readme-docs/SKILL.md): audit and minimally fix README files against actual code and tests.
 - [infragate-mcp-gateway](.agents/skills/infragate-mcp-gateway/SKILL.md): use the local InfraGate MCP gateway for Kubernetes inspection and guarded changes.
 - [review-mutation-approval-flow](.agents/skills/review-mutation-approval-flow/SKILL.md): review the MCP mutation-approval glossary, flow diagrams, relationship table, profile sketch, and related ADRs for consistency.
+- [run-local-sonarqube](.agents/skills/run-local-sonarqube/SKILL.md): run local SonarQube Community Build analysis and ensure the agent-ingestible report is saved to disk.
+- [sonar-local-remediaton](.agents/skills/sonar-local-remediaton/SKILL.md): consume the saved local SonarQube report and produce a remediation plan.
+- [sonarcloud-remediation](.agents/skills/sonarcloud-remediation/SKILL.md): consume SonarCloud CI findings and produce a remediation plan.
+- [repo-onboarding](.agents/skills/repo-onboarding/SKILL.md): orient agents in the repo before broad investigations, repo navigation, or unfamiliar work.
+- [tdd](.agents/skills/tdd/SKILL.md): test-first development — write failing tests before writing implementation code.
+- [grill-with-docs](.agents/skills/grill-with-docs/SKILL.md): cross-check code behavior against documentation and surface gaps.
+- [improve-codebase-architecture](.agents/skills/improve-codebase-architecture/SKILL.md): structural or architectural analysis and refactor proposals.
+- [run-tests](.agents/skills/run-tests/SKILL.md): run the test suite, interpret failures, and validate fixes.
+
+## Codegraph
+
+When `.codegraph/` is present, prefer these tools over file reads and grep:
+
+- `codegraph_status` — verify the index is healthy before relying on it
+- `codegraph_files` — project file tree with symbol counts (replaces `find`)
+- `codegraph_context` — primary task entry point; run before deciding which docs to read
+- `codegraph_search` — locate symbols by name (replaces grep)
+- `codegraph_callers` / `codegraph_callees` — trace call chains through the approval and dispatch flows
+- `codegraph_impact` — check blast radius before making changes
+
+Use doc reads for rationale, flow diagrams, and ADR decisions that codegraph cannot answer.
 
 ## Solution Map
 
@@ -108,10 +129,13 @@ Load only the project README you need:
   - [InfraGate.KubernetesAdapter](src/InfraGate.KubernetesAdapter/README.md): Kubernetes-specific approval payload and evidence records used by the generic approval flow.
   - [InfraGate.RuntimeSafety](src/InfraGate.RuntimeSafety/README.md): runtime mode resolution, production safety validation, and environment variable conventions.
   - [InfraGate.Observability](src/InfraGate.Observability/README.md): shared Serilog structured logging configuration for the MCP Gateway and MCP Server.
+  - [InfraGate.RunProfiles](src/InfraGate.RunProfiles/README.md): CLI tool that compiles named run profiles from `deploy/run-profiles.yaml` into `.env` files and appsettings JSON for Docker Compose and .NET runtime binding.
+  - InfraGate.DownstreamAuth (`src/InfraGate.DownstreamAuth/`): client credentials token provider and downstream MCP server auth filter; no README yet — read source directly (`DownstreamAuthConventions`, `DownstreamAuthOptions`, `IDownstreamServiceTokenProvider`).
 - Test projects:
   - [InfraGate.McpServer.Tests](tests/InfraGate.McpServer.Tests/README.md): server unit tests and opt-in Kubernetes integration coverage.
   - [InfraGate.McpGateway.Tests](tests/InfraGate.McpGateway.Tests/README.md): gateway auth, guardrail, sanitization, audit, and forwarding tests.
   - [InfraGate.McpGateway.KeycloakTests](tests/InfraGate.McpGateway.KeycloakTests/README.md): opt-in Keycloak Testcontainers integration tests covering real OIDC discovery, JWKS validation, and token acquisition through the gateway's JWT bearer pipeline.
   - [InfraGate.RuntimeSafety.Tests](tests/InfraGate.RuntimeSafety.Tests/README.md): unit tests for runtime mode detection, production safety validation, and environment variable resolution.
   - [InfraGate.Observability.Tests](tests/InfraGate.Observability.Tests/README.md): unit tests for console and file sink logging configuration.
+  - [InfraGate.RunProfiles.Tests](tests/InfraGate.RunProfiles.Tests/README.md): unit tests for the run-profile CLI covering list, validate, and generate commands without live infrastructure.
   - [InfraGate.Safety.E2E.Tests](tests/InfraGate.Safety.E2E.Tests/README.md): opt-in end-to-end tests proving the seven approval-flow safety properties through real OAuth (Keycloak in a container), gateway TestHost, McpServer subprocess, and a developer-provided Kubernetes cluster.

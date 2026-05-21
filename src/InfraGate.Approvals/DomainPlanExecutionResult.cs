@@ -1,6 +1,6 @@
 namespace InfraGate.Approvals;
 
-public sealed record DomainPlanExecutionResult(
+public sealed record class DomainPlanExecutionResult(
     bool IsSuccessful,
     string Message,
     string? TargetNamespace,

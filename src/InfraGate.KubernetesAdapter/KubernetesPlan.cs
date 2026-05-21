@@ -2,7 +2,7 @@ using InfraGate.Approvals;
 
 namespace InfraGate.KubernetesAdapter;
 
-public sealed record KubernetesPlan(PlanEnvelope Envelope, KubernetesPlanPayload Payload) : IPlanReview
+public sealed record class KubernetesPlan(PlanEnvelope Envelope, KubernetesPlanPayload Payload) : IPlanReview
 {
     public string Id => Envelope.Id;
 

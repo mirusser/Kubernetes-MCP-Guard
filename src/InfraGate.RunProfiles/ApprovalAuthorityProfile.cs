@@ -1,6 +1,6 @@
 namespace InfraGate.RunProfiles;
 
-internal sealed record ApprovalAuthorityProfile(
+internal sealed record class ApprovalAuthorityProfile(
     string? BaseUrl,
     string? OauthClientId,
     string? OauthCallbackPath,

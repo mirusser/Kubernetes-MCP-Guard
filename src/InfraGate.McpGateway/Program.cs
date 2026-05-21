@@ -2,6 +2,7 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.McpGateway.Notifications;
 using InfraGate.Observability;
 using InfraGate.RuntimeSafety;
@@ -64,6 +65,23 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddAntiforgery();
 builder.Services.AddGatewayAuthentication(options.Auth);
 
+var downstreamAuth = options.DownstreamAuth ?? new InfraGate.DownstreamAuth.DownstreamAuthOptions();
+if (downstreamAuth.Required)
+{
+    builder.Services.AddSingleton(downstreamAuth);
+    builder.Services.AddHttpClient();
+    builder.Services.AddSingleton<IDownstreamServiceTokenProvider>(sp =>
+        new ClientCredentialsDownstreamServiceTokenProvider(
+            sp.GetRequiredService<InfraGate.DownstreamAuth.DownstreamAuthOptions>(),
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(ClientCredentialsDownstreamServiceTokenProvider)),
+            TimeProvider.System,
+            sp.GetRequiredService<ILogger<ClientCredentialsDownstreamServiceTokenProvider>>()));
+}
+else
+{
+    builder.Services.AddSingleton<IDownstreamServiceTokenProvider, NullDownstreamServiceTokenProvider>();
+}
+
 builder.Services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
 builder.Services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
 
@@ -78,11 +96,16 @@ builder.Services
     .WithHttpTransport(transportOptions =>
     {
         // RunSessionHandler is experimental in ModelContextProtocol.AspNetCore 1.3.0.
-        // It runs before a session starts and its CancellationToken cancels on disconnect,
-        // giving us both the registration and cleanup hook in one place.
+        // Calling server.RunAsync(ct) manually starts the session message loop.
+        // Task.Delay(Timeout.Infinite) was incorrect — it kept the handler alive but never
+        // started the session, so no MCP messages (including initialize) were ever processed.
 #pragma warning disable MCPEXP002
         transportOptions.RunSessionHandler = async (httpContext, server, ct) =>
         {
+            var handlerLogger = httpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("InfraGate.McpGateway.SessionHandler");
+            handlerLogger.LogInformation("RunSessionHandler: started (session={SessionId})", server.SessionId);
+
             var registry = httpContext.RequestServices.GetRequiredService<ISubscriptionRegistry>();
             var id = server.SessionId;
             if (id is not null)
@@ -91,10 +114,17 @@ builder.Services
             }
             try
             {
-                await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
+                handlerLogger.LogInformation("RunSessionHandler: calling server.RunAsync");
+                await server.RunAsync(ct).ConfigureAwait(false);
+                handlerLogger.LogInformation("RunSessionHandler: server.RunAsync completed normally");
             }
             catch (OperationCanceledException)
             {
+                handlerLogger.LogInformation("RunSessionHandler: session cancelled (client disconnected)");
+            }
+            catch (Exception ex)
+            {
+                handlerLogger.LogError(ex, "RunSessionHandler: unexpected exception");
             }
             finally
             {
@@ -102,6 +132,7 @@ builder.Services
                 {
                     registry.RemoveSession(id);
                 }
+                handlerLogger.LogInformation("RunSessionHandler: cleanup done (session={SessionId})", id);
             }
         };
 #pragma warning restore MCPEXP002
@@ -132,7 +163,7 @@ app.MapGatewayApprovalEndpoints();
 app.MapMcp(McpGatewayConventions.McpPath)
     .RequireAuthorization(GatewayAuthConventions.Schemes.PolicyName);
 
-await app.RunAsync();
+await app.RunAsync().ConfigureAwait(false);
 
 static void AddInfraGateConfiguration(IConfigurationBuilder configuration, string[] args)
 {

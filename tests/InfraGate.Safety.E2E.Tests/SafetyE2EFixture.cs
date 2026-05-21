@@ -5,9 +5,11 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.DownstreamAuth;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.McpGateway.Notifications;
 using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.OAuth;
@@ -48,6 +50,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
     private readonly string guardAuditRoot;
     private readonly string namespaceName;
     private readonly string kubeconfigPath;
+    private readonly string? previousDownstreamAuthRequired;
 
     private KeycloakContainer? keycloakContainer;
     private TestServer? gatewayServer;
@@ -64,6 +67,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
         guardAuditRoot = Path.Combine(approvalRoot, "guardrails");
         namespaceName = Environment.GetEnvironmentVariable("K8S_MCP_ALLOWED_NAMESPACES") ?? DefaultNamespace;
         kubeconfigPath = ResolveKubeconfigPath(repoRoot);
+        previousDownstreamAuthRequired = Environment.GetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.Required);
     }
 
     public bool IsEnabled { get; private set; }
@@ -102,6 +106,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable(ApprovalConventions.EnvironmentVariables.ApprovalRoot, approvalRoot);
         Environment.SetEnvironmentVariable("K8S_MCP_ALLOWED_NAMESPACES", namespaceName);
         Environment.SetEnvironmentVariable(KubeconfigEnvVar, kubeconfigPath);
+        Environment.SetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.Required, "false");
 
         string realmJsonPath = Path.Combine(AppContext.BaseDirectory, "TestData", RealmJsonFileName);
         keycloakContainer = new KeycloakBuilder(KeycloakImage)
@@ -132,6 +137,10 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
         {
             await keycloakContainer.DisposeAsync();
         }
+
+        Environment.SetEnvironmentVariable(
+            DownstreamAuthConventions.EnvironmentVariables.Required,
+            previousDownstreamAuthRequired);
 
         try
         {
@@ -396,7 +405,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
 
     // PlanId is always a 32-char lowercase hex string (16 random bytes, hex-encoded).
     // Extracting by format rather than by surrounding text avoids brittleness when response messages change.
-    [System.Text.RegularExpressions.GeneratedRegex(@"\b[0-9a-f]{32}\b", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    [System.Text.RegularExpressions.GeneratedRegex(@"\b[0-9A-Fa-f]{32}\b", System.Text.RegularExpressions.RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial System.Text.RegularExpressions.Regex PlanIdPattern();
 
     public static string ParsePlanId(string text) =>
@@ -409,7 +418,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
             ? match.Groups["id"].Value
             : throw new InvalidOperationException("Could not extract an approval challenge id from the text.");
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"https?://[^/]+/approvals/(?<id>[0-9a-f]+)", System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    [System.Text.RegularExpressions.GeneratedRegex(@"https?://[^/]+/approvals/(?<id>[0-9A-Fa-f]+)", System.Text.RegularExpressions.RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial System.Text.RegularExpressions.Regex ChallengeIdPattern();
 
     public static string ParseAntiforgeryToken(string html)
@@ -492,6 +501,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                 services.AddRouting();
                 services.AddSingleton(options);
                 services.AddSingleton<IGuardrailAuditStore, GuardrailAuditStore>();
+                services.AddSingleton<IDownstreamServiceTokenProvider, NullDownstreamServiceTokenProvider>();
                 services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
                 services.AddSingleton<GuardedToolRunner>();
                 services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));

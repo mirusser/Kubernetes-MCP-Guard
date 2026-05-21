@@ -11,6 +11,7 @@ namespace InfraGate.McpGateway;
 
 internal static class GatewayApprovalEndpoints
 {
+    private const string TextHtmlContentType = "text/html";
     public static IEndpointRouteBuilder MapGatewayApprovalEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet(McpGatewayConventions.Approvals.LoginPath, Login);
@@ -24,12 +25,12 @@ internal static class GatewayApprovalEndpoints
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
                 {
-                    var page = await approvals.GetApprovalPageAsync(challengeId, cancellationToken);
+                    var page = await approvals.GetApprovalPageAsync(challengeId, cancellationToken).ConfigureAwait(false);
                     var tokens = antiforgery.GetAndStoreTokens(context);
 
                     return Results.Content(
                         RenderApprovalPage(page, renderer, tokens.RequestToken),
-                        "text/html",
+                        TextHtmlContentType,
                         Encoding.UTF8);
                 })
             .RequireAuthorization(GatewayAuthConventions.Schemes.ApprovalPolicyName);
@@ -42,15 +43,15 @@ internal static class GatewayApprovalEndpoints
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
                 {
-                    var validation = await ValidateAntiforgeryAsync(context, antiforgery);
+                    var validation = await ValidateAntiforgeryAsync(context, antiforgery).ConfigureAwait(false);
                     if (validation is not null)
                     {
                         return validation;
                     }
 
-                    var result = await approvals.ApproveChallengeAsync(challengeId, cancellationToken);
+                    var result = await approvals.ApproveChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
 
-                    return Results.Content(RenderDecisionPage(result), "text/html", Encoding.UTF8);
+                    return Results.Content(RenderDecisionPage(result), TextHtmlContentType, Encoding.UTF8);
                 })
             .RequireAuthorization(GatewayAuthConventions.Schemes.ApprovalPolicyName);
         endpoints.MapPost(
@@ -62,15 +63,15 @@ internal static class GatewayApprovalEndpoints
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
                 {
-                    var validation = await ValidateAntiforgeryAsync(context, antiforgery);
+                    var validation = await ValidateAntiforgeryAsync(context, antiforgery).ConfigureAwait(false);
                     if (validation is not null)
                     {
                         return validation;
                     }
 
-                    var result = await approvals.DenyChallengeAsync(challengeId, cancellationToken);
+                    var result = await approvals.DenyChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
 
-                    return Results.Content(RenderDecisionPage(result), "text/html", Encoding.UTF8);
+                    return Results.Content(RenderDecisionPage(result), TextHtmlContentType, Encoding.UTF8);
                 })
             .RequireAuthorization(GatewayAuthConventions.Schemes.ApprovalPolicyName);
         endpoints.MapPost(
@@ -82,15 +83,15 @@ internal static class GatewayApprovalEndpoints
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
                 {
-                    var validation = await ValidateAntiforgeryAsync(context, antiforgery);
+                    var validation = await ValidateAntiforgeryAsync(context, antiforgery).ConfigureAwait(false);
                     if (validation is not null)
                     {
                         return validation;
                     }
 
-                    var result = await approvals.CancelChallengeAsync(challengeId, cancellationToken);
+                    var result = await approvals.CancelChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
 
-                    return Results.Content(RenderDecisionPage(result), "text/html", Encoding.UTF8);
+                    return Results.Content(RenderDecisionPage(result), TextHtmlContentType, Encoding.UTF8);
                 })
             .RequireAuthorization(GatewayAuthConventions.Schemes.ApprovalPolicyName);
 
@@ -114,7 +115,7 @@ internal static class GatewayApprovalEndpoints
     {
         try
         {
-            await antiforgery.ValidateRequestAsync(context);
+            await antiforgery.ValidateRequestAsync(context).ConfigureAwait(false);
             return null;
         }
         catch (AntiforgeryValidationException)
@@ -131,7 +132,7 @@ internal static class GatewayApprovalEndpoints
         var title = page.CanDecide ? "Review Plan" : "Approval Unavailable";
         var body = page.CanDecide && page.Challenge is not null && page.PlanReview is not null
             ? RenderApprovalForm(page.Challenge, page.PlanReview, renderer, requestToken)
-            : $"<p class=\"error\">{Html(page.Error ?? "Approval challenge is unavailable.")}</p>";
+            : $"<section class=\"card\" data-section=\"approval-unavailable\"><p class=\"error\" data-field=\"error-message\">{Html(page.Error ?? "Approval challenge is unavailable.")}</p></section>";
 
         return RenderDocument(title, body);
     }
@@ -204,8 +205,8 @@ internal static class GatewayApprovalEndpoints
         return RenderDocument(
             result.Succeeded ? "Approval Recorded" : "Approval Failed",
             $"""
-             <section class="card">
-               <p class="{className}">{Html(result.Message)}</p>
+             <section class="card" data-section="decision-result">
+               <p class="{className}" data-field="decision-message">{Html(result.Message)}</p>
              </section>
              """);
     }

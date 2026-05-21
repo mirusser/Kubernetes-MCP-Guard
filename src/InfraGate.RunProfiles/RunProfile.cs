@@ -1,6 +1,6 @@
 namespace InfraGate.RunProfiles;
 
-internal sealed record RunProfile(
+internal sealed record class RunProfile(
     string Name,
     string Kind,
     string? RuntimeMode,
@@ -9,4 +9,5 @@ internal sealed record RunProfile(
     ApprovalAuthorityProfile? ApprovalAuthority,
     GenericApprovalCoreProfile? GenericApprovalCore,
     IReadOnlyList<DomainAdapterProfile> DomainAdapters,
-    HostProfile? Host);
+    HostProfile? Host,
+    DownstreamAuthProfile? DownstreamAuth);

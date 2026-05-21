@@ -1,3 +1,3 @@
 namespace InfraGate.Approvals;
 
-public sealed record PlanRequester(string Subject, string? AuthenticationType);
+public sealed record class PlanRequester(string Subject, string? AuthenticationType);
