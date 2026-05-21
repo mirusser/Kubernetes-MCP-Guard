@@ -120,6 +120,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         Assert.Contains(tools, tool => tool.Name == "get_k8s_status");
         Assert.Contains(tools, tool => tool.Name == "request_apply_manifest");
         Assert.Contains(tools, tool => tool.Name == McpGatewayConventions.ToolNames.ApplyApprovedPlan);
+        Assert.Contains(tools, tool => tool.Name == McpGatewayConventions.ToolNames.GetPlanStatus);
     }
 
     [Fact]

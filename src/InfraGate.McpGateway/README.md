@@ -5,7 +5,7 @@
 ## Runtime Flow
 
 - `Program.cs` configures the HTTP MCP server at `/mcp`, registers auth, approval endpoints, guardrails, the downstream client, and the Kubernetes adapter implementation of the generic plan seams.
-- `IGatewayToolDispatcher.cs` / `GatewayToolDispatcher.cs` dynamically forward downstream ReadOnly tools, hide downstream Destructive tools, expose `request_*` wrappers for plan creation, own `execute_approved_plan`, and call the generic pre-execution gate before adapter execution.
+- `IGatewayToolDispatcher.cs` / `GatewayToolDispatcher.cs` dynamically forward downstream ReadOnly tools, hide downstream Destructive tools, expose `request_*` wrappers for plan creation, own `execute_approved_plan` and `get_plan_status`, and call the generic pre-execution gate before adapter execution.
 - `IGatewayApprovalService.cs`, `GatewayApprovalService.cs`, and `GatewayApprovalEndpoints.cs` create or reuse short-lived approval URLs and render Kubernetes review evidence decoded through `InfraGate.KubernetesAdapter`; `IApprovalChallengeStore` lives in `InfraGate.Approvals`. `ApprovalGateResult` separates `Approved`, `ApprovalRequired`, and `Refused` states and carries stable reason codes while preserving the MCP text response.
 - `GuardedToolRunner.cs` scans inbound arguments, calls the downstream stdio server, sanitizes risky model-visible output, and writes audit events.
 - `DownstreamMcpClient.cs` starts and reuses the downstream `InfraGate.McpServer` process via the Model Context Protocol client.
@@ -33,6 +33,7 @@ The controls below are ordered by importance. The downstream service token (in-p
 - OAuth access tokens are terminated at the gateway. The downstream stdio server receives tool calls, not bearer tokens.
 - The gateway binds approval challenges to the requester stored in the generic plan envelope; a different authenticated subject must request a fresh plan.
 - Approval is browser-based and out-of-band: MCP clients receive an approval URL but cannot submit approval content through MCP.
+- `get_plan_status` is read-only and returns the current approval plan status so MCP clients can poll after `execute_approved_plan` returns `ApprovalRequired`.
 - Browser approval pages render the stored Kubernetes server-side dry-run status, Intent Digest, Review Digest, and adapter review evidence. Manifest plans require diff evidence; narrow Deployment operations may be dry-run-only.
 - Browser approval pages expose semantic `data-section`, `data-field`, and `data-action` attributes for tests and tooling; visible copy remains presentation text.
 - Approval challenges are bound to plan id, intent/review digests, requester subject, expiry, and Single-Execution status. The gateway recomputes the plan file hash and digest bindings at challenge creation and approval time to detect drift between the stored plan and the challenge bindings. Repeated execution requests reuse a matching still-pending challenge URL. Approved challenges issue Approval Grants consumed by the generic pre-execution gate.

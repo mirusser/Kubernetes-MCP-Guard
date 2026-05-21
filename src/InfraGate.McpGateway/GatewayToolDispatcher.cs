@@ -72,6 +72,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         }
 
         tools.Add(CreateApplyApprovedPlanTool());
+        tools.Add(CreateGetPlanStatusTool());
 
         return new ListToolsResult { Tools = tools };
     }
@@ -85,6 +86,11 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         if (toolName.Equals(McpGatewayConventions.ToolNames.ApplyApprovedPlan, StringComparison.Ordinal))
         {
             return await HandleApplyApprovedPlanAsync(request, ct).ConfigureAwait(false);
+        }
+
+        if (toolName.Equals(McpGatewayConventions.ToolNames.GetPlanStatus, StringComparison.Ordinal))
+        {
+            return await HandleGetPlanStatusAsync(request, ct).ConfigureAwait(false);
         }
 
         if (toolName.StartsWith(McpGatewayConventions.ToolNames.RequestToolPrefix, StringComparison.Ordinal))
@@ -222,6 +228,32 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         return await ExecutePlanAsync(planId, preExecution.Envelope, preExecution.Grant, ct).ConfigureAwait(false);
     }
 
+    private async Task<CallToolResult> HandleGetPlanStatusAsync(
+        CallToolRequestParams request,
+        CancellationToken ct)
+    {
+        var args = ConvertArguments(request.Arguments);
+        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.PlanId, out var planIdObj) ||
+            planIdObj is not string planId ||
+            string.IsNullOrWhiteSpace(planId))
+        {
+            return ErrorResult("Missing required argument: planId.");
+        }
+
+        var result = await approvalStore.GetPlanStatusAsync(planId, ct).ConfigureAwait(false);
+        var response = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [McpGatewayConventions.ToolArguments.PlanId] = planId,
+            [McpGatewayConventions.ToolResponseFields.Status] = ToPlanStatusValue(result.Status)
+        };
+        var json = JsonSerializer.Serialize(response);
+
+        return new CallToolResult
+        {
+            Content = [new TextContentBlock { Text = json }]
+        };
+    }
+
     private CallToolResult HandleUnapprovedGate(ApprovalGateResult gate, string planId)
     {
         if (gate.Status is ApprovalGateStatus.ApprovalRequired)
@@ -314,6 +346,8 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
     private static readonly string[] ApplyApprovedPlanRequiredArgs = ["planId"];
 
+    private static readonly string[] GetPlanStatusRequiredArgs = [McpGatewayConventions.ToolArguments.PlanId];
+
     private static Tool CreateApplyApprovedPlanTool()
     {
         return new Tool
@@ -331,6 +365,49 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             })
         };
     }
+
+    private static Tool CreateGetPlanStatusTool()
+    {
+        return new Tool
+        {
+            Name = McpGatewayConventions.ToolNames.GetPlanStatus,
+            Description = "Returns the current status of a pending approval plan (" +
+                          ApprovalConventions.PlanStatusValues.NotFound + " | " +
+                          ApprovalConventions.PlanStatusValues.ApprovalRequired + " | " +
+                          ApprovalConventions.PlanStatusValues.Approved + " | " +
+                          ApprovalConventions.PlanStatusValues.Applied + " | " +
+                          ApprovalConventions.PlanStatusValues.Expired + "). " +
+                          "Call this in a polling loop after " +
+                          McpGatewayConventions.ToolNames.ApplyApprovedPlan +
+                          " returns ApprovalRequired. When status is " +
+                          ApprovalConventions.PlanStatusValues.Approved + ", call " +
+                          McpGatewayConventions.ToolNames.ApplyApprovedPlan +
+                          " to apply the plan. When status is " +
+                          ApprovalConventions.PlanStatusValues.Expired + ", call " +
+                          McpGatewayConventions.ToolNames.ApplyApprovedPlan +
+                          " to create a new approval challenge.",
+            InputSchema = JsonSerializer.SerializeToElement(new
+            {
+                type = "object",
+                properties = new
+                {
+                    planId = new { type = "string", description = "PlanId returned by one of the request_* tools." }
+                },
+                required = GetPlanStatusRequiredArgs
+            })
+        };
+    }
+
+    private static string ToPlanStatusValue(PlanStatus status) =>
+        status switch
+        {
+            PlanStatus.NotFound => ApprovalConventions.PlanStatusValues.NotFound,
+            PlanStatus.ApprovalRequired => ApprovalConventions.PlanStatusValues.ApprovalRequired,
+            PlanStatus.Approved => ApprovalConventions.PlanStatusValues.Approved,
+            PlanStatus.Applied => ApprovalConventions.PlanStatusValues.Applied,
+            PlanStatus.Expired => ApprovalConventions.PlanStatusValues.Expired,
+            _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
+        };
 
     private static IReadOnlyDictionary<string, object?> ConvertArguments(IDictionary<string, JsonElement>? args)
     {

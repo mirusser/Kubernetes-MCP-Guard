@@ -46,3 +46,4 @@
 [analyzers] Don't rename public methods or change their signatures to satisfy an analyzer rule without searching for all callers first — test projects break. (cause: Render → RenderAsync broke 14 test methods)
 [run-profiles] Don't hide missing required Compose variables with optional interpolation — add required values to the generating run profile instead. (cause: smoke downstream-auth warnings)
 [mcp-spec] Don't rely on older MCP spec versions when debugging protocol behavior — check the latest dated specification first. (cause: protocol version drift)
+[mcp-testing] Don't use kubectl when the user is testing InfraGate MCP behavior — perform Kubernetes inspection and mutation through infra-gate tools only. (cause: tool-path validation)

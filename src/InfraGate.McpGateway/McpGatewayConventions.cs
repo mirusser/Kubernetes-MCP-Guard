@@ -148,11 +148,17 @@ internal static class McpGatewayConventions
     {
         public const string RequestToolPrefix = "request_";
         public const string ApplyApprovedPlan = "execute_approved_plan";
+        public const string GetPlanStatus = "get_plan_status";
     }
 
     public static class ToolArguments
     {
         public const string PlanId = "planId";
+    }
+
+    public static class ToolResponseFields
+    {
+        public const string Status = "status";
     }
 
     public static class GuardrailAudit

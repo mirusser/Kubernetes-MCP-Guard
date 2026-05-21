@@ -17,6 +17,80 @@ public sealed class GatewayToolDispatcherTests
     private const string RefusedReasonCode = "approval.refused.test";
 
     [Fact]
+    public async Task ListToolsAsync_GetPlanStatus_ReturnsTool()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+
+        var result = await context.Dispatcher.ListToolsAsync(new ListToolsRequestParams(), CancellationToken.None);
+
+        Assert.Contains(result.Tools, tool => tool.Name == McpGatewayConventions.ToolNames.GetPlanStatus);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_GetPlanStatus_MissingPlanId_ReturnsError()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.GetPlanStatus
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Equal("Missing required argument: planId.", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_GetPlanStatus_UnknownPlan_ReturnsNotFoundJson()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+        string planId = ApprovalStore.NewPlanId();
+
+        var result = await CallGetPlanStatusAsync(context, planId);
+
+        AssertPlanStatusJson(result, planId, ApprovalConventions.PlanStatusValues.NotFound);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_GetPlanStatus_ApprovalRequired_ReturnsStatusJson()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+        var envelope = CreatePlanEnvelope("mcp-nginx-demo");
+        await context.Store.CreatePlanAsync(envelope, "mcp-nginx-demo", CancellationToken.None);
+
+        var result = await CallGetPlanStatusAsync(context, envelope.Id);
+
+        AssertPlanStatusJson(result, envelope.Id, ApprovalConventions.PlanStatusValues.ApprovalRequired);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_GetPlanStatus_Approved_ReturnsStatusJson()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+        var envelope = await CreateGrantedPlanAsync(context.Store);
+
+        var result = await CallGetPlanStatusAsync(context, envelope.Id);
+
+        AssertPlanStatusJson(result, envelope.Id, ApprovalConventions.PlanStatusValues.Approved);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_GetPlanStatus_Applied_ReturnsStatusJson()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+        var envelope = await CreateGrantedPlanAsync(context.Store);
+        var grant = await context.Store.GetGrantAsync(envelope.Id, CancellationToken.None);
+        Assert.NotNull(grant);
+        await context.Store.MarkAppliedAsync(envelope, "mcp-nginx-demo", grant, CancellationToken.None);
+
+        var result = await CallGetPlanStatusAsync(context, envelope.Id);
+
+        AssertPlanStatusJson(result, envelope.Id, ApprovalConventions.PlanStatusValues.Applied);
+    }
+
+    [Fact]
     public async Task CallToolAsync_RawDestructiveTool_ReturnsErrorWithoutCallingDownstream()
     {
         var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
@@ -302,6 +376,35 @@ public sealed class GatewayToolDispatcherTests
                             [])
                     ]
                 }));
+
+    private static Task<CallToolResult> CallGetPlanStatusAsync(TestContext context, string planId) =>
+        context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.GetPlanStatus,
+                Arguments = new Dictionary<string, JsonElement>
+                {
+                    [McpGatewayConventions.ToolArguments.PlanId] = JsonSerializer.SerializeToElement(planId)
+                }
+            },
+            CancellationToken.None);
+
+    private static void AssertPlanStatusJson(
+        CallToolResult result,
+        string planId,
+        string expectedStatus)
+    {
+        Assert.True(result.IsError is not true);
+        string text = Assert.Single(result.Content.OfType<TextContentBlock>()).Text;
+        using var document = JsonDocument.Parse(text);
+
+        Assert.Equal(
+            planId,
+            document.RootElement.GetProperty(McpGatewayConventions.ToolArguments.PlanId).GetString());
+        Assert.Equal(
+            expectedStatus,
+            document.RootElement.GetProperty(McpGatewayConventions.ToolResponseFields.Status).GetString());
+    }
 
     private sealed class FakeDownstream : IDownstreamMcpClient
     {
