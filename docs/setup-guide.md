@@ -23,9 +23,13 @@ graph LR
 
 | Project | Role | Runs as |
 |---|---|---|
-| `InfraGate.McpServer` | Kubernetes MCP server (tools, plans, approvals) | stdio child process |
-| `InfraGate.McpGateway` | HTTP MCP endpoint + guardrails + audit | HTTP server `:3001` |
+| `InfraGate.McpServer` | Kubernetes MCP server (read-only tools, evidence tools, raw mutating tools) | stdio child process |
+| `InfraGate.McpGateway` | HTTP MCP endpoint + guardrails + audit + approval flow | HTTP server `:3001` |
 | `InfraGate.McpGateway.Auth` | Auth library (OAuth JWT + browser approval cookie) | Linked into Gateway |
+| `InfraGate.Approvals` | Shared approval storage, challenges, grants, audit spine | Shared library |
+| `InfraGate.KubernetesAdapter` | Kubernetes approval payload, evidence, intent canonicalization | Shared library |
+| `InfraGate.RuntimeSafety` | Runtime mode resolution, production safety validation | Shared library |
+| `InfraGate.DownstreamAuth` | Client-credentials token provider for downstream MCP server auth | Shared library |
 | Keycloak realm | Local OAuth/OIDC issuer | Container `:3010` |
 
 In the supported containerized OAuth path, Keycloak and the gateway run as separate containers. The gateway launches the server as a private stdio subprocess, so there is no separate network-facing MCP server process.
@@ -314,6 +318,7 @@ Once running, the server exposes these tools:
 
 | Tool | Purpose |
 |---|---|
+| `get_allowed_namespaces()` | Returns configured namespace allow-list |
 | `get_k8s_status(namespace, labelSelector?)` | Read deployments, services, pods status |
 | `get_k8s_events(namespace, labelSelector?, fieldSelector?, limit?)` | Read bounded Kubernetes events |
 | `get_pod_logs(namespace, podName, container?, tailLines?, previous?)` | Read bounded pod logs |
@@ -387,6 +392,9 @@ The canonical environment variable, CI/CD, and release configuration reference i
 │   ├── InfraGate.Approvals/              # Shared approval storage/challenge contracts
 │   ├── InfraGate.KubernetesAdapter/      # Kubernetes approval payload/evidence adapter
 │   ├── InfraGate.RuntimeSafety/          # Runtime mode and production safety checks
+│   ├── InfraGate.DownstreamAuth/         # Client-credentials token provider
+│   ├── InfraGate.Observability/          # Shared Serilog structured logging config
+│   ├── InfraGate.RunProfiles/            # CLI for compiling run profiles into .env and appsettings
 │   ├── InfraGate.McpServer/              # Stdio MCP server (Kubernetes tools)
 │   ├── InfraGate.McpGateway/             # HTTP gateway (guardrails, downstream client)
 │   └── InfraGate.McpGateway.Auth/        # Auth library (OAuth JWT + browser approval cookie)
@@ -395,9 +403,12 @@ The canonical environment variable, CI/CD, and release configuration reference i
 │   ├── InfraGate.McpGateway.Tests/
 │   ├── InfraGate.McpGateway.KeycloakTests/
 │   ├── InfraGate.Safety.E2E.Tests/
-│   └── InfraGate.RuntimeSafety.Tests/
+│   ├── InfraGate.RuntimeSafety.Tests/
+│   ├── InfraGate.Observability.Tests/
+│   ├── InfraGate.RunProfiles.Tests/
+│   └── InfraGate.DownstreamAuth.Tests/
 ├── deploy/
-│   ├── compose/                          # Docker Compose deployments and Keycloak demo
+│   ├── compose/                          # Docker Compose deployments
 │   ├── docker/                           # Runtime Dockerfiles
 │   ├── keycloak/                         # Keycloak realm config (infra-gate-realm.json)
 │   ├── minikube/rbac.yaml                # Namespace + ServiceAccount + Role + RoleBinding
@@ -406,7 +417,9 @@ The canonical environment variable, CI/CD, and release configuration reference i
 ├── scripts/
 │   ├── create-demo-kubeconfig.sh         # Bootstrap RBAC & generate kubeconfig
 │   ├── generate-env.sh                   # Generate run profile env/appsettings files for local Compose use
-│   └── smoke-test-release.sh             # Published-image smoke
+│   ├── smoke-test-local.sh               # Local-build smoke test
+│   ├── smoke-test-release.sh             # Published-image smoke test
+│   └── coverage.sh                       # Code coverage report generator
 ├── .kube/                                # Generated kubeconfigs (gitignored)
 ├── .mcp-approvals/                       # Approval files: pending/, grants/, applied/, challenges/ (gitignored)
 └── .mcp-guardrails/                      # Gateway audit log output (gitignored)

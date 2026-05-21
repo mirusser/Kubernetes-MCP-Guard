@@ -13,6 +13,7 @@ using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.McpGateway.Notifications;
+using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Builder;
@@ -220,6 +221,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ("KUBECONFIG", kubeconfig),
             ("K8S_MCP_APPROVAL_ROOT", Path.Combine(testRoot, "approvals")),
             ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
         await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
@@ -260,6 +262,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ("KUBECONFIG", kubeconfig),
             ("K8S_MCP_APPROVAL_ROOT", Path.Combine(testRoot, "approvals")),
             ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "true"),
             (DownstreamAuthConventions.EnvironmentVariables.Authority, oidcServer.Url),
             (DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata, "false"),
@@ -301,6 +304,69 @@ public sealed partial class GatewayHttpMcpIntegrationTests
     }
 
     [Fact]
+    public async Task McpEndpoint_ListsRealStdioToolsWithDownstreamAuth()
+    {
+        var repoRoot = FindRepoRoot();
+        var serverProject = Path.Combine(repoRoot, "src", "InfraGate.McpServer", "InfraGate.McpServer.csproj");
+        var testRoot = Path.Combine(Path.GetTempPath(), "infra-gate-gateway-tests", Guid.NewGuid().ToString("N"));
+        await using var k8sApi = new TestKubernetesApi(_ => TestResponse.Json("{}"));
+        var kubeconfig = await WriteKubeconfigAsync(testRoot, k8sApi.Url);
+        await using var oidcServer = new FakeOidcMetadataServer();
+        var tokenProvider = new LocalJwtTokenProvider(
+            oidcServer.Url,
+            oidcServer.SigningKey,
+            DownstreamAuthConventions.Defaults.Audience,
+            DownstreamAuthConventions.Defaults.Scope);
+        using var environment = EnvironmentVariableScope.Set(
+            ("KUBECONFIG", kubeconfig),
+            ("K8S_MCP_APPROVAL_ROOT", Path.Combine(testRoot, "approvals")),
+            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "true"),
+            (DownstreamAuthConventions.EnvironmentVariables.Authority, oidcServer.Url),
+            (DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata, "false"),
+            (DownstreamAuthConventions.EnvironmentVariables.Audience, DownstreamAuthConventions.Defaults.Audience),
+            (DownstreamAuthConventions.EnvironmentVariables.Scope, DownstreamAuthConventions.Defaults.Scope));
+        var authOptions = new DownstreamAuthOptions
+        {
+            Required = true,
+            Authority = oidcServer.Url,
+            RequireHttpsMetadata = false,
+            Audience = DownstreamAuthConventions.Defaults.Audience,
+            Scope = DownstreamAuthConventions.Defaults.Scope,
+            GatewayClientId = "test-gateway-client"
+        };
+        var options = new McpGatewayOptions(
+            new GatewayAuthOptions(
+                Issuer,
+                Resource,
+                Scope,
+                OAuthRequireHttpsMetadata: false,
+                OAuthMetadataAddress: null,
+                ApprovalOAuthClientId: GatewayAuthConventions.DefaultApprovalOAuthClientId,
+                ApprovalOAuthAuthorizationEndpoint: Issuer + "/authorize",
+                ApprovalOAuthTokenEndpoint: Issuer + "/token"),
+            serverProject,
+            Path.Combine(testRoot, "guardrails"),
+            repoRoot,
+            Path.Combine(testRoot, "approvals"),
+            ApprovalBaseUrl: null,
+            McpGatewayOptions.DefaultApprovalChallengeTtl,
+            DownstreamAuth: authOptions);
+        await using var downstream = new DownstreamMcpClient(options, tokenProvider, NullLogger<DownstreamMcpClient>.Instance);
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(downstream, audit, options);
+        await using var client = await CreateHttpMcpClientAsync(server);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+
+        var tools = await client.ListToolsAsync(cancellationToken: timeout.Token);
+
+        Assert.Contains(tools, tool => tool.Name == "get_allowed_namespaces");
+        Assert.Contains(tools, tool => tool.Name == "request_scale_deployment");
+        Assert.Contains(tools, tool => tool.Name == McpGatewayConventions.ToolNames.ApplyApprovedPlan);
+    }
+
+    [Fact]
     public async Task AuthenticatedStdio_ToolExecution_FailsWithoutAuthToken()
     {
         var repoRoot = FindRepoRoot();
@@ -314,6 +380,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ("KUBECONFIG", kubeconfig),
             ("K8S_MCP_APPROVAL_ROOT", Path.Combine(testRoot, "approvals")),
             ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "true"),
             (DownstreamAuthConventions.EnvironmentVariables.Authority, oidcServer.Url),
             (DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata, "false"),
@@ -348,19 +415,16 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         await using var downstream = new DownstreamMcpClient(options, tokenProvider, NullLogger<DownstreamMcpClient>.Instance);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
 
-        var result = await downstream.CallToolAsync(
-            KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
-            new Dictionary<string, object?>
-            {
-                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
-                [KubernetesAdapterConventions.ToolArguments.Manifest] = CleanConfigMapManifest
-            },
-            timeout.Token);
+        var ex = await Assert.ThrowsAsync<McpException>(() => downstream.CallToolAsync(
+                KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
+                new Dictionary<string, object?>
+                {
+                    [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                    [KubernetesAdapterConventions.ToolArguments.Manifest] = CleanConfigMapManifest
+                },
+                timeout.Token));
 
-        Assert.NotEmpty(result);
-        Assert.True(
-            IsDownstreamAuthFailure(result),
-            $"Expected downstream auth rejection in result, got: {result}");
+        Assert.Contains(DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired, ex.Message);
     }
 
     [Fact]
@@ -376,6 +440,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ("KUBECONFIG", kubeconfig),
             ("K8S_MCP_APPROVAL_ROOT", approvalRoot),
             ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
         await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
         var audit = new InMemoryAuditStore();
@@ -463,6 +528,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ("KUBECONFIG", kubeconfig),
             ("K8S_MCP_APPROVAL_ROOT", approvalRoot),
             ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
         await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
         var audit = new InMemoryAuditStore();
@@ -501,6 +567,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ("KUBECONFIG", kubeconfig),
             ("K8S_MCP_APPROVAL_ROOT", approvalRoot),
             ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
         await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance);
         var audit = new InMemoryAuditStore();

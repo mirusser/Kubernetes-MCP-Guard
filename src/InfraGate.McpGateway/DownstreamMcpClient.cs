@@ -14,6 +14,7 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
     private readonly McpGatewayOptions options;
     private readonly IDownstreamServiceTokenProvider tokenProvider;
     private readonly ILogger<DownstreamMcpClient> logger;
+    private readonly ILoggerFactory loggerFactory;
     private readonly SemaphoreSlim clientLock = new(1, 1);
     private readonly SemaphoreSlim callLock = new(1, 1);
     private McpClient? client;
@@ -21,11 +22,13 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
     public DownstreamMcpClient(
         McpGatewayOptions options,
         IDownstreamServiceTokenProvider tokenProvider,
-        ILogger<DownstreamMcpClient> logger)
+        ILogger<DownstreamMcpClient> logger,
+        ILoggerFactory loggerFactory)
     {
         this.options = options;
         this.tokenProvider = tokenProvider;
         this.logger = logger;
+        this.loggerFactory = loggerFactory;
     }
 
     public async Task<string> CallToolAsync(
@@ -120,13 +123,19 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
                 return client;
             }
 
-            var transport = new StdioClientTransport(CreateTransportOptions());
+            var transportOptions = CreateTransportOptions();
+            string? bootstrapLine = await CreateBootstrapLineAsync(cancellationToken).ConfigureAwait(false);
+            IClientTransport transport = bootstrapLine is null
+                ? new StdioClientTransport(transportOptions)
+                : new BootstrapStdioClientTransport(transportOptions, bootstrapLine, loggerFactory);
 
-            // TODO (Task 6 bootstrap gate): write "io.infragate.downstream.authorization: Bearer <token>\n"
-            // to the child process stdin BEFORE McpClient.CreateAsync fires the initialize request.
-            // StdioClientTransport does not expose stdin before connect; this requires a custom transport
-            // or process wrapper. The per-request _meta below covers listTools and callTool. The
-            // initialize gap is noted and deferred to a follow-up.
+            // The MCP 2025-11-25 schema allows initialize params to carry _meta, but the
+            // Microsoft MCP .NET SDK 1.3.0 CreateAsync path does not expose an initialize
+            // RequestOptions/Meta hook. Until the SDK catches up, the custom transport
+            // writes one InfraGate-private authorization line to stdin before CreateAsync
+            // sends initialize. Keep the per-request _meta below: it is still the auth
+            // boundary for tools/list and tools/call, and it handles token refresh after
+            // the one-time initialize bootstrap has completed.
             client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return client;
@@ -180,6 +189,41 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
         return meta;
     }
 
+    internal static string? BuildBootstrapLine(string token)
+    {
+        if (string.IsNullOrEmpty(token))
+        {
+            return null;
+        }
+
+        return $"{DownstreamAuthConventions.BootstrapLineKey}: {token}";
+    }
+
+    private async Task<string?> CreateBootstrapLineAsync(CancellationToken cancellationToken)
+    {
+        if (!IsDownstreamAuthRequired())
+        {
+            return null;
+        }
+
+        string token = await tokenProvider.GetServiceTokenAsync(cancellationToken).ConfigureAwait(false);
+        string? bootstrapLine = BuildBootstrapLine(token);
+        if (bootstrapLine is null)
+        {
+            throw new McpException(
+                $"{DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired}: " +
+                "downstream bootstrap credential is missing.");
+        }
+
+        return bootstrapLine;
+    }
+
+    private bool IsDownstreamAuthRequired()
+    {
+        var authOptions = options.DownstreamAuth ?? DownstreamAuthOptions.FromEnvironment();
+        return authOptions.Required;
+    }
+
     internal StdioClientTransportOptions CreateTransportOptions()
     {
         string[] arguments = string.IsNullOrWhiteSpace(options.DownstreamAssembly)
@@ -207,7 +251,8 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
             Arguments = arguments,
             WorkingDirectory = options.WorkingDirectory,
             EnvironmentVariables = environmentVariables,
-            ShutdownTimeout = TimeSpan.FromSeconds(10)
+            ShutdownTimeout = TimeSpan.FromSeconds(10),
+            StandardErrorLines = line => logger.LogWarning("[downstream-server stderr] {Line}", line)
         };
     }
 

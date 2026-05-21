@@ -770,8 +770,8 @@ public sealed class RunProfileCliTests
         { "test-integration", MinimalProfileKeys },
         { "test-gateway-integration", MinimalProfileKeys },
         { "test-safety-e2e", MinimalProfileKeys },
-        { "smoke-local", ComposeStackProfileKeys },
-        { "smoke-release", ComposeStackProfileKeys }
+        { "smoke-local", LocalComposeProfileKeys },
+        { "smoke-release", LocalComposeProfileKeys }
     };
 
     [Theory]

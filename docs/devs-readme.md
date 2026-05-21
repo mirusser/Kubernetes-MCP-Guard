@@ -18,7 +18,7 @@ Kubernetes MCP Guard is a .NET 10 MCP gateway/server for AI-safe Kubernetes oper
 Current architecture delivers:
 
 - HTTP MCP gateway with OAuth JWT auth at `/mcp`
-- Stdio Kubernetes MCP server (private subprocess, no bearer token passthrough)
+- Stdio Kubernetes MCP server (private subprocess, OAuth JWT terminated at gateway; downstream service-token auth available as defense-in-depth)
 - Namespace-scoped RBAC as the hard permission boundary
 - Bounded read-only observability + approval-gated mutation plans
 - Browser-based out-of-band approval with same-subject binding

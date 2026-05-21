@@ -53,6 +53,7 @@ The gateway scans model-visible inputs and outputs for these guardrail categorie
 3. `tool-use`
 4. `secret-exfiltration`
 5. `authority-override`
+6. `manifest-echo`
 
 On detection, the gateway writes a guardrail audit finding and still forwards the request. Suspicious values in the response are redacted before the response returns to the MCP client.
 
@@ -68,7 +69,7 @@ Approval audit is separate and is written under `K8S_MCP_APPROVAL_ROOT/audit.jso
 
 ### 2.4 MCP Tool Annotations
 
-Tool definitions use MCP annotations such as `ReadOnly = true` and `Destructive = true` or `Destructive = false`. Compliant clients may use these annotations for UI policy, but the gateway does not rely on them for enforcement.
+Tool definitions use MCP annotations such as `ReadOnly = true` and `Destructive = true`. Compliant clients may use these annotations for UI policy, but the gateway does not rely on them for enforcement.
 
 ### 2.5 Hash-Bound Approvals
 

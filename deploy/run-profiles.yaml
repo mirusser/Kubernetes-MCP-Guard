@@ -30,7 +30,7 @@ profiles:
       approvalRoot: /data/approvals
     downstreamAuth:
       required: "true"
-      authority: http://127.0.0.1:3010/realms/infra-gate
+      authority: http://keycloak:8080/realms/infra-gate
       metadataAddress: http://keycloak:8080/realms/infra-gate/.well-known/openid-configuration
       requireHttpsMetadata: "false"
       audience: urn:infra-gate:mcp-server
@@ -208,6 +208,15 @@ profiles:
       oauthTokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
     genericApprovalCore:
       approvalRoot: /data/approvals
+    downstreamAuth:
+      required: "true"
+      authority: http://keycloak:8080/realms/infra-gate
+      metadataAddress: http://keycloak:8080/realms/infra-gate/.well-known/openid-configuration
+      requireHttpsMetadata: "false"
+      audience: urn:infra-gate:mcp-server
+      scope: mcp:downstream
+      gatewayClientId: infra-gate-gateway-service
+      gatewayClientSecret: gateway-service-secret
     host:
       bindAddress: 127.0.0.1
       bindPort: "3001"
@@ -240,6 +249,15 @@ profiles:
       oauthTokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
     genericApprovalCore:
       approvalRoot: /data/approvals
+    downstreamAuth:
+      required: "true"
+      authority: http://keycloak:8080/realms/infra-gate
+      metadataAddress: http://keycloak:8080/realms/infra-gate/.well-known/openid-configuration
+      requireHttpsMetadata: "false"
+      audience: urn:infra-gate:mcp-server
+      scope: mcp:downstream
+      gatewayClientId: infra-gate-gateway-service
+      gatewayClientSecret: gateway-service-secret
     host:
       bindAddress: 127.0.0.1
       bindPort: "3001"

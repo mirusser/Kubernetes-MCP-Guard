@@ -100,6 +100,7 @@ internal static class McpGatewayConventions
                 RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment,
                 RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment,
                 RuntimeSafetyConventions.EnvironmentVariables.AspNetCoreEnvironment,
+                RuntimeSafetyConventions.EnvironmentVariables.ConfigPath,
 
                 // Kubernetes access — server needs these to connect to the cluster
                 "KUBECONFIG",
