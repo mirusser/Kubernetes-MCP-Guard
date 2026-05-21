@@ -1,88 +1,71 @@
-# ADR-0009: Plan-ID Subscription Over Subject Routing for Approval Notifications
+# ADR-0009: Explicit Plan-Status Resource Subscription for Approval Notifications
 
-**Date:** 2026-05-19  
+**Date:** 2026-05-19
+**Amended:** 2026-05-21
 **Status:** Accepted
 
 ---
 
 ## Context
 
-When a human approves a plan challenge in the browser, the gateway sends a
-`notifications/resources/updated` MCP message to the AI agent session that is waiting for that
-approval. The question is: how does the gateway identify which session(s) to notify?
+When a human approves a plan challenge in the browser, the gateway can notify an MCP client that the plan status changed. The notification payload is `notifications/resources/updated` for the plan-status resource URI:
 
-Two routing strategies were considered:
+```text
+plan://{planId}/status
+```
 
-**Subject-based routing**: The gateway records the requester's OAuth subject at plan-creation time
-and, on approval, fans out to all active sessions whose bound subject matches the requester. This
-requires mapping `sessionId → subject` and `subject → set<sessionId>`.
+The routing question is how the gateway identifies which MCP session should receive that notification.
 
-**Plan-ID subscription**: The session that calls `execute_approved_plan` and receives a pending
-challenge subscribes itself to that specific plan ID at call time. On approval, the gateway fans out
-to all sessions subscribed to that plan ID. No subject mapping is required.
+Three strategies were considered:
 
----
+- Subject-based routing: map an OAuth subject to all active sessions for that subject.
+- Implicit plan-id subscription: subscribe the session that calls `execute_approved_plan` and receives an approval URL.
+- Explicit resource subscription: require the client to call MCP `resources/subscribe` for `plan://{planId}/status`.
+
+The original ADR accepted implicit plan-id subscription. After testing against Codex and the MCP resource subscription model, the gateway now uses explicit MCP resource subscription for protocol correctness and keeps a read-only wait tool for clients that do not surface resource notifications.
 
 ## Decision
 
-**v1 uses plan-ID subscription.**
+The gateway exposes a plan-status resource template:
 
-When `execute_approved_plan` is called and the pre-execution gate returns a pending challenge (not a
-hard refusal), `GatewayToolDispatcher` calls `ISubscriptionRegistry.SubscribeToPlan(sessionId, planId)`.
-On approval, `GatewayApprovalService` calls `IApprovalNotificationDispatcher.NotifyPlanApprovedAsync(planId, ct)`,
-which fans out to all sessions subscribed to that plan ID and unsubscribes each after the send.
+```text
+plan://{planId}/status
+```
 
-`ISubscriptionRegistry.BindSubject(sessionId, requesterSubject)` exists on the interface as a reserved
-extension point but is a **no-op in v1**. It is called from the mutation-request path so the call site
-is in place; the implementation simply discards the argument.
+Clients can read this resource to receive JSON with the same fields as `get_plan_status`:
 
----
+```json
+{"planId":"...","status":"ApprovalRequired"}
+```
+
+Clients that want push-style approval updates must explicitly call `resources/subscribe` for that URI. `PlanStatusResourceHandler` parses the URI, extracts the plan id, and registers the current MCP session in `ISubscriptionRegistry` with `SubscribeToPlan(sessionId, planId)`.
+
+When browser approval issues an Approval Grant, `GatewayApprovalService` calls `IApprovalNotificationDispatcher.NotifyPlanApprovedAsync(planId, ct)`. The dispatcher sends `notifications/resources/updated` to sessions subscribed to that plan id and then removes each subscription.
+
+`execute_approved_plan` no longer creates an implicit subscription when it returns `ApprovalRequired`.
 
 ## Rationale
 
-- **Correctness for the common case**: The session that is waiting for approval is the session that
-  called `execute_approved_plan`. Subscribing that session to the plan ID at call time routes the
-  notification exactly where it needs to go without any subject inference.
-
-- **Simpler state**: No subject→session index is needed. A single `planId → set<sessionId>` map
-  suffices.
-
-- **No cross-session leakage**: Subject-based routing would notify all sessions for a user, including
-  unrelated background sessions that happened to share the same OAuth subject. Plan-ID subscription
-  scopes the notification to the session that explicitly requested it.
-
-- **Automatic cleanup**: The subscription is removed immediately after the notification is sent, so
-  no stale entries accumulate. Session disconnect (`RemoveSession`) also clears all plan subscriptions
-  for that session.
-
----
+- MCP resource update notifications are tied to resource subscriptions. Requiring `resources/subscribe` matches the protocol instead of relying on side effects from a tool call.
+- The resource URI carries the plan id, so the internal registry can stay plan-id based without adding subject routing.
+- Explicit subscription avoids notifying unrelated sessions for the same OAuth subject.
+- Clients that do not support or display MCP resource notifications still have a deterministic fallback: call `get_plan_status` in a loop or call `wait_for_plan_approval`.
 
 ## Consequences
 
-- `BindSubject` is intentionally a no-op. Future implementors should not assume it has an effect.
-  If subject-based routing becomes necessary (e.g., to notify the original requester when the
-  `execute_approved_plan` call came from a different session), `BindSubject` is the named extension
-  point. Its interface position and call site are already wired; only the implementation needs to
-  change.
-
-- A session that never calls `execute_approved_plan` will never receive an approval notification for
-  that plan, even if the same user is authenticated in that session. This is acceptable because the
-  manual fallback (the user telling the agent "the plan is approved") remains unchanged.
-
-- If the waiting session disconnects before the approval arrives, `RemoveSession` clears its plan
-  subscriptions. The notification is silently dropped. The agent must re-subscribe on reconnect by
-  calling `execute_approved_plan` again.
-
----
+- `BindSubject` remains a no-op extension point. It is still called from mutation-plan creation, but notification routing does not depend on subject mapping.
+- A session receives approval notifications only after subscribing to `plan://{planId}/status`.
+- If the waiting session disconnects before browser approval, `RemoveSession` clears its plan subscriptions and the notification is dropped.
+- `wait_for_plan_approval(planId, timeoutSeconds)` is intentionally read-only. It returns status JSON with `timedOut` and never applies a plan.
+- Clients such as Codex may still need polling or the wait tool if they do not surface background MCP resource notifications in chat.
 
 ## Alternatives Considered
 
-**Subject-based routing (original ADR #9 intent)**  
-Would notify all sessions for the requester's subject. Adds complexity (subject→session index,
-lifetime management across session churn) and risks over-notification. Deferred to a future ADR if
-a concrete need arises.
+**Subject-based routing**
+Rejected for v1 because it adds subject-to-session indexes, lifetime management across session churn, and a risk of notifying unrelated sessions for the same user.
 
-**Explicit subscription via MCP `resources/subscribe` handler**  
-The MCP protocol supports client-initiated `resources/subscribe` calls. In practice, most AI hosts
-do not send these proactively. Using implicit subscription at `execute_approved_plan` call time
-achieves the same result without relying on client cooperation.
+**Implicit plan-id subscription at `execute_approved_plan` time**
+This was the original accepted design. It works for hosts that never call `resources/subscribe`, but it makes a tool call mutate notification routing outside the resource subscription protocol. It has been replaced by explicit resource subscriptions plus the wait fallback.
+
+**Client-native notification display or hooks**
+This is outside the gateway. A client could display `notifications/resources/updated` directly, maintain a background subscription listener, or offer a hook that reacts to background MCP notifications. Until that exists in a client, `get_plan_status` and `wait_for_plan_approval` remain the supported fallback paths.

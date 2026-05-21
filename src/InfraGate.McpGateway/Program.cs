@@ -84,6 +84,7 @@ else
 
 builder.Services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
 builder.Services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
+builder.Services.AddSingleton<PlanStatusResourceHandler>();
 
 builder.Services
     .AddMcpServer(serverOptions =>
@@ -95,6 +96,8 @@ builder.Services
     })
     .WithHttpTransport(transportOptions =>
     {
+        transportOptions.Stateless = false;
+
         // RunSessionHandler is experimental in ModelContextProtocol.AspNetCore 1.3.0.
         // Calling server.RunAsync(ct) manually starts the session message loop.
         // Task.Delay(Timeout.Infinite) was incorrect — it kept the handler alive but never
@@ -148,12 +151,14 @@ builder.Services
         }
         return new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct));
     })
+    .WithListResourceTemplatesHandler((RequestContext<ListResourceTemplatesRequestParams> request, CancellationToken ct) =>
+        new ValueTask<ListResourceTemplatesResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>().ListTemplates()))
+    .WithReadResourceHandler((RequestContext<ReadResourceRequestParams> request, CancellationToken ct) =>
+        new ValueTask<ReadResourceResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>().ReadAsync(request.Params, ct)))
     .WithSubscribeToResourcesHandler((RequestContext<SubscribeRequestParams> request, CancellationToken ct) =>
-    {
-        // Subscriptions are managed implicitly by the gateway when challenges are created.
-        // This handler satisfies the MCP protocol handshake for clients that send subscribe requests.
-        return new ValueTask<EmptyResult>(new EmptyResult());
-    });
+        new ValueTask<EmptyResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>().Subscribe(request.Server.SessionId, request.Params)))
+    .WithUnsubscribeFromResourcesHandler((RequestContext<UnsubscribeRequestParams> request, CancellationToken ct) =>
+        new ValueTask<EmptyResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>().Unsubscribe(request.Server.SessionId, request.Params)));
 
 var app = builder.Build();
 

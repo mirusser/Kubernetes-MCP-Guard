@@ -1,10 +1,10 @@
 # Tool Permissions Matrix
 
-This document lists the 22 MCP tools exposed by Kubernetes MCP Guard and their associated Kubernetes RBAC permissions, required OAuth scope, and approval requirements. See [docs/security-model.md](security-model.md) for the broader threat model and boundary discussion.
+This document lists the 24 MCP tools exposed by Kubernetes MCP Guard and their associated Kubernetes RBAC permissions, required OAuth scope, and approval requirements. See [docs/security-model.md](security-model.md) for the broader threat model and boundary discussion.
 
 ## Common Properties
 
-All 22 tools require the `mcp:tools` OAuth scope at the gateway. All Kubernetes-facing operations are namespace-scoped by the MCP server namespace allow-list and by Kubernetes RBAC. Kubernetes RBAC is enforced independently by the Kubernetes API server.
+All 24 tools require the `mcp:tools` OAuth scope at the gateway. All Kubernetes-facing operations are namespace-scoped by the MCP server namespace allow-list and by Kubernetes RBAC. Kubernetes RBAC is enforced independently by the Kubernetes API server.
 
 `ReadOnly` and `Destructive` are MCP tool annotations, not RBAC claims. They are useful client metadata, but they are not the enforcement mechanism.
 
@@ -53,6 +53,13 @@ These tools create pending plans. They run Kubernetes `dryRun=All` first, but th
 | MCP Tool | MCP Annotation | K8s Verbs | K8s Resources | Approval Required | Bounds / Notes |
 |---|---|---|---|---|---|
 | `execute_approved_plan` | `Destructive = true` | Depends on approved plan | Depends on approved plan | Yes | Through the gateway, requires out-of-band browser approval through a Single-Execution challenge URL; the gateway validates the Approval Grant and generic gates, then the Kubernetes adapter repeats `dryRun=All` before any Kubernetes write |
+
+## Approval Status Tools (2 tools)
+
+| MCP Tool | MCP Annotation | K8s Verbs | K8s Resources | Approval Required | Bounds / Notes |
+|---|---|---|---|---|---|
+| `get_plan_status` | read-only gateway tool | none | none | No | Returns `planId` and status for pending, approved, applied, expired, or missing plans |
+| `wait_for_plan_approval` | read-only gateway tool | none | none | No | Default timeout 55 seconds, min 1, max 300; returns `timedOut` and never applies the plan |
 
 Local direct-stdio server experiments must use an Approval Grant for execution authorization. The legacy `scripts/approve-plan.sh` has been removed; the grant-based flow is the only supported path.
 

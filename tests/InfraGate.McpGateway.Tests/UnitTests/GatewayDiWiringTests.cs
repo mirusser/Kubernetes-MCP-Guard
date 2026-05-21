@@ -25,6 +25,7 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
         services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
         services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
+        services.AddSingleton<PlanStatusResourceHandler>();
         services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
         services.AddHttpContextAccessor();
         services.AddLogging();
@@ -65,6 +66,7 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
         services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
         services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
+        services.AddSingleton<PlanStatusResourceHandler>();
         services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
         services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
         services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
@@ -84,6 +86,7 @@ public sealed class GatewayDiWiringTests
         Assert.NotNull(provider.GetRequiredService<ApprovalStore>());
         Assert.NotNull(provider.GetRequiredService<IApprovalChallengeStore>());
         Assert.NotNull(provider.GetRequiredService<IApprovalPreExecutionGate>());
+        Assert.NotNull(provider.GetRequiredService<PlanStatusResourceHandler>());
         Assert.NotNull(provider.GetRequiredService<IGatewayToolDispatcher>());
     }
 

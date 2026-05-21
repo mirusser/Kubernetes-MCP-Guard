@@ -1,3 +1,5 @@
+using ModelContextProtocol.Protocol;
+
 namespace InfraGate.McpGateway.Notifications;
 
 internal static class NotificationsConventions
@@ -9,13 +11,17 @@ internal static class NotificationsConventions
     {
         internal const string PlanStatusScheme = "plan";
         internal const string PlanStatusMimeType = "application/json";
+        internal const string PlanStatusTemplateName = "approval-plan-status";
+        internal const string PlanStatusUriTemplate = "plan://{planId}/status";
+        internal const string PlanStatusUriPrefix = "plan://";
+        internal const string PlanStatusUriSuffix = "/status";
 
         internal static string PlanStatusUri(string planId) =>
-            $"{PlanStatusScheme}://{planId}/status";
+            $"{PlanStatusUriPrefix}{planId}{PlanStatusUriSuffix}";
     }
 
     internal static class Methods
     {
-        internal const string ResourcesUpdated = "notifications/resources/updated";
+        internal const string ResourcesUpdated = NotificationMethods.ResourceUpdatedNotification;
     }
 }

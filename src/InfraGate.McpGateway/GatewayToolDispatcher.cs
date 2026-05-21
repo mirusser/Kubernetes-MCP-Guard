@@ -10,6 +10,12 @@ namespace InfraGate.McpGateway;
 
 internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 {
+    private const int WaitForPlanApprovalDefaultTimeoutSeconds = 55;
+    private const int WaitForPlanApprovalMinimumTimeoutSeconds = 1;
+    private const int WaitForPlanApprovalMaximumTimeoutSeconds = 300;
+
+    private static readonly TimeSpan WaitForPlanApprovalPollInterval = TimeSpan.FromMilliseconds(250);
+
     private readonly DownstreamToolRegistry registry;
     private readonly GuardedToolRunner guardedRunner;
     private readonly IDomainAdapter domainAdapter;
@@ -73,6 +79,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         tools.Add(CreateApplyApprovedPlanTool());
         tools.Add(CreateGetPlanStatusTool());
+        tools.Add(CreateWaitForPlanApprovalTool());
 
         return new ListToolsResult { Tools = tools };
     }
@@ -91,6 +98,11 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         if (toolName.Equals(McpGatewayConventions.ToolNames.GetPlanStatus, StringComparison.Ordinal))
         {
             return await HandleGetPlanStatusAsync(request, ct).ConfigureAwait(false);
+        }
+
+        if (toolName.Equals(McpGatewayConventions.ToolNames.WaitForPlanApproval, StringComparison.Ordinal))
+        {
+            return await HandleWaitForPlanApprovalAsync(request, ct).ConfigureAwait(false);
         }
 
         if (toolName.StartsWith(McpGatewayConventions.ToolNames.RequestToolPrefix, StringComparison.Ordinal))
@@ -144,10 +156,6 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         }
 
         var sessionId = CurrentSessionId;
-        if (sessionId is not null)
-        {
-            subscriptionRegistry.BindSubject(sessionId, identity.Subject);
-        }
 
         var args = ConvertArguments(request.Arguments);
         bool requestHasFindings = await guardedRunner.AuditRequestAsync(toolName, args, ct).ConfigureAwait(false);
@@ -184,6 +192,12 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             planResult.TargetNamespace,
             ct).ConfigureAwait(false);
 
+        if (sessionId is not null)
+        {
+            subscriptionRegistry.BindSubject(sessionId, identity.Subject);
+            subscriptionRegistry.SubscribeToPlan(sessionId, planResult.PlanId);
+        }
+
         var message = $"Approval plan '{planResult.PlanId}' created. To execute, submit with execute_approved_plan(planId=\"{planResult.PlanId}\").";
         if (requestHasFindings)
         {
@@ -211,7 +225,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         var gate = await approvals.EnsureApprovedOrCreateChallengeAsync(planId, ct).ConfigureAwait(false);
         if (!gate.IsApproved)
         {
-            return HandleUnapprovedGate(gate, planId);
+            return HandleUnapprovedGate(gate);
         }
 
         var preExecution = await preExecutionGate.EvaluateAsync(planId, domainAdapter, ct).ConfigureAwait(false);
@@ -241,12 +255,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         }
 
         var result = await approvalStore.GetPlanStatusAsync(planId, ct).ConfigureAwait(false);
-        var response = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            [McpGatewayConventions.ToolArguments.PlanId] = planId,
-            [McpGatewayConventions.ToolResponseFields.Status] = ToPlanStatusValue(result.Status)
-        };
-        var json = JsonSerializer.Serialize(response);
+        var json = PlanStatusResponse.Serialize(planId, result.Status);
 
         return new CallToolResult
         {
@@ -254,17 +263,61 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         };
     }
 
-    private CallToolResult HandleUnapprovedGate(ApprovalGateResult gate, string planId)
+    private async Task<CallToolResult> HandleWaitForPlanApprovalAsync(
+        CallToolRequestParams request,
+        CancellationToken ct)
     {
-        if (gate.Status is ApprovalGateStatus.ApprovalRequired)
+        var args = ConvertArguments(request.Arguments);
+        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.PlanId, out var planIdObj) ||
+            planIdObj is not string planId ||
+            string.IsNullOrWhiteSpace(planId))
         {
-            var sessionId = CurrentSessionId;
-            if (sessionId is not null)
-            {
-                subscriptionRegistry.SubscribeToPlan(sessionId, planId);
-            }
+            return ErrorResult("Missing required argument: planId.");
         }
 
+        if (!TryGetWaitTimeoutSeconds(args, out int timeoutSeconds, out var timeoutError))
+        {
+            return ErrorResult(timeoutError);
+        }
+
+        var deadline = TimeProvider.System.GetUtcNow().AddSeconds(timeoutSeconds);
+        bool timedOut = false;
+        PlanStatusResult result;
+        do
+        {
+            result = await approvalStore.GetPlanStatusAsync(planId, ct).ConfigureAwait(false);
+            if (IsTerminalWaitStatus(result.Status))
+            {
+                break;
+            }
+
+            var now = TimeProvider.System.GetUtcNow();
+            if (now >= deadline)
+            {
+                timedOut = true;
+                break;
+            }
+
+            var delay = deadline - now;
+            if (delay > WaitForPlanApprovalPollInterval)
+            {
+                delay = WaitForPlanApprovalPollInterval;
+            }
+
+            await Task.Delay(delay, TimeProvider.System, ct).ConfigureAwait(false);
+        }
+        while (true);
+
+        var json = PlanStatusResponse.Serialize(planId, result.Status, timedOut);
+
+        return new CallToolResult
+        {
+            Content = [new TextContentBlock { Text = json }]
+        };
+    }
+
+    private static CallToolResult HandleUnapprovedGate(ApprovalGateResult gate)
+    {
         return gate.Status switch
         {
             ApprovalGateStatus.ApprovalRequired => new CallToolResult
@@ -348,12 +401,16 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
     private static readonly string[] GetPlanStatusRequiredArgs = [McpGatewayConventions.ToolArguments.PlanId];
 
+    private static readonly string[] WaitForPlanApprovalRequiredArgs = [McpGatewayConventions.ToolArguments.PlanId];
+
     private static Tool CreateApplyApprovedPlanTool()
     {
         return new Tool
         {
             Name = McpGatewayConventions.ToolNames.ApplyApprovedPlan,
-            Description = "Returns a browser approval URL for a pending plan, or applies it after out-of-band approval.",
+            Description = "Returns a browser approval URL for a pending plan, or applies it after out-of-band approval. " +
+                          "When this returns ApprovalRequired, call wait_for_plan_approval(planId=...) to poll for approval status, " +
+                          "then call this tool again once the status is Approved.",
             InputSchema = JsonSerializer.SerializeToElement(new
             {
                 type = "object",
@@ -398,16 +455,31 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         };
     }
 
-    private static string ToPlanStatusValue(PlanStatus status) =>
-        status switch
+    private static Tool CreateWaitForPlanApprovalTool()
+    {
+        return new Tool
         {
-            PlanStatus.NotFound => ApprovalConventions.PlanStatusValues.NotFound,
-            PlanStatus.ApprovalRequired => ApprovalConventions.PlanStatusValues.ApprovalRequired,
-            PlanStatus.Approved => ApprovalConventions.PlanStatusValues.Approved,
-            PlanStatus.Applied => ApprovalConventions.PlanStatusValues.Applied,
-            PlanStatus.Expired => ApprovalConventions.PlanStatusValues.Expired,
-            _ => throw new ArgumentOutOfRangeException(nameof(status), status, null)
+            Name = McpGatewayConventions.ToolNames.WaitForPlanApproval,
+            Description = "Waits briefly for an approval plan to become approved, applied, expired, or missing without applying the plan.",
+            InputSchema = JsonSerializer.SerializeToElement(new
+            {
+                type = "object",
+                properties = new
+                {
+                    planId = new { type = "string", description = "PlanId returned by one of the request_* tools." },
+                    timeoutSeconds = new
+                    {
+                        type = "integer",
+                        description = "How long to wait before returning ApprovalRequired with timedOut=true.",
+                        minimum = 1,
+                        maximum = 300,
+                        @default = 55
+                    }
+                },
+                required = WaitForPlanApprovalRequiredArgs
+            })
         };
+    }
 
     private static IReadOnlyDictionary<string, object?> ConvertArguments(IDictionary<string, JsonElement>? args)
     {
@@ -436,6 +508,48 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             JsonValueKind.Array => element,
             _ => element
         };
+
+    private static bool TryGetWaitTimeoutSeconds(
+        IReadOnlyDictionary<string, object?> args,
+        out int timeoutSeconds,
+        out string timeoutError)
+    {
+        timeoutSeconds = WaitForPlanApprovalDefaultTimeoutSeconds;
+        timeoutError = string.Empty;
+
+        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.TimeoutSeconds, out var timeoutObj))
+        {
+            return true;
+        }
+
+        if (timeoutObj is int timeout)
+        {
+            timeoutSeconds = timeout;
+        }
+        else if (timeoutObj is double doubleTimeout &&
+                 doubleTimeout % 1 == 0 &&
+                 doubleTimeout >= int.MinValue &&
+                 doubleTimeout <= int.MaxValue)
+        {
+            timeoutSeconds = (int)doubleTimeout;
+        }
+        else
+        {
+            timeoutError = "timeoutSeconds must be an integer between 1 and 300.";
+            return false;
+        }
+
+        if (timeoutSeconds is < WaitForPlanApprovalMinimumTimeoutSeconds or > WaitForPlanApprovalMaximumTimeoutSeconds)
+        {
+            timeoutError = "timeoutSeconds must be an integer between 1 and 300.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsTerminalWaitStatus(PlanStatus status) =>
+        status is PlanStatus.NotFound or PlanStatus.Approved or PlanStatus.Applied or PlanStatus.Expired;
 
     private async Task WritePlanAuditAsync(PlanAudit audit, string context, CancellationToken ct)
     {

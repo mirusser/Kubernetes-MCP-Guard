@@ -258,8 +258,10 @@ The HTTP gateway forwards read-only stdio tools as-is, hides raw destructive std
 - `request_restart_deployment(namespace, name)`
 - `request_set_deployment_image(namespace, name, container, image)`
 - `execute_approved_plan(planId)`
+- `get_plan_status(planId)`
+- `wait_for_plan_approval(planId, timeoutSeconds = 55)`
 
-When calling the stdio server directly, use the read-only evidence tools (`dry_run_*`, `diff_manifest`, `check_live_drift`) or raw destructive tools (`apply_manifest`, `delete_manifest`, `scale_deployment`, `restart_deployment`, `set_deployment_image`). Direct stdio does not expose `request_*` or `execute_approved_plan`; those are gateway-owned.
+When calling the stdio server directly, use the read-only evidence tools (`dry_run_*`, `diff_manifest`, `check_live_drift`) or raw destructive tools (`apply_manifest`, `delete_manifest`, `scale_deployment`, `restart_deployment`, `set_deployment_image`). Direct stdio does not expose `request_*`, `execute_approved_plan`, `get_plan_status`, or `wait_for_plan_approval`; those are gateway-owned.
 
 Logs and Events are untrusted Kubernetes workload/cluster output. The HTTP gateway sanitizes suspicious model-visible output before returning it; direct stdio use of `InfraGate.McpServer` bypasses that gateway guardrail layer.
 
@@ -272,6 +274,8 @@ Approval flow:
 3. The Gateway returns an approval URL instead of applying.
 4. Open the URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan and dry-run status, and approve or deny it.
 5. Call `execute_approved_plan` again. The Gateway forwards only after an Approval Grant exists and still matches the pending plan's Intent Digest and Review Digest; the Kubernetes adapter repeats declared freshness checks immediately before the raw write.
+
+Clients that support MCP resources can subscribe to `plan://{planId}/status` and react to `notifications/resources/updated` after browser approval. Clients without resource notification support can call `get_plan_status` in a polling loop or `wait_for_plan_approval(planId, timeoutSeconds)` before retrying `execute_approved_plan`.
 
 The MCP client never submits approval content. Approval challenges are bound to the plan id, current pending-plan hash, requester subject, expected Intent Digest, expected Review Digest, expiry, and Single-Execution status.
 

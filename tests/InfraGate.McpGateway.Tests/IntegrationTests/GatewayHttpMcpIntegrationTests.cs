@@ -121,6 +121,31 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         Assert.Contains(tools, tool => tool.Name == "request_apply_manifest");
         Assert.Contains(tools, tool => tool.Name == McpGatewayConventions.ToolNames.ApplyApprovedPlan);
         Assert.Contains(tools, tool => tool.Name == McpGatewayConventions.ToolNames.GetPlanStatus);
+        Assert.Contains(tools, tool => tool.Name == McpGatewayConventions.ToolNames.WaitForPlanApproval);
+    }
+
+    [Fact]
+    public async Task McpEndpoint_ReadsPlanStatusResourceThroughHttpTransport()
+    {
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(new FakeDownstream("unused"), audit);
+        await using var client = await CreateHttpMcpClientAsync(server);
+        string planId = ApprovalStore.NewPlanId();
+
+        var templates = await client.ListResourceTemplatesAsync(new ListResourceTemplatesRequestParams(), CancellationToken.None);
+        var read = await client.ReadResourceAsync(
+            new ReadResourceRequestParams { Uri = NotificationsConventions.Resources.PlanStatusUri(planId) },
+            CancellationToken.None);
+
+        Assert.Contains(
+            templates.ResourceTemplates,
+            template => template.UriTemplate == NotificationsConventions.Resources.PlanStatusUriTemplate);
+        var content = Assert.IsType<TextResourceContents>(Assert.Single(read.Contents));
+        using var document = JsonDocument.Parse(content.Text);
+        Assert.Equal(planId, document.RootElement.GetProperty(McpGatewayConventions.ToolArguments.PlanId).GetString());
+        Assert.Equal(
+            ApprovalConventions.PlanStatusValues.NotFound,
+            document.RootElement.GetProperty(McpGatewayConventions.ToolResponseFields.Status).GetString());
     }
 
     [Fact]
@@ -847,6 +872,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
                 services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
                 services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
+                services.AddSingleton<PlanStatusResourceHandler>();
                 services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
                 services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
@@ -873,8 +899,17 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                     oauthOptions.Backchannel = new HttpClient(new FakeOAuthBackchannel(Subject));
                 });
                 services
-                    .AddMcpServer()
-                    .WithHttpTransport()
+                    .AddMcpServer(serverOptions =>
+                    {
+                        serverOptions.Capabilities = new ServerCapabilities
+                        {
+                            Resources = new ResourcesCapability { Subscribe = true }
+                        };
+                    })
+                    .WithHttpTransport(transportOptions =>
+                    {
+                        transportOptions.Stateless = false;
+                    })
                     .WithListToolsHandler((RequestContext<ListToolsRequestParams> request, CancellationToken ct) =>
                     {
                         var dispatcher = ResolveDispatcher(request.Services, serverServices);
@@ -884,6 +919,26 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                     {
                         var dispatcher = ResolveDispatcher(request.Services, serverServices);
                         return new ValueTask<CallToolResult>(dispatcher.CallToolAsync(request.Params, ct));
+                    })
+                    .WithListResourceTemplatesHandler((RequestContext<ListResourceTemplatesRequestParams> request, CancellationToken ct) =>
+                    {
+                        var resourceHandler = ResolvePlanStatusResourceHandler(request.Services, serverServices);
+                        return new ValueTask<ListResourceTemplatesResult>(resourceHandler.ListTemplates());
+                    })
+                    .WithReadResourceHandler((RequestContext<ReadResourceRequestParams> request, CancellationToken ct) =>
+                    {
+                        var resourceHandler = ResolvePlanStatusResourceHandler(request.Services, serverServices);
+                        return new ValueTask<ReadResourceResult>(resourceHandler.ReadAsync(request.Params, ct));
+                    })
+                    .WithSubscribeToResourcesHandler((RequestContext<SubscribeRequestParams> request, CancellationToken ct) =>
+                    {
+                        var resourceHandler = ResolvePlanStatusResourceHandler(request.Services, serverServices);
+                        return new ValueTask<EmptyResult>(resourceHandler.Subscribe(request.Server.SessionId, request.Params));
+                    })
+                    .WithUnsubscribeFromResourcesHandler((RequestContext<UnsubscribeRequestParams> request, CancellationToken ct) =>
+                    {
+                        var resourceHandler = ResolvePlanStatusResourceHandler(request.Services, serverServices);
+                        return new ValueTask<EmptyResult>(resourceHandler.Unsubscribe(request.Server.SessionId, request.Params));
                     });
             })
             .Configure(app =>
@@ -909,6 +964,12 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         IServiceProvider? serverServices) =>
         (requestServices ?? serverServices)?.GetRequiredService<IGatewayToolDispatcher>()
         ?? throw new InvalidOperationException("GatewayToolDispatcher not available.");
+
+    private static PlanStatusResourceHandler ResolvePlanStatusResourceHandler(
+        IServiceProvider? requestServices,
+        IServiceProvider? serverServices) =>
+        (requestServices ?? serverServices)?.GetRequiredService<PlanStatusResourceHandler>()
+        ?? throw new InvalidOperationException("PlanStatusResourceHandler not available.");
 
     private static McpGatewayOptions CreateGatewayOptions(string downstreamProject, string testRoot, string workingDirectory) =>
         new(

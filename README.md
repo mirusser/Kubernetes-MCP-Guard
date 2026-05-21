@@ -148,7 +148,7 @@ The central safety property is that approval is necessary but not sufficient. A 
 | `get_pod_diagnostics` | Inspect Pod status, conditions, container state, and Events. |
 | `get_service_diagnostics` | Inspect Service endpoints, backing Pods, and Events. |
 
-### ✅ Approval-Gated Mutations
+### ✅ Gateway Approval Tools
 
 | Tool | Purpose |
 | --- | --- |
@@ -158,6 +158,8 @@ The central safety property is that approval is necessary but not sufficient. A 
 | `request_restart_deployment` | Dry-run and plan a Deployment rollout restart. |
 | `request_set_deployment_image` | Dry-run and plan a Deployment container image update. |
 | `execute_approved_plan` | Create the browser approval challenge or execute an approved, digest-bound plan after gates pass. |
+| `get_plan_status` | Read the current approval status for a plan. |
+| `wait_for_plan_approval` | Wait briefly for an out-of-band browser approval and return status JSON without applying the plan. |
 
 Direct Kubernetes mutation tools exist inside the private server surface for the adapter executor. The HTTP gateway exposes `request_*` wrappers plus `execute_approved_plan` instead of exposing raw destructive tools to MCP clients.
 
