@@ -128,6 +128,21 @@ run_tier() {
     echo ""
 }
 
+prepare_safety_e2e_workload() {
+    local kubeconfig_file="$1"
+
+    echo -e "${CYAN}Preparing Safety E2E demo workload...${NC}"
+    if kubectl --kubeconfig "$kubeconfig_file" apply -f "${REPO_ROOT}/examples/failing-deployment/deployment.yaml" >/dev/null 2>&1; then
+        echo -e "  ${GREEN}✓${NC} Safety E2E demo Deployment applied"
+        echo ""
+        return 0
+    fi
+
+    echo -e "  ${RED}✗${NC} Could not apply Safety E2E demo Deployment"
+    echo ""
+    return 1
+}
+
 # ────────────────── Tier 1: Unit Tests ──────────────────
 
 run_tier \
@@ -167,9 +182,14 @@ fi
 # ────────────────── Tier 5: Safety E2E ──────────────────
 
 if $DOCKER_OK && $K8S_OK; then
-    run_tier \
-        "Safety E2E" \
-        "INFRA_GATE_RUN_SAFETY_E2E=1 KUBECONFIG=\"$KUBECONFIG_FILE\" dotnet test tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj --filter \"Category=SafetyE2E\""
+    if prepare_safety_e2e_workload "$KUBECONFIG_FILE"; then
+        run_tier \
+            "Safety E2E" \
+            "INFRA_GATE_RUN_SAFETY_E2E=1 KUBECONFIG=\"$KUBECONFIG_FILE\" dotnet test tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj --filter \"Category=SafetyE2E\""
+    else
+        FAILED_TIERS+=("Safety E2E setup (demo Deployment unavailable)")
+        FAILED=1
+    fi
 else
     if ! $DOCKER_OK; then
         SKIPPED_TIERS+=("Safety E2E (Docker not available)")

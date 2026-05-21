@@ -43,6 +43,13 @@ The pragmatic fix is a read-only `get_plan_status` MCP tool. Claude can call it 
   internal enum PlanStatus { NotFound, ApprovalRequired, Approved, Applied, Expired }
   ```
 
+  > **Note:** `PlanStatus` shares its name with the notification system's
+  > `NotificationsConventions.Resources.PlanStatusUri()` — this is intentional, not coincidental.
+  > The notification URI scheme (`plan://{planId}/status`) identifies the plan-status resource at the
+  > MCP protocol layer; the `PlanStatus` enum defines the domain values that resource carries.
+  > They live in separate projects (`InfraGate.McpGateway.Notifications` vs `InfraGate.Approvals`)
+  > because the gateway owns protocol concerns while the approvals project owns domain types.
+
   Add a constant for the status enum string values in `ApprovalConventions` (or a new `PlanStatusConventions` nested class) — no raw string literals in the tool response.
 
   **Acceptance criteria:**
@@ -78,7 +85,7 @@ The pragmatic fix is a read-only `get_plan_status` MCP tool. Claude can call it 
      - Return JSON: `{ "planId": "...", "status": "..." }` — use `System.Text.Json.JsonSerializer.Serialize`.
      - Status string values must come from the convention constants, not inline literals.
 
-  2. In `CallToolAsync`, add a branch before the `RequestToolPrefix` check:
+  2. In `CallToolAsync`, add a branch between the `execute_approved_plan` check and the `RequestToolPrefix` check:
 
      ```csharp
      if (toolName.Equals(McpGatewayConventions.ToolNames.GetPlanStatus, StringComparison.Ordinal))
@@ -91,9 +98,10 @@ The pragmatic fix is a read-only `get_plan_status` MCP tool. Claude can call it 
      private static Tool CreateGetPlanStatusTool() => new Tool
      {
          Name = McpGatewayConventions.ToolNames.GetPlanStatus,
-         Description = "Returns the current status of a pending approval plan (NotFound | ApprovalRequired | Approved | Applied | Expired). " +
-                       "Call this in a polling loop after execute_approved_plan returns ApprovalRequired. " +
-                       "When status is Approved, call execute_approved_plan to apply the plan.",
+          Description = "Returns the current status of a pending approval plan (NotFound | ApprovalRequired | Approved | Applied | Expired). " +
+                        "Call this in a polling loop after execute_approved_plan returns ApprovalRequired. " +
+                        "When status is Approved, call execute_approved_plan to apply the plan. " +
+                        "When status is Expired, call execute_approved_plan to create a new approval challenge.",
          InputSchema = JsonSerializer.SerializeToElement(new
          {
              type = "object",
