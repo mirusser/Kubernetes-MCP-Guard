@@ -36,6 +36,7 @@ jobs:
       contents: read
       packages: write
       security-events: write
+      id-token: write
     env:
       DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || 'local' }}
       PUSH_IMAGES: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/v'))) || (github.event_name == 'workflow_dispatch' && inputs.push_images) }}
@@ -102,7 +103,7 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           push: ${{ env.PUSH_IMAGES == 'true' }}
-          load: ${{ env.PUSH_IMAGES != 'true' }}
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
@@ -126,7 +127,7 @@ jobs:
           exit-code: '1'
 
       - name: Upload Trivy SARIF results
-        if: always()
+        if: always() && hashFiles('trivy-*.sarif') != ''
         uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
         with:
           sarif_file: trivy-${{ matrix.image }}.sarif
