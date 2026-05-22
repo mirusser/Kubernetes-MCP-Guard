@@ -18,6 +18,9 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
     private readonly IApprovalNotificationDispatcher notificationDispatcher;
     private readonly ILogger<GatewayApprovalService> logger;
 
+    // Justification: S107 — DI constructor with 9 parameters. See GatewayToolDispatcher
+    // for the rationale. The approval-service constructor mirrors the dispatcher pattern
+    // for consistency.
     public GatewayApprovalService(
         ApprovalStore approvalStore,
         IApprovalChallengeStore challengeStore,

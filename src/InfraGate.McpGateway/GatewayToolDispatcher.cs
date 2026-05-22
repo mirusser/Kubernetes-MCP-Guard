@@ -26,6 +26,9 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
     private readonly ISubscriptionRegistry subscriptionRegistry;
     private readonly ILogger<GatewayToolDispatcher> logger;
 
+    // Justification: S107 — DI constructor with 9 parameters. Grouping into options/aggregate
+    // services would add indirection without reducing coupling. The constructor remains
+    // explicit so DI failures surface immediately rather than being deferred.
     public GatewayToolDispatcher(
         DownstreamToolRegistry registry,
         GuardedToolRunner guardedRunner,
@@ -509,7 +512,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             _ => element
         };
 
-    private static bool TryGetWaitTimeoutSeconds(
+    internal static bool TryGetWaitTimeoutSeconds(
         IReadOnlyDictionary<string, object?> args,
         out int timeoutSeconds,
         out string timeoutError)
@@ -527,7 +530,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             timeoutSeconds = timeout;
         }
         else if (timeoutObj is double doubleTimeout &&
-                 doubleTimeout % 1 == 0 &&
+                 double.IsInteger(doubleTimeout) &&
                  doubleTimeout >= int.MinValue &&
                  doubleTimeout <= int.MaxValue)
         {

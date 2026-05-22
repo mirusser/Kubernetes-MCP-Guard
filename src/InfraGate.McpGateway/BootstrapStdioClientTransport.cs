@@ -159,9 +159,11 @@ internal sealed class BootstrapStdioClientTransport(
         }
         catch (ObjectDisposedException)
         {
+            // Justification: The process is already exiting; StandardInput close is benign.
         }
         catch (InvalidOperationException)
         {
+            // Justification: The process has already exited; StandardInput close is benign.
         }
     }
 
@@ -173,6 +175,7 @@ internal sealed class BootstrapStdioClientTransport(
         }
         catch (InvalidOperationException)
         {
+            // Justification: The process has already exited; Kill is benign.
         }
     }
 

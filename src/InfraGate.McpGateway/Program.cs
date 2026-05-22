@@ -14,7 +14,7 @@ using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 var builder = WebApplication.CreateBuilder(args);
-AddInfraGateConfiguration(builder.Configuration, args);
+GatewayConfigurationExtensions.AddInfraGateConfiguration(builder.Configuration, args);
 
 builder.Services.Configure<InfraGateGatewaySettings>(
     builder.Configuration.GetSection("InfraGate:Gateway"));
@@ -169,22 +169,3 @@ app.MapMcp(McpGatewayConventions.McpPath)
     .RequireAuthorization(GatewayAuthConventions.Schemes.PolicyName);
 
 await app.RunAsync().ConfigureAwait(false);
-
-static void AddInfraGateConfiguration(IConfigurationBuilder configuration, string[] args)
-{
-    string? configPath = Environment.GetEnvironmentVariable(RuntimeSafetyConventions.EnvironmentVariables.ConfigPath);
-    if (!string.IsNullOrWhiteSpace(configPath))
-    {
-        configuration.AddJsonFile(configPath, optional: false, reloadOnChange: false);
-        configuration.AddInfraGateEnvironmentVariables(mappings =>
-        {
-            RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
-            McpGatewayConventions.RegisterInfraGateEnvVarMappings(mappings);
-            GatewayAuthConventions.RegisterInfraGateEnvVarMappings(mappings);
-            // ApprovalRoot env var is shared; the gateway reads K8S_MCP_APPROVAL_ROOT
-            mappings.Map(ApprovalConventions.EnvironmentVariables.ApprovalRoot, McpGatewayConventions.ConfigurationKeys.ApprovalRoot);
-        });
-        configuration.AddEnvironmentVariables();
-        configuration.AddCommandLine(args);
-    }
-}

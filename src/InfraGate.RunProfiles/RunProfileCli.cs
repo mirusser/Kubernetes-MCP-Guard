@@ -27,20 +27,45 @@ internal static class RunProfileCli
             return 1;
         }
 
-        string configPath;
-        RunProfileDocument document;
-        try
+        if (!TryLoadConfig(args, error, out string configPath, out RunProfileDocument document))
         {
-            configPath = GetConfigPath(args);
-            document = await RunProfileDocumentReader.ReadAsync(configPath, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (InvalidOperationException ex)
-        {
-            await error.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
 
+        return await DispatchCommandAsync(command, args, document, configPath, output, error, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static bool TryLoadConfig(
+        IReadOnlyList<string> args,
+        TextWriter error,
+        out string configPath,
+        out RunProfileDocument document)
+    {
+        try
+        {
+            configPath = GetConfigPath(args);
+            document = RunProfileDocumentReader.ReadAsync(configPath, CancellationToken.None).GetAwaiter().GetResult();
+            return true;
+        }
+        catch (InvalidOperationException ex)
+        {
+            error.WriteLineAsync(ex.Message).GetAwaiter().GetResult();
+            configPath = string.Empty;
+            document = null!;
+            return false;
+        }
+    }
+
+    private static async Task<int> DispatchCommandAsync(
+        string command,
+        IReadOnlyList<string> args,
+        RunProfileDocument document,
+        string configPath,
+        TextWriter output,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
         if (string.Equals(command, RunProfileConventions.Commands.Validate, StringComparison.Ordinal))
         {
             await output.WriteLineAsync("Run profile configuration is valid.").ConfigureAwait(false);
@@ -107,8 +132,8 @@ internal static class RunProfileCli
         {
             generatedText = format switch
             {
-                RunProfileConventions.Formats.AppSettingsName => AppSettingsRenderer.Render(Path.GetFileName(configPath), profile),
-                RunProfileConventions.Formats.EnvName => EnvFileRenderer.Render(Path.GetFileName(configPath), profile),
+                RunProfileConventions.Formats.AppSettingJson => AppSettingsRenderer.Render(Path.GetFileName(configPath), profile),
+                RunProfileConventions.Formats.DotEnv => EnvFileRenderer.Render(Path.GetFileName(configPath), profile),
                 _ => throw new InvalidOperationException($"Unsupported format: {format}")
             };
         }
@@ -137,17 +162,17 @@ internal static class RunProfileCli
         string? format = GetOption(args, RunProfileConventions.Options.Format);
         if (format is null)
         {
-            return RunProfileConventions.Formats.EnvName;
+            return RunProfileConventions.Formats.DotEnv;
         }
 
-        if (string.Equals(format, RunProfileConventions.Formats.EnvName, StringComparison.Ordinal) ||
-            string.Equals(format, RunProfileConventions.Formats.AppSettingsName, StringComparison.Ordinal))
+        if (string.Equals(format, RunProfileConventions.Formats.DotEnv, StringComparison.Ordinal) ||
+            string.Equals(format, RunProfileConventions.Formats.AppSettingJson, StringComparison.Ordinal))
         {
             return format;
         }
 
         throw new InvalidOperationException(
-            $"{RunProfileConventions.Options.Format} must be '{RunProfileConventions.Formats.EnvName}' or '{RunProfileConventions.Formats.AppSettingsName}'.");
+            $"{RunProfileConventions.Options.Format} must be '{RunProfileConventions.Formats.DotEnv}' or '{RunProfileConventions.Formats.AppSettingJson}'.");
     }
 
     private static bool IsGeneratedForProfile(string content, string profileName) =>
@@ -259,7 +284,8 @@ internal static class RunProfileCli
                 throw new InvalidOperationException($"{RunProfileConventions.Options.Set} requires a value.");
             }
 
-            string assignment = args[++i];
+            i++;
+            string assignment = args[i];
             int eq = assignment.IndexOf('=', StringComparison.Ordinal);
             if (eq < 0)
             {

@@ -146,6 +146,53 @@ public sealed class GatewayToolDispatcherTests
         AssertPlanStatusJson(result, envelope.Id, ApprovalConventions.PlanStatusValues.Expired, timedOut: false);
     }
 
+    [Theory]
+    [InlineData(1.0d, 1)]
+    [InlineData(60.0d, 60)]
+    [InlineData(300.0d, 300)]
+    public void TryGetWaitTimeoutSeconds_IntegralDouble_AcceptsValue(double input, int expected)
+    {
+        var args = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [McpGatewayConventions.ToolArguments.TimeoutSeconds] = input
+        };
+
+        bool ok = GatewayToolDispatcher.TryGetWaitTimeoutSeconds(args, out int timeout, out string? error);
+
+        Assert.True(ok);
+        Assert.Equal(expected, timeout);
+    }
+
+    [Theory]
+    [InlineData(1.5d)]
+    [InlineData(0.5d)]
+    public void TryGetWaitTimeoutSeconds_NonIntegralDouble_RejectsValue(double input)
+    {
+        var args = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [McpGatewayConventions.ToolArguments.TimeoutSeconds] = input
+        };
+
+        bool ok = GatewayToolDispatcher.TryGetWaitTimeoutSeconds(args, out _, out string? error);
+
+        Assert.False(ok);
+        Assert.Equal("timeoutSeconds must be an integer between 1 and 300.", error);
+    }
+
+    [Fact]
+    public void TryGetWaitTimeoutSeconds_NegativeIntegralDouble_RejectsValue()
+    {
+        var args = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [McpGatewayConventions.ToolArguments.TimeoutSeconds] = -1.0d
+        };
+
+        bool ok = GatewayToolDispatcher.TryGetWaitTimeoutSeconds(args, out _, out string? error);
+
+        Assert.False(ok);
+        Assert.Equal("timeoutSeconds must be an integer between 1 and 300.", error);
+    }
+
     [Fact]
     public async Task CallToolAsync_GetPlanStatus_ApprovalRequired_ReturnsStatusJson()
     {
