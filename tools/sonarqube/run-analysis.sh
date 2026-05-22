@@ -106,22 +106,22 @@ fetch_paged_array() {
 export_report() {
   local report_dir
   local tmp_dir
-  local issues_json
-  local hotspots_json
 
   report_dir="$(dirname "${REPORT_PATH}")"
   tmp_dir="$(mktemp -d)"
   mkdir -p "${report_dir}"
 
-  issues_json="$(fetch_paged_array \
+  fetch_paged_array \
     "${SONAR_URL}/api/issues/search?componentKeys=${PROJECT_KEY}&additionalFields=rules" \
     "issues" \
-    "${tmp_dir}/issues")"
+    "${tmp_dir}/issues" \
+    > "${tmp_dir}/issues-all.json"
 
-  hotspots_json="$(fetch_paged_array \
+  fetch_paged_array \
     "${SONAR_URL}/api/hotspots/search?projectKey=${PROJECT_KEY}" \
     "hotspots" \
-    "${tmp_dir}/hotspots")"
+    "${tmp_dir}/hotspots" \
+    > "${tmp_dir}/hotspots-all.json"
 
   curl -sf -u "${SONAR_TOKEN}:" \
     "${SONAR_URL}/api/qualitygates/project_status?projectKey=${PROJECT_KEY}" \
@@ -142,8 +142,8 @@ export_report() {
     --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg sonarUrl "${SONAR_URL}" \
     --arg dashboardUrl "${SONAR_URL}/dashboard?id=${PROJECT_KEY}" \
-    --argjson issues "${issues_json}" \
-    --argjson hotspots "${hotspots_json}" \
+    --slurpfile issues "${tmp_dir}/issues-all.json" \
+    --slurpfile hotspots "${tmp_dir}/hotspots-all.json" \
     --slurpfile qualityGate "${tmp_dir}/quality-gate.json" \
     --slurpfile measures "${tmp_dir}/measures.json" \
     '{
@@ -156,8 +156,8 @@ export_report() {
       },
       qualityGate: $qualityGate[0],
       measures: $measures[0],
-      issues: $issues,
-      hotspots: $hotspots
+      issues: $issues[0],
+      hotspots: $hotspots[0]
     }' > "${REPORT_PATH}"
 
   rm -rf "${tmp_dir}"

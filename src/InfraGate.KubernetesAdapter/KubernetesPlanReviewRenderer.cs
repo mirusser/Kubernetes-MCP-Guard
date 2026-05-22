@@ -47,7 +47,10 @@ public sealed class KubernetesPlanReviewRenderer : IPlanReviewRenderer
                Approval URL: {approvalUrl}
                Expires at UTC: {expiresAtUtc:O}
 
-               Open the approval URL in a browser, sign in with the same identity, review the Gateway-rendered plan, then call execute_approved_plan again.
+               Open the approval URL in a browser, sign in with the same identity, and review the Gateway-rendered plan.
+               While waiting, call wait_for_plan_approval(planId="{plan.Id}") to poll for approval status (55 s timeout, repeat as needed).
+               When the status is Approved, call execute_approved_plan again to apply the plan.
+               Alternatively, if the user tells you they have approved (e.g. types "approved"), skip polling and call execute_approved_plan immediately.
                """;
     }
 

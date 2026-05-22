@@ -17,6 +17,220 @@ public sealed class GatewayToolDispatcherTests
     private const string RefusedReasonCode = "approval.refused.test";
 
     [Fact]
+    public async Task ListToolsAsync_GetPlanStatus_ReturnsTool()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+
+        var result = await context.Dispatcher.ListToolsAsync(new ListToolsRequestParams(), CancellationToken.None);
+
+        Assert.Contains(result.Tools, tool => tool.Name == McpGatewayConventions.ToolNames.GetPlanStatus);
+    }
+
+    [Fact]
+    public async Task ListToolsAsync_WaitForPlanApproval_ReturnsTool()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+
+        var result = await context.Dispatcher.ListToolsAsync(new ListToolsRequestParams(), CancellationToken.None);
+
+        Assert.Contains(result.Tools, tool => tool.Name == McpGatewayConventions.ToolNames.WaitForPlanApproval);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_GetPlanStatus_MissingPlanId_ReturnsError()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.GetPlanStatus
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Equal("Missing required argument: planId.", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_WaitForPlanApproval_MissingPlanId_ReturnsError()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.WaitForPlanApproval
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Equal("Missing required argument: planId.", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_GetPlanStatus_UnknownPlan_ReturnsNotFoundJson()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+        string planId = ApprovalStore.NewPlanId();
+
+        var result = await CallGetPlanStatusAsync(context, planId);
+
+        AssertPlanStatusJson(result, planId, ApprovalConventions.PlanStatusValues.NotFound);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_WaitForPlanApproval_UnknownPlan_ReturnsNotFoundJson()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+        string planId = ApprovalStore.NewPlanId();
+
+        var result = await CallWaitForPlanApprovalAsync(context, planId);
+
+        AssertPlanStatusJson(result, planId, ApprovalConventions.PlanStatusValues.NotFound, timedOut: false);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_WaitForPlanApproval_PendingPlanTimesOut_ReturnsApprovalRequiredJson()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+        var envelope = CreatePlanEnvelope("mcp-nginx-demo");
+        await context.Store.CreatePlanAsync(envelope, "mcp-nginx-demo", CancellationToken.None);
+
+        var result = await CallWaitForPlanApprovalAsync(context, envelope.Id, timeoutSeconds: 1);
+
+        AssertPlanStatusJson(result, envelope.Id, ApprovalConventions.PlanStatusValues.ApprovalRequired, timedOut: true);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_WaitForPlanApproval_PendingPlanBecomesApproved_ReturnsApprovedJson()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+        var envelope = CreatePlanEnvelope("mcp-nginx-demo");
+        await context.Store.CreatePlanAsync(envelope, "mcp-nginx-demo", CancellationToken.None);
+
+        var waitTask = CallWaitForPlanApprovalAsync(context, envelope.Id, timeoutSeconds: 1);
+        await Task.Delay(TimeSpan.FromMilliseconds(50), TimeProvider.System, CancellationToken.None);
+        await context.Store.CreateGrantAsync(envelope, Subject, "challenge-1", CancellationToken.None);
+
+        var result = await waitTask;
+
+        AssertPlanStatusJson(result, envelope.Id, ApprovalConventions.PlanStatusValues.Approved, timedOut: false);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_WaitForPlanApproval_AppliedPlan_ReturnsAppliedJson()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+        var envelope = await CreateGrantedPlanAsync(context.Store);
+        var grant = await context.Store.GetGrantAsync(envelope.Id, CancellationToken.None);
+        Assert.NotNull(grant);
+        await context.Store.MarkAppliedAsync(envelope, "mcp-nginx-demo", grant, CancellationToken.None);
+
+        var result = await CallWaitForPlanApprovalAsync(context, envelope.Id);
+
+        AssertPlanStatusJson(result, envelope.Id, ApprovalConventions.PlanStatusValues.Applied, timedOut: false);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_WaitForPlanApproval_ExpiredPlan_ReturnsExpiredJson()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+        var createdAtUtc = DateTimeOffset.UtcNow
+            .Subtract(ApprovalConventions.PlanValidity.DefaultWindow)
+            .Subtract(TimeSpan.FromMinutes(1));
+        var envelope = await CreateGrantedPlanAsync(context.Store, createdAtUtc);
+
+        var result = await CallWaitForPlanApprovalAsync(context, envelope.Id);
+
+        AssertPlanStatusJson(result, envelope.Id, ApprovalConventions.PlanStatusValues.Expired, timedOut: false);
+    }
+
+    [Theory]
+    [InlineData(1.0d, 1)]
+    [InlineData(60.0d, 60)]
+    [InlineData(300.0d, 300)]
+    public void TryGetWaitTimeoutSeconds_IntegralDouble_AcceptsValue(double input, int expected)
+    {
+        var args = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [McpGatewayConventions.ToolArguments.TimeoutSeconds] = input
+        };
+
+        bool ok = GatewayToolDispatcher.TryGetWaitTimeoutSeconds(args, out int timeout, out string? error);
+
+        Assert.True(ok);
+        Assert.Equal(expected, timeout);
+    }
+
+    [Theory]
+    [InlineData(1.5d)]
+    [InlineData(0.5d)]
+    public void TryGetWaitTimeoutSeconds_NonIntegralDouble_RejectsValue(double input)
+    {
+        var args = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [McpGatewayConventions.ToolArguments.TimeoutSeconds] = input
+        };
+
+        bool ok = GatewayToolDispatcher.TryGetWaitTimeoutSeconds(args, out _, out string? error);
+
+        Assert.False(ok);
+        Assert.Equal("timeoutSeconds must be an integer between 1 and 300.", error);
+    }
+
+    [Fact]
+    public void TryGetWaitTimeoutSeconds_NegativeIntegralDouble_RejectsValue()
+    {
+        var args = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [McpGatewayConventions.ToolArguments.TimeoutSeconds] = -1.0d
+        };
+
+        bool ok = GatewayToolDispatcher.TryGetWaitTimeoutSeconds(args, out _, out string? error);
+
+        Assert.False(ok);
+        Assert.Equal("timeoutSeconds must be an integer between 1 and 300.", error);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_GetPlanStatus_ApprovalRequired_ReturnsStatusJson()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+        var envelope = CreatePlanEnvelope("mcp-nginx-demo");
+        await context.Store.CreatePlanAsync(envelope, "mcp-nginx-demo", CancellationToken.None);
+
+        var result = await CallGetPlanStatusAsync(context, envelope.Id);
+
+        AssertPlanStatusJson(result, envelope.Id, ApprovalConventions.PlanStatusValues.ApprovalRequired);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_GetPlanStatus_Approved_ReturnsStatusJson()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+        var envelope = await CreateGrantedPlanAsync(context.Store);
+
+        var result = await CallGetPlanStatusAsync(context, envelope.Id);
+
+        AssertPlanStatusJson(result, envelope.Id, ApprovalConventions.PlanStatusValues.Approved);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_GetPlanStatus_Applied_ReturnsStatusJson()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+        var envelope = await CreateGrantedPlanAsync(context.Store);
+        var grant = await context.Store.GetGrantAsync(envelope.Id, CancellationToken.None);
+        Assert.NotNull(grant);
+        await context.Store.MarkAppliedAsync(envelope, "mcp-nginx-demo", grant, CancellationToken.None);
+
+        var result = await CallGetPlanStatusAsync(context, envelope.Id);
+
+        AssertPlanStatusJson(result, envelope.Id, ApprovalConventions.PlanStatusValues.Applied);
+    }
+
+    [Fact]
     public async Task CallToolAsync_RawDestructiveTool_ReturnsErrorWithoutCallingDownstream()
     {
         var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
@@ -90,6 +304,32 @@ public sealed class GatewayToolDispatcherTests
     }
 
     [Fact]
+    public async Task CallToolAsync_ApprovalRequired_DoesNotSubscribeCurrentSession()
+    {
+        const string planId = "plan-1";
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            approvals: new FakeGatewayApprovalService(
+                ApprovalGateResult.RequiresApproval("Approval required.")));
+        context.Subscriptions.RegisterSession("session-1", new FakeSessionNotifier("session-1"));
+        context.HttpContext.Items[NotificationsConventions.McpSessionIdItemKey] = "session-1";
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+                Arguments = new Dictionary<string, JsonElement>
+                {
+                    [McpGatewayConventions.ToolArguments.PlanId] = JsonSerializer.SerializeToElement(planId)
+                }
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError is not true);
+        Assert.Empty(context.Subscriptions.GetSessionsForPlan(planId));
+    }
+
+    [Fact]
     public async Task CallToolAsync_ApprovedPlanPassingPreExecutionGate_ExecutesPlan()
     {
         var executor = new FakeDomainPlanExecutor(
@@ -157,7 +397,7 @@ public sealed class GatewayToolDispatcherTests
                 }
             },
             CancellationToken.None);
-        string audit = await File.ReadAllTextAsync(context.Store.AuditPath);
+        string audit = await File.ReadAllTextAsync(context.Store.AuditPath, CancellationToken.None);
 
         Assert.True(result.IsError);
         Assert.Contains("execution failed", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
@@ -186,7 +426,7 @@ public sealed class GatewayToolDispatcherTests
             CancellationToken.None);
 
         Assert.True(result.IsError is not true);
-        var auditJson = await File.ReadAllTextAsync(context.Store.AuditPath);
+        var auditJson = await File.ReadAllTextAsync(context.Store.AuditPath, CancellationToken.None);
         Assert.Contains($@"""namespace"": ""{targetNamespace}""", auditJson);
     }
 
@@ -207,16 +447,17 @@ public sealed class GatewayToolDispatcherTests
             root,
             "http://gateway.test",
             McpGatewayOptions.DefaultApprovalChallengeTtl);
+        var httpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(
+            [
+                new Claim(GatewayAuthConventions.Claims.Subject, Subject),
+                new Claim(GatewayAuthConventions.Claims.Scope, "mcp:tools")
+            ], "test"))
+        };
         var httpContextAccessor = new HttpContextAccessor
         {
-            HttpContext = new DefaultHttpContext
-            {
-                User = new ClaimsPrincipal(new ClaimsIdentity(
-                [
-                    new Claim(GatewayAuthConventions.Claims.Subject, Subject),
-                    new Claim(GatewayAuthConventions.Claims.Scope, "mcp:tools")
-                ], "test"))
-            }
+            HttpContext = httpContext
         };
         var downstream = new FakeDownstream();
         var audit = new InMemoryAuditStore();
@@ -239,6 +480,7 @@ public sealed class GatewayToolDispatcherTests
         var domainAdapter = new FakeDomainAdapter(
             planBuilder ?? new FakeDomainPlanBuilder(PlanBuildResult.Failed("not implemented")),
             planExecutor);
+        var subscriptions = new SubscriptionRegistry();
 
         return new TestContext(
             new GatewayToolDispatcher(
@@ -249,15 +491,19 @@ public sealed class GatewayToolDispatcherTests
                 store,
                 new ApprovalPreExecutionGate(store, new ApprovalStoreAuditPublisher(store)),
                 httpContextAccessor,
-                new SubscriptionRegistry(),
+                subscriptions,
                 NullLogger<GatewayToolDispatcher>.Instance),
             store,
-            downstream);
+            downstream,
+            subscriptions,
+            httpContext);
     }
 
-    private static async Task<PlanEnvelope> CreateGrantedPlanAsync(ApprovalStore store)
+    private static async Task<PlanEnvelope> CreateGrantedPlanAsync(
+        ApprovalStore store,
+        DateTimeOffset? createdAtUtc = null)
     {
-        var envelope = CreatePlanEnvelope("mcp-nginx-demo");
+        var envelope = CreatePlanEnvelope("mcp-nginx-demo", createdAtUtc);
 
         await store.CreatePlanAsync(envelope, "mcp-nginx-demo", CancellationToken.None);
         await store.CreateGrantAsync(envelope, Subject, "challenge-1", CancellationToken.None);
@@ -265,12 +511,12 @@ public sealed class GatewayToolDispatcherTests
         return envelope;
     }
 
-    private static PlanEnvelope CreatePlanEnvelope(string namespaceName) =>
+    private static PlanEnvelope CreatePlanEnvelope(string namespaceName, DateTimeOffset? createdAtUtc = null) =>
         KubernetesApprovalAdapter.ToEnvelope(
             KubernetesApprovalAdapter.CreateEnvelope(
                 ApprovalStore.NewPlanId(),
                 KubernetesAdapterConventions.PlanOperations.Apply,
-                DateTimeOffset.UtcNow,
+                createdAtUtc ?? DateTimeOffset.UtcNow,
                 new PlanRequester(Subject, "test"),
                 new KubernetesPlanPayload(
                     namespaceName,
@@ -302,6 +548,66 @@ public sealed class GatewayToolDispatcherTests
                             [])
                     ]
                 }));
+
+    private static Task<CallToolResult> CallGetPlanStatusAsync(TestContext context, string planId) =>
+        context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.GetPlanStatus,
+                Arguments = new Dictionary<string, JsonElement>
+                {
+                    [McpGatewayConventions.ToolArguments.PlanId] = JsonSerializer.SerializeToElement(planId)
+                }
+            },
+            CancellationToken.None);
+
+    private static Task<CallToolResult> CallWaitForPlanApprovalAsync(
+        TestContext context,
+        string planId,
+        int? timeoutSeconds = null)
+    {
+        var arguments = new Dictionary<string, JsonElement>
+        {
+            [McpGatewayConventions.ToolArguments.PlanId] = JsonSerializer.SerializeToElement(planId)
+        };
+
+        if (timeoutSeconds is { } value)
+        {
+            arguments[McpGatewayConventions.ToolArguments.TimeoutSeconds] = JsonSerializer.SerializeToElement(value);
+        }
+
+        return context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.WaitForPlanApproval,
+                Arguments = arguments
+            },
+            CancellationToken.None);
+    }
+
+    private static void AssertPlanStatusJson(
+        CallToolResult result,
+        string planId,
+        string expectedStatus,
+        bool? timedOut = null)
+    {
+        Assert.True(result.IsError is not true);
+        string text = Assert.Single(result.Content.OfType<TextContentBlock>()).Text;
+        using var document = JsonDocument.Parse(text);
+
+        Assert.Equal(
+            planId,
+            document.RootElement.GetProperty(McpGatewayConventions.ToolArguments.PlanId).GetString());
+        Assert.Equal(
+            expectedStatus,
+            document.RootElement.GetProperty(McpGatewayConventions.ToolResponseFields.Status).GetString());
+        if (timedOut is { } expectedTimedOut)
+        {
+            Assert.Equal(
+                expectedTimedOut,
+                document.RootElement.GetProperty(McpGatewayConventions.ToolResponseFields.TimedOut).GetBoolean());
+        }
+    }
 
     private sealed class FakeDownstream : IDownstreamMcpClient
     {
@@ -403,6 +709,15 @@ public sealed class GatewayToolDispatcherTests
             Task.CompletedTask;
     }
 
+    private sealed class FakeSessionNotifier(string sessionId) : ISessionNotifier
+    {
+        public string? SessionId => sessionId;
+
+        public Task SendNotificationAsync<TParams>(string method, TParams @params, CancellationToken ct)
+            where TParams : notnull =>
+            Task.CompletedTask;
+    }
+
     private sealed class FakeGatewayApprovalService(ApprovalGateResult gateResult) : IGatewayApprovalService
     {
         public Task<ApprovalGateResult> EnsureApprovedOrCreateChallengeAsync(
@@ -434,7 +749,9 @@ public sealed class GatewayToolDispatcherTests
     private sealed record class TestContext(
         IGatewayToolDispatcher Dispatcher,
         ApprovalStore Store,
-        FakeDownstream Downstream);
+        FakeDownstream Downstream,
+        SubscriptionRegistry Subscriptions,
+        DefaultHttpContext HttpContext);
 
     private sealed class NullNotificationDispatcher : IApprovalNotificationDispatcher
     {

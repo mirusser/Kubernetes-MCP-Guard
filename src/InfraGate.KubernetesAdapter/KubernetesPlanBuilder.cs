@@ -602,6 +602,11 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             return false;
         }
 
+        return TryParseIntObject(raw, out value);
+    }
+
+    private static bool TryParseIntObject(object? raw, out int value)
+    {
         switch (raw)
         {
             case int i:
@@ -610,7 +615,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             case long l:
                 value = (int)l;
                 return true;
-            case double d when Math.Abs(d % 1) < 1e-10 && d >= int.MinValue && d <= int.MaxValue:
+            case double d when double.IsInteger(d) && d >= int.MinValue && d <= int.MaxValue:
                 value = (int)d;
                 return true;
             case string s when int.TryParse(s, out value):

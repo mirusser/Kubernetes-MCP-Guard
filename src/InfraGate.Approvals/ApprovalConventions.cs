@@ -60,6 +60,15 @@ public static class ApprovalConventions
         public static readonly TimeSpan DefaultWindow = TimeSpan.FromHours(1);
     }
 
+    public static class PlanStatusValues
+    {
+        public const string NotFound = "NotFound";
+        public const string ApprovalRequired = "ApprovalRequired";
+        public const string Approved = "Approved";
+        public const string Applied = "Applied";
+        public const string Expired = "Expired";
+    }
+
     public static class AuditEvents
     {
         private const string ExecutionBlockedValue = "execution.blocked";

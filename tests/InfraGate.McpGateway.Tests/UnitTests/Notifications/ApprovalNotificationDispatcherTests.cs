@@ -25,7 +25,7 @@ public sealed class ApprovalNotificationDispatcherTests
         await dispatcher.NotifyPlanApprovedAsync("plan-1", CancellationToken.None);
 
         Assert.Single(notifier.SentMethods);
-        Assert.Equal("notifications/resources/updated", notifier.SentMethods[0]);
+        Assert.Equal(NotificationsConventions.Methods.ResourcesUpdated, notifier.SentMethods[0]);
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public sealed class ApprovalNotificationDispatcherTests
         await dispatcher.NotifyPlanApprovedAsync("plan-abc", CancellationToken.None);
 
         Assert.Single(notifier.SentUris);
-        Assert.Equal("plan://plan-abc/status", notifier.SentUris[0]);
+        Assert.Equal(NotificationsConventions.Resources.PlanStatusUri("plan-abc"), notifier.SentUris[0]);
     }
 
     [Fact]

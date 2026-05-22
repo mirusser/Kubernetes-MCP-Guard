@@ -171,6 +171,33 @@ public sealed class ApprovalStore
             : PendingPlanResult.Found(read.Envelope, pendingPath, actualHash);
     }
 
+    public async Task<PlanStatusResult> GetPlanStatusAsync(string planId, CancellationToken cancellationToken)
+    {
+        if (!IsSafePlanId(planId))
+        {
+            return new PlanStatusResult(PlanStatus.NotFound);
+        }
+
+        var appliedPath = GetAppliedPath(planId);
+        if (File.Exists(appliedPath))
+        {
+            return new PlanStatusResult(PlanStatus.Applied);
+        }
+
+        var grant = await GetGrantAsync(planId, cancellationToken).ConfigureAwait(false);
+        if (grant is not null)
+        {
+            return grant.ExpiresAtUtc <= DateTimeOffset.UtcNow
+                ? new PlanStatusResult(PlanStatus.Expired)
+                : new PlanStatusResult(PlanStatus.Approved);
+        }
+
+        var pendingPath = GetPendingPath(planId);
+        return File.Exists(pendingPath)
+            ? new PlanStatusResult(PlanStatus.ApprovalRequired)
+            : new PlanStatusResult(PlanStatus.NotFound);
+    }
+
     public async Task MarkAppliedAsync(
         PlanEnvelope envelope,
         string targetNamespace,

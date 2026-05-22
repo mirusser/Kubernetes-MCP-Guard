@@ -54,10 +54,14 @@ sequenceDiagram
     opt execute_approved_plan requires approval
         Gateway->>Gateway: Read pending plan + hash
         Gateway-->>Client: Approval URL
+        opt Client supports MCP resources
+            Client->>Gateway: resources/subscribe plan://{planId}/status
+        end
         Client-->>Gateway: Browser opens /approvals/{challengeId}
         Gateway->>Gateway: OAuth cookie auth + same-subject check
         Gateway->>Gateway: Recompute pending-plan hash
         Gateway->>Gateway: Record Challenge Outcome and issue Approval Grant if unchanged
+        Gateway-->>Client: notifications/resources/updated plan://{planId}/status
     end
 
     Downstream-->>Gateway: Tool result text
@@ -75,6 +79,12 @@ The Gateway delegates the transport layer to the official `ModelContextProtocol.
   * Uses `.WithHttpTransport()` in `Program.cs`.
   * Clients send `POST` requests with JSON-RPC messages to `/mcp`.
   * Streamable HTTP response handling is delegated to the official SDK, including JSON-RPC responses and Server-Sent Events (SSE) where appropriate.
+  * The gateway runs stateful HTTP transport so subscribed resource notifications can be delivered to active sessions.
+
+## 1.1. Resources Specification
+**Status: ✅ Compliant**
+
+The Gateway exposes `plan://{planId}/status` as an MCP resource template. Clients may read it to get the same JSON status contract as `get_plan_status`, or subscribe to it with `resources/subscribe` before waiting for a browser approval. When approval issues a grant, the gateway sends `notifications/resources/updated` for the subscribed plan-status URI. Clients without resource notification support can use `get_plan_status` or `wait_for_plan_approval`.
 
 ---
 
