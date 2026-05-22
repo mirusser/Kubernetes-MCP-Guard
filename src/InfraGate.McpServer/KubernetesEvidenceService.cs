@@ -485,38 +485,38 @@ public sealed class KubernetesEvidenceService
         switch (obj.ApiVersion, obj.Kind)
         {
             case (KubernetesConventions.KubernetesResources.AppsV1, KubernetesConventions.KubernetesResources.Deployment):
-            {
-                using var response = await client.AppsV1.DeleteNamespacedDeploymentWithHttpMessagesAsync(
-                    obj.Name,
-                    obj.Namespace,
-                    body: CreateDryRunDeleteOptions(),
-                    dryRun: KubernetesConventions.KubernetesApi.DryRunAll,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                {
+                    using var response = await client.AppsV1.DeleteNamespacedDeploymentWithHttpMessagesAsync(
+                        obj.Name,
+                        obj.Namespace,
+                        body: CreateDryRunDeleteOptions(),
+                        dryRun: KubernetesConventions.KubernetesApi.DryRunAll,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
 
-                return CaptureDryRunResult(obj, response);
-            }
+                    return CaptureDryRunResult(obj, response);
+                }
             case (KubernetesConventions.KubernetesResources.V1, KubernetesConventions.KubernetesResources.Service):
-            {
-                using var response = await client.CoreV1.DeleteNamespacedServiceWithHttpMessagesAsync(
-                    obj.Name,
-                    obj.Namespace,
-                    body: CreateDryRunDeleteOptions(),
-                    dryRun: KubernetesConventions.KubernetesApi.DryRunAll,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                {
+                    using var response = await client.CoreV1.DeleteNamespacedServiceWithHttpMessagesAsync(
+                        obj.Name,
+                        obj.Namespace,
+                        body: CreateDryRunDeleteOptions(),
+                        dryRun: KubernetesConventions.KubernetesApi.DryRunAll,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
 
-                return CaptureDryRunResult(obj, response);
-            }
+                    return CaptureDryRunResult(obj, response);
+                }
             case (KubernetesConventions.KubernetesResources.V1, KubernetesConventions.KubernetesResources.ConfigMap):
-            {
-                using var response = await client.CoreV1.DeleteNamespacedConfigMapWithHttpMessagesAsync(
-                    obj.Name,
-                    obj.Namespace,
-                    body: CreateDryRunDeleteOptions(),
-                    dryRun: KubernetesConventions.KubernetesApi.DryRunAll,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                {
+                    using var response = await client.CoreV1.DeleteNamespacedConfigMapWithHttpMessagesAsync(
+                        obj.Name,
+                        obj.Namespace,
+                        body: CreateDryRunDeleteOptions(),
+                        dryRun: KubernetesConventions.KubernetesApi.DryRunAll,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
 
-                return CaptureDryRunResult(obj, response);
-            }
+                    return CaptureDryRunResult(obj, response);
+                }
             default:
                 throw new InvalidOperationException($"Unsupported object for server-side dry-run: {KubernetesManagerHelpers.FormatObjectRef(obj)}.");
         }

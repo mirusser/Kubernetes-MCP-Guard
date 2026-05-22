@@ -28,7 +28,7 @@ builder.Services.Configure<InfraGateApprovalSettings>(
 var options = McpGatewayOptions.FromConfiguration(builder.Configuration);
 options.ValidateProductionSafety();
 
-builder.AddInfraGateObservability(opt => 
+builder.AddInfraGateObservability(opt =>
 {
     opt.WriteToConsole = true;
     opt.ConsoleToStandardError = false;
