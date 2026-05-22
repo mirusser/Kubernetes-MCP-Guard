@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.Postgres;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
@@ -50,10 +51,8 @@ builder.Services.AddSingleton(options);
 builder.Services.AddSingleton<IGuardrailAuditStore, GuardrailAuditStore>();
 builder.Services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
 builder.Services.AddSingleton<GuardedToolRunner>();
-builder.Services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
-builder.Services.AddSingleton<ApprovalStore>();
-builder.Services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
-builder.Services.AddSingleton<IApprovalChallengeStore, ApprovalChallengeStore>();
+builder.Services.AddPostgresApprovalPersistence(
+    builder.Configuration[McpGatewayConventions.ConfigurationKeys.ApprovalPostgresConnectionString]);
 builder.Services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
 builder.Services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
 builder.Services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
@@ -161,6 +160,9 @@ builder.Services
         new ValueTask<EmptyResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>().Unsubscribe(request.Server.SessionId, request.Params)));
 
 var app = builder.Build();
+
+await app.Services.GetRequiredService<PostgresApprovalSchemaValidator>()
+    .ValidateAsync(CancellationToken.None).ConfigureAwait(false);
 
 app.UseAuthentication();
 app.UseAuthorization();

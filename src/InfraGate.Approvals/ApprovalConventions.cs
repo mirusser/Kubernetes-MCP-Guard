@@ -37,6 +37,7 @@ public static class ApprovalConventions
 
     public static class Canonicalizations
     {
+        public const string PlanEnvelopeV1 = "infra-gate.approval.plan-envelope.v1";
         public const string ProfileReviewV1 = "infra-gate.approval.review.v1";
     }
 
@@ -111,6 +112,13 @@ public static class ApprovalConventions
         public const string Canceled = "canceled";
     }
 
+    public static class ExecutionOutcomeStatuses
+    {
+        public const string Blocked = "blocked";
+        public const string Failed = "failed";
+        public const string Succeeded = "succeeded";
+    }
+
     public static class PolicySeverities
     {
         public const string Information = "Information";
@@ -141,6 +149,8 @@ public static class ApprovalConventions
         public const string GrantExpired = "approval.grant.expired";
         public const string InvalidGrant = "approval.grant.invalid";
         public const string InvalidPlanId = "approval.plan.invalid_id";
+        public const string ExecutionBlocked = "approval.execution.blocked";
+        public const string ExecutionClaimActive = "approval.execution.claim_active";
         public const string MissingReviewEvidence = "approval.review_evidence.missing";
         public const string PendingPlanChanged = "approval.challenge.pending_plan_changed";
         public const string PlanAlreadyApplied = "approval.plan.already_applied";

@@ -4,6 +4,7 @@ WORKDIR /src
 COPY Directory.Build.props .
 COPY .editorconfig .
 COPY src/InfraGate.Approvals/InfraGate.Approvals.csproj src/InfraGate.Approvals/
+COPY src/InfraGate.Approvals.Postgres/InfraGate.Approvals.Postgres.csproj src/InfraGate.Approvals.Postgres/
 COPY src/InfraGate.DownstreamAuth/InfraGate.DownstreamAuth.csproj src/InfraGate.DownstreamAuth/
 COPY src/InfraGate.KubernetesAdapter/InfraGate.KubernetesAdapter.csproj src/InfraGate.KubernetesAdapter/
 COPY src/InfraGate.RuntimeSafety/InfraGate.RuntimeSafety.csproj src/InfraGate.RuntimeSafety/
@@ -15,6 +16,7 @@ RUN dotnet restore src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
 RUN dotnet restore src/InfraGate.McpServer/InfraGate.McpServer.csproj
 
 COPY src/InfraGate.Approvals/ src/InfraGate.Approvals/
+COPY src/InfraGate.Approvals.Postgres/ src/InfraGate.Approvals.Postgres/
 COPY src/InfraGate.DownstreamAuth/ src/InfraGate.DownstreamAuth/
 COPY src/InfraGate.KubernetesAdapter/ src/InfraGate.KubernetesAdapter/
 COPY src/InfraGate.RuntimeSafety/ src/InfraGate.RuntimeSafety/

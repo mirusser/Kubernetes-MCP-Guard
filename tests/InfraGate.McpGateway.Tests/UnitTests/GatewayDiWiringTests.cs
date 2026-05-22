@@ -16,10 +16,10 @@ public sealed class GatewayDiWiringTests
     {
         var services = new ServiceCollection();
         services.AddSingleton(CreateOptions());
-        services.AddSingleton(new ApprovalStoreOptions(Path.Combine(Path.GetTempPath(), "di-wiring-test", Guid.NewGuid().ToString("N"))));
-        services.AddSingleton<ApprovalStore>();
-        services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
-        services.AddSingleton<IApprovalChallengeStore, ApprovalChallengeStore>();
+        services.AddSingleton<TestApprovalWorkflow>();
+        services.AddSingleton<IApprovalPlanWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
+        services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
+        services.AddSingleton<IApprovalAuditPublisher>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
         services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
         services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
         services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
@@ -59,10 +59,11 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton<IDownstreamMcpClient, NullDownstreamClient>();
         services.AddSingleton<IGuardrailAuditStore, NullAuditStore>();
         services.AddSingleton<GuardedToolRunner>();
-        services.AddSingleton(new ApprovalStoreOptions(Path.Combine(Path.GetTempPath(), "di-wiring-test", Guid.NewGuid().ToString("N"))));
-        services.AddSingleton<ApprovalStore>();
-        services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
-        services.AddSingleton<IApprovalChallengeStore, ApprovalChallengeStore>();
+        services.AddSingleton<TestApprovalWorkflow>();
+        services.AddSingleton<IApprovalPlanWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
+        services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
+        services.AddSingleton<IApprovalExecutionWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
+        services.AddSingleton<IApprovalAuditPublisher>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
         services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
         services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
         services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
@@ -83,8 +84,6 @@ public sealed class GatewayDiWiringTests
 
         Assert.NotNull(provider.GetRequiredService<IGatewayApprovalService>());
         Assert.NotNull(provider.GetRequiredService<GuardedToolRunner>());
-        Assert.NotNull(provider.GetRequiredService<ApprovalStore>());
-        Assert.NotNull(provider.GetRequiredService<IApprovalChallengeStore>());
         Assert.NotNull(provider.GetRequiredService<IApprovalPreExecutionGate>());
         Assert.NotNull(provider.GetRequiredService<PlanStatusResourceHandler>());
         Assert.NotNull(provider.GetRequiredService<IGatewayToolDispatcher>());

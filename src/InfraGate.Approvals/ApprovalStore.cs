@@ -4,7 +4,7 @@ using InfraGate.Approvals.AuditPayloads;
 
 namespace InfraGate.Approvals;
 
-public sealed class ApprovalStore
+public sealed class ApprovalStore : IApprovalPlanWorkflow, IApprovalAuditPublisher
 {
     private const int PlanIdRandomByteCount = 16;
     private const int GrantIdByteCount = 16;
@@ -296,6 +296,9 @@ public sealed class ApprovalStore
 
         return File.AppendAllTextAsync(AuditPath, line + Environment.NewLine, cancellationToken);
     }
+
+    public Task PublishAsync(PlanAudit audit, CancellationToken cancellationToken) =>
+        WriteAuditAsync(audit.EventName, audit.Payload, cancellationToken);
 
     public string GetPendingPath(string planId) => Path.Combine(PendingDirectory, planId + ApprovalConventions.Storage.JsonExtension);
 

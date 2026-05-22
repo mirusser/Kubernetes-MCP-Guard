@@ -13,6 +13,7 @@ using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.McpGateway.Notifications;
+using InfraGate.McpGateway.Tests.UnitTests;
 using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OAuth;
@@ -130,7 +131,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(new FakeDownstream("unused"), audit);
         await using var client = await CreateHttpMcpClientAsync(server);
-        string planId = ApprovalStore.NewPlanId();
+        string planId = ApprovalIds.NewPlanId();
 
         var templates = await client.ListResourceTemplatesAsync(new ListResourceTemplatesRequestParams(), CancellationToken.None);
         var read = await client.ReadResourceAsync(
@@ -534,7 +535,6 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             });
 
         Assert.Contains("Scaled apps/v1 Deployment", acceptedResult);
-        Assert.True(File.Exists(Path.Combine(approvalRoot, "grants", $"{planId}.json")));
         Assert.Contains(k8sApi.Requests, apiRequest =>
             apiRequest.Method == "PATCH" &&
             apiRequest.Path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo/scale" &&
@@ -599,6 +599,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(downstream, audit, CreateGatewayOptions(serverProject, testRoot, repoRoot));
         await using var client = await CreateHttpMcpClientAsync(server);
+        var approvalWorkflow = server.Services.GetRequiredService<TestApprovalWorkflow>();
 
         try
         {
@@ -628,7 +629,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             Assert.Contains("data-section=\"diff\"", pageText);
         }
 
-        await ApprovePlanAsync(approvalRoot, applyRequestText, Subject);
+        await ApprovePlanAsync(approvalWorkflow,applyRequestText, Subject);
         var applyText = await CallTextAsync(
             client,
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
@@ -765,7 +766,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [KubernetesAdapterConventions.ToolArguments.Container] = "nginx",
                 [KubernetesAdapterConventions.ToolArguments.Image] = "nginx:1.27-alpine"
             });
-        var setImagePlanId = await ApprovePlanAsync(approvalRoot, setImageRequestText, Subject);
+        var setImagePlanId = await ApprovePlanAsync(approvalWorkflow,setImageRequestText, Subject);
         var setImageText = await CallTextAsync(
             client,
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
@@ -784,7 +785,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo",
                 [KubernetesAdapterConventions.ToolArguments.Replicas] = 2
             });
-        var scalePlanId = await ApprovePlanAsync(approvalRoot, scaleRequestText, Subject);
+        var scalePlanId = await ApprovePlanAsync(approvalWorkflow,scaleRequestText, Subject);
         var scaleText = await CallTextAsync(
             client,
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
@@ -802,7 +803,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
                 [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo"
             });
-        var restartPlanId = await ApprovePlanAsync(approvalRoot, restartRequestText, Subject);
+        var restartPlanId = await ApprovePlanAsync(approvalWorkflow,restartRequestText, Subject);
         var restartText = await CallTextAsync(
             client,
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
@@ -820,7 +821,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
                 [KubernetesAdapterConventions.ToolArguments.Manifest] = DemoManifest
             });
-        var deletePlanId = await ApprovePlanAsync(approvalRoot, deleteRequestText, Subject);
+        var deletePlanId = await ApprovePlanAsync(approvalWorkflow,deleteRequestText, Subject);
         var deleteText = await CallTextAsync(
             client,
             McpGatewayConventions.ToolNames.ApplyApprovedPlan,
@@ -864,11 +865,11 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<IGuardrailAuditStore>(audit);
                 services.AddSingleton<IDownstreamMcpClient>(downstream);
                 services.AddSingleton<GuardedToolRunner>();
-                services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
-                services.AddSingleton<ApprovalStore>();
-                services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
-                services.AddSingleton<ApprovalChallengeStore>();
-                services.AddSingleton<IApprovalChallengeStore>(sp => sp.GetRequiredService<ApprovalChallengeStore>());
+                services.AddSingleton<TestApprovalWorkflow>();
+                services.AddSingleton<IApprovalPlanWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
+                services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
+                services.AddSingleton<IApprovalExecutionWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
+                services.AddSingleton<IApprovalAuditPublisher>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
                 services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
                 services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
                 services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
@@ -1318,17 +1319,16 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         return kubeconfigPath;
     }
 
-    private static async Task<string> ApprovePlanAsync(string approvalRoot, string requestText, string subject)
+    private static async Task<string> ApprovePlanAsync(TestApprovalWorkflow workflow, string requestText, string subject)
     {
         var planId = ParsePlanId(requestText);
-        var store = new ApprovalStore(new ApprovalStoreOptions(approvalRoot));
-        var pending = await store.GetPendingPlanAsync(planId, CancellationToken.None);
+        var pending = await workflow.GetPendingPlanAsync(planId, CancellationToken.None);
         if (!pending.IsPending || pending.Envelope is null)
         {
             throw new InvalidOperationException(pending.Message);
         }
 
-        await store.CreateGrantAsync(
+        await workflow.CreateGrantAsync(
             pending.Envelope,
             subject,
             sourceChallengeId: "integration-test",

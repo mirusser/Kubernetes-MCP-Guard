@@ -3,7 +3,7 @@ using InfraGate.Approvals.AuditPayloads;
 namespace InfraGate.Approvals;
 
 public sealed class ApprovalPreExecutionGate(
-    ApprovalStore approvalStore,
+    IApprovalPlanWorkflow approvalPlans,
     IApprovalAuditPublisher? auditPublisher = null) : IApprovalPreExecutionGate
 {
     private readonly IApprovalAuditPublisher auditPublisher = auditPublisher ?? NoOpApprovalAuditPublisher.Instance;
@@ -18,7 +18,7 @@ public sealed class ApprovalPreExecutionGate(
         IDomainPlanExecutor domainExecutor,
         CancellationToken cancellationToken)
     {
-        var granted = await approvalStore.GetGrantedPlanAsync(planId, cancellationToken).ConfigureAwait(false);
+        var granted = await approvalPlans.GetGrantedPlanAsync(planId, cancellationToken).ConfigureAwait(false);
         if (!granted.IsGranted || granted.Envelope is null || granted.Grant is null)
         {
             return PreExecutionGateResult.Blocked(planId, granted.Message, granted.ReasonCode);

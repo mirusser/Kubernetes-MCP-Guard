@@ -20,13 +20,15 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
     private readonly GuardedToolRunner guardedRunner;
     private readonly IDomainAdapter domainAdapter;
     private readonly IGatewayApprovalService approvals;
-    private readonly ApprovalStore approvalStore;
+    private readonly IApprovalPlanWorkflow approvalPlans;
+    private readonly IApprovalExecutionWorkflow approvalExecution;
+    private readonly IApprovalAuditPublisher auditPublisher;
     private readonly IApprovalPreExecutionGate preExecutionGate;
     private readonly IHttpContextAccessor httpContextAccessor;
     private readonly ISubscriptionRegistry subscriptionRegistry;
     private readonly ILogger<GatewayToolDispatcher> logger;
 
-    // Justification: S107 — DI constructor with 9 parameters. Grouping into options/aggregate
+    // Justification: S107 — DI constructor with 11 parameters. Grouping into options/aggregate
     // services would add indirection without reducing coupling. The constructor remains
     // explicit so DI failures surface immediately rather than being deferred.
     public GatewayToolDispatcher(
@@ -34,7 +36,9 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         GuardedToolRunner guardedRunner,
         IDomainAdapter domainAdapter,
         IGatewayApprovalService approvals,
-        ApprovalStore approvalStore,
+        IApprovalPlanWorkflow approvalPlans,
+        IApprovalExecutionWorkflow approvalExecution,
+        IApprovalAuditPublisher auditPublisher,
         IApprovalPreExecutionGate preExecutionGate,
         IHttpContextAccessor httpContextAccessor,
         ISubscriptionRegistry subscriptionRegistry,
@@ -44,7 +48,9 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         this.guardedRunner = guardedRunner;
         this.domainAdapter = domainAdapter;
         this.approvals = approvals;
-        this.approvalStore = approvalStore;
+        this.approvalPlans = approvalPlans;
+        this.approvalExecution = approvalExecution;
+        this.auditPublisher = auditPublisher;
         this.preExecutionGate = preExecutionGate;
         this.httpContextAccessor = httpContextAccessor;
         this.subscriptionRegistry = subscriptionRegistry;
@@ -190,7 +196,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             return ErrorResult(errorText);
         }
 
-        await approvalStore.CreatePlanAsync(
+        await approvalPlans.CreatePlanAsync(
             planResult.Envelope,
             planResult.TargetNamespace,
             ct).ConfigureAwait(false);
@@ -231,18 +237,41 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             return HandleUnapprovedGate(gate);
         }
 
+        var granted = await approvalPlans.GetGrantedPlanAsync(planId, ct).ConfigureAwait(false);
+        if (!granted.IsGranted || granted.Grant is null)
+        {
+            return ErrorResult(granted.Message);
+        }
+
+        var beginExecution = await approvalExecution.BeginExecutionAttemptAsync(planId, granted.Grant, ct)
+            .ConfigureAwait(false);
+        if (!beginExecution.IsStarted || beginExecution.Attempt is null)
+        {
+            return ErrorResult(beginExecution.Message);
+        }
+
         var preExecution = await preExecutionGate.EvaluateAsync(planId, domainAdapter, ct).ConfigureAwait(false);
         if (!preExecution.IsPassed || preExecution.Envelope is null || preExecution.Grant is null)
         {
-            if (preExecution.Audit is { } audit)
-            {
-                await WritePlanAuditAsync(audit, planId, ct).ConfigureAwait(false);
-            }
+            var audit = preExecution.Audit ?? new PlanAudit(
+                ApprovalConventions.AuditEvents.ApplyDenied,
+                new ApplyDeniedPayload(planId, preExecution.Message));
+            await approvalExecution.RecordExecutionBlockedAsync(
+                beginExecution.Attempt,
+                preExecution.Message,
+                preExecution.ReasonCode,
+                audit,
+                ct).ConfigureAwait(false);
 
             return ErrorResult(preExecution.Message);
         }
 
-        return await ExecutePlanAsync(planId, preExecution.Envelope, preExecution.Grant, ct).ConfigureAwait(false);
+        return await ExecutePlanAsync(
+            planId,
+            preExecution.Envelope,
+            preExecution.Grant,
+            beginExecution.Attempt,
+            ct).ConfigureAwait(false);
     }
 
     private async Task<CallToolResult> HandleGetPlanStatusAsync(
@@ -257,7 +286,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             return ErrorResult("Missing required argument: planId.");
         }
 
-        var result = await approvalStore.GetPlanStatusAsync(planId, ct).ConfigureAwait(false);
+        var result = await approvalPlans.GetPlanStatusAsync(planId, ct).ConfigureAwait(false);
         var json = PlanStatusResponse.Serialize(planId, result.Status);
 
         return new CallToolResult
@@ -288,7 +317,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         PlanStatusResult result;
         do
         {
-            result = await approvalStore.GetPlanStatusAsync(planId, ct).ConfigureAwait(false);
+            result = await approvalPlans.GetPlanStatusAsync(planId, ct).ConfigureAwait(false);
             if (IsTerminalWaitStatus(result.Status))
             {
                 break;
@@ -336,6 +365,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         string planId,
         PlanEnvelope envelope,
         ApprovalGrant grant,
+        ExecutionAttempt attempt,
         CancellationToken ct)
     {
         DomainPlanExecutionResult executeResult;
@@ -346,14 +376,17 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             var message = $"Plan '{planId}' execution failed: {ex.Message}";
-            await WritePlanAuditAsync(
-                new PlanAudit(
-                    ApprovalConventions.AuditEvents.ApplyFailed,
-                    new ApplyFailedPayload(
-                        planId,
-                        envelope.Operation,
-                        message)),
-                planId,
+            var audit = new PlanAudit(
+                ApprovalConventions.AuditEvents.ApplyFailed,
+                new ApplyFailedPayload(
+                    planId,
+                    envelope.Operation,
+                    message));
+            await approvalExecution.RecordExecutionFailedAsync(
+                attempt,
+                message,
+                reasonCode: null,
+                audit,
                 ct).ConfigureAwait(false);
 
             logger.LogWarning(ex, "Approved plan {PlanId} execution failed.", planId);
@@ -363,25 +396,28 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (!executeResult.IsSuccessful)
         {
-            if (executeResult.Audit is { } audit)
-            {
-                await WritePlanAuditAsync(audit, planId, ct).ConfigureAwait(false);
-            }
-            else
-            {
-                await approvalStore.WriteAuditAsync(
-                    ApprovalConventions.AuditEvents.ApplyDenied,
-                    new ApplyDeniedPayload(planId, executeResult.Message),
-                    ct).ConfigureAwait(false);
-            }
+            var audit = executeResult.Audit ?? new PlanAudit(
+                ApprovalConventions.AuditEvents.ApplyFailed,
+                new ApplyFailedPayload(planId, envelope.Operation, executeResult.Message));
+            await approvalExecution.RecordExecutionFailedAsync(
+                attempt,
+                executeResult.Message,
+                executeResult.ReasonCode,
+                audit,
+                ct).ConfigureAwait(false);
 
             return ErrorResult(executeResult.Message);
         }
 
-        await approvalStore.MarkAppliedAsync(
-            envelope,
-            executeResult.TargetNamespace ?? GetNamespaceFromEnvelope(envelope),
+        string targetNamespace = executeResult.TargetNamespace ?? GetNamespaceFromEnvelope(envelope);
+        await approvalExecution.RecordExecutionSucceededAsync(
+            attempt,
             grant,
+            targetNamespace,
+            executeResult.Message,
+            new PlanAudit(
+                ApprovalConventions.AuditEvents.PlanApplied,
+                new PlanAppliedPayload(envelope.Id, envelope.Operation, targetNamespace, grant.ReviewDigest.Value)),
             ct).ConfigureAwait(false);
 
         return new CallToolResult
@@ -558,7 +594,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
     {
         try
         {
-            await approvalStore.WriteAuditAsync(audit.EventName, audit.Payload, ct).ConfigureAwait(false);
+            await auditPublisher.PublishAsync(audit, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
