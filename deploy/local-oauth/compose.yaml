@@ -34,6 +34,26 @@ services:
       retries: 12
       start_period: 10s
 
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: infra-gate
+      POSTGRES_USER: infra-gate
+      POSTGRES_PASSWORD: infra-gate-dev-password
+      INFRA_GATE_RUN_APPROVAL_MIGRATIONS: "true"
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../../src/InfraGate.Approvals.Postgres/Migrations:/var/approval-migrations:ro
+      - ../../scripts/persistence/run-compose-migrations.sh:/docker-entrypoint-initdb.d/00-run-approval-migrations.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U infra-gate -d infra-gate"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   mcp-gateway:
     image: ${INFRA_GATE_GATEWAY_IMAGE:-kubernetes-mcp-guard-gateway}
     build:
@@ -41,6 +61,8 @@ services:
       dockerfile: deploy/docker/mcp-gateway.Dockerfile
     depends_on:
       keycloak:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     env_file:
       # Compose --env-file supplies interpolation values; env_file passes the
@@ -85,6 +107,9 @@ services:
     networks:
       - default
       - k8s
+
+volumes:
+  pgdata:
 
 networks:
   default: {}

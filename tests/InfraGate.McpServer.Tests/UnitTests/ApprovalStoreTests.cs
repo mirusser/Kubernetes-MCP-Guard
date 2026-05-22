@@ -12,7 +12,7 @@ public sealed class ApprovalStoreTests
     [Fact]
     public void NewPlanId_ReturnsOpaquePlanIdentifier()
     {
-        string planId = ApprovalStore.NewPlanId();
+        string planId = ApprovalIds.NewPlanId();
 
         Assert.Matches("^[0-9A-Fa-f]{32}$", planId);
         Assert.DoesNotMatch("^\\d{14}-", planId);
@@ -34,9 +34,8 @@ public sealed class ApprovalStoreTests
     public async Task PublishAsync_PlanAudit_WritesAuditEvent()
     {
         var store = CreateStore();
-        var publisher = new ApprovalStoreAuditPublisher(store);
 
-        await publisher.PublishAsync(
+        await store.PublishAsync(
             new PlanAudit(
                 ApprovalConventions.AuditEvents.PreExecutionChecked,
                 new PreExecutionCheckedPayload(
@@ -72,7 +71,7 @@ public sealed class ApprovalStoreTests
     public async Task GetPendingPlanAsync_LegacyRawPlan_ReturnsReRequestMessage()
     {
         var store = CreateStore();
-        string planId = ApprovalStore.NewPlanId();
+        string planId = ApprovalIds.NewPlanId();
         Directory.CreateDirectory(store.PendingDirectory);
         await File.WriteAllTextAsync(
             store.GetPendingPath(planId),
@@ -97,7 +96,7 @@ public sealed class ApprovalStoreTests
     public async Task GetPendingPlanAsync_EnvelopeWithoutDigests_ReturnsReRequestMessage()
     {
         var store = CreateStore();
-        string planId = ApprovalStore.NewPlanId();
+        string planId = ApprovalIds.NewPlanId();
         Directory.CreateDirectory(store.PendingDirectory);
         await File.WriteAllTextAsync(
             store.GetPendingPath(planId),
@@ -172,7 +171,7 @@ public sealed class ApprovalStoreTests
     public async Task GetPendingPlanAsync_EnvelopeWithNullAdapterId_ReturnsReRequestMessage()
     {
         var store = CreateStore();
-        string planId = ApprovalStore.NewPlanId();
+        string planId = ApprovalIds.NewPlanId();
         Directory.CreateDirectory(store.PendingDirectory);
         var envelope = new PlanEnvelope
         {
@@ -205,7 +204,7 @@ public sealed class ApprovalStoreTests
     public async Task GetPendingPlanAsync_EnvelopeWithMismatchedDigestAlgorithm_ReturnsReRequestMessage()
     {
         var store = CreateStore();
-        string planId = ApprovalStore.NewPlanId();
+        string planId = ApprovalIds.NewPlanId();
         Directory.CreateDirectory(store.PendingDirectory);
         var envelope = new PlanEnvelope
         {
@@ -238,7 +237,7 @@ public sealed class ApprovalStoreTests
     public async Task GetPendingPlanAsync_EnvelopeWithNullReviewSurface_ReturnsReRequestMessage()
     {
         var store = CreateStore();
-        string planId = ApprovalStore.NewPlanId();
+        string planId = ApprovalIds.NewPlanId();
         Directory.CreateDirectory(store.PendingDirectory);
         var envelope = new PlanEnvelope
         {
@@ -275,7 +274,7 @@ public sealed class ApprovalStoreTests
 
     private static PlanEnvelope<Dictionary<string, string>> CreatePlan() =>
         PlanEnvelopeFactory.Create(
-            ApprovalStore.NewPlanId(),
+            ApprovalIds.NewPlanId(),
             "dummy",
             "scale",
             DateTimeOffset.UtcNow,

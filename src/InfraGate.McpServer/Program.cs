@@ -18,7 +18,7 @@ builder.Services.Configure<InfraGateKubernetesSettings>(
 
 var mcpOptions = KubernetesMcpOptions.FromConfiguration(builder.Configuration);
 
-builder.AddInfraGateObservability(opt => 
+builder.AddInfraGateObservability(opt =>
 {
     opt.WriteToConsole = true;
     opt.ConsoleToStandardError = true;

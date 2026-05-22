@@ -512,7 +512,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         PlanRequester requester,
         FreshnessPolicy freshnessPolicy)
     {
-        var planId = ApprovalStore.NewPlanId();
+        var planId = ApprovalIds.NewPlanId();
         var envelope = KubernetesApprovalAdapter.ToEnvelope(
             KubernetesApprovalAdapter.CreateEnvelope(
                 planId,
@@ -554,7 +554,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             ApprovalConventions.AuditEvents.DryRunFailed,
             new InfraGate.Approvals.AuditPayloads.DryRunFailedPayload(
                 "request",
-                ApprovalStore.NewPlanId(),
+                ApprovalIds.NewPlanId(),
                 operation,
                 namespaceName,
                 Array.Empty<string>(),
@@ -568,7 +568,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         new(
             ApprovalConventions.AuditEvents.DiffFailed,
             new InfraGate.Approvals.AuditPayloads.DiffFailedPayload(
-                ApprovalStore.NewPlanId(),
+                ApprovalIds.NewPlanId(),
                 operation,
                 namespaceName,
                 objects,

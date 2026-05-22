@@ -5,7 +5,7 @@ using ModelContextProtocol.Protocol;
 namespace InfraGate.McpGateway.Notifications;
 
 internal sealed class PlanStatusResourceHandler(
-    ApprovalStore approvalStore,
+    IApprovalPlanWorkflow approvalPlans,
     ISubscriptionRegistry subscriptionRegistry)
 {
     public ListResourceTemplatesResult ListTemplates() => new()
@@ -25,7 +25,7 @@ internal sealed class PlanStatusResourceHandler(
     public async Task<ReadResourceResult> ReadAsync(ReadResourceRequestParams request, CancellationToken ct)
     {
         string planId = ParsePlanStatusUri(request.Uri);
-        var status = await approvalStore.GetPlanStatusAsync(planId, ct).ConfigureAwait(false);
+        var status = await approvalPlans.GetPlanStatusAsync(planId, ct).ConfigureAwait(false);
         string uri = NotificationsConventions.Resources.PlanStatusUri(planId);
 
         return new ReadResourceResult

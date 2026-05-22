@@ -25,7 +25,11 @@
     },
     "Approval": {
       "Root": "/data/approvals",
-      "BaseUrl": "http://127.0.0.1:3001"
+      "BaseUrl": "http://127.0.0.1:3001",
+      "Postgres": {
+        "ConnectionString": "Host=postgres;Port=5432;Database=infra-gate;Username=infra-gate;Password=infra-gate-dev-password",
+        "RunMigrationsOnStartup": true
+      }
     },
     "Kubernetes": {
       "KubeConfig": "/run/kube/mcp-nginx-demo.compose.config",

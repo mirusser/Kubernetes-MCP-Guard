@@ -56,7 +56,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
     private TestServer? gatewayServer;
     private DownstreamMcpClient? downstreamClient;
     private ApprovalStore? approvalStore;
-    private ApprovalChallengeStore? challengeStore;
+    private InMemoryApprovalChallengeWorkflow? challengeStore;
     private string keycloakBaseAddress = string.Empty;
     private string approvalOAuthSubject = DemoUsername;
 
@@ -79,7 +79,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
     public ApprovalStore ApprovalStore =>
         approvalStore ?? throw new InvalidOperationException("Fixture is not initialised.");
 
-    public ApprovalChallengeStore ChallengeStore =>
+    public InMemoryApprovalChallengeWorkflow ChallengeStore =>
         challengeStore ?? throw new InvalidOperationException("Fixture is not initialised.");
 
     public IDownstreamMcpClient DownstreamClient =>
@@ -117,7 +117,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
 
         var storeOptions = new ApprovalStoreOptions(approvalRoot);
         approvalStore = new ApprovalStore(storeOptions);
-        challengeStore = new ApprovalChallengeStore(storeOptions);
+        challengeStore = new InMemoryApprovalChallengeWorkflow(approvalStore);
 
         gatewayServer = CreateGatewayServer();
         downstreamClient = gatewayServer.Services.GetRequiredService<IDownstreamMcpClient>() as DownstreamMcpClient
@@ -506,9 +506,11 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                 services.AddSingleton<GuardedToolRunner>();
                 services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
                 services.AddSingleton<ApprovalStore>();
-                services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
-                services.AddSingleton<ApprovalChallengeStore>();
-                services.AddSingleton<IApprovalChallengeStore>(sp => sp.GetRequiredService<ApprovalChallengeStore>());
+                services.AddSingleton<IApprovalAuditPublisher>(sp => sp.GetRequiredService<ApprovalStore>());
+                services.AddSingleton<IApprovalPlanWorkflow>(sp => sp.GetRequiredService<ApprovalStore>());
+                services.AddSingleton(challengeStore!);
+                services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<InMemoryApprovalChallengeWorkflow>());
+                services.AddSingleton<IApprovalExecutionWorkflow>(sp => sp.GetRequiredService<InMemoryApprovalChallengeWorkflow>());
                 services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
                 services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
                 services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();

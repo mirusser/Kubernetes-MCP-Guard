@@ -50,13 +50,13 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
         // can extract a valid antiforgery token.
         var otherPayload = CreateRestartPayload();
         var otherPlan = KubernetesApprovalAdapter.CreateEnvelope(
-            ApprovalStore.NewPlanId(),
+            ApprovalIds.NewPlanId(),
             "restart",
             DateTimeOffset.UtcNow,
             new PlanRequester(otherSubject, "test"),
             otherPayload);
         var otherPlanResult = await fixture.ApprovalStore.CreatePlanAsync(otherPlan, fixture.Namespace, CancellationToken.None);
-        var otherChallenge = await fixture.ChallengeStore.CreateAsync(
+        var otherChallenge = await fixture.ChallengeStore.CreateChallengeAsync(
             otherPlanResult.Envelope.Id,
             otherPlanResult.Hash,
             otherSubject,
@@ -76,7 +76,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
             browser,
             originalChallengeId,
             SafetyE2EFixture.ParseAntiforgeryToken(tokenPageText));
-        var originalChallenge = await fixture.ChallengeStore.GetAsync(originalChallengeId, CancellationToken.None);
+        var originalChallenge = await fixture.ChallengeStore.GetChallengeAsync(originalChallengeId, CancellationToken.None);
 
         Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Rejected, originalChallenge?.Status);
@@ -127,7 +127,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
         try
         {
             var result = await fixture.GetApprovalService().ApproveChallengeAsync(challengeId, CancellationToken.None);
-            var challenge = await fixture.ChallengeStore.GetAsync(challengeId, CancellationToken.None);
+            var challenge = await fixture.ChallengeStore.GetChallengeAsync(challengeId, CancellationToken.None);
 
             Assert.False(result.Succeeded);
             Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired, result.ReasonCode);
@@ -169,13 +169,13 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
 
         var otherPayload = CreateRestartPayload();
         var otherPlan = KubernetesApprovalAdapter.CreateEnvelope(
-            ApprovalStore.NewPlanId(),
+            ApprovalIds.NewPlanId(),
             "restart",
             DateTimeOffset.UtcNow,
             new PlanRequester(otherSubject, "test"),
             otherPayload);
         var otherPlanResult = await fixture.ApprovalStore.CreatePlanAsync(otherPlan, fixture.Namespace, CancellationToken.None);
-        var otherChallenge = await fixture.ChallengeStore.CreateAsync(
+        var otherChallenge = await fixture.ChallengeStore.CreateChallengeAsync(
             otherPlanResult.Envelope.Id,
             otherPlanResult.Hash,
             otherSubject,
@@ -195,7 +195,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
             browser,
             originalChallengeId,
             SafetyE2EFixture.ParseAntiforgeryToken(tokenPageText));
-        var originalChallenge = await fixture.ChallengeStore.GetAsync(originalChallengeId, CancellationToken.None);
+        var originalChallenge = await fixture.ChallengeStore.GetChallengeAsync(originalChallengeId, CancellationToken.None);
 
         Assert.False(File.Exists(fixture.ApprovalStore.GetGrantPath(planId)));
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Rejected, originalChallenge?.Status);
@@ -238,7 +238,7 @@ public sealed class WrongUserApprovalTests(SafetyE2EFixture fixture)
         try
         {
             var result = await fixture.GetApprovalService().ApproveChallengeAsync(challengeId, CancellationToken.None);
-            var challenge = await fixture.ChallengeStore.GetAsync(challengeId, CancellationToken.None);
+            var challenge = await fixture.ChallengeStore.GetChallengeAsync(challengeId, CancellationToken.None);
 
             Assert.False(result.Succeeded);
             Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired, result.ReasonCode);

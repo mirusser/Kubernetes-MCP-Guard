@@ -25,7 +25,7 @@ public sealed class PlanStatusResourceHandlerTests
     public async Task ReadAsync_UnknownSafePlan_ReturnsNotFoundJson()
     {
         var handler = CreateHandler();
-        string planId = ApprovalStore.NewPlanId();
+        string planId = ApprovalIds.NewPlanId();
 
         var result = await handler.ReadAsync(
             new ReadResourceRequestParams { Uri = NotificationsConventions.Resources.PlanStatusUri(planId) },

@@ -72,7 +72,7 @@ public sealed class GatewayToolDispatcherTests
     public async Task CallToolAsync_GetPlanStatus_UnknownPlan_ReturnsNotFoundJson()
     {
         var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
-        string planId = ApprovalStore.NewPlanId();
+        string planId = ApprovalIds.NewPlanId();
 
         var result = await CallGetPlanStatusAsync(context, planId);
 
@@ -83,7 +83,7 @@ public sealed class GatewayToolDispatcherTests
     public async Task CallToolAsync_WaitForPlanApproval_UnknownPlan_ReturnsNotFoundJson()
     {
         var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
-        string planId = ApprovalStore.NewPlanId();
+        string planId = ApprovalIds.NewPlanId();
 
         var result = await CallWaitForPlanApprovalAsync(context, planId);
 
@@ -95,7 +95,7 @@ public sealed class GatewayToolDispatcherTests
     {
         var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
         var envelope = CreatePlanEnvelope("mcp-nginx-demo");
-        await context.Store.CreatePlanAsync(envelope, "mcp-nginx-demo", CancellationToken.None);
+        await context.Workflow.CreatePlanAsync(envelope, "mcp-nginx-demo", CancellationToken.None);
 
         var result = await CallWaitForPlanApprovalAsync(context, envelope.Id, timeoutSeconds: 1);
 
@@ -107,11 +107,11 @@ public sealed class GatewayToolDispatcherTests
     {
         var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
         var envelope = CreatePlanEnvelope("mcp-nginx-demo");
-        await context.Store.CreatePlanAsync(envelope, "mcp-nginx-demo", CancellationToken.None);
+        await context.Workflow.CreatePlanAsync(envelope, "mcp-nginx-demo", CancellationToken.None);
 
         var waitTask = CallWaitForPlanApprovalAsync(context, envelope.Id, timeoutSeconds: 1);
         await Task.Delay(TimeSpan.FromMilliseconds(50), TimeProvider.System, CancellationToken.None);
-        await context.Store.CreateGrantAsync(envelope, Subject, "challenge-1", CancellationToken.None);
+        await context.Workflow.CreateGrantAsync(envelope, Subject, "challenge-1", CancellationToken.None);
 
         var result = await waitTask;
 
@@ -122,10 +122,10 @@ public sealed class GatewayToolDispatcherTests
     public async Task CallToolAsync_WaitForPlanApproval_AppliedPlan_ReturnsAppliedJson()
     {
         var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
-        var envelope = await CreateGrantedPlanAsync(context.Store);
-        var grant = await context.Store.GetGrantAsync(envelope.Id, CancellationToken.None);
+        var envelope = await CreateGrantedPlanAsync(context.Workflow);
+        var grant = await context.Workflow.GetGrantAsync(envelope.Id, CancellationToken.None);
         Assert.NotNull(grant);
-        await context.Store.MarkAppliedAsync(envelope, "mcp-nginx-demo", grant, CancellationToken.None);
+        await context.Workflow.MarkAppliedAsync(envelope, "mcp-nginx-demo", grant, CancellationToken.None);
 
         var result = await CallWaitForPlanApprovalAsync(context, envelope.Id);
 
@@ -139,7 +139,7 @@ public sealed class GatewayToolDispatcherTests
         var createdAtUtc = DateTimeOffset.UtcNow
             .Subtract(ApprovalConventions.PlanValidity.DefaultWindow)
             .Subtract(TimeSpan.FromMinutes(1));
-        var envelope = await CreateGrantedPlanAsync(context.Store, createdAtUtc);
+        var envelope = await CreateGrantedPlanAsync(context.Workflow, createdAtUtc);
 
         var result = await CallWaitForPlanApprovalAsync(context, envelope.Id);
 
@@ -198,7 +198,7 @@ public sealed class GatewayToolDispatcherTests
     {
         var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
         var envelope = CreatePlanEnvelope("mcp-nginx-demo");
-        await context.Store.CreatePlanAsync(envelope, "mcp-nginx-demo", CancellationToken.None);
+        await context.Workflow.CreatePlanAsync(envelope, "mcp-nginx-demo", CancellationToken.None);
 
         var result = await CallGetPlanStatusAsync(context, envelope.Id);
 
@@ -209,7 +209,7 @@ public sealed class GatewayToolDispatcherTests
     public async Task CallToolAsync_GetPlanStatus_Approved_ReturnsStatusJson()
     {
         var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
-        var envelope = await CreateGrantedPlanAsync(context.Store);
+        var envelope = await CreateGrantedPlanAsync(context.Workflow);
 
         var result = await CallGetPlanStatusAsync(context, envelope.Id);
 
@@ -220,10 +220,10 @@ public sealed class GatewayToolDispatcherTests
     public async Task CallToolAsync_GetPlanStatus_Applied_ReturnsStatusJson()
     {
         var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
-        var envelope = await CreateGrantedPlanAsync(context.Store);
-        var grant = await context.Store.GetGrantAsync(envelope.Id, CancellationToken.None);
+        var envelope = await CreateGrantedPlanAsync(context.Workflow);
+        var grant = await context.Workflow.GetGrantAsync(envelope.Id, CancellationToken.None);
         Assert.NotNull(grant);
-        await context.Store.MarkAppliedAsync(envelope, "mcp-nginx-demo", grant, CancellationToken.None);
+        await context.Workflow.MarkAppliedAsync(envelope, "mcp-nginx-demo", grant, CancellationToken.None);
 
         var result = await CallGetPlanStatusAsync(context, envelope.Id);
 
@@ -259,7 +259,7 @@ public sealed class GatewayToolDispatcherTests
             DomainPlanExecutionResult.Success("unused", null),
             DomainPlanExecutionResult.Blocked("Plan cannot be executed: live Kubernetes state has drifted."));
         var context = CreateContext(executor);
-        var envelope = await CreateGrantedPlanAsync(context.Store);
+        var envelope = await CreateGrantedPlanAsync(context.Workflow);
 
         var result = await context.Dispatcher.CallToolAsync(
             new CallToolRequestParams
@@ -274,7 +274,7 @@ public sealed class GatewayToolDispatcherTests
 
         Assert.True(result.IsError);
         Assert.Contains("drifted", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
-        Assert.False(File.Exists(context.Store.GetAppliedPath(envelope.Id)));
+        Assert.False(context.Workflow.IsApplied(envelope.Id));
         Assert.Empty(executor.ExecuteCalls);
         Assert.Single(executor.PreExecutionCalls);
     }
@@ -336,7 +336,7 @@ public sealed class GatewayToolDispatcherTests
             DomainPlanExecutionResult.Success("Applied successfully.", "mcp-nginx-demo"),
             DomainPlanExecutionResult.Success("Pre-execution checks passed.", null));
         var context = CreateContext(executor);
-        var envelope = await CreateGrantedPlanAsync(context.Store);
+        var envelope = await CreateGrantedPlanAsync(context.Workflow);
 
         var result = await context.Dispatcher.CallToolAsync(
             new CallToolRequestParams
@@ -352,7 +352,7 @@ public sealed class GatewayToolDispatcherTests
         Assert.True(result.IsError is not true);
         Assert.Single(executor.PreExecutionCalls);
         Assert.Single(executor.ExecuteCalls);
-        Assert.True(File.Exists(context.Store.GetAppliedPath(envelope.Id)));
+        Assert.True(context.Workflow.IsApplied(envelope.Id));
     }
 
     [Fact]
@@ -362,7 +362,7 @@ public sealed class GatewayToolDispatcherTests
             DomainPlanExecutionResult.Success("Applied successfully.", "mcp-nginx-demo"),
             DomainPlanExecutionResult.Success("Pre-execution checks passed.", null));
         var context = CreateContext(executor);
-        var envelope = await CreateGrantedPlanAsync(context.Store);
+        var envelope = await CreateGrantedPlanAsync(context.Workflow);
 
         await context.Dispatcher.CallToolAsync(
             new CallToolRequestParams
@@ -375,7 +375,7 @@ public sealed class GatewayToolDispatcherTests
             },
             CancellationToken.None);
 
-        string audit = await File.ReadAllTextAsync(context.Store.AuditPath, CancellationToken.None);
+        string audit = context.Workflow.GetAuditEventsJson();
 
         Assert.Contains($@"""eventName"": ""{ApprovalConventions.AuditEvents.PreExecutionGrantValidated}""", audit);
         Assert.Contains($@"""planId"": ""{envelope.Id}""", audit);
@@ -385,7 +385,7 @@ public sealed class GatewayToolDispatcherTests
     public async Task CallToolAsync_ApprovedPlanExecutionThrows_WritesExecutionFailedAudit()
     {
         var context = CreateContext(new ThrowingDomainPlanExecutor());
-        var envelope = await CreateGrantedPlanAsync(context.Store);
+        var envelope = await CreateGrantedPlanAsync(context.Workflow);
 
         var result = await context.Dispatcher.CallToolAsync(
             new CallToolRequestParams
@@ -397,12 +397,12 @@ public sealed class GatewayToolDispatcherTests
                 }
             },
             CancellationToken.None);
-        string audit = await File.ReadAllTextAsync(context.Store.AuditPath, CancellationToken.None);
+        string audit = context.Workflow.GetAuditEventsJson();
 
         Assert.True(result.IsError);
         Assert.Contains("execution failed", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
         Assert.Contains($@"""eventName"": ""{ApprovalConventions.AuditEvents.ApplyFailed}""", audit);
-        Assert.False(File.Exists(context.Store.GetAppliedPath(envelope.Id)));
+        Assert.False(context.Workflow.IsApplied(envelope.Id));
     }
 
     [Fact]
@@ -426,7 +426,7 @@ public sealed class GatewayToolDispatcherTests
             CancellationToken.None);
 
         Assert.True(result.IsError is not true);
-        var auditJson = await File.ReadAllTextAsync(context.Store.AuditPath, CancellationToken.None);
+        var auditJson = context.Workflow.GetAuditEventsJson();
         Assert.Contains($@"""namespace"": ""{targetNamespace}""", auditJson);
     }
 
@@ -436,9 +436,7 @@ public sealed class GatewayToolDispatcherTests
         IGatewayApprovalService? approvals = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-dispatcher-tests", Guid.NewGuid().ToString("N"));
-        var storeOptions = new ApprovalStoreOptions(root);
-        var store = new ApprovalStore(storeOptions);
-        var challenges = new ApprovalChallengeStore(storeOptions);
+        var workflow = new TestApprovalWorkflow();
         var gatewayOptions = new McpGatewayOptions(
             new GatewayAuthOptions("https://issuer.example.com"),
             "downstream.csproj",
@@ -467,8 +465,9 @@ public sealed class GatewayToolDispatcherTests
             httpContextAccessor,
             NullLogger<GuardedToolRunner>.Instance);
         var gatewayApprovalService = approvals ?? new GatewayApprovalService(
-            store,
-            challenges,
+            workflow,
+            workflow,
+            workflow,
             new KubernetesPlanReviewAdapter(),
             new KubernetesPlanReviewRenderer(),
             new SameSubjectAuthorizationCheck(),
@@ -488,25 +487,27 @@ public sealed class GatewayToolDispatcherTests
                 guardedRunner,
                 domainAdapter,
                 gatewayApprovalService,
-                store,
-                new ApprovalPreExecutionGate(store, new ApprovalStoreAuditPublisher(store)),
+                workflow,
+                workflow,
+                workflow,
+                new ApprovalPreExecutionGate(workflow, workflow),
                 httpContextAccessor,
                 subscriptions,
                 NullLogger<GatewayToolDispatcher>.Instance),
-            store,
+            workflow,
             downstream,
             subscriptions,
             httpContext);
     }
 
     private static async Task<PlanEnvelope> CreateGrantedPlanAsync(
-        ApprovalStore store,
+        TestApprovalWorkflow workflow,
         DateTimeOffset? createdAtUtc = null)
     {
         var envelope = CreatePlanEnvelope("mcp-nginx-demo", createdAtUtc);
 
-        await store.CreatePlanAsync(envelope, "mcp-nginx-demo", CancellationToken.None);
-        await store.CreateGrantAsync(envelope, Subject, "challenge-1", CancellationToken.None);
+        await workflow.CreatePlanAsync(envelope, "mcp-nginx-demo", CancellationToken.None);
+        await workflow.CreateGrantAsync(envelope, Subject, "challenge-1", CancellationToken.None);
 
         return envelope;
     }
@@ -514,7 +515,7 @@ public sealed class GatewayToolDispatcherTests
     private static PlanEnvelope CreatePlanEnvelope(string namespaceName, DateTimeOffset? createdAtUtc = null) =>
         KubernetesApprovalAdapter.ToEnvelope(
             KubernetesApprovalAdapter.CreateEnvelope(
-                ApprovalStore.NewPlanId(),
+                ApprovalIds.NewPlanId(),
                 KubernetesAdapterConventions.PlanOperations.Apply,
                 createdAtUtc ?? DateTimeOffset.UtcNow,
                 new PlanRequester(Subject, "test"),
@@ -748,7 +749,7 @@ public sealed class GatewayToolDispatcherTests
 
     private sealed record class TestContext(
         IGatewayToolDispatcher Dispatcher,
-        ApprovalStore Store,
+        TestApprovalWorkflow Workflow,
         FakeDownstream Downstream,
         SubscriptionRegistry Subscriptions,
         DefaultHttpContext HttpContext);

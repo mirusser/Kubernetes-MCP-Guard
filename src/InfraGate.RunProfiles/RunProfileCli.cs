@@ -415,6 +415,8 @@ internal static class RunProfileCli
         field switch
         {
             RunProfileConventions.YamlKeys.ApprovalRoot => profile with { ApprovalRoot = value },
+            RunProfileConventions.YamlKeys.PostgresConnectionString => profile with { PostgresConnectionString = value },
+            RunProfileConventions.YamlKeys.RunMigrationsOnStartup => profile with { RunMigrationsOnStartup = bool.TryParse(value, out bool parsed) ? parsed : null },
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };
 

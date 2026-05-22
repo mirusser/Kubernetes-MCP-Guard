@@ -57,7 +57,7 @@ public sealed class KubernetesPlanExecutorTests
 
         return KubernetesApprovalAdapter.ToEnvelope(
             KubernetesApprovalAdapter.CreateEnvelope(
-                ApprovalStore.NewPlanId(),
+                ApprovalIds.NewPlanId(),
                 KubernetesAdapterConventions.PlanOperations.Apply,
                 DateTimeOffset.UtcNow,
                 TestRequester,
@@ -88,7 +88,7 @@ public sealed class KubernetesPlanExecutorTests
 
         return KubernetesApprovalAdapter.ToEnvelope(
             KubernetesApprovalAdapter.CreateEnvelope(
-                ApprovalStore.NewPlanId(),
+                ApprovalIds.NewPlanId(),
                 KubernetesAdapterConventions.PlanOperations.Scale,
                 DateTimeOffset.UtcNow,
                 TestRequester,
@@ -119,7 +119,7 @@ public sealed class KubernetesPlanExecutorTests
 
         return KubernetesApprovalAdapter.ToEnvelope(
             KubernetesApprovalAdapter.CreateEnvelope(
-                ApprovalStore.NewPlanId(),
+                ApprovalIds.NewPlanId(),
                 KubernetesAdapterConventions.PlanOperations.SetImage,
                 DateTimeOffset.UtcNow,
                 TestRequester,

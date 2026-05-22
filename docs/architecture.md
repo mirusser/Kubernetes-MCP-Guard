@@ -32,17 +32,9 @@ flowchart TB
     end
 
     subgraph GenericCore["Generic Approval Core"]
-        ApprovalStore["InfraGate.Approvals<br/>plan envelopes, challenges, grants, audit spine"]
-        Pending["pending/*.json<br/>Plan Envelope"]
-        Grants["grants/*.json<br/>Approval Grant"]
-        Applied["applied/*.json"]
-        Challenges["challenges/*.json<br/>Approval Challenge / Challenge Outcome"]
-        ApprovalAudit["audit.jsonl<br/>approval events"]
-        ApprovalStore --> Pending
-        ApprovalStore --> Grants
-        ApprovalStore --> Applied
-        ApprovalStore --> Challenges
-        ApprovalStore --> ApprovalAudit
+        Approvals["InfraGate.Approvals (PostgreSQL)<br/>approvals.plan_envelopes, approval_challenges,<br/>approval_grants, audit_events"]
+        Persistence["InfraGate.Approvals.Postgres<br/>Npgsql + Dapper"]
+        Approvals --> Persistence
     end
 
     subgraph K8sAdapter["Kubernetes Adapter"]
@@ -79,7 +71,7 @@ flowchart TB
     Guardrails --> GuardAudit
     Gateway -->|"plan builder + executor seams"| Adapter
     Adapter -->|"calls evidence/raw mutation tools"| Downstream
-    Gateway -->|"persists + loads"| ApprovalStore
+    Gateway -->|"approval workflow interfaces"| Approvals
     Manager -->|"KubernetesClient"| RBAC
 ```
 
@@ -311,13 +303,13 @@ flowchart LR
     Guard -->|"suspicious input"| GuardAudit[".mcp-guardrails/audit.jsonl"]
     Sanitizer -->|"suspicious or redacted output"| GuardAudit
 
-    Plan["request_* plan"] --> PlanAudit["K8S_MCP_APPROVAL_ROOT/audit.jsonl<br/>plan.created"]
-    Challenge["approval challenge"] --> ChallengeAudit["K8S_MCP_APPROVAL_ROOT/audit.jsonl<br/>challenge.*"]
+    Plan["request_* plan"] --> PlanAudit["approvals.audit_events<br/>plan.created"]
+    Challenge["approval challenge"] --> ChallengeAudit["approvals.audit_events<br/>challenge.*"]
     Approve["approve / deny / expire / reject"] --> ChallengeAudit
-    Apply["execute_approved_plan"] --> ApplyAudit["K8S_MCP_APPROVAL_ROOT/audit.jsonl<br/>execution.succeeded / execution.blocked / execution.failed"]
+    Apply["execute_approved_plan"] --> ApplyAudit["approvals.audit_events<br/>execution.succeeded / execution.blocked / execution.failed"]
 ```
 
-Guardrail audit and approval audit are separate streams. Guardrail audit records model-visible prompt-injection findings and response redaction actions. Approval audit records plan, challenge, approval, denial, expiry, hash mismatch, and apply events under `K8S_MCP_APPROVAL_ROOT/audit.jsonl`.
+Guardrail audit and approval audit are separate. Guardrail audit records model-visible prompt-injection findings and response redaction actions to `.mcp-guardrails/audit.jsonl`. Approval audit records plan, challenge, approval, denial, expiry, hash mismatch, and apply events in the `approvals.audit_events` PostgreSQL table.
 
 ## Image And Registry Layout
 

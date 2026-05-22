@@ -47,12 +47,12 @@ DecidedAtUtc                  DateTimeOffset?
 They live in different stores on disk ([ApprovalConventions.Storage](../src/InfraGate.Approvals/ApprovalConventions.cs#L10-L20)):
 
 ```text
-<approval-root>/
-  pending/<planId>.json         ← the PlanEnvelope
-  challenges/<challengeId>.json ← the ApprovalChallenge
-  grants/<planId>.json          ← Approval Grant issued after an approved challenge
-  applied/<planId>.json         ← post-execution record
-  audit.jsonl                   ← every state transition
+PostgreSQL approvals schema
+  approvals.plan_envelopes      ← the PlanEnvelope
+  approvals.approval_challenges ← the ApprovalChallenge
+  approvals.approval_grants     ← Approval Grant issued after an approved challenge
+  approvals.applied_plans       ← post-execution record
+  approvals.audit_events        ← every state transition
 ```
 
 ---
@@ -109,15 +109,15 @@ The roadmap ([.agents/Plans/archive/security-roadmap.md §13](../.agents/Plans/a
 
 ```text
 1. AI client calls request_apply_manifest (or scale/restart/setImage/delete)
-   └── Gateway asks the Kubernetes adapter to create a PlanEnvelope with KubernetesPlanPayload, then writes pending/<planId>.json
+   └── Gateway asks the Kubernetes adapter to create a PlanEnvelope with KubernetesPlanPayload, then writes to approvals.plan_envelopes
        Audit: plan.created  (PlanRequestedPayload)
 
 2. AI client calls execute_approved_plan(planId)
    └── Gateway asks ApprovalStore.GetGrantedPlanAsync
-       └── No grants/<planId>.json exists yet
+       └── No approvals.approval_grants row exists yet
            Gateway receives ApprovalGateStatus.Refused / approval.plan.not_approved
        Gateway's EnsureApprovedOrCreateChallengeAsync sees no challenge either
-           Creates ApprovalChallenge, writes challenges/<challengeId>.json
+           Creates ApprovalChallenge, writes to approvals.approval_challenges
            Audit: challenge.created  (ApprovalChallengeCreatedPayload)
            Returns approval URL to the AI client
 
@@ -133,17 +133,17 @@ The roadmap ([.agents/Plans/archive/security-roadmap.md §13](../.agents/Plans/a
          - Compares challenge.PendingPlanHash to current pending file hash
          - Verifies the expected Intent Digest and Review Digest still match
          - Marks challenge Status=approved, sets ApproverSubject + DecidedAtUtc
-         - Calls ApprovalStore.CreateGrantAsync
-             which writes grants/<planId>.json
+          - Calls ApprovalStore.CreateGrantAsync
+              which writes to approvals.approval_grants
          Audit: challenge.approved  (ApprovalChallengeApprovedPayload)
          Audit: grant.issued        (ApprovalGrantIssuedPayload)
 
 5. AI client calls execute_approved_plan(planId) again
-   └── ApprovalStore.GetGrantedPlanAsync now finds grants/<planId>.json
-       Validates grant expiry, Intent Digest, Review Digest, and Single-Execution state
-       Gateway validates generic pre-execution gates
-       Kubernetes adapter reruns dryRun=All; must still succeed (pre-execution gate)
-       Then mutates Kubernetes; gateway writes applied/<planId>.json
+   └── ApprovalStore.GetGrantedPlanAsync now finds approvals.approval_grants
+        Validates grant expiry, Intent Digest, Review Digest, and Single-Execution state
+        Gateway validates generic pre-execution gates
+        Kubernetes adapter reruns dryRun=All; must still succeed (pre-execution gate)
+        Then mutates Kubernetes; gateway writes to approvals.applied_plans
        Audit: execution.succeeded  (PlanAppliedPayload)
 ```
 
@@ -160,7 +160,7 @@ The plan threads through every step from 1 to 5. The challenge only matters for 
 | **Identifies** | A mutation | An approval attempt |
 | **Bound to** | A namespace + objects + Intent/Review Digests | A requester subject + pending-plan hash + clock |
 | **Holds** | Manifest, diff, dry-run, policy findings | Identities, timestamps, status |
-| **Stored at** | `pending/<planId>.json` → `applied/<planId>.json` | `challenges/<challengeId>.json` |
+| **Stored at** | `approvals.plan_envelopes` → `approvals.applied_plans` | `approvals.approval_challenges` |
 | **Multiplicity** | 1 per intent | Many possible per plan (retries) |
 
 If you imagine OAuth: the plan envelope is the resource, `ApprovalChallenge` is the authorization-code grant. Different lifecycles for different reasons.

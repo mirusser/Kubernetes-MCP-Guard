@@ -3,14 +3,15 @@ using InfraGate.Approvals.AuditPayloads;
 namespace InfraGate.Approvals;
 
 public sealed class ApprovalPreExecutionGate(
-    ApprovalStore approvalStore,
+    IApprovalPlanWorkflow approvalPlans,
     IApprovalAuditPublisher? auditPublisher = null) : IApprovalPreExecutionGate
 {
     private readonly IApprovalAuditPublisher auditPublisher = auditPublisher ?? NoOpApprovalAuditPublisher.Instance;
 
     // The profile's 8 sequential pre-execution gates are implemented as two ownership buckets:
     // Bucket 1 — generic core (gates 1–6: grant validity, plan window, grant expiry, authorization,
-    //   intent digest, review digest, reuse policy): owned by ApprovalStore.GetGrantedPlanAsync.
+    //   intent digest, review digest, reuse policy): owned by PostgresApprovalPersistence.GetGrantedPlanAsync,
+    //   backed by ApprovalGrantValidation.Validate.
     // Bucket 2 — domain adapter (gates 7–8: freshness policy, domain policy checks): owned by
     //   domainExecutor.CheckPreExecutionAsync.
     public async Task<PreExecutionGateResult> EvaluateAsync(
@@ -18,7 +19,7 @@ public sealed class ApprovalPreExecutionGate(
         IDomainPlanExecutor domainExecutor,
         CancellationToken cancellationToken)
     {
-        var granted = await approvalStore.GetGrantedPlanAsync(planId, cancellationToken).ConfigureAwait(false);
+        var granted = await approvalPlans.GetGrantedPlanAsync(planId, cancellationToken).ConfigureAwait(false);
         if (!granted.IsGranted || granted.Envelope is null || granted.Grant is null)
         {
             return PreExecutionGateResult.Blocked(planId, granted.Message, granted.ReasonCode);

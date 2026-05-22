@@ -24,7 +24,7 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             Gateway = MergeGateway(profile.Gateway, defaults.Gateway),
             IdentityProvider = MergeIdentityProvider(profile.IdentityProvider, defaults.IdentityProvider),
             ApprovalAuthority = MergeApprovalAuthority(profile.ApprovalAuthority, defaults.ApprovalAuthority),
-            GenericApprovalCore = profile.GenericApprovalCore ?? defaults.GenericApprovalCore,
+            GenericApprovalCore = MergeGenericApprovalCore(profile.GenericApprovalCore, defaults.GenericApprovalCore),
             Host = MergeHost(profile.Host, defaults.Host),
             DownstreamAuth = MergeDownstreamAuth(profile.DownstreamAuth, defaults.DownstreamAuth)
         };
@@ -108,6 +108,19 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             Scope = profile.Scope ?? defaults.Scope,
             GatewayClientId = profile.GatewayClientId ?? defaults.GatewayClientId,
             GatewayClientSecret = profile.GatewayClientSecret ?? defaults.GatewayClientSecret
+        };
+    }
+
+    private static GenericApprovalCoreProfile? MergeGenericApprovalCore(
+        GenericApprovalCoreProfile? profile,
+        GenericApprovalCoreProfile? defaults)
+    {
+        if (profile is null) return defaults;
+        if (defaults is null) return profile;
+        return profile with
+        {
+            PostgresConnectionString = profile.PostgresConnectionString ?? defaults.PostgresConnectionString,
+            RunMigrationsOnStartup = profile.RunMigrationsOnStartup ?? defaults.RunMigrationsOnStartup
         };
     }
 }

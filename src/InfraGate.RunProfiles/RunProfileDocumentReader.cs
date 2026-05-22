@@ -90,7 +90,9 @@ internal static class RunProfileDocumentReader
     private static readonly IReadOnlySet<string> KnownGenericApprovalCoreKeys =
         new HashSet<string>(
             [
-                RunProfileConventions.YamlKeys.ApprovalRoot
+                RunProfileConventions.YamlKeys.ApprovalRoot,
+                RunProfileConventions.YamlKeys.PostgresConnectionString,
+                RunProfileConventions.YamlKeys.RunMigrationsOnStartup
             ],
             StringComparer.Ordinal);
 
@@ -333,7 +335,12 @@ internal static class RunProfileDocumentReader
 
         ValidateKnownKeys(mapping, KnownGenericApprovalCoreKeys);
         string approvalRoot = GetRequiredScalar(mapping, RunProfileConventions.YamlKeys.ApprovalRoot);
-        return new GenericApprovalCoreProfile(approvalRoot);
+        string? postgresConnectionString = GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.PostgresConnectionString);
+        string? runMigrationsOnStartup = GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.RunMigrationsOnStartup);
+        bool? runMigrationsOnStartupBool = string.IsNullOrEmpty(runMigrationsOnStartup)
+            ? null
+            : bool.TryParse(runMigrationsOnStartup, out bool parsed) ? parsed : null;
+        return new GenericApprovalCoreProfile(approvalRoot, postgresConnectionString, runMigrationsOnStartupBool);
     }
 
     private static HostProfile? ReadHost(YamlMappingNode node)

@@ -13,6 +13,7 @@ using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.McpGateway.Notifications;
+using InfraGate.McpGateway.Tests.UnitTests;
 using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OAuth;
@@ -130,7 +131,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(new FakeDownstream("unused"), audit);
         await using var client = await CreateHttpMcpClientAsync(server);
-        string planId = ApprovalStore.NewPlanId();
+        string planId = ApprovalIds.NewPlanId();
 
         var templates = await client.ListResourceTemplatesAsync(new ListResourceTemplatesRequestParams(), CancellationToken.None);
         var read = await client.ReadResourceAsync(
@@ -522,7 +523,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 [McpGatewayConventions.Approvals.RequestVerificationToken] = token
-        }));
+            }));
         approvalResponse.EnsureSuccessStatusCode();
 
         var acceptedResult = await CallTextAsync(
@@ -534,7 +535,6 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             });
 
         Assert.Contains("Scaled apps/v1 Deployment", acceptedResult);
-        Assert.True(File.Exists(Path.Combine(approvalRoot, "grants", $"{planId}.json")));
         Assert.Contains(k8sApi.Requests, apiRequest =>
             apiRequest.Method == "PATCH" &&
             apiRequest.Path == $"/apis/apps/v1/namespaces/{NamespaceName}/deployments/demo/scale" &&
@@ -599,239 +599,240 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(downstream, audit, CreateGatewayOptions(serverProject, testRoot, repoRoot));
         await using var client = await CreateHttpMcpClientAsync(server);
+        var approvalWorkflow = server.Services.GetRequiredService<TestApprovalWorkflow>();
 
         try
         {
 
-        var applyRequestText = await CallTextAsync(
-            client,
-            "request_apply_manifest",
-            new Dictionary<string, object?>
-            {
-                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
-                [KubernetesAdapterConventions.ToolArguments.Manifest] = DemoManifest
-            });
-        var applyPlanId = ParsePlanId(applyRequestText);
-        var applyApprovalRequired = await CallTextAsync(
-            client,
-            McpGatewayConventions.ToolNames.ApplyApprovedPlan,
-            new Dictionary<string, object?>
-            {
-                [McpGatewayConventions.ToolArguments.PlanId] = applyPlanId
-            });
-        var applyChallengeId = ParseChallengeId(applyApprovalRequired);
-        using (var browser = await CreateAuthenticatedApprovalBrowserAsync(server, applyChallengeId))
-        {
-            var page = await browser.GetAsync($"/approvals/{applyChallengeId}");
-            page.EnsureSuccessStatusCode();
-            var pageText = await page.Content.ReadAsStringAsync();
-            Assert.Contains("data-section=\"diff\"", pageText);
-        }
-
-        await ApprovePlanAsync(approvalRoot, applyRequestText, Subject);
-        var applyText = await CallTextAsync(
-            client,
-            McpGatewayConventions.ToolNames.ApplyApprovedPlan,
-            new Dictionary<string, object?>
-            {
-                [McpGatewayConventions.ToolArguments.PlanId] = applyPlanId
-            });
-
-        Assert.Contains("Applied apps/v1 Deployment", applyText);
-
-        var statusText = await CallTextAsync(
-            client,
-            "get_k8s_status",
-            new Dictionary<string, object?>
-            {
-                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
-                [KubernetesAdapterConventions.ToolArguments.LabelSelector] = "app=mcp-api-demo"
-            });
-        Assert.Contains("mcp-api-demo", statusText);
-        Assert.Contains("demo-config", statusText);
-        var podName = TryGetFirstPodName(statusText);
-
-        var eventsText = await CallTextAsync(
-            client,
-            "get_k8s_events",
-            new Dictionary<string, object?>
-            {
-                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
-                [KubernetesAdapterConventions.ToolArguments.LabelSelector] = "app=mcp-api-demo",
-                [KubernetesAdapterConventions.ToolArguments.Limit] = 5
-            });
-        AssertJsonArrayProperty(eventsText, "events");
-
-        var deploymentResourceText = await CallTextAsync(
-            client,
-            "get_k8s_resource",
-            new Dictionary<string, object?>
-            {
-                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
-                [KubernetesAdapterConventions.ToolArguments.Kind] = "Deployment",
-                [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo"
-            });
-        AssertJsonKindName(deploymentResourceText, "Deployment", "mcp-api-demo");
-
-        var serviceResourceText = await CallTextAsync(
-            client,
-            "get_k8s_resource",
-            new Dictionary<string, object?>
-            {
-                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
-                [KubernetesAdapterConventions.ToolArguments.Kind] = "Service",
-                [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo"
-            });
-        AssertJsonKindName(serviceResourceText, "Service", "mcp-api-demo");
-
-        var configMapResourceText = await CallTextAsync(
-            client,
-            "get_k8s_resource",
-            new Dictionary<string, object?>
-            {
-                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
-                [KubernetesAdapterConventions.ToolArguments.Kind] = "ConfigMap",
-                [KubernetesAdapterConventions.ToolArguments.Name] = "demo-config"
-            });
-        AssertJsonKindName(configMapResourceText, "ConfigMap", "demo-config");
-
-        var deploymentDiagnosticsText = await CallTextAsync(
-            client,
-            "get_deployment_diagnostics",
-            new Dictionary<string, object?>
-            {
-                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
-                [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo",
-                [KubernetesAdapterConventions.ToolArguments.Limit] = 5
-            });
-        AssertJsonKindName(deploymentDiagnosticsText, "Deployment", "mcp-api-demo");
-
-        var serviceDiagnosticsText = await CallTextAsync(
-            client,
-            "get_service_diagnostics",
-            new Dictionary<string, object?>
-            {
-                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
-                [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo",
-                [KubernetesAdapterConventions.ToolArguments.Limit] = 5
-            });
-        AssertJsonKindName(serviceDiagnosticsText, "Service", "mcp-api-demo");
-
-        if (!string.IsNullOrWhiteSpace(podName))
-        {
-            var podDiagnosticsText = await CallTextAsync(
+            var applyRequestText = await CallTextAsync(
                 client,
-                "get_pod_diagnostics",
+                "request_apply_manifest",
                 new Dictionary<string, object?>
                 {
                     [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
-                    [KubernetesAdapterConventions.ToolArguments.PodName] = podName,
+                    [KubernetesAdapterConventions.ToolArguments.Manifest] = DemoManifest
+                });
+            var applyPlanId = ParsePlanId(applyRequestText);
+            var applyApprovalRequired = await CallTextAsync(
+                client,
+                McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+                new Dictionary<string, object?>
+                {
+                    [McpGatewayConventions.ToolArguments.PlanId] = applyPlanId
+                });
+            var applyChallengeId = ParseChallengeId(applyApprovalRequired);
+            using (var browser = await CreateAuthenticatedApprovalBrowserAsync(server, applyChallengeId))
+            {
+                var page = await browser.GetAsync($"/approvals/{applyChallengeId}");
+                page.EnsureSuccessStatusCode();
+                var pageText = await page.Content.ReadAsStringAsync();
+                Assert.Contains("data-section=\"diff\"", pageText);
+            }
+
+            await ApprovePlanAsync(approvalWorkflow, applyRequestText, Subject);
+            var applyText = await CallTextAsync(
+                client,
+                McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+                new Dictionary<string, object?>
+                {
+                    [McpGatewayConventions.ToolArguments.PlanId] = applyPlanId
+                });
+
+            Assert.Contains("Applied apps/v1 Deployment", applyText);
+
+            var statusText = await CallTextAsync(
+                client,
+                "get_k8s_status",
+                new Dictionary<string, object?>
+                {
+                    [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                    [KubernetesAdapterConventions.ToolArguments.LabelSelector] = "app=mcp-api-demo"
+                });
+            Assert.Contains("mcp-api-demo", statusText);
+            Assert.Contains("demo-config", statusText);
+            var podName = TryGetFirstPodName(statusText);
+
+            var eventsText = await CallTextAsync(
+                client,
+                "get_k8s_events",
+                new Dictionary<string, object?>
+                {
+                    [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                    [KubernetesAdapterConventions.ToolArguments.LabelSelector] = "app=mcp-api-demo",
                     [KubernetesAdapterConventions.ToolArguments.Limit] = 5
                 });
-            AssertJsonKindName(
-                podDiagnosticsText,
-                "Pod",
-                podName,
-                KubernetesAdapterConventions.ToolArguments.PodName);
+            AssertJsonArrayProperty(eventsText, "events");
 
-            var podLogsText = await CallTextAsync(
+            var deploymentResourceText = await CallTextAsync(
                 client,
-                "get_pod_logs",
+                "get_k8s_resource",
                 new Dictionary<string, object?>
                 {
                     [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
-                    [KubernetesAdapterConventions.ToolArguments.PodName] = podName,
-                    [KubernetesAdapterConventions.ToolArguments.Container] = "nginx",
-                    [KubernetesAdapterConventions.ToolArguments.TailLines] = 10
+                    [KubernetesAdapterConventions.ToolArguments.Kind] = "Deployment",
+                    [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo"
                 });
-            
-            if (podLogsText.StartsWith('{'))
+            AssertJsonKindName(deploymentResourceText, "Deployment", "mcp-api-demo");
+
+            var serviceResourceText = await CallTextAsync(
+                client,
+                "get_k8s_resource",
+                new Dictionary<string, object?>
+                {
+                    [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                    [KubernetesAdapterConventions.ToolArguments.Kind] = "Service",
+                    [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo"
+                });
+            AssertJsonKindName(serviceResourceText, "Service", "mcp-api-demo");
+
+            var configMapResourceText = await CallTextAsync(
+                client,
+                "get_k8s_resource",
+                new Dictionary<string, object?>
+                {
+                    [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                    [KubernetesAdapterConventions.ToolArguments.Kind] = "ConfigMap",
+                    [KubernetesAdapterConventions.ToolArguments.Name] = "demo-config"
+                });
+            AssertJsonKindName(configMapResourceText, "ConfigMap", "demo-config");
+
+            var deploymentDiagnosticsText = await CallTextAsync(
+                client,
+                "get_deployment_diagnostics",
+                new Dictionary<string, object?>
+                {
+                    [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                    [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo",
+                    [KubernetesAdapterConventions.ToolArguments.Limit] = 5
+                });
+            AssertJsonKindName(deploymentDiagnosticsText, "Deployment", "mcp-api-demo");
+
+            var serviceDiagnosticsText = await CallTextAsync(
+                client,
+                "get_service_diagnostics",
+                new Dictionary<string, object?>
+                {
+                    [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                    [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo",
+                    [KubernetesAdapterConventions.ToolArguments.Limit] = 5
+                });
+            AssertJsonKindName(serviceDiagnosticsText, "Service", "mcp-api-demo");
+
+            if (!string.IsNullOrWhiteSpace(podName))
             {
-                AssertJsonProperty(podLogsText, "podName", podName);
+                var podDiagnosticsText = await CallTextAsync(
+                    client,
+                    "get_pod_diagnostics",
+                    new Dictionary<string, object?>
+                    {
+                        [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                        [KubernetesAdapterConventions.ToolArguments.PodName] = podName,
+                        [KubernetesAdapterConventions.ToolArguments.Limit] = 5
+                    });
+                AssertJsonKindName(
+                    podDiagnosticsText,
+                    "Pod",
+                    podName,
+                    KubernetesAdapterConventions.ToolArguments.PodName);
+
+                var podLogsText = await CallTextAsync(
+                    client,
+                    "get_pod_logs",
+                    new Dictionary<string, object?>
+                    {
+                        [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                        [KubernetesAdapterConventions.ToolArguments.PodName] = podName,
+                        [KubernetesAdapterConventions.ToolArguments.Container] = "nginx",
+                        [KubernetesAdapterConventions.ToolArguments.TailLines] = 10
+                    });
+
+                if (podLogsText.StartsWith('{'))
+                {
+                    AssertJsonProperty(podLogsText, "podName", podName);
+                }
+                else
+                {
+                    Assert.Contains("Pod log read failed", podLogsText);
+                }
             }
-            else
-            {
-                Assert.Contains("Pod log read failed", podLogsText);
-            }
-        }
 
-        var setImageRequestText = await CallTextAsync(
-            client,
-            "request_set_deployment_image",
-            new Dictionary<string, object?>
-            {
-                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
-                [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo",
-                [KubernetesAdapterConventions.ToolArguments.Container] = "nginx",
-                [KubernetesAdapterConventions.ToolArguments.Image] = "nginx:1.27-alpine"
-            });
-        var setImagePlanId = await ApprovePlanAsync(approvalRoot, setImageRequestText, Subject);
-        var setImageText = await CallTextAsync(
-            client,
-            McpGatewayConventions.ToolNames.ApplyApprovedPlan,
-            new Dictionary<string, object?>
-            {
-                [McpGatewayConventions.ToolArguments.PlanId] = setImagePlanId
-            });
-        Assert.Contains("Updated apps/v1 Deployment", setImageText);
+            var setImageRequestText = await CallTextAsync(
+                client,
+                "request_set_deployment_image",
+                new Dictionary<string, object?>
+                {
+                    [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                    [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo",
+                    [KubernetesAdapterConventions.ToolArguments.Container] = "nginx",
+                    [KubernetesAdapterConventions.ToolArguments.Image] = "nginx:1.27-alpine"
+                });
+            var setImagePlanId = await ApprovePlanAsync(approvalWorkflow, setImageRequestText, Subject);
+            var setImageText = await CallTextAsync(
+                client,
+                McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+                new Dictionary<string, object?>
+                {
+                    [McpGatewayConventions.ToolArguments.PlanId] = setImagePlanId
+                });
+            Assert.Contains("Updated apps/v1 Deployment", setImageText);
 
-        var scaleRequestText = await CallTextAsync(
-            client,
-            "request_scale_deployment",
-            new Dictionary<string, object?>
-            {
-                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
-                [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo",
-                [KubernetesAdapterConventions.ToolArguments.Replicas] = 2
-            });
-        var scalePlanId = await ApprovePlanAsync(approvalRoot, scaleRequestText, Subject);
-        var scaleText = await CallTextAsync(
-            client,
-            McpGatewayConventions.ToolNames.ApplyApprovedPlan,
-            new Dictionary<string, object?>
-            {
-                [McpGatewayConventions.ToolArguments.PlanId] = scalePlanId
-            });
-        Assert.Contains("Scaled apps/v1 Deployment", scaleText);
+            var scaleRequestText = await CallTextAsync(
+                client,
+                "request_scale_deployment",
+                new Dictionary<string, object?>
+                {
+                    [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                    [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo",
+                    [KubernetesAdapterConventions.ToolArguments.Replicas] = 2
+                });
+            var scalePlanId = await ApprovePlanAsync(approvalWorkflow, scaleRequestText, Subject);
+            var scaleText = await CallTextAsync(
+                client,
+                McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+                new Dictionary<string, object?>
+                {
+                    [McpGatewayConventions.ToolArguments.PlanId] = scalePlanId
+                });
+            Assert.Contains("Scaled apps/v1 Deployment", scaleText);
 
-        var restartRequestText = await CallTextAsync(
-            client,
-            "request_restart_deployment",
-            new Dictionary<string, object?>
-            {
-                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
-                [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo"
-            });
-        var restartPlanId = await ApprovePlanAsync(approvalRoot, restartRequestText, Subject);
-        var restartText = await CallTextAsync(
-            client,
-            McpGatewayConventions.ToolNames.ApplyApprovedPlan,
-            new Dictionary<string, object?>
-            {
-                [McpGatewayConventions.ToolArguments.PlanId] = restartPlanId
-            });
-        Assert.Contains("Restarted apps/v1 Deployment", restartText);
+            var restartRequestText = await CallTextAsync(
+                client,
+                "request_restart_deployment",
+                new Dictionary<string, object?>
+                {
+                    [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                    [KubernetesAdapterConventions.ToolArguments.Name] = "mcp-api-demo"
+                });
+            var restartPlanId = await ApprovePlanAsync(approvalWorkflow, restartRequestText, Subject);
+            var restartText = await CallTextAsync(
+                client,
+                McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+                new Dictionary<string, object?>
+                {
+                    [McpGatewayConventions.ToolArguments.PlanId] = restartPlanId
+                });
+            Assert.Contains("Restarted apps/v1 Deployment", restartText);
 
-        var deleteRequestText = await CallTextAsync(
-            client,
-            "request_delete_manifest",
-            new Dictionary<string, object?>
-            {
-                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
-                [KubernetesAdapterConventions.ToolArguments.Manifest] = DemoManifest
-            });
-        var deletePlanId = await ApprovePlanAsync(approvalRoot, deleteRequestText, Subject);
-        var deleteText = await CallTextAsync(
-            client,
-            McpGatewayConventions.ToolNames.ApplyApprovedPlan,
-            new Dictionary<string, object?>
-            {
-                [McpGatewayConventions.ToolArguments.PlanId] = deletePlanId
-            });
+            var deleteRequestText = await CallTextAsync(
+                client,
+                "request_delete_manifest",
+                new Dictionary<string, object?>
+                {
+                    [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                    [KubernetesAdapterConventions.ToolArguments.Manifest] = DemoManifest
+                });
+            var deletePlanId = await ApprovePlanAsync(approvalWorkflow, deleteRequestText, Subject);
+            var deleteText = await CallTextAsync(
+                client,
+                McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+                new Dictionary<string, object?>
+                {
+                    [McpGatewayConventions.ToolArguments.PlanId] = deletePlanId
+                });
 
-        Assert.Contains("Deleted apps/v1 Deployment", deleteText);
-        Assert.Contains("Deleted v1 Service", deleteText);
-        Assert.Contains("Deleted v1 ConfigMap", deleteText);
+            Assert.Contains("Deleted apps/v1 Deployment", deleteText);
+            Assert.Contains("Deleted v1 Service", deleteText);
+            Assert.Contains("Deleted v1 ConfigMap", deleteText);
         }
         finally
         {
@@ -864,11 +865,11 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<IGuardrailAuditStore>(audit);
                 services.AddSingleton<IDownstreamMcpClient>(downstream);
                 services.AddSingleton<GuardedToolRunner>();
-                services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
-                services.AddSingleton<ApprovalStore>();
-                services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
-                services.AddSingleton<ApprovalChallengeStore>();
-                services.AddSingleton<IApprovalChallengeStore>(sp => sp.GetRequiredService<ApprovalChallengeStore>());
+                services.AddSingleton<TestApprovalWorkflow>();
+                services.AddSingleton<IApprovalPlanWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
+                services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
+                services.AddSingleton<IApprovalExecutionWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
+                services.AddSingleton<IApprovalAuditPublisher>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
                 services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
                 services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
                 services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
@@ -1318,17 +1319,16 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         return kubeconfigPath;
     }
 
-    private static async Task<string> ApprovePlanAsync(string approvalRoot, string requestText, string subject)
+    private static async Task<string> ApprovePlanAsync(TestApprovalWorkflow workflow, string requestText, string subject)
     {
         var planId = ParsePlanId(requestText);
-        var store = new ApprovalStore(new ApprovalStoreOptions(approvalRoot));
-        var pending = await store.GetPendingPlanAsync(planId, CancellationToken.None);
+        var pending = await workflow.GetPendingPlanAsync(planId, CancellationToken.None);
         if (!pending.IsPending || pending.Envelope is null)
         {
             throw new InvalidOperationException(pending.Message);
         }
 
-        await store.CreateGrantAsync(
+        await workflow.CreateGrantAsync(
             pending.Envelope,
             subject,
             sourceChallengeId: "integration-test",
