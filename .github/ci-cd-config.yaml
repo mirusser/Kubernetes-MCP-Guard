@@ -1,0 +1,10 @@
+language: dotnet
+dotnet_version: "10.0.x"
+dotnet_solution: "InfraGate.slnx"
+project: "infragate"
+package_ecosystems:
+  - "nuget"
+  - "github-actions"
+use_semgrep: true
+use_docker: true
+use_codecov: true

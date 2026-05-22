@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore NuGet Packages Cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('**/*.csproj', 'Directory.Packages.props', 'Directory.Build.props') }}
+          restore-keys: nuget-
+
+      - name: Restore
+        run: dotnet restore InfraGate.slnx
+
+      - name: Format Check
+        run: dotnet format InfraGate.slnx --verify-no-changes
+
+      - name: Build
+        run: dotnet build InfraGate.slnx --configuration Release --no-restore
+
+      - name: Test with Coverage
+        run: dotnet test InfraGate.slnx --configuration Release --no-build --filter "Category!=Keycloak&Category!=SafetyE2E" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --results-directory TestResults/coverage -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+      - name: Validate run profiles
+        run: dotnet run --project src/InfraGate.RunProfiles -- validate

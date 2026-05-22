@@ -28,6 +28,7 @@ profiles:
       oauthTokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
     genericApprovalCore:
       approvalRoot: /data/approvals
+      postgresConnectionString: "Host=postgres;Port=5432;Database=infra-gate;Username=infra-gate;Password=infra-gate-dev-password"
     downstreamAuth:
       required: "true"
       authority: http://keycloak:8080/realms/infra-gate
@@ -208,6 +209,7 @@ profiles:
       oauthTokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
     genericApprovalCore:
       approvalRoot: /data/approvals
+      postgresConnectionString: "Host=postgres;Port=5432;Database=infra-gate;Username=infra-gate;Password=infra-gate-dev-password"
     downstreamAuth:
       required: "true"
       authority: http://keycloak:8080/realms/infra-gate
@@ -249,6 +251,7 @@ profiles:
       oauthTokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
     genericApprovalCore:
       approvalRoot: /data/approvals
+      postgresConnectionString: "Host=postgres;Port=5432;Database=infra-gate;Username=infra-gate;Password=infra-gate-dev-password"
     downstreamAuth:
       required: "true"
       authority: http://keycloak:8080/realms/infra-gate

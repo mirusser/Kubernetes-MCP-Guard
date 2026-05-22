@@ -10,8 +10,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: keycloak-tests
-  cancel-in-progress: false
+  group: keycloak-tests-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   keycloak-integration:

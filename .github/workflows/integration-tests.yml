@@ -15,8 +15,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: integration-tests
-  cancel-in-progress: false
+  group: integration-tests-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   integration-tests:
