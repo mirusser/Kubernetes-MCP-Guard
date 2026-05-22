@@ -61,6 +61,8 @@ internal static class RunProfileConventions
         public const string OAuthResource = "OAuthResource";
         public const string OAuthScope = "OAuthScope";
         public const string RootPath = "Root";
+        public const string Postgres = "Postgres";
+        public const string PostgresConnectionString = "ConnectionString";
     }
 
     public static class YamlKeys
@@ -68,6 +70,7 @@ internal static class RunProfileConventions
         public const string AllowedNamespaces = "allowedNamespaces";
         public const string ApprovalAuthority = "approvalAuthority";
         public const string ApprovalRoot = "approvalRoot";
+        public const string PostgresConnectionString = "postgresConnectionString";
         public const string AspnetcoreUrls = "aspnetcoreUrls";
         public const string Audience = "audience";
         public const string Authority = "authority";

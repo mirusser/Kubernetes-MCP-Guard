@@ -198,6 +198,37 @@ public sealed class AppSettingsRendererTests
     }
 
     [Fact]
+    public void Render_PostgresConnectionStringPresent_WritesNestedPostgresObject()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            GenericApprovalCore = new GenericApprovalCoreProfile("/data/approvals", "Host=postgres;Port=5432;Database=approvals;Username=app;Password=secret")
+        };
+
+        string result = AppSettingsRenderer.Render("config.yaml", profile);
+
+        using var doc = JsonDocument.Parse(result);
+        JsonElement approval = doc.RootElement.GetProperty("InfraGate").GetProperty("Approval");
+        JsonElement postgres = approval.GetProperty("Postgres");
+        Assert.Equal("Host=postgres;Port=5432;Database=approvals;Username=app;Password=secret", postgres.GetProperty("ConnectionString").GetString());
+    }
+
+    [Fact]
+    public void Render_PostgresConnectionStringNull_OmitsPostgresSection()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            GenericApprovalCore = new GenericApprovalCoreProfile("/data/approvals")
+        };
+
+        string result = AppSettingsRenderer.Render("config.yaml", profile);
+
+        using var doc = JsonDocument.Parse(result);
+        JsonElement approval = doc.RootElement.GetProperty("InfraGate").GetProperty("Approval");
+        Assert.False(approval.TryGetProperty("Postgres", out _));
+    }
+
+    [Fact]
     public void Render_MultipleAllowedNamespaces_WritesArray()
     {
         var profile = CreateMinimalProfile() with

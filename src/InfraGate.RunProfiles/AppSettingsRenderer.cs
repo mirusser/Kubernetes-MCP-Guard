@@ -126,6 +126,7 @@ internal static class AppSettingsRenderer
     {
         bool hasAnyValue =
             !string.IsNullOrEmpty(profile.GenericApprovalCore?.ApprovalRoot) ||
+            !string.IsNullOrEmpty(profile.GenericApprovalCore?.PostgresConnectionString) ||
             !string.IsNullOrEmpty(profile.ApprovalAuthority?.BaseUrl);
 
         if (!hasAnyValue)
@@ -137,6 +138,14 @@ internal static class AppSettingsRenderer
         writer.WriteStartObject();
         WriteStringIfSet(writer, RunProfileConventions.AppSettings.RootPath, profile.GenericApprovalCore?.ApprovalRoot);
         WriteStringIfSet(writer, RunProfileConventions.AppSettings.BaseUrl, profile.ApprovalAuthority?.BaseUrl);
+        if (!string.IsNullOrEmpty(profile.GenericApprovalCore?.PostgresConnectionString))
+        {
+            writer.WritePropertyName(RunProfileConventions.AppSettings.Postgres);
+            writer.WriteStartObject();
+            writer.WriteString(RunProfileConventions.AppSettings.PostgresConnectionString, profile.GenericApprovalCore.PostgresConnectionString);
+            writer.WriteEndObject();
+        }
+
         writer.WriteEndObject();
     }
 

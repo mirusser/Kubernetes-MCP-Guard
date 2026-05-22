@@ -1799,6 +1799,166 @@ public sealed class RunProfileCliTests
             generated.ReplaceLineEndings());
     }
 
+    [Fact]
+    public async Task ExecuteAsync_GenerateAppSettingsWithPostgresConnectionString_WritesNestedPostgresObject()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                genericApprovalCore:
+                  approvalRoot: /data/approvals
+                  postgresConnectionString: "Host=postgres;Port=5432;Database=approvals;Username=app;Password=secret"
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.appsettings.json");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--format", "appsettings", "--output", outputPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        using var doc = System.Text.Json.JsonDocument.Parse(content);
+        var postgres = doc.RootElement.GetProperty("InfraGate").GetProperty("Approval").GetProperty("Postgres");
+        Assert.Equal(
+            "Host=postgres;Port=5432;Database=approvals;Username=app;Password=secret",
+            postgres.GetProperty("ConnectionString").GetString());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateEnvWithPostgresConnectionString_DoesNotEmitConnectionStringEnvVar()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-stdio:
+                kind: mcp-stdio
+                genericApprovalCore:
+                  approvalRoot: .mcp-approvals
+                  postgresConnectionString: "Host=postgres;Port=5432;Database=approvals;Username=app;Password=secret"
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: .kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-stdio", "--config", configPath, "--output", outputPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        Assert.DoesNotContain("postgres", content, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Host=postgres", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateAppSettings_DefaultsPostgresConnectionStringMergedIntoProfile()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            defaults:
+              genericApprovalCore:
+                approvalRoot: /data/approvals
+                postgresConnectionString: "Host=postgres;Port=5432;Database=approvals;Username=app;Password=secret"
+            profiles:
+              local-compose:
+                kind: compose
+                genericApprovalCore:
+                  approvalRoot: /custom/approvals
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.appsettings.json");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--format", "appsettings", "--output", outputPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        using var doc = System.Text.Json.JsonDocument.Parse(content);
+        var approval = doc.RootElement.GetProperty("InfraGate").GetProperty("Approval");
+        Assert.Equal("/custom/approvals", approval.GetProperty("Root").GetString());
+        Assert.Equal(
+            "Host=postgres;Port=5432;Database=approvals;Username=app;Password=secret",
+            approval.GetProperty("Postgres").GetProperty("ConnectionString").GetString());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetPostgresConnectionString_OverridesValue()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                genericApprovalCore:
+                  approvalRoot: /data/approvals
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.appsettings.json");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--format", "appsettings", "--output", outputPath,
+             "--set", "genericApprovalCore.postgresConnectionString=Host=custom-pg;Port=5432"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        using var doc = System.Text.Json.JsonDocument.Parse(content);
+        Assert.Equal(
+            "Host=custom-pg;Port=5432",
+            doc.RootElement.GetProperty("InfraGate").GetProperty("Approval").GetProperty("Postgres").GetProperty("ConnectionString").GetString());
+    }
+
     private static string FindRepoRoot()
     {
         DirectoryInfo? dir = new(AppContext.BaseDirectory);
