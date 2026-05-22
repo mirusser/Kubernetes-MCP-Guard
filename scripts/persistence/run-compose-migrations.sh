@@ -24,13 +24,13 @@ for f in $(ls "$MIGRATIONS_DIR"/*.sql 2>/dev/null | sort); do
     checksum=$(sha256sum "$f" | awk '{print toupper($1)}')
 
     # Check if schema_migrations table already exists (idempotency guard)
-    table_exists=$(psql -d "$POSTGRES_DB" -tAc \
+    table_exists=$(psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
         "SELECT COUNT(*) FROM information_schema.tables \
          WHERE table_schema='approvals' AND table_name='schema_migrations'" \
         2>/dev/null || echo "0")
 
     if [ "$table_exists" = "1" ]; then
-        already=$(psql -d "$POSTGRES_DB" -tAc \
+        already=$(psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
             "SELECT COUNT(*) FROM approvals.schema_migrations WHERE filename='$filename'" \
             2>/dev/null || echo "0")
         if [ "$already" = "1" ]; then
@@ -40,8 +40,8 @@ for f in $(ls "$MIGRATIONS_DIR"/*.sql 2>/dev/null | sort); do
     fi
 
     echo "[approval-migrations]   Applying $filename..."
-    psql -d "$POSTGRES_DB" -f "$f"
-    psql -d "$POSTGRES_DB" -c \
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$f"
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
         "INSERT INTO approvals.schema_migrations (filename, checksum_sha256) \
          VALUES ('$filename', '$checksum');"
     echo "[approval-migrations]   $filename: applied. checksum=$checksum"
