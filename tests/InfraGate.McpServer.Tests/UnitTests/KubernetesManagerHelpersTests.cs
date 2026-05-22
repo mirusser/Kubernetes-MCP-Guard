@@ -161,6 +161,149 @@ public sealed class KubernetesManagerHelpersTests
         Assert.Contains("422 UnprocessableEntity: validation failed", result);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ValidateNamespace_NullOrWhitespace_ReturnsRequiredMessage(string? namespaceName)
+    {
+        var options = new KubernetesMcpOptions(
+            AllowedNamespaces: new HashSet<string>(["default"]),
+            ApprovalRoot: "/tmp/approvals");
+
+        var result = KubernetesManagerHelpers.ValidateNamespace(options, namespaceName!);
+
+        Assert.Equal("Namespace is required.", result);
+    }
+
+    [Fact]
+    public void ValidateNamespace_DisallowedNamespace_ReturnsNotAllowedMessage()
+    {
+        var options = new KubernetesMcpOptions(
+            AllowedNamespaces: new HashSet<string>(["production"]),
+            ApprovalRoot: "/tmp/approvals");
+
+        var result = KubernetesManagerHelpers.ValidateNamespace(options, "staging");
+
+        Assert.NotNull(result);
+        Assert.Contains("staging", result);
+        Assert.Contains("not allowed", result);
+    }
+
+    [Fact]
+    public void ValidateNamespace_AllowedNamespace_ReturnsNull()
+    {
+        var options = new KubernetesMcpOptions(
+            AllowedNamespaces: new HashSet<string>(["production"]),
+            ApprovalRoot: "/tmp/approvals");
+
+        var result = KubernetesManagerHelpers.ValidateNamespace(options, "production");
+
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void ValidateName_NullOrWhitespace_ReturnsRequiredMessage(string? name)
+    {
+        var result = KubernetesManagerHelpers.ValidateName(name!);
+
+        Assert.Equal("Resource name is required.", result);
+    }
+
+    [Fact]
+    public void ValidateName_ValidName_ReturnsNull()
+    {
+        var result = KubernetesManagerHelpers.ValidateName("my-deployment");
+
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData(null, "Image")]
+    [InlineData("", "Image")]
+    [InlineData("  ", "Tag")]
+    public void ValidateRequiredText_NullOrWhitespace_ReturnsRequiredMessage(string? value, string fieldName)
+    {
+        var result = KubernetesManagerHelpers.ValidateRequiredText(value!, fieldName);
+
+        Assert.Equal($"{fieldName} is required.", result);
+    }
+
+    [Fact]
+    public void ValidateRequiredText_ValidValue_ReturnsNull()
+    {
+        var result = KubernetesManagerHelpers.ValidateRequiredText("nginx:latest", "Image");
+
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(KubernetesManagerHelpers.MaxReplicas + 1)]
+    public void ValidateReplicas_OutOfRange_ReturnsErrorMessage(int replicas)
+    {
+        var result = KubernetesManagerHelpers.ValidateReplicas(replicas);
+
+        Assert.NotNull(result);
+        Assert.Contains("Replicas must be between", result);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(KubernetesManagerHelpers.MaxReplicas)]
+    public void ValidateReplicas_ValidRange_ReturnsNull(int replicas)
+    {
+        var result = KubernetesManagerHelpers.ValidateReplicas(replicas);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void IsNotFound_KubernetesException404_ReturnsTrue()
+    {
+        var status = new k8s.Models.V1Status { Code = 404 };
+        var ex = new KubernetesException(status);
+
+        Assert.True(KubernetesManagerHelpers.IsNotFound(ex));
+    }
+
+    [Fact]
+    public void IsNotFound_HttpOperationException404_ReturnsTrue()
+    {
+        var ex = CreateHttpOperationException(System.Net.HttpStatusCode.NotFound);
+
+        Assert.True(KubernetesManagerHelpers.IsNotFound(ex));
+    }
+
+    [Fact]
+    public void IsNotFound_KubernetesException500_ReturnsFalse()
+    {
+        var status = new k8s.Models.V1Status { Code = 500 };
+        var ex = new KubernetesException(status);
+
+        Assert.False(KubernetesManagerHelpers.IsNotFound(ex));
+    }
+
+    [Fact]
+    public void IsNotFound_OtherException_ReturnsFalse()
+    {
+        Assert.False(KubernetesManagerHelpers.IsNotFound(new InvalidOperationException("oops")));
+    }
+
+    [Fact]
+    public void FormatObjectRef_ReturnsApiVersionKindNamespaceSlashName()
+    {
+        var obj = new InfraGate.KubernetesAdapter.KubernetesObjectRef("apps/v1", "Deployment", "production", "web-api");
+
+        var result = KubernetesManagerHelpers.FormatObjectRef(obj);
+
+        Assert.Equal("apps/v1 Deployment production/web-api", result);
+    }
+
     private static HttpOperationException CreateHttpOperationException(
         HttpStatusCode statusCode,
         string reasonPhrase = "Reason",
