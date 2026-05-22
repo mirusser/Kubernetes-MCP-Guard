@@ -10,7 +10,7 @@ internal sealed class TestApprovalWorkflow :
     IApprovalExecutionWorkflow,
     IApprovalAuditPublisher
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    private static readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true
     };
@@ -375,7 +375,7 @@ internal sealed class TestApprovalWorkflow :
             timestampUtc = DateTimeOffset.UtcNow,
             eventName,
             payload
-        }, JsonOptions);
+        }, jsonOptions);
         auditLines.Add(line);
     }
 

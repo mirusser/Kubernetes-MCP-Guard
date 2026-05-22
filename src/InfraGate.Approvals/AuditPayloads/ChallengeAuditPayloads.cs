@@ -1,6 +1,6 @@
-// Audit-payload records for approval-challenge-anchored events written to
-// audit.jsonl. See PlanAuditPayloads.cs for the rationale on grouped-file
-// layout, marker-interface choice, and the parameter-name-to-JSON-key contract.
+// Audit-payload records for approval-challenge-anchored events in the
+// approval audit store. See PlanAuditPayloads.cs for the rationale on
+// grouped-file layout, marker-interface choice, and the parameter-name-to-JSON-key contract.
 
 namespace InfraGate.Approvals.AuditPayloads;
 

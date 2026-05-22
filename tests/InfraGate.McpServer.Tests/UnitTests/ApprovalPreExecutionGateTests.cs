@@ -37,7 +37,7 @@ public sealed class ApprovalPreExecutionGateTests
         var gate = new ApprovalPreExecutionGate(store);
 
         var result = await gate.EvaluateAsync(
-            ApprovalStore.NewPlanId(),
+            ApprovalIds.NewPlanId(),
             new PassingDomainPlanExecutor(),
             CancellationToken.None);
 
@@ -53,7 +53,7 @@ public sealed class ApprovalPreExecutionGateTests
 
     private static PlanEnvelope<Dictionary<string, string>> CreatePlanEnvelope() =>
         PlanEnvelopeFactory.Create(
-            ApprovalStore.NewPlanId(),
+            ApprovalIds.NewPlanId(),
             "dummy",
             "scale",
             DateTimeOffset.UtcNow,

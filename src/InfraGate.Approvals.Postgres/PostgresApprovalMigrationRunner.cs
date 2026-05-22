@@ -103,7 +103,7 @@ public static class PostgresApprovalMigrationRunner
 
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             }
-            catch
+            catch (Exception)
             {
                 await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
                 throw;

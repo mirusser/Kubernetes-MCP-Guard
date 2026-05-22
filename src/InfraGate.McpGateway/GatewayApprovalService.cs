@@ -651,15 +651,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                     new ApplyDeniedPayload(planId, message)),
                 cancellationToken).ConfigureAwait(false);
         }
-        catch (IOException ex)
-        {
-            logger.LogWarning(
-                ex,
-                "Failed to write approval audit event {EventName} for plan {PlanId}.",
-                ApprovalConventions.AuditEvents.ApplyDenied,
-                planId);
-        }
-        catch (UnauthorizedAccessException ex)
+        catch (Exception ex)
         {
             logger.LogWarning(
                 ex,

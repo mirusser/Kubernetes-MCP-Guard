@@ -8,7 +8,7 @@ namespace InfraGate.Approvals.Postgres;
 
 public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : IApprovalPersistence
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web);
 
     public async Task<ApprovalPlanResult> CreatePlanAsync(
         PlanEnvelope envelope,
@@ -109,7 +109,7 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
 
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
                 }
-                catch
+                catch (Exception)
                 {
                     await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
                     throw;
@@ -351,7 +351,7 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
 
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
                 }
-                catch
+                catch (Exception)
                 {
                     await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
                     throw;
@@ -512,7 +512,7 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
 
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
                 }
-                catch
+                catch (Exception)
                 {
                     await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
                     throw;
@@ -549,7 +549,7 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
                         cancellationToken).ConfigureAwait(false);
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
                 }
-                catch
+                catch (Exception)
                 {
                     await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
                     throw;
@@ -633,7 +633,7 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
 
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
                 }
-                catch
+                catch (Exception)
                 {
                     await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
                     throw;
@@ -741,7 +741,7 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
                         $"Plan '{planId}' already has an active execution claim.",
                         ApprovalConventions.ResultReasonCodes.ExecutionClaimActive);
                 }
-                catch
+                catch (Exception)
                 {
                     await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
                     throw;
@@ -855,7 +855,7 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
 
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
                 }
-                catch
+                catch (Exception)
                 {
                     await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
                     throw;
@@ -909,7 +909,7 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
 
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
                 }
-                catch
+                catch (Exception)
                 {
                     await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
                     throw;
@@ -1018,8 +1018,8 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
                 ReviewDigestAlgorithm = grant.ReviewDigest.Algorithm,
                 ReviewDigestCanonicalization = grant.ReviewDigest.Canonicalization,
                 ReviewDigestValue = grant.ReviewDigest.Value,
-                ApprovalPolicyJsonText = JsonSerializer.Serialize(grant.ApprovalPolicy, JsonOptions),
-                ExecutionReusePolicyJsonText = JsonSerializer.Serialize(grant.ExecutionReusePolicy, JsonOptions),
+                ApprovalPolicyJsonText = JsonSerializer.Serialize(grant.ApprovalPolicy, jsonOptions),
+                ExecutionReusePolicyJsonText = JsonSerializer.Serialize(grant.ExecutionReusePolicy, jsonOptions),
                 grant.IssuedAtUtc,
                 grant.ExpiresAtUtc
             },
@@ -1105,7 +1105,7 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
                 correlation.GrantId,
                 correlation.ExecutionAttemptId,
                 OccurredAtUtc = DateTimeOffset.UtcNow,
-                PayloadJsonText = JsonSerializer.Serialize(payload, JsonOptions)
+                PayloadJsonText = JsonSerializer.Serialize(payload, jsonOptions)
             },
             transaction,
             cancellationToken: cancellationToken)).ConfigureAwait(false);
@@ -1268,8 +1268,8 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
                     reader.GetString(4),
                     new ApprovalDigest(reader.GetString(5), reader.GetString(6), reader.GetString(7)),
                     new ApprovalDigest(reader.GetString(8), reader.GetString(9), reader.GetString(10)),
-                    JsonSerializer.Deserialize<ApprovalPolicy>(reader.GetString(11), JsonOptions) ?? new ApprovalPolicy(),
-                    JsonSerializer.Deserialize<ExecutionReusePolicy>(reader.GetString(12), JsonOptions) ?? new ExecutionReusePolicy(),
+                    JsonSerializer.Deserialize<ApprovalPolicy>(reader.GetString(11), jsonOptions) ?? new ApprovalPolicy(),
+                    JsonSerializer.Deserialize<ExecutionReusePolicy>(reader.GetString(12), jsonOptions) ?? new ExecutionReusePolicy(),
                     await reader.GetFieldValueAsync<DateTimeOffset>(13, cancellationToken).ConfigureAwait(false),
                     await reader.GetFieldValueAsync<DateTimeOffset>(14, cancellationToken).ConfigureAwait(false));
             }
@@ -1325,7 +1325,7 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
 
     private static PendingPlanResult DeserializePendingPlan(string planId, PlanRow row)
     {
-        var envelope = JsonSerializer.Deserialize<PlanEnvelope>(row.CanonicalJsonText, JsonOptions);
+        var envelope = JsonSerializer.Deserialize<PlanEnvelope>(row.CanonicalJsonText, jsonOptions);
         if (envelope is null || !string.Equals(envelope.Id, planId, StringComparison.Ordinal))
         {
             return PendingPlanResult.Denied(

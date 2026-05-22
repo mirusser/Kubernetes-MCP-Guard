@@ -15,7 +15,7 @@ public sealed class ApprovalStoreTests
     {
         var store = CreateStore();
 
-        var result = await store.GetPlanStatusAsync(ApprovalStore.NewPlanId(), CancellationToken.None);
+        var result = await store.GetPlanStatusAsync(ApprovalIds.NewPlanId(), CancellationToken.None);
 
         Assert.Equal(PlanStatus.NotFound, result.Status);
     }
@@ -59,7 +59,7 @@ public sealed class ApprovalStoreTests
     public async Task GetPlanStatusAsync_AppliedFile_ReturnsApplied()
     {
         var store = CreateStore();
-        string planId = ApprovalStore.NewPlanId();
+        string planId = ApprovalIds.NewPlanId();
         Directory.CreateDirectory(store.AppliedDirectory);
         await File.WriteAllTextAsync(store.GetAppliedPath(planId), "{}", CancellationToken.None);
 
@@ -94,7 +94,7 @@ public sealed class ApprovalStoreTests
     {
         DateTimeOffset createdAt = createdAtUtc ?? DateTimeOffset.UtcNow;
         var envelope = PlanEnvelopeFactory.Create(
-            ApprovalStore.NewPlanId(),
+            ApprovalIds.NewPlanId(),
             AdapterId,
             Operation,
             createdAt,

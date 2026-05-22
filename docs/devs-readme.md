@@ -140,6 +140,8 @@ export INFRA_GATE_APPROVAL_BASE_URL="http://127.0.0.1:3001"
 export INFRA_GATE_DOWNSTREAM_PROJECT="${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
 export KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config"
 export K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals"
+# The gateway also requires PostgreSQL (via InfraGate:Approval:Postgres:ConnectionString in
+# generated appsettings JSON, provided by the run-profiles generate command).
 export K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo
 
 dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
@@ -209,6 +211,8 @@ codex mcp add infra-gate \
   -- dotnet run --project "${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
 ```
 
+The gateway requires PostgreSQL even for stdio mode (via `InfraGate:Approval:Postgres:ConnectionString` in generated appsettings JSON, provided by the run-profiles generate command).
+
 Next time, with the same environment, run:
 
 ```bash
@@ -239,6 +243,8 @@ Use this shape for a local stdio MCP client:
   }
 }
 ```
+
+The gateway requires PostgreSQL (via `InfraGate:Approval:Postgres:ConnectionString` in generated appsettings JSON, provided by the run-profiles generate command).
 
 ### Available MCP tools
 
@@ -279,7 +285,7 @@ Clients that support MCP resources can subscribe to `plan://{planId}/status` and
 
 The MCP client never submits approval content. Approval challenges are bound to the plan id, current pending-plan hash, requester subject, expected Intent Digest, expected Review Digest, expiry, and Single-Execution status.
 
-Approval grants are stored under `.mcp-approvals/grants/` and bind the requester, approver, source challenge, Intent Digest, Review Digest, approval policy, reuse policy, and plan validity expiry. Old raw pending-plan files must be re-requested after the envelope-format change. If the pending plan changes after approval, the grant no longer matches and the gateway refuses to apply it. Audit events are written under `.mcp-approvals/audit.jsonl`.
+Approval state and audit are persisted in PostgreSQL (`InfraGate.Approvals.Postgres`). Guardrail audit remains file-backed under the configured guardrail audit root.
 
 ### Verification
 

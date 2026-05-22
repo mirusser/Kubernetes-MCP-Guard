@@ -65,7 +65,7 @@ flowchart TB
         Challenge["Approval Challenge<br/>TTL + requester binding"]
         Grant["Approval Grant<br/>single-execution default"]
         Gates["pre-execution gates"]
-        Audit["approval audit.jsonl"]
+        Audit["approval audit<br/>(PostgreSQL)"]
         Envelope --> Challenge
         Challenge --> Grant
         Grant --> Gates

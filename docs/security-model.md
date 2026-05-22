@@ -34,11 +34,11 @@ The `request_*` tools create pending plans only after Kubernetes `dryRun=All` su
 
 Approval happens out of band in the gateway-hosted browser UI. The challenge has a cryptographically random ID, a TTL, the requester subject, the current pending-plan hash, expected Intent Digest, expected Review Digest, and Single-Execution status. The browser approval flow requires a separate OAuth session bound to the same subject.
 
-Approval issues an Approval Grant under `.mcp-approvals/grants/`, bound to the plan id, requester, approver, challenge id, Intent Digest, Review Digest, approval policy, reuse policy, and expiry. The gateway still recomputes the pending-plan hash at challenge creation and approval time to detect approval-URL drift. The gateway validates the grant and digests before apply, then asks the Kubernetes adapter to repeat Kubernetes dry-run immediately before the real write. A mismatch is refused; dry-run failures are audited as `execution.blocked` with a dry-run failure payload.
+Approval issues an Approval Grant persisted in PostgreSQL `approvals.approval_grants`, bound to the plan id, requester, approver, challenge id, Intent Digest, Review Digest, approval policy, reuse policy, and expiry. The gateway still recomputes the pending-plan hash at challenge creation and approval time to detect approval-URL drift. The gateway validates the grant and digests before apply, then asks the Kubernetes adapter to repeat Kubernetes dry-run immediately before the real write. A mismatch is refused; dry-run failures are audited as `execution.blocked` with a dry-run failure payload.
 
 The gateway approval endpoints require anti-forgery tokens, same-subject binding, challenge TTL checks, and pending-plan hash plus digest time-of-check/time-of-use re-verification at approval time.
 
-See [`src/InfraGate.McpServer/README.md`](../src/InfraGate.McpServer/README.md) for the `ApprovalStore` contract and [`src/InfraGate.McpGateway/README.md`](../src/InfraGate.McpGateway/README.md) for `GatewayApprovalService` and browser approval endpoints.
+See [`src/InfraGate.Approvals/README.md`](../src/InfraGate.Approvals/README.md) for the approval persistence contracts and [`src/InfraGate.McpGateway/README.md`](../src/InfraGate.McpGateway/README.md) for `GatewayApprovalService` and browser approval endpoints.
 
 ## 2. Defense-in-Depth
 
@@ -65,7 +65,7 @@ Echoed manifest blocks are redacted to `[redacted: inspect the pending plan file
 
 Guardrail audit entries are written to `.mcp-guardrails/audit.jsonl` by default, configurable through `INFRA_GATE_GUARD_AUDIT_ROOT`. Entries include `toolName`, `direction`, `action` (`warn`, `warn_redact`, or `redact_manifest`), `categories`, `planId`, `subject`, and `authenticationType`.
 
-Approval audit is separate and is written under `K8S_MCP_APPROVAL_ROOT/audit.jsonl`.
+Approval audit is separate and is persisted in PostgreSQL `approvals.audit_events`.
 
 ### 2.4 MCP Tool Annotations
 

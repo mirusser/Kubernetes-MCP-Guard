@@ -49,7 +49,7 @@ request_set_deployment_image(
 )
 ```
 
-**What you should see:** the tool returns a `PlanId` (a short identifier like `20260503-a1b2c3d4`) and a plan summary describing the patch. **Nothing has been applied to the cluster yet.** A pending plan file appears at `.mcp-approvals/pending/<PlanId>.json`.
+**What you should see:** the tool returns a `PlanId` (a short identifier like `20260503-a1b2c3d4`) and a plan summary describing the patch. **Nothing has been applied to the cluster yet.** The plan is persisted in the `approvals.plan_envelopes` PostgreSQL table.
 
 ### Alternate — `request_apply_manifest`
 
@@ -69,11 +69,11 @@ Direct hash approval files do not authorize execution in the current grant-bound
 execute_approved_plan(planId = "<PlanId>")
 ```
 
-The gateway re-reads `pending/<PlanId>.json`, validates the Approval Grant and its Intent/Review Digest bindings, asks the Kubernetes adapter to repeat Kubernetes dry-run, and applies the plan against the Kubernetes API only if every gate passes.
+The gateway reads the plan from PostgreSQL, validates the Approval Grant and its Intent/Review Digest bindings, asks the Kubernetes adapter to repeat Kubernetes dry-run, and applies the plan against the Kubernetes API only if every gate passes.
 
 **What you should see:** the tool returns the apply result describing the patched Deployment. Within seconds, Kubernetes pulls the new image and the Pods become Ready.
 
-If anything edits `pending/<PlanId>.json` between approval and apply, the digest or evidence-artifact binding no longer matches and execution is refused, emitting an `execution.blocked` audit entry. This is the tamper-detection guarantee in action.
+If the persisted plan data changes between approval and apply, the digest or evidence-artifact binding no longer matches and execution is refused, emitting an `execution.blocked` audit entry. This is the tamper-detection guarantee in action.
 
 ## Step 6 — Verify recovery
 
@@ -87,13 +87,11 @@ Re-run the read-only tools from Step 2:
 
 Two JSONL streams record the demo. Both live under volumes mounted by `deploy/local-oauth/compose.yaml` and `deploy/local-oauth/compose.release.yaml`.
 
-### Server-side (`.mcp-approvals/audit.jsonl`)
+### Server-side (`approvals.audit_events`)
 
-Records the plan lifecycle: `plan.created`, `challenge.created`, `challenge.approved`, `grant.issued`, `execution.succeeded` (and on a tampered plan, `execution.blocked`). One entry shape:
+Records the plan lifecycle: `plan.created`, `challenge.created`, `challenge.approved`, `grant.issued`, `execution.succeeded` (and on a tampered plan, `execution.blocked`).
 
-```json
-{"timestampUtc":"2026-05-03T12:34:56.789Z","eventName":"execution.succeeded","payload":{"planId":"20260503-a1b2c3d4","operation":"setImage","namespace":"mcp-nginx-demo","hash":"sha256:…"}}
-```
+Approval audit events are queryable from the `approvals.audit_events` PostgreSQL table. Example query: `SELECT event_name, occurred_at_utc, payload_json_text FROM approvals.audit_events WHERE plan_id = '<PlanId>' ORDER BY audit_sequence;`
 
 ### Gateway-side (`.mcp-guardrails/audit.jsonl`)
 
@@ -117,7 +115,7 @@ The gateway-mediated equivalent is `request_delete_manifest` followed by `execut
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `execute_approved_plan` returns "plan not found" | The gateway and server must share the same `K8S_MCP_APPROVAL_ROOT`. The compose files mount `.mcp-approvals` into the gateway container; if you run a custom setup, point both gateway and downstream server at the same directory. |
-| Digest mismatch or grant mismatch, apply refused | `pending/<PlanId>.json` was edited between approval and apply (manually, or by re-running `request_*` and overwriting). Generate a fresh plan and approve that one. |
+| `execute_approved_plan` returns "plan not found" | The gateway and server no longer need a shared filesystem for approval state (PostgreSQL-backed). The compose files mount `.mcp-approvals` into the gateway container; if you run a custom setup, point both gateway and downstream server at the same directory. |
+| Digest mismatch or grant mismatch, apply refused | Persisted plan data was modified between approval and apply (manually, or by re-running `request_*` and overwriting). Generate a fresh plan and approve that one. |
 | Approval URL opens but refuses approval | Sign in with the same OAuth subject that requested the plan, and request a fresh URL if the challenge expired or the pending-plan hash/digest binding changed. |
 | Pods stuck in `ImagePullBackOff` after Step 5 | The replica count is 2 and the rollout takes a few seconds; re-run `get_k8s_status`. If it persists, check `get_k8s_events` for a different pull error (e.g. registry rate limiting). |

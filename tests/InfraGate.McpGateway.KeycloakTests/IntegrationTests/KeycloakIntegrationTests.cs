@@ -208,10 +208,10 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             authority: RealmAuthority(),
             approvalOAuthBackchannel: new KeycloakTokenBackchannel(TokenEndpoint()));
         var approvalStore = server.Services.GetRequiredService<ApprovalStore>();
-        var challengeStore = server.Services.GetRequiredService<ApprovalChallengeStore>();
+        var challengeStore = server.Services.GetRequiredService<InMemoryApprovalChallengeWorkflow>();
         var plan = CreateApprovalPlan();
         var planResult = await approvalStore.CreatePlanAsync(plan, "mcp-nginx-demo", CancellationToken.None);
-        var challenge = await challengeStore.CreateAsync(
+        var challenge = await challengeStore.CreateChallengeAsync(
             planResult.Envelope.Id,
             planResult.Hash,
             DemoUsername,
@@ -234,7 +234,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             }));
         approve.EnsureSuccessStatusCode();
         var approveText = await approve.Content.ReadAsStringAsync();
-        var approvedChallenge = await challengeStore.GetAsync(challenge.Id, CancellationToken.None);
+        var approvedChallenge = await challengeStore.GetChallengeAsync(challenge.Id, CancellationToken.None);
 
         Assert.Contains("Approval Recorded", approveText);
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Approved, approvedChallenge?.Status);
@@ -798,7 +798,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         };
 
         return KubernetesApprovalAdapter.CreateEnvelope(
-            ApprovalStore.NewPlanId(),
+            ApprovalIds.NewPlanId(),
             "scale",
             DateTimeOffset.UtcNow,
             new PlanRequester(DemoUsername, GatewayAuthConventions.Audit.OAuthAuthenticationType),
@@ -946,9 +946,11 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                 services.AddSingleton<GuardedToolRunner>();
                 services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
                 services.AddSingleton<ApprovalStore>();
-                services.AddSingleton<IApprovalAuditPublisher, ApprovalStoreAuditPublisher>();
-                services.AddSingleton<ApprovalChallengeStore>();
-                services.AddSingleton<IApprovalChallengeStore>(sp => sp.GetRequiredService<ApprovalChallengeStore>());
+                services.AddSingleton<IApprovalAuditPublisher>(sp => sp.GetRequiredService<ApprovalStore>());
+                services.AddSingleton<IApprovalPlanWorkflow>(sp => sp.GetRequiredService<ApprovalStore>());
+                services.AddSingleton<InMemoryApprovalChallengeWorkflow>();
+                services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<InMemoryApprovalChallengeWorkflow>());
+                services.AddSingleton<IApprovalExecutionWorkflow>(sp => sp.GetRequiredService<InMemoryApprovalChallengeWorkflow>());
                 services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
                 services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
                 services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();

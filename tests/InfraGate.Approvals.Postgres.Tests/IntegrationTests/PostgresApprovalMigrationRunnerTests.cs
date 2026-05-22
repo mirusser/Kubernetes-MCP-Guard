@@ -78,4 +78,23 @@ public sealed class PostgresApprovalMigrationRunnerTests : IAsyncLifetime
 
         Assert.Equal(1, migrationCount);
     }
+
+    [Fact]
+    public async Task ApplyAsync_ChecksumDrift_ThrowsInvalidOperationException()
+    {
+        await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
+
+        await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
+
+        await using (var connection = await dataSource.OpenConnectionAsync(CancellationToken.None))
+        {
+            await connection.ExecuteAsync(
+                "update approvals.schema_migrations set checksum_sha256 = 'tampered-checksum'");
+        }
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None));
+
+        Assert.Contains("checksum changed after it was applied", ex.Message);
+    }
 }

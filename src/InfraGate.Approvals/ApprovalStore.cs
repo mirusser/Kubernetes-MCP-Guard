@@ -6,7 +6,6 @@ namespace InfraGate.Approvals;
 
 public sealed class ApprovalStore : IApprovalPlanWorkflow, IApprovalAuditPublisher
 {
-    private const int PlanIdRandomByteCount = 16;
     private const int GrantIdByteCount = 16;
 
     private readonly ApprovalStoreOptions options;
@@ -29,14 +28,6 @@ public sealed class ApprovalStore : IApprovalPlanWorkflow, IApprovalAuditPublish
     public string GrantsDirectory => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.GrantsDirectory);
 
     public string AuditPath => Path.Combine(options.ApprovalRoot, ApprovalConventions.Storage.AuditFileName);
-
-    public static string NewPlanId()
-    {
-        Span<byte> bytes = stackalloc byte[PlanIdRandomByteCount];
-        RandomNumberGenerator.Fill(bytes);
-
-        return Convert.ToHexString(bytes).ToUpperInvariant();
-    }
 
     public async Task<ApprovalPlanResult> CreatePlanAsync<TPayload>(
         PlanEnvelope<TPayload> envelope,

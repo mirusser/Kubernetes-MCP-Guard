@@ -1,4 +1,4 @@
-// Audit-payload records for plan-anchored events written to audit.jsonl.
+// Audit-payload records for plan-anchored events in the approval audit store.
 //
 // Why one file with multiple records: this is a deliberate, documented deviation
 // from .agents/skills/code-standards/SKILL.md's "one meaningful top-level type per
@@ -15,7 +15,7 @@
 // identical to today's anonymous-type output.
 //
 // Why "planId" via positional parameter name: System.Text.Json with
-// JsonSerializerDefaults.Web (see ApprovalStore.jsonOptions) lowercases the first
+// JsonSerializerDefaults.Web lowercases the first
 // letter, so the C# parameter "PlanId" serialises as "planId". Renaming any
 // parameter here is a breaking schema change — AuditPayloadsTests pins the
 // canonical field set per payload.
