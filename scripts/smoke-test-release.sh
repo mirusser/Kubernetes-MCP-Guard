@@ -111,7 +111,7 @@ until curl -sS -o /dev/null -w "%{http_code}" \
       -X POST "${GATEWAY_URL}/mcp" \
       -H "Content-Type: application/json" \
       -d "${MCP_INITIALIZE_BODY}" \
-      2>/dev/null | grep -qE '^[0-9]{3}$'; do
+      2>/dev/null | grep -qE '^[1-9][0-9]{2}$'; do
   [[ ${elapsed} -ge ${POLL_TIMEOUT} ]] && {
     echo "ERROR: Gateway did not become ready within ${POLL_TIMEOUT}s." >&2; exit 1
   }
