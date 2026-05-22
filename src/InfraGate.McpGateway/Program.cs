@@ -2,6 +2,7 @@ using InfraGate.Approvals;
 using InfraGate.Approvals.Postgres;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
+using Npgsql;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.McpGateway.Notifications;
@@ -92,6 +93,14 @@ builder.Services
         {
             Resources = new ResourcesCapability { Subscribe = true }
         };
+        serverOptions.ServerInstructions = """
+            Approval workflow (MANDATORY — no exceptions):
+            1. After calling any request_* tool, call execute_approved_plan(planId=...) to get the approval URL.
+            2. You MUST then call wait_for_plan_approval(planId=...) in a polling loop (55 s timeout, repeat as needed).
+               Do NOT wait for the user to confirm approval — poll automatically.
+            3. When wait_for_plan_approval returns Approved, call execute_approved_plan again to apply the plan.
+            Skipping the polling step and waiting for user confirmation instead is not permitted.
+            """;
     })
     .WithHttpTransport(transportOptions =>
     {
@@ -160,6 +169,12 @@ builder.Services
         new ValueTask<EmptyResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>().Unsubscribe(request.Server.SessionId, request.Params)));
 
 var app = builder.Build();
+
+if (string.Equals(builder.Configuration[McpGatewayConventions.ConfigurationKeys.ApprovalPostgresRunMigrationsOnStartup], "true", StringComparison.OrdinalIgnoreCase))
+{
+    var postgresDataSource = app.Services.GetRequiredService<NpgsqlDataSource>();
+    await PostgresApprovalMigrationRunner.ApplyAsync(postgresDataSource, CancellationToken.None).ConfigureAwait(false);
+}
 
 await app.Services.GetRequiredService<PostgresApprovalSchemaValidator>()
     .ValidateAsync(CancellationToken.None).ConfigureAwait(false);

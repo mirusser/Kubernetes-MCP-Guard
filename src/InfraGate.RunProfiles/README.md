@@ -89,6 +89,7 @@ profiles:
     genericApprovalCore:
       approvalRoot: <path>
       postgresConnectionString: <connection_string>
+      runMigrationsOnStartup: <"true" or "false">
 
     host:                          # Compose bind-mount and image configuration
       bindAddress: <address>
@@ -131,6 +132,7 @@ profiles:
 | `approvalAuthority` | `baseUrl`, `oauthAuthorizationEndpoint`, `oauthTokenEndpoint` |
 | `genericApprovalCore` | `approvalRoot` |
 | `genericApprovalCore` | `postgresConnectionString` |
+| `genericApprovalCore` | `runMigrationsOnStartup` |
 | `host` | `bindAddress`, `bindPort`, `gatewayImage`, `configHostPath`, `kubeconfigHostPath`, `approvalHostPath`, `guardAuditHostPath`, `dataProtectionHostPath` |
 
 Use `--set` when a run needs host paths different from the profile defaults. Docker Compose resolves relative bind-mount paths from the Compose file directory, so local OAuth profiles keep committed defaults relative to `deploy/local-oauth/`. For generated local runs, `scripts/generate-env.sh` supplies absolute repository-root paths so the command is independent of the current working directory.
@@ -182,7 +184,8 @@ INFRA_GATE_APPROVAL_BASE_URL=...
 K8S_MCP_APPROVAL_ROOT=...
 
 # The generated appsettings JSON also includes an InfraGate:Approval:Postgres:ConnectionString
-# section when the profile specifies postgresConnectionString.
+# section when the profile specifies postgresConnectionString. When runMigrationsOnStartup
+# is "true", the gateway applies pending migrations at startup (development profiles only).
 
 # Kubernetes Adapter
 KUBECONFIG=...

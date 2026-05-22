@@ -117,7 +117,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
 
         var storeOptions = new ApprovalStoreOptions(approvalRoot);
         approvalStore = new ApprovalStore(storeOptions);
-        challengeStore = new InMemoryApprovalChallengeWorkflow();
+        challengeStore = new InMemoryApprovalChallengeWorkflow(approvalStore);
 
         gatewayServer = CreateGatewayServer();
         downstreamClient = gatewayServer.Services.GetRequiredService<IDownstreamMcpClient>() as DownstreamMcpClient

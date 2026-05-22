@@ -29,6 +29,7 @@ profiles:
     genericApprovalCore:
       approvalRoot: /data/approvals
       postgresConnectionString: "Host=postgres;Port=5432;Database=infra-gate;Username=infra-gate;Password=infra-gate-dev-password"
+      runMigrationsOnStartup: "true"
     downstreamAuth:
       required: "true"
       authority: http://keycloak:8080/realms/infra-gate
@@ -210,6 +211,7 @@ profiles:
     genericApprovalCore:
       approvalRoot: /data/approvals
       postgresConnectionString: "Host=postgres;Port=5432;Database=infra-gate;Username=infra-gate;Password=infra-gate-dev-password"
+      runMigrationsOnStartup: "true"
     downstreamAuth:
       required: "true"
       authority: http://keycloak:8080/realms/infra-gate
@@ -252,6 +254,7 @@ profiles:
     genericApprovalCore:
       approvalRoot: /data/approvals
       postgresConnectionString: "Host=postgres;Port=5432;Database=infra-gate;Username=infra-gate;Password=infra-gate-dev-password"
+      runMigrationsOnStartup: "true"
     downstreamAuth:
       required: "true"
       authority: http://keycloak:8080/realms/infra-gate

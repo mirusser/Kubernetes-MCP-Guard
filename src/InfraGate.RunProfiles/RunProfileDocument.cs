@@ -119,7 +119,8 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
         if (defaults is null) return profile;
         return profile with
         {
-            PostgresConnectionString = profile.PostgresConnectionString ?? defaults.PostgresConnectionString
+            PostgresConnectionString = profile.PostgresConnectionString ?? defaults.PostgresConnectionString,
+            RunMigrationsOnStartup = profile.RunMigrationsOnStartup ?? defaults.RunMigrationsOnStartup
         };
     }
 }

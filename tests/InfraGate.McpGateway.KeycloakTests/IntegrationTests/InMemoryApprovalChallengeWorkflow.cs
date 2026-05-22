@@ -11,6 +11,14 @@ internal sealed class InMemoryApprovalChallengeWorkflow : IApprovalChallengeWork
     private readonly Dictionary<string, ApprovalChallenge> challenges = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ApprovalGrant> grants = new(StringComparer.Ordinal);
     private readonly HashSet<string> appliedPlans = new(StringComparer.Ordinal);
+    private readonly IApprovalAuditPublisher auditPublisher;
+    private readonly ApprovalStore? approvalStore;
+
+    public InMemoryApprovalChallengeWorkflow(IApprovalAuditPublisher? auditPublisher = null)
+    {
+        this.auditPublisher = auditPublisher ?? NoOpApprovalAuditPublisher.Instance;
+        this.approvalStore = auditPublisher as ApprovalStore;
+    }
 
     // ── IApprovalChallengeWorkflow ────────────────────────────────────────────
 
@@ -67,7 +75,7 @@ internal sealed class InMemoryApprovalChallengeWorkflow : IApprovalChallengeWork
         return Task.FromResult(match);
     }
 
-    public Task<ApprovalGrant> ApproveChallengeAsync(
+    public async Task<ApprovalGrant> ApproveChallengeAsync(
         ApprovalChallenge challenge,
         PlanEnvelope envelope,
         string approverSubject,
@@ -102,10 +110,44 @@ internal sealed class InMemoryApprovalChallengeWorkflow : IApprovalChallengeWork
                 reason: null,
                 grantId: grant.Id)
         };
-        return Task.FromResult(grant);
+
+        if (approvalStore is not null)
+        {
+            var path = approvalStore.GetGrantPath(envelope.Id);
+            var json = System.Text.Json.JsonSerializer.Serialize(grant);
+            await System.IO.File.WriteAllTextAsync(path, json, cancellationToken).ConfigureAwait(false);
+        }
+
+        await auditPublisher.PublishAsync(
+            new PlanAudit(
+                ApprovalConventions.AuditEvents.ApprovalChallengeApproved,
+                new InfraGate.Approvals.AuditPayloads.ApprovalChallengeApprovedPayload(
+                    challenge.Id,
+                    challenge.PlanId,
+                    challenge.PendingPlanHash,
+                    challenge.RequesterSubject,
+                    approverSubject,
+                    now)),
+            cancellationToken).ConfigureAwait(false);
+
+        await auditPublisher.PublishAsync(
+            new PlanAudit(
+                ApprovalConventions.AuditEvents.GrantIssued,
+                new InfraGate.Approvals.AuditPayloads.ApprovalGrantIssuedPayload(
+                    grant.PlanId,
+                    grant.Id,
+                    grant.SourceChallengeId,
+                    grant.RequesterSubject,
+                    grant.ApproverSubject,
+                    grant.IntentDigest,
+                    grant.ReviewDigest,
+                    grant.ExpiresAtUtc)),
+            cancellationToken).ConfigureAwait(false);
+
+        return grant;
     }
 
-    public Task<ApprovalChallenge> RecordChallengeOutcomeAsync(
+    public async Task<ApprovalChallenge> RecordChallengeOutcomeAsync(
         ApprovalChallenge challenge,
         ChallengeOutcome outcome,
         PlanAudit audit,
@@ -119,7 +161,8 @@ internal sealed class InMemoryApprovalChallengeWorkflow : IApprovalChallengeWork
             Outcome = outcome
         };
         challenges[challenge.Id] = updated;
-        return Task.FromResult(updated);
+        await auditPublisher.PublishAsync(audit, cancellationToken).ConfigureAwait(false);
+        return updated;
     }
 
     // ── IApprovalExecutionWorkflow ────────────────────────────────────────────

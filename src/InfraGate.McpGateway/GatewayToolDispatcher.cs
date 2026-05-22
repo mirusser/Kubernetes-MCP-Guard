@@ -447,9 +447,9 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         return new Tool
         {
             Name = McpGatewayConventions.ToolNames.ApplyApprovedPlan,
-            Description = "Returns a browser approval URL for a pending plan, or applies it after out-of-band approval. " +
-                          "When this returns ApprovalRequired, call wait_for_plan_approval(planId=...) to poll for approval status, " +
-                          "then call this tool again once the status is Approved.",
+            Description = "Returns a browser approval URL for a pending plan, or applies it after approval. " +
+                          "When this returns ApprovalRequired, you MUST call wait_for_plan_approval(planId=...) to poll for approval — do NOT wait for user confirmation. " +
+                          "Repeat until Approved, then call this tool again to apply the plan.",
             InputSchema = JsonSerializer.SerializeToElement(new
             {
                 type = "object",

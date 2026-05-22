@@ -40,8 +40,13 @@ services:
       POSTGRES_DB: infra-gate
       POSTGRES_USER: infra-gate
       POSTGRES_PASSWORD: infra-gate-dev-password
+      INFRA_GATE_RUN_APPROVAL_MIGRATIONS: "true"
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ../../src/InfraGate.Approvals.Postgres/Migrations:/var/approval-migrations:ro
+      - ../../scripts/persistence/run-compose-migrations.sh:/docker-entrypoint-initdb.d/00-run-approval-migrations.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U infra-gate -d infra-gate"]
       interval: 5s
