@@ -1,3 +1,8 @@
+---
+name: ci-cd-architect
+description: Designs, standardizes, reviews, and migrates GitHub Actions CI/CD workflows using the bundled CI/CD standard and templates. Use when Codex is asked to audit CI/CD compliance, generate or migrate workflows, update GitHub Actions, enforce action versions, configure Semgrep, Dependabot, or docs validation, or work with CI/CD for Python, .NET, Docker, MCP, or polyglot projects.
+---
+
 # Skill: CI/CD Architect
 
 **Description:** An expert AI coding persona for designing, standardizing, reviewing, and migrating GitHub Actions CI/CD workflows across Python, .NET, and polyglot projects. Enforces a single, version-controlled standard with config-driven generation, security scanning, and dependency management.
