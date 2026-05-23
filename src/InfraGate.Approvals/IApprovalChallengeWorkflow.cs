@@ -2,7 +2,7 @@ namespace InfraGate.Approvals;
 
 public interface IApprovalChallengeWorkflow
 {
-    Task<ApprovalChallenge> CreateChallengeAsync(
+    Task<ApprovalChallenge> CreateChallengeAsync( // NOSONAR:S107 — Interface: 7 business params + CancellationToken. Parameter-object adds ceremony.
         string planId,
         string pendingPlanHash,
         string requesterSubject,

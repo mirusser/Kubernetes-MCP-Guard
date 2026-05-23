@@ -94,47 +94,28 @@ internal static class RunProfileCli
         TextWriter error,
         CancellationToken cancellationToken)
     {
-        string profileName;
-        string outputPath;
-        string format;
-        bool force;
-        IReadOnlyList<(string Path, string Value)> setOverrides;
-        RunProfile profile;
-        try
+        if (!TryParseGenerateArgs(args, document, error, out var parsed))
         {
-            profileName = GetRequiredProfileName(args);
-            outputPath = GetRequiredOption(args, RunProfileConventions.Options.Output);
-            format = GetGenerateFormat(args);
-            force = HasFlag(args, RunProfileConventions.Options.Force);
-            setOverrides = GetSetOverrides(args);
-            profile = document.FindProfileWithDefaults(profileName, document.Defaults);
-            profile = ApplySetOverrides(profile, setOverrides);
-        }
-        catch (InvalidOperationException ex)
-        {
-            await error.WriteLineAsync(ex.Message).ConfigureAwait(false);
             return 1;
         }
 
-        if (File.Exists(outputPath) && !force)
+        if (!parsed.Force && !await CheckFileOverwriteAllowedAsync(parsed.OutputPath, parsed.ProfileName, cancellationToken)
+            .ConfigureAwait(false))
         {
-            string existingContent = await File.ReadAllTextAsync(outputPath, cancellationToken).ConfigureAwait(false);
-            if (!IsGeneratedForProfile(existingContent, profileName))
-            {
-                await error.WriteLineAsync(
-                    $"Will not overwrite '{outputPath}': not generated for profile '{profileName}'. Use --force to overwrite.").ConfigureAwait(false);
-                return 1;
-            }
+            await error.WriteLineAsync(
+                $"Will not overwrite '{parsed.OutputPath}': not generated for profile '{parsed.ProfileName}'. Use --force to overwrite.")
+                .ConfigureAwait(false);
+            return 1;
         }
 
         string generatedText;
         try
         {
-            generatedText = format switch
+            generatedText = parsed.Format switch
             {
-                RunProfileConventions.Formats.AppSettingJson => AppSettingsRenderer.Render(Path.GetFileName(configPath), profile),
-                RunProfileConventions.Formats.DotEnv => EnvFileRenderer.Render(Path.GetFileName(configPath), profile),
-                _ => throw new InvalidOperationException($"Unsupported format: {format}")
+                RunProfileConventions.Formats.AppSettingJson => AppSettingsRenderer.Render(Path.GetFileName(configPath), parsed.Profile),
+                RunProfileConventions.Formats.DotEnv => EnvFileRenderer.Render(Path.GetFileName(configPath), parsed.Profile),
+                _ => throw new InvalidOperationException($"Unsupported format: {parsed.Format}")
             };
         }
         catch (InvalidOperationException ex)
@@ -143,15 +124,60 @@ internal static class RunProfileCli
             return 1;
         }
 
-        string? outputDirectory = Path.GetDirectoryName(outputPath);
+        string? outputDirectory = Path.GetDirectoryName(parsed.OutputPath);
         if (!string.IsNullOrWhiteSpace(outputDirectory))
         {
             Directory.CreateDirectory(outputDirectory);
         }
 
-        await File.WriteAllTextAsync(outputPath, generatedText, cancellationToken).ConfigureAwait(false);
-        await output.WriteLineAsync($"Generated {outputPath}").ConfigureAwait(false);
+        await File.WriteAllTextAsync(parsed.OutputPath, generatedText, cancellationToken).ConfigureAwait(false);
+        await output.WriteLineAsync($"Generated {parsed.OutputPath}").ConfigureAwait(false);
         return 0;
+    }
+
+    private sealed record class GenerateArgs(
+        string ProfileName,
+        string OutputPath,
+        string Format,
+        bool Force,
+        RunProfile Profile);
+
+    private static bool TryParseGenerateArgs(
+        IReadOnlyList<string> args,
+        RunProfileDocument document,
+        TextWriter error,
+        out GenerateArgs parsed)
+    {
+        try
+        {
+            var profileName = GetRequiredProfileName(args);
+            var outputPath = GetRequiredOption(args, RunProfileConventions.Options.Output);
+            var format = GetGenerateFormat(args);
+            var force = HasFlag(args, RunProfileConventions.Options.Force);
+            var setOverrides = GetSetOverrides(args);
+            var profile = document.FindProfileWithDefaults(profileName, document.Defaults);
+            profile = ApplySetOverrides(profile, setOverrides);
+            parsed = new GenerateArgs(profileName, outputPath, format, force, profile);
+            return true;
+        }
+        catch (InvalidOperationException ex)
+        {
+            error.WriteLineAsync(ex.Message).GetAwaiter().GetResult();
+            parsed = null!;
+            return false;
+        }
+    }
+
+    private static async Task<bool> CheckFileOverwriteAllowedAsync(
+        string outputPath, string profileName, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(outputPath))
+        {
+            return true;
+        }
+
+        string existingContent = await File.ReadAllTextAsync(outputPath, cancellationToken).ConfigureAwait(false);
+        return IsGeneratedForProfile(existingContent, profileName);
     }
 
     private static bool HasFlag(IReadOnlyList<string> args, string flag) =>
@@ -267,6 +293,8 @@ internal static class RunProfileCli
         return RunProfileConventions.DefaultConfigPath;
     }
 
+    // NOSONAR:S3267 — The while-loop here advances by 2 for --set flag+value pairs, throws on
+    // invalid state, and parses path=value format. LINQ would harm readability.
     private static IReadOnlyList<(string Path, string Value)> GetSetOverrides(IReadOnlyList<string> args)
     {
         var overrides = new List<(string, string)>();

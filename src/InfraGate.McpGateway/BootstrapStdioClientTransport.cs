@@ -49,12 +49,11 @@ internal sealed class BootstrapStdioClientTransport(
 
         try
         {
-            logger?.LogInformation("Writing bootstrap line to downstream process stdin.");
+            logger?.LogDebug("Writing bootstrap line to downstream process stdin.");
             await startedProcess.StandardInput.WriteLineAsync(bootstrapLine.AsMemory(), cancellationToken)
                 .ConfigureAwait(false);
             await startedProcess.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
 
-            logger?.LogInformation("Connecting stream transport to downstream process.");
             var sessionTransport = await ConnectStreamTransportAsync(
                 startedProcess.StandardOutput.BaseStream,
                 startedProcess.StandardInput.BaseStream,
@@ -67,12 +66,16 @@ internal sealed class BootstrapStdioClientTransport(
                 startedProcess,
                 options.ShutdownTimeout);
         }
+        // S2139 — The exception is logged then rethrown to propagate the connection failure
+        // to the caller, which is the correct top-level transport behavior.
+#pragma warning disable S2139
         catch (Exception ex)
         {
             logger?.LogError(ex, "Failed to connect downstream stdio transport (PID={Pid}).", startedProcess.Id);
             await DisposeProcessAsync(startedProcess, options.ShutdownTimeout).ConfigureAwait(false);
             throw;
         }
+#pragma warning restore S2139
     }
 
     private static ProcessStartInfo CreateStartInfo(StdioClientTransportOptions options)
@@ -159,11 +162,11 @@ internal sealed class BootstrapStdioClientTransport(
         }
         catch (ObjectDisposedException)
         {
-            // Justification: The process is already exiting; StandardInput close is benign.
+            // NOSONAR:S108 — Justification: The process is already exiting; StandardInput close is benign.
         }
         catch (InvalidOperationException)
         {
-            // Justification: The process has already exited; StandardInput close is benign.
+            // NOSONAR:S108 — Justification: The process has already exited; StandardInput close is benign.
         }
     }
 
@@ -175,7 +178,7 @@ internal sealed class BootstrapStdioClientTransport(
         }
         catch (InvalidOperationException)
         {
-            // Justification: The process has already exited; Kill is benign.
+            // NOSONAR:S108 — Justification: The process has already exited; Kill is benign.
         }
     }
 

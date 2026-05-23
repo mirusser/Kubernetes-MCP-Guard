@@ -18,10 +18,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
     private readonly IApprovalNotificationDispatcher notificationDispatcher;
     private readonly ILogger<GatewayApprovalService> logger;
 
-    // Justification: S107 — DI constructor with 9 parameters. See GatewayToolDispatcher
-    // for the rationale. The approval-service constructor mirrors the dispatcher pattern
-    // for consistency.
-    public GatewayApprovalService(
+    public GatewayApprovalService( // NOSONAR:S107 — 9-param DI constructor. Mirrors GatewayToolDispatcher pattern for consistency.
         IApprovalPlanWorkflow approvalPlans,
         IApprovalChallengeWorkflow approvalChallenges,
         IApprovalAuditPublisher auditPublisher,
@@ -421,7 +418,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         string challengeId,
         CancellationToken cancellationToken)
     {
-        var challenge = await approvalChallenges.GetChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
+        var challenge = await RetrieveChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
         if (challenge is null)
         {
             return ChallengeValidation.Invalid(
@@ -429,6 +426,39 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 ApprovalConventions.ResultReasonCodes.ChallengeNotFound);
         }
 
+        var stateError = await ValidateChallengeStateAsync(challenge, cancellationToken).ConfigureAwait(false);
+        if (stateError is not null)
+        {
+            return stateError;
+        }
+
+        var approver = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
+        var approverError = await ValidateApproverAsync(challenge, approver, cancellationToken).ConfigureAwait(false);
+        if (approverError is not null)
+        {
+            return approverError;
+        }
+
+        var pending = await approvalPlans.GetPendingPlanAsync(challenge.PlanId, cancellationToken).ConfigureAwait(false);
+        var pendingError = await ValidatePendingPlanStateAsync(challenge, pending, approver!.Subject, cancellationToken)
+            .ConfigureAwait(false);
+        if (pendingError is not null)
+        {
+            return pendingError;
+        }
+
+        return await ValidateDecodedReviewAsync(challenge, pending, approver!.Subject, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<ApprovalChallenge?> RetrieveChallengeAsync(string challengeId, CancellationToken ct)
+    {
+        return await approvalChallenges.GetChallengeAsync(challengeId, ct).ConfigureAwait(false);
+    }
+
+    private async Task<ChallengeValidation?> ValidateChallengeStateAsync(
+        ApprovalChallenge challenge, CancellationToken ct)
+    {
         if (!IsPending(challenge))
         {
             return ChallengeValidation.Invalid(
@@ -439,15 +469,19 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
 
         if (challenge.ExpiresAtUtc <= DateTimeOffset.UtcNow)
         {
-            var expired = await ExpireChallengeAsync(challenge, cancellationToken).ConfigureAwait(false);
-
+            var expired = await ExpireChallengeAsync(challenge, ct).ConfigureAwait(false);
             return ChallengeValidation.Invalid(
                 "Approval challenge expired. Ask the MCP client to request a new approval URL.",
                 ApprovalConventions.ResultReasonCodes.ChallengeExpired,
                 expired);
         }
 
-        var approver = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
+        return null;
+    }
+
+    private async Task<ChallengeValidation?> ValidateApproverAsync(
+        ApprovalChallenge challenge, GatewayApprovalIdentity? approver, CancellationToken ct)
+    {
         if (approver is null)
         {
             return ChallengeValidation.Invalid(
@@ -459,10 +493,8 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         if (!SameSubject(challenge.RequesterSubject, approver.Subject))
         {
             await WriteChallengeRejectedAuditAsync(
-                challenge,
-                approver.Subject,
-                "Approver subject did not match requester subject.",
-                cancellationToken).ConfigureAwait(false);
+                challenge, approver.Subject,
+                "Approver subject did not match requester subject.", ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
                 "Approval requires the same authenticated subject that requested the plan.",
@@ -470,14 +502,16 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 challenge);
         }
 
-        var pending = await approvalPlans.GetPendingPlanAsync(challenge.PlanId, cancellationToken).ConfigureAwait(false);
+        return null;
+    }
+
+    private async Task<ChallengeValidation?> ValidatePendingPlanStateAsync(
+        ApprovalChallenge challenge, PendingPlanResult pending, string? approverSubject, CancellationToken ct)
+    {
         if (!pending.IsPending || pending.Envelope is null || pending.Hash is null)
         {
             await WriteChallengeRejectedAuditAsync(
-                challenge,
-                approver.Subject,
-                pending.Message,
-                cancellationToken).ConfigureAwait(false);
+                challenge, approverSubject, pending.Message, ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
                 pending.Message,
@@ -489,79 +523,53 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
             !SameDigest(challenge.ReviewDigest, pending.Envelope.ReviewDigest))
         {
             const string message = "The pending plan digest binding changed after this approval URL was created. Ask the MCP client to request a new approval URL.";
-            await WriteChallengeRejectedAuditAsync(
-                challenge,
-                approver.Subject,
-                message,
-                cancellationToken).ConfigureAwait(false);
+            await WriteChallengeRejectedAuditAsync(challenge, approverSubject, message, ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
-                message,
-                ApprovalConventions.ResultReasonCodes.DigestChanged,
-                challenge);
+                message, ApprovalConventions.ResultReasonCodes.DigestChanged, challenge);
         }
 
         if (!FixedTimeStringComparer.Equals(challenge.PendingPlanHash, pending.Hash))
         {
             const string message = "The pending plan changed after this approval URL was created. Ask the MCP client to request a new approval URL.";
-            await WriteChallengeRejectedAuditAsync(
-                challenge,
-                approver.Subject,
-                message,
-                cancellationToken).ConfigureAwait(false);
+            await WriteChallengeRejectedAuditAsync(challenge, approverSubject, message, ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
-                message,
-                ApprovalConventions.ResultReasonCodes.PendingPlanChanged,
-                challenge);
+                message, ApprovalConventions.ResultReasonCodes.PendingPlanChanged, challenge);
         }
 
-        var decoded = planReviewAdapter.TryDecodeForReview(pending.Envelope, out var decodeError);
+        return null;
+    }
+
+    private async Task<ChallengeValidation> ValidateDecodedReviewAsync(
+        ApprovalChallenge challenge, PendingPlanResult pending, string? approverSubject, CancellationToken ct)
+    {
+        var decoded = planReviewAdapter.TryDecodeForReview(pending.Envelope!, out var decodeError);
         if (decoded is null)
         {
             var errorMessage = decodeError ?? "Plan could not be decoded by the approval adapter.";
-            await WriteChallengeRejectedAuditAsync(
-                challenge,
-                approver.Subject,
-                errorMessage,
-                cancellationToken).ConfigureAwait(false);
+            await WriteChallengeRejectedAuditAsync(challenge, approverSubject, errorMessage, ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
-                errorMessage,
-                McpGatewayConventions.ApprovalReasonCodes.AdapterDecodeFailed,
-                challenge);
+                errorMessage, McpGatewayConventions.ApprovalReasonCodes.AdapterDecodeFailed, challenge);
         }
 
         if (!SameSubject(challenge.RequesterSubject, decoded.Envelope.Requester.Subject))
         {
             const string message = "The pending plan requester changed after this approval URL was created. Ask the MCP client to request a new approval URL.";
-            await WriteChallengeRejectedAuditAsync(
-                challenge,
-                approver.Subject,
-                message,
-                cancellationToken).ConfigureAwait(false);
+            await WriteChallengeRejectedAuditAsync(challenge, approverSubject, message, ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
-                message,
-                ApprovalConventions.ResultReasonCodes.RequesterChanged,
-                challenge,
-                decoded);
+                message, ApprovalConventions.ResultReasonCodes.RequesterChanged, challenge, decoded);
         }
 
         if (!decoded.HasReviewEvidence)
         {
             var message = MissingEvidenceMessage(challenge.PlanId);
-            await WriteChallengeRejectedAuditAsync(
-                challenge,
-                approver.Subject,
-                message,
-                cancellationToken).ConfigureAwait(false);
+            await WriteChallengeRejectedAuditAsync(challenge, approverSubject, message, ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
-                message,
-                ApprovalConventions.ResultReasonCodes.MissingReviewEvidence,
-                challenge,
-                decoded);
+                message, ApprovalConventions.ResultReasonCodes.MissingReviewEvidence, challenge, decoded);
         }
 
         return ChallengeValidation.Valid(challenge, decoded);

@@ -72,6 +72,8 @@ public static class ApprovalConventions
 
     public static class AuditEvents
     {
+        // NOSONAR:S1192 — The const ExecutionBlockedValue centralizes the "execution.blocked" literal.
+        // The compiler inlines it into 4 public const fields, but the source has a single definition.
         private const string ExecutionBlockedValue = "execution.blocked";
 
         public const string PlanRequested = "plan.created";

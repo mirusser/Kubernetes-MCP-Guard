@@ -54,7 +54,57 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                 KubernetesAdapterConventions.ResultReasonCodes.MissingArguments);
         }
 
-        var applyEvidenceJson = await toolCaller.CallAsync(
+        var applyEvidence = await GetApplyEvidenceAsync(namespaceName, manifest, ct).ConfigureAwait(false);
+        if (applyEvidence.Error is not null)
+        {
+            return applyEvidence.Error;
+        }
+
+        if (applyEvidence.Evidence!.PolicyBlocked)
+        {
+            var message = $"Manifest rejected by policy:{Environment.NewLine}{applyEvidence.Evidence.PolicyRefusal}";
+            return PlanBuildResult.Failed(
+                message,
+                DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message),
+                KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked);
+        }
+
+        var diffs = await GetManifestDiffsAsync(namespaceName, manifest, applyEvidence.Evidence.DryRun.Objects, ct)
+            .ConfigureAwait(false);
+        if (diffs.Error is not null)
+        {
+            return diffs.Error;
+        }
+
+        var objects = diffs.Diffs!.Select(d => d.Object).ToArray();
+        var payload = new KubernetesPlanPayload(
+            namespaceName,
+            $"Apply {objects.Length} supported Kubernetes object(s) in namespace '{namespaceName}'.",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [KubernetesAdapterConventions.PlanParameters.ObjectCount] = objects.Length.ToString()
+            },
+            objects)
+        {
+            Manifest = manifest,
+            DryRun = applyEvidence.Evidence.DryRun,
+            Diffs = diffs.Diffs!,
+            PolicyFindings = applyEvidence.Evidence.PolicyFindings
+        };
+
+        return BuildEnvelope(
+            KubernetesAdapterConventions.PlanOperations.Apply,
+            payload,
+            requester,
+            new FreshnessPolicy(ManifestFreshnessChecks));
+    }
+
+    private sealed record class ApplyEvidenceResult(PlanBuildResult? Error, KubernetesApplyEvidence? Evidence);
+
+    private async Task<ApplyEvidenceResult> GetApplyEvidenceAsync(
+        string namespaceName, string manifest, CancellationToken ct)
+    {
+        var json = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
             new Dictionary<string, object?>(StringComparer.Ordinal)
             {
@@ -63,39 +113,40 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             },
             ct).ConfigureAwait(false);
 
-        KubernetesApplyEvidence? applyEvidence;
+        KubernetesApplyEvidence? evidence;
         try
         {
-            applyEvidence = JsonSerializer.Deserialize<KubernetesApplyEvidence>(applyEvidenceJson, JsonOptions);
+            evidence = JsonSerializer.Deserialize<KubernetesApplyEvidence>(json, JsonOptions);
         }
         catch (JsonException)
         {
-            var message = $"Evidence dry-run failed: {applyEvidenceJson}";
-            return PlanBuildResult.Failed(
-                message,
-                DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message),
-                KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed);
+            var message = $"Evidence dry-run failed: {json}";
+            return new ApplyEvidenceResult(
+                PlanBuildResult.Failed(message,
+                    DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message),
+                    KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed),
+                null);
         }
 
-        if (applyEvidence is null)
+        if (evidence is null)
         {
             const string message = "Evidence dry-run returned an empty result.";
-            return PlanBuildResult.Failed(
-                message,
-                DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message),
-                KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed);
+            return new ApplyEvidenceResult(
+                PlanBuildResult.Failed(message,
+                    DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message),
+                    KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed),
+                null);
         }
 
-        if (applyEvidence.PolicyBlocked)
-        {
-            var message = $"Manifest rejected by policy:{Environment.NewLine}{applyEvidence.PolicyRefusal}";
-            return PlanBuildResult.Failed(
-                message,
-                DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message),
-                KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked);
-        }
+        return new ApplyEvidenceResult(null, evidence);
+    }
 
-        var diffJson = await toolCaller.CallAsync(
+    private sealed record class DiffsResult(PlanBuildResult? Error, KubernetesPlanDiff[]? Diffs);
+
+    private async Task<DiffsResult> GetManifestDiffsAsync(
+        string namespaceName, string manifest, IEnumerable<KubernetesPlanDryRunObject> dryRunObjects, CancellationToken ct)
+    {
+        var json = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.DiffManifest,
             new Dictionary<string, object?>(StringComparer.Ordinal)
             {
@@ -104,59 +155,36 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             },
             ct).ConfigureAwait(false);
 
+        string[] objectList = dryRunObjects.Select(obj => obj.Object).ToArray();
+
         KubernetesPlanDiff[]? diffs;
         try
         {
-            diffs = JsonSerializer.Deserialize<KubernetesPlanDiff[]>(diffJson, JsonOptions);
+            diffs = JsonSerializer.Deserialize<KubernetesPlanDiff[]>(json, JsonOptions);
         }
         catch (JsonException)
         {
-            var message = $"Diff evidence failed: {diffJson}";
-            return PlanBuildResult.Failed(
-                message,
-                DiffAudit(
-                    KubernetesAdapterConventions.PlanOperations.Apply,
-                    namespaceName,
-                    applyEvidence.DryRun.Objects.Select(obj => obj.Object).ToArray(),
-                    message),
-                KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceFailed);
+            var message = $"Diff evidence failed: {json}";
+            return new DiffsResult(
+                PlanBuildResult.Failed(
+                    message,
+                    DiffAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, objectList, message),
+                    KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceFailed),
+                null);
         }
 
         if (diffs is null)
         {
             const string message = "Diff evidence returned an empty result.";
-            return PlanBuildResult.Failed(
-                message,
-                DiffAudit(
-                    KubernetesAdapterConventions.PlanOperations.Apply,
-                    namespaceName,
-                    applyEvidence.DryRun.Objects.Select(obj => obj.Object).ToArray(),
-                    message),
-                KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceEmpty);
+            return new DiffsResult(
+                PlanBuildResult.Failed(
+                    message,
+                    DiffAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, objectList, message),
+                    KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceEmpty),
+                null);
         }
 
-        var objects = diffs.Select(d => d.Object).ToArray();
-        var objectCount = objects.Length;
-        var payload = new KubernetesPlanPayload(
-            namespaceName,
-            $"Apply {objectCount} supported Kubernetes object(s) in namespace '{namespaceName}'.",
-            new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                [KubernetesAdapterConventions.PlanParameters.ObjectCount] = objectCount.ToString()
-            },
-            objects)
-        {
-            Manifest = manifest,
-            DryRun = applyEvidence.DryRun,
-            Diffs = diffs,
-            PolicyFindings = applyEvidence.PolicyFindings
-        };
-
-        return BuildEnvelope(
-            KubernetesAdapterConventions.PlanOperations.Apply,
-            payload,
-            requester,
-            new FreshnessPolicy(ManifestFreshnessChecks));
+        return new DiffsResult(null, diffs);
     }
 
     private async Task<PlanBuildResult> BuildDeleteManifestAsync(
