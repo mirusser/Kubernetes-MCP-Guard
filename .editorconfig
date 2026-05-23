@@ -78,3 +78,8 @@ dotnet_diagnostic.MA0016.severity = none        # Collection abstraction in publ
 dotnet_diagnostic.CA1062.severity = none        # Null parameter validation — too many instances, needs separate audit
 dotnet_diagnostic.MA0048.severity = none        # File name must match type name — multi-type files intentional
 dotnet_diagnostic.CA2234.severity = none        # HttpClient with string vs Uri — pre-existing pattern
+
+# === xUnit analyzer: MemberData type serializability (test infra only, not used with remote runners) ===
+[tests/**/*.cs]
+dotnet_diagnostic.xUnit1044.severity = none
+dotnet_diagnostic.xUnit1045.severity = none

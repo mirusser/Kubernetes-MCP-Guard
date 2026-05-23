@@ -15,7 +15,6 @@
 - `KubernetesPlanBuilderTests.cs`: Kubernetes adapter plan creation, freshness policy declarations, dry-run evidence, diff evidence, policy refusal behavior, and adapter-owned reason codes.
 - `KubernetesPlanExecutorTests.cs`: Kubernetes adapter pre-execution checks, drift blocking, pre-execution dry-run blocking, policy blocking, raw execution dispatch, and blocked-result reason codes.
 - `KubernetesPlanReviewTests.cs`: review evidence requirements for manifest plans and dry-run-only Deployment operations.
-- `KubernetesPlanReviewRendererTests.cs`: semantic review-rendering sections for objects, submitted manifests, policy findings, dry-run results, and diffs.
 
 ## Running Tests
 

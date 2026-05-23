@@ -28,10 +28,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
     private readonly ISubscriptionRegistry subscriptionRegistry;
     private readonly ILogger<GatewayToolDispatcher> logger;
 
-    // Justification: S107 — DI constructor with 11 parameters. Grouping into options/aggregate
-    // services would add indirection without reducing coupling. The constructor remains
-    // explicit so DI failures surface immediately rather than being deferred.
-    public GatewayToolDispatcher(
+    public GatewayToolDispatcher( // NOSONAR:S107 — 11-param DI constructor. Aggregates would add indirection; explicit DI surfaces failures immediately.
         DownstreamToolRegistry registry,
         GuardedToolRunner guardedRunner,
         IDomainAdapter domainAdapter,
@@ -119,14 +116,18 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             return await HandleRequestMutationAsync(toolName, request, ct).ConfigureAwait(false);
         }
 
-        var readOnlyTools = await registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
-        if (readOnlyTools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal)))
+        return await DispatchDownstreamToolAsync(toolName, request, ct).ConfigureAwait(false);
+    }
+
+    private async Task<CallToolResult> DispatchDownstreamToolAsync(
+        string toolName, CallToolRequestParams request, CancellationToken ct)
+    {
+        if (await IsReadOnlyToolAsync(toolName, ct).ConfigureAwait(false))
         {
             return await HandleReadOnlyAsync(toolName, request, ct).ConfigureAwait(false);
         }
 
-        var destructiveTools = await registry.GetDestructiveAsync(ct).ConfigureAwait(false);
-        if (destructiveTools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal)))
+        if (await IsDestructiveToolAsync(toolName, ct).ConfigureAwait(false))
         {
             return ErrorResult(
                 $"Refused: destructive tool '{toolName}' must be requested through " +
@@ -135,6 +136,18 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         }
 
         return ErrorResult($"Unknown tool '{toolName}'.");
+    }
+
+    private async Task<bool> IsReadOnlyToolAsync(string toolName, CancellationToken ct)
+    {
+        var readOnlyTools = await registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
+        return readOnlyTools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal));
+    }
+
+    private async Task<bool> IsDestructiveToolAsync(string toolName, CancellationToken ct)
+    {
+        var destructiveTools = await registry.GetDestructiveAsync(ct).ConfigureAwait(false);
+        return destructiveTools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal));
     }
 
     private async Task<CallToolResult> HandleReadOnlyAsync(
@@ -177,23 +190,9 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (!planResult.Succeeded || planResult.Envelope is null)
         {
-            logger.LogWarning(
-                "Plan build failed for tool '{ToolName}' by requester '{Requester}': {Message}",
-                mutationToolName,
-                identity.Subject,
-                planResult.Message);
-
-            if (planResult.Audit is { } audit)
-            {
-                await WritePlanAuditAsync(audit, mutationToolName, ct).ConfigureAwait(false);
-            }
-
-            var sanitized = await guardedRunner.SanitizeAndAuditResponseAsync(toolName, args, planResult.Message, ct).ConfigureAwait(false);
-            var errorText = requestHasFindings || sanitized.HasFindings
-                ? GuardedToolRunner.FormatWarningResponse(sanitized.Text)
-                : sanitized.Text;
-
-            return ErrorResult(errorText);
+            return await HandlePlanBuildFailureAsync(
+                toolName, mutationToolName, args, identity, planResult, requestHasFindings, ct)
+                .ConfigureAwait(false);
         }
 
         await approvalPlans.CreatePlanAsync(
@@ -217,6 +216,35 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         {
             Content = [new TextContentBlock { Text = message }]
         };
+    }
+
+    private async Task<CallToolResult> HandlePlanBuildFailureAsync(
+        string toolName,
+        string mutationToolName,
+        IReadOnlyDictionary<string, object?> args,
+        GatewayApprovalIdentity identity,
+        PlanBuildResult planResult,
+        bool requestHasFindings,
+        CancellationToken ct)
+    {
+        logger.LogWarning(
+            "Plan build failed for tool '{ToolName}' by requester '{Requester}': {Message}",
+            mutationToolName,
+            identity.Subject,
+            planResult.Message);
+
+        if (planResult.Audit is { } audit)
+        {
+            await WritePlanAuditAsync(audit, mutationToolName, ct).ConfigureAwait(false);
+        }
+
+        var sanitized = await guardedRunner.SanitizeAndAuditResponseAsync(toolName, args, planResult.Message, ct)
+            .ConfigureAwait(false);
+        var errorText = requestHasFindings || sanitized.HasFindings
+            ? GuardedToolRunner.FormatWarningResponse(sanitized.Text)
+            : sanitized.Text;
+
+        return ErrorResult(errorText);
     }
 
     private async Task<CallToolResult> HandleApplyApprovedPlanAsync(
@@ -566,7 +594,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             timeoutSeconds = timeout;
         }
         else if (timeoutObj is double doubleTimeout &&
-                 double.IsInteger(doubleTimeout) &&
+                 double.IsInteger(doubleTimeout) && // NOSONAR:S1244 — intended API, not an equality comparison
                  doubleTimeout >= int.MinValue &&
                  doubleTimeout <= int.MaxValue)
         {

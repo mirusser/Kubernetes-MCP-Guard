@@ -629,7 +629,6 @@ public sealed class GatewayApprovalServiceTests
         var httpContextAccessor = new HttpContextAccessor();
         SetUser(httpContextAccessor, Subject);
         var planReviewAdapter = new KubernetesPlanReviewAdapter();
-        var planReviewRenderer = new KubernetesPlanReviewRenderer();
 
         return new TestContext(
             new GatewayApprovalService(
@@ -637,7 +636,6 @@ public sealed class GatewayApprovalServiceTests
                 workflow,
                 workflow,
                 planReviewAdapter,
-                planReviewRenderer,
                 new SameSubjectAuthorizationCheck(),
                 gatewayOptions,
                 httpContextAccessor,

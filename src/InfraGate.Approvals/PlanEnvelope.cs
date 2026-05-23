@@ -6,7 +6,7 @@ public sealed record class PlanEnvelope
 {
     public PlanEnvelope() { }
 
-    public PlanEnvelope(
+    public PlanEnvelope( // NOSONAR:S107 — 16-param data record; maps 1:1 to init-only props. Parameter-object would add indirection.
         string id,
         string profile,
         string adapterId,

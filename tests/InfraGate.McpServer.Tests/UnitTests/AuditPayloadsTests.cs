@@ -119,21 +119,21 @@ public sealed class AuditPayloadsTests
     }
 
     [Theory]
-    [MemberData(nameof(PlanPayloads))]
+    [MemberData(nameof(PlanPayloads))] // NOSONAR — Interface type arg is not serializable; fine for local test execution
     public void Serialize_PlanAuditPayload_ProducesExpectedFieldSet(IPlanAuditPayload payload, string[] expectedFields)
     {
         AssertFieldSet(payload, expectedFields);
     }
 
     [Theory]
-    [MemberData(nameof(ChallengePayloads))]
+    [MemberData(nameof(ChallengePayloads))] // NOSONAR — Interface type arg is not serializable; fine for local test execution
     public void Serialize_ChallengeAuditPayload_ProducesExpectedFieldSet(IChallengeAuditPayload payload, string[] expectedFields)
     {
         AssertFieldSet(payload, expectedFields);
     }
 
     [Theory]
-    [MemberData(nameof(PlanPayloads))]
+    [MemberData(nameof(PlanPayloads))] // NOSONAR — Interface type arg is not serializable; fine for local test execution
     public void Serialize_PlanAuditPayload_EmitsPlanIdField(IPlanAuditPayload payload, string[] expectedFields)
     {
         _ = expectedFields;
@@ -145,7 +145,7 @@ public sealed class AuditPayloadsTests
     }
 
     [Theory]
-    [MemberData(nameof(ChallengePayloads))]
+    [MemberData(nameof(ChallengePayloads))] // NOSONAR — Interface type arg is not serializable; fine for local test execution
     public void Serialize_ChallengeAuditPayload_EmitsIdAndPlanIdFields(IChallengeAuditPayload payload, string[] expectedFields)
     {
         _ = expectedFields;

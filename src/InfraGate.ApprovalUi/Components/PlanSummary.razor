@@ -1,0 +1,34 @@
+@namespace InfraGate.ApprovalUi.Components
+
+<section class="card" data-section="plan-summary">
+    <h2>Plan Summary</h2>
+    <div class="kv-grid">
+        <span class="kv-label">Plan ID</span>
+        <span class="kv-value" data-field="plan-id"><code>@Envelope.Id</code></span>
+        <span class="kv-label">Operation</span>
+        <span class="kv-value" data-field="operation">@Envelope.Operation</span>
+        <span class="kv-label">Intent Digest</span>
+        <span class="kv-value" data-field="intent-digest"><code>@Envelope.IntentDigest.Value</code></span>
+        <span class="kv-label">Review Digest</span>
+        <span class="kv-value" data-field="review-digest"><code>@Envelope.ReviewDigest.Value</code></span>
+        <span class="kv-label">Requester</span>
+        <span class="kv-value" data-field="requester">@RequesterSubject</span>
+        <span class="kv-label">Requester Auth</span>
+        <span class="kv-value" data-field="requester-auth">@(RequesterAuth ?? "Unknown")</span>
+        <span class="kv-label">Challenge Status</span>
+        <span class="kv-value" data-field="status"><span class="badge badge-@Status">@Status</span></span>
+        <span class="kv-label">Challenge Created</span>
+        <span class="kv-value" data-field="created-at">@CreatedAt.ToString("O")</span>
+        <span class="kv-label">Expires</span>
+        <span class="kv-value" data-field="expires-at">@ExpiresAt.ToString("O")</span>
+    </div>
+</section>
+
+@code {
+    [Parameter] public PlanEnvelope Envelope { get; set; } = default!;
+    [Parameter] public string RequesterSubject { get; set; } = string.Empty;
+    [Parameter] public string? RequesterAuth { get; set; }
+    [Parameter] public string Status { get; set; } = string.Empty;
+    [Parameter] public DateTimeOffset CreatedAt { get; set; }
+    [Parameter] public DateTimeOffset ExpiresAt { get; set; }
+}

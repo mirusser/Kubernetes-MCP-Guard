@@ -337,9 +337,12 @@ internal static class RunProfileDocumentReader
         string approvalRoot = GetRequiredScalar(mapping, RunProfileConventions.YamlKeys.ApprovalRoot);
         string? postgresConnectionString = GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.PostgresConnectionString);
         string? runMigrationsOnStartup = GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.RunMigrationsOnStartup);
-        bool? runMigrationsOnStartupBool = string.IsNullOrEmpty(runMigrationsOnStartup)
-            ? null
-            : bool.TryParse(runMigrationsOnStartup, out bool parsed) ? parsed : null;
+        bool? runMigrationsOnStartupBool = null;
+        if (!string.IsNullOrEmpty(runMigrationsOnStartup) && bool.TryParse(runMigrationsOnStartup, out bool parsed))
+        {
+            runMigrationsOnStartupBool = parsed;
+        }
+
         return new GenericApprovalCoreProfile(approvalRoot, postgresConnectionString, runMigrationsOnStartupBool);
     }
 

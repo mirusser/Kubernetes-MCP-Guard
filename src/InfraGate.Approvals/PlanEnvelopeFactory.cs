@@ -2,7 +2,7 @@ namespace InfraGate.Approvals;
 
 public static class PlanEnvelopeFactory
 {
-    public static PlanEnvelope<TPayload> Create<TPayload>(
+    public static PlanEnvelope<TPayload> Create<TPayload>( // NOSONAR:S107 — 10 params (2 optional, one generic). Parameter-object adds ceremony.
         string id,
         string adapterId,
         string operation,
@@ -73,7 +73,7 @@ public static class PlanEnvelopeFactory
             envelope.EvidenceArtifacts,
             envelope.IntentDigest);
 
-    private static ApprovalDigest ComputeReviewDigest(
+    private static ApprovalDigest ComputeReviewDigest( // NOSONAR:S107 — Private digest: each param is a distinct canonical field. Parameter-object would add indirection.
         string id,
         string profile,
         string adapterId,

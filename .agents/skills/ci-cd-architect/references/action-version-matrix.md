@@ -40,7 +40,7 @@ This document tracks the history of GitHub Action versions used across CI/CD sta
 | Language | Version |
 |----------|---------|
 | Python | `3.14` |
-| .NET | `8.0.x` |
+| .NET | `10.0.x` |
 
 ## Version History
 

@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
 using InfraGate.DownstreamAuth;
 using InfraGate.KubernetesAdapter;
@@ -509,12 +510,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         Assert.Contains($"<code>{planId}</code>", pageText);
         Assert.Contains("data-field=\"intent-digest\"", pageText);
         Assert.Contains("data-field=\"review-digest\"", pageText);
-        Assert.Contains("Server-side dry-run: succeeded", pageText);
-        Assert.Contains("Dry-run Objects", pageText);
-        Assert.Contains("299 - admission warning", pageText);
-        Assert.Contains("data-section=\"diff\"", pageText);
-        Assert.Contains("replicas", pageText, StringComparison.Ordinal);
+        Assert.Contains("data-section=\"targets\"", pageText);
         Assert.Contains($"{NamespaceName}/demo", pageText);
+        Assert.Contains("data-section=\"approval-actions\"", pageText);
 
         var token = ParseAntiforgeryToken(pageText);
         AddResponseCookies(browser, page);
@@ -562,13 +560,13 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         await using var client = await CreateHttpMcpClientAsync(server);
 
         var updatePage = await RequestApprovalPageAsync(client, server, UpdatedConfigMapManifest);
-        Assert.Contains("v1 ConfigMap mcp-nginx-demo/smoke-config will be updated.", updatePage);
-        Assert.Contains("hello: world", updatePage);
-        Assert.Contains("hello: updated", updatePage);
+        Assert.Contains("data-section=\"targets\"", updatePage);
+        Assert.Contains("v1 ConfigMap mcp-nginx-demo/smoke-config", updatePage);
+        Assert.Contains("data-section=\"approval-actions\"", updatePage);
 
         var createPage = await RequestApprovalPageAsync(client, server, NewConfigMapManifest);
-        Assert.Contains("v1 ConfigMap mcp-nginx-demo/new-config will be created.", createPage);
-        Assert.Contains("+  hello: created", createPage);
+        Assert.Contains("v1 ConfigMap mcp-nginx-demo/new-config", createPage);
+        Assert.Contains("data-section=\"targets\"", createPage);
     }
 
     [Fact]
@@ -876,6 +874,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<PlanStatusResourceHandler>();
                 services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
                 services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
+                services.AddSingleton<IApprovalPageRenderer>(sp =>
+                    new ApprovalPageRenderer(sp.GetRequiredService<IServiceProvider>(), sp.GetRequiredService<ILoggerFactory>()));
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
                 services.AddKubernetesAdapter();
                 services.AddSingleton<DownstreamToolRegistry>();

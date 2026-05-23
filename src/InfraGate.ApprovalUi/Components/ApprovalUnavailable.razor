@@ -1,0 +1,9 @@
+@namespace InfraGate.ApprovalUi.Components
+
+<section class="card" data-section="approval-unavailable">
+    <p class="error" data-field="error-message">@(ErrorMessage ?? "Approval challenge is unavailable.")</p>
+</section>
+
+@code {
+    [Parameter] public string? ErrorMessage { get; set; }
+}

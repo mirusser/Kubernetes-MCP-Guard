@@ -152,7 +152,7 @@ public static class KubernetesTools
 
     [McpServerTool(Name = KubernetesConventions.ToolNames.DiffDeployment, ReadOnly = true, OpenWorld = false)]
     [Description("Computes a diff between live Kubernetes state and the proposed mutation of a Deployment. Returns JSON-serialized diff result.")]
-    public static Task<string> DiffDeployment(
+    public static Task<string> DiffDeployment( // NOSONAR:S107 — MCP tool signature dictated by framework convention.
         KubernetesEvidenceService evidence,
         [Description("Allowed Kubernetes namespace.")] string @namespace,
         [Description("Deployment name.")] string name,

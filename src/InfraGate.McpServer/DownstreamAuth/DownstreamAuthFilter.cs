@@ -14,7 +14,7 @@ namespace InfraGate.McpServer.DownstreamAuth;
 /// </summary>
 internal static class DownstreamAuthFilter
 {
-    // TODO (Task 6/bootstrap gate): Startup validation without a valid service credential
+    // TODO (Task 6/bootstrap gate): Startup validation without a valid service credential // NOSONAR:S1135 — Tracked in task backlog
     // is not handled here — that belongs to the bootstrap gate for 'initialize'.
 
     internal static McpRequestFilter<ListToolsRequestParams, ListToolsResult> ListTools()

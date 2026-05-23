@@ -122,6 +122,16 @@ public static class KubernetesAdapterConventions
         public const string Image = "image";
     }
 
+    public static class PolicySeverities
+    {
+        public const string Deny = "Deny";
+    }
+
+    public static class PlanAttributeKeys
+    {
+        public const string ApiVersion = "apiVersion";
+    }
+
     public static class PolicyCodes
     {
         public const string DeploymentPrivilegedContainer = "DEPLOYMENT_PRIVILEGED_CONTAINER";

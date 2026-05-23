@@ -5,8 +5,7 @@ namespace InfraGate.KubernetesAdapter;
 internal sealed class KubernetesDomainAdapter(
     IDomainPlanBuilder planBuilder,
     IDomainPlanExecutor planExecutor,
-    IPlanReviewAdapter planReviewAdapter,
-    IPlanReviewRenderer planReviewRenderer) : IDomainAdapter
+    IPlanReviewAdapter planReviewAdapter) : IDomainAdapter
 {
     public string AdapterId => planReviewAdapter.AdapterId;
 
@@ -25,10 +24,4 @@ internal sealed class KubernetesDomainAdapter(
 
     public IPlanReview? TryDecodeForReview(PlanEnvelope envelope, out string? error) =>
         planReviewAdapter.TryDecodeForReview(envelope, out error);
-
-    public string RenderReviewContent(IPlanReview planReview) =>
-        planReviewRenderer.RenderReviewContent(planReview);
-
-    public string RenderApprovalRequiredMessage(IPlanReview planReview, string approvalUrl, DateTimeOffset expiresAtUtc) =>
-        planReviewRenderer.RenderApprovalRequiredMessage(planReview, approvalUrl, expiresAtUtc);
 }

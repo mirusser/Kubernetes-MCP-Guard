@@ -95,6 +95,46 @@ public sealed class KubernetesPlanReviewTests
         Assert.True(review.CanBeApproved);
     }
 
+    [Fact]
+    public void Description_ReturnsPayloadDescription()
+    {
+        const string expected = "Scale deployment.";
+        var plan = Materialize(WithPlan(payload => payload));
+
+        var description = ((IPlanReview)plan).Description;
+
+        Assert.Equal(expected, description);
+    }
+
+    [Fact]
+    public void Targets_MapsKubernetesObjects()
+    {
+        var plan = Materialize(WithPlan(payload => payload with
+        {
+            Objects =
+            [
+                new KubernetesObjectRef("apps/v1", "Deployment", "mcp-ns", "demo"),
+                new KubernetesObjectRef("v1", "Service", "mcp-ns", "svc")
+            ]
+        }));
+
+        var targets = ((IPlanReview)plan).Targets;
+
+        Assert.Equal(2, targets.Count);
+        Assert.Contains(targets, t => t is { Type: "Deployment", Name: "demo", Scope: "mcp-ns" });
+        Assert.Contains(targets, t => t is { Type: "Service", Name: "svc", Scope: "mcp-ns" });
+    }
+
+    [Fact]
+    public void Targets_IncludesApiVersionInAttributes()
+    {
+        var plan = Materialize(WithPlan(payload => payload));
+
+        var target = ((IPlanReview)plan).Targets.Single();
+
+        Assert.Equal("apps/v1", target.Attributes["apiVersion"]);
+    }
+
     private static KubernetesPlan Materialize(PlanEnvelope<KubernetesPlanPayload> envelope) =>
         KubernetesApprovalAdapter.Materialize(envelope);
 

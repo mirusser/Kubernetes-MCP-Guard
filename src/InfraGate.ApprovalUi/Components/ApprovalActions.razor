@@ -1,0 +1,21 @@
+@namespace InfraGate.ApprovalUi.Components
+
+<section class="card actions-card" data-section="approval-actions">
+    <form method="post" action="@Actions.ApproveUrl" data-action="approve">
+        <input type="hidden" name="@Actions.AntiforgeryFieldName" value="@(Actions.AntiforgeryToken ?? "")">
+        <button type="submit" class="approve" data-action="approve" disabled="@(!CanBeApproved)">Approve</button>
+    </form>
+    <form method="post" action="@Actions.DenyUrl" data-action="deny">
+        <input type="hidden" name="@Actions.AntiforgeryFieldName" value="@(Actions.AntiforgeryToken ?? "")">
+        <button type="submit" class="deny" data-action="deny">Deny</button>
+    </form>
+    <form method="post" action="@Actions.CancelUrl" data-action="cancel">
+        <input type="hidden" name="@Actions.AntiforgeryFieldName" value="@(Actions.AntiforgeryToken ?? "")">
+        <button type="submit" class="cancel" data-action="cancel">Cancel</button>
+    </form>
+</section>
+
+@code {
+    [Parameter] public ApprovalActionUrls Actions { get; set; } = default!;
+    [Parameter] public bool CanBeApproved { get; set; }
+}

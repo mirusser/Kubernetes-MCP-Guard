@@ -775,7 +775,7 @@ public sealed class RunProfileCliTests
     };
 
     [Theory]
-    [MemberData(nameof(ProfileKeySetData))]
+    [MemberData(nameof(ProfileKeySetData))] // NOSONAR — HashSet<string> is not serializable; fine for local test execution
     public async Task ExecuteAsync_GenerateProfile_EmitsExpectedEnvKeys(
         string profileName,
         HashSet<string> expectedKeys)

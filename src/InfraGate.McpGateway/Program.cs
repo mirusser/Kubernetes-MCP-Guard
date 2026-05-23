@@ -1,3 +1,4 @@
+using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
 using InfraGate.Approvals.Postgres;
 using InfraGate.KubernetesAdapter;
@@ -34,13 +35,7 @@ builder.AddInfraGateObservability(opt =>
     opt.ConsoleToStandardError = false;
 });
 
-if (string.IsNullOrWhiteSpace(builder.Configuration[McpGatewayConventions.ConfigurationKeys.Urls]) &&
-    string.IsNullOrWhiteSpace(builder.Configuration[McpGatewayConventions.EnvironmentVariables.AspNetCoreUrls]))
-{
-    string configuredUrls = builder.Configuration[McpGatewayConventions.ConfigurationKeys.AspNetCoreUrls] ??
-        McpGatewayOptions.DefaultUrl;
-    builder.WebHost.UseUrls(configuredUrls);
-}
+ConfigureUrls(builder);
 
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(
@@ -56,6 +51,8 @@ builder.Services.AddPostgresApprovalPersistence(
     builder.Configuration[McpGatewayConventions.ConfigurationKeys.ApprovalPostgresConnectionString]);
 builder.Services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
 builder.Services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
+builder.Services.AddSingleton<IApprovalPageRenderer>(sp =>
+    new ApprovalPageRenderer(sp.GetRequiredService<IServiceProvider>(), sp.GetRequiredService<ILoggerFactory>()));
 builder.Services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
 builder.Services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
 builder.Services.AddKubernetesAdapter();
@@ -65,22 +62,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddAntiforgery();
 builder.Services.AddGatewayAuthentication(options.Auth);
 
-var downstreamAuth = options.DownstreamAuth ?? new InfraGate.DownstreamAuth.DownstreamAuthOptions();
-if (downstreamAuth.Required)
-{
-    builder.Services.AddSingleton(downstreamAuth);
-    builder.Services.AddHttpClient();
-    builder.Services.AddSingleton<IDownstreamServiceTokenProvider>(sp =>
-        new ClientCredentialsDownstreamServiceTokenProvider(
-            sp.GetRequiredService<InfraGate.DownstreamAuth.DownstreamAuthOptions>(),
-            sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(ClientCredentialsDownstreamServiceTokenProvider)),
-            TimeProvider.System,
-            sp.GetRequiredService<ILogger<ClientCredentialsDownstreamServiceTokenProvider>>()));
-}
-else
-{
-    builder.Services.AddSingleton<IDownstreamServiceTokenProvider, NullDownstreamServiceTokenProvider>();
-}
+RegisterDownstreamAuth(builder, options);
 
 builder.Services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
 builder.Services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
@@ -131,7 +113,7 @@ builder.Services
             }
             catch (OperationCanceledException)
             {
-                handlerLogger.LogInformation("RunSessionHandler: session cancelled (client disconnected)");
+                handlerLogger.LogInformation("RunSessionHandler: session cancelled (client disconnected)"); // NOSONAR
             }
             catch (Exception ex)
             {
@@ -170,11 +152,7 @@ builder.Services
 
 var app = builder.Build();
 
-if (string.Equals(builder.Configuration[McpGatewayConventions.ConfigurationKeys.ApprovalPostgresRunMigrationsOnStartup], "true", StringComparison.OrdinalIgnoreCase))
-{
-    var postgresDataSource = app.Services.GetRequiredService<NpgsqlDataSource>();
-    await PostgresApprovalMigrationRunner.ApplyAsync(postgresDataSource, CancellationToken.None).ConfigureAwait(false);
-}
+await RunPostgresMigrationsAsync(builder, app).ConfigureAwait(false);
 
 await app.Services.GetRequiredService<PostgresApprovalSchemaValidator>()
     .ValidateAsync(CancellationToken.None).ConfigureAwait(false);
@@ -186,3 +164,43 @@ app.MapMcp(McpGatewayConventions.McpPath)
     .RequireAuthorization(GatewayAuthConventions.Schemes.PolicyName);
 
 await app.RunAsync().ConfigureAwait(false);
+
+static void ConfigureUrls(WebApplicationBuilder builder)
+{
+    if (string.IsNullOrWhiteSpace(builder.Configuration[McpGatewayConventions.ConfigurationKeys.Urls]) &&
+        string.IsNullOrWhiteSpace(builder.Configuration[McpGatewayConventions.EnvironmentVariables.AspNetCoreUrls]))
+    {
+        string configuredUrls = builder.Configuration[McpGatewayConventions.ConfigurationKeys.AspNetCoreUrls] ??
+            McpGatewayOptions.DefaultUrl;
+        builder.WebHost.UseUrls(configuredUrls);
+    }
+}
+
+static void RegisterDownstreamAuth(WebApplicationBuilder builder, McpGatewayOptions options)
+{
+    var downstreamAuth = options.DownstreamAuth ?? new InfraGate.DownstreamAuth.DownstreamAuthOptions();
+    if (downstreamAuth.Required)
+    {
+        builder.Services.AddSingleton(downstreamAuth);
+        builder.Services.AddHttpClient();
+        builder.Services.AddSingleton<IDownstreamServiceTokenProvider>(sp =>
+            new ClientCredentialsDownstreamServiceTokenProvider(
+                sp.GetRequiredService<InfraGate.DownstreamAuth.DownstreamAuthOptions>(),
+                sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(ClientCredentialsDownstreamServiceTokenProvider)),
+                TimeProvider.System,
+                sp.GetRequiredService<ILogger<ClientCredentialsDownstreamServiceTokenProvider>>()));
+    }
+    else
+    {
+        builder.Services.AddSingleton<IDownstreamServiceTokenProvider, NullDownstreamServiceTokenProvider>();
+    }
+}
+
+static async Task RunPostgresMigrationsAsync(WebApplicationBuilder builder, WebApplication app)
+{
+    if (string.Equals(builder.Configuration[McpGatewayConventions.ConfigurationKeys.ApprovalPostgresRunMigrationsOnStartup], "true", StringComparison.OrdinalIgnoreCase))
+    {
+        var postgresDataSource = app.Services.GetRequiredService<NpgsqlDataSource>();
+        await PostgresApprovalMigrationRunner.ApplyAsync(postgresDataSource, CancellationToken.None).ConfigureAwait(false);
+    }
+}

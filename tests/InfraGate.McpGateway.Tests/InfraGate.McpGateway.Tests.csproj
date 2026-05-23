@@ -29,6 +29,7 @@
     <ProjectReference Include="..\..\src\InfraGate.DownstreamAuth\InfraGate.DownstreamAuth.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.KubernetesAdapter\InfraGate.KubernetesAdapter.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.McpGateway.Auth\InfraGate.McpGateway.Auth.csproj" />
+    <ProjectReference Include="..\..\src\InfraGate.ApprovalUi\InfraGate.ApprovalUi.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.McpGateway\InfraGate.McpGateway.csproj" />
   </ItemGroup>
 

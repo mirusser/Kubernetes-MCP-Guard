@@ -9,11 +9,13 @@ internal static class NotificationsConventions
 
     internal static class Resources
     {
+        private const string PlanUriScheme = "plan://";
+
         internal const string PlanStatusScheme = "plan";
         internal const string PlanStatusMimeType = "application/json";
         internal const string PlanStatusTemplateName = "approval-plan-status";
-        internal const string PlanStatusUriTemplate = "plan://{planId}/status";
-        internal const string PlanStatusUriPrefix = "plan://";
+        internal static readonly string PlanStatusUriTemplate = $"{PlanUriScheme}{{planId}}/status";
+        internal const string PlanStatusUriPrefix = PlanUriScheme;
         internal const string PlanStatusUriSuffix = "/status";
 
         internal static string PlanStatusUri(string planId) =>

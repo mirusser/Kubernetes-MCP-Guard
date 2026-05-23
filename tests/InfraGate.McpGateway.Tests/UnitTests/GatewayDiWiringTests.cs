@@ -1,3 +1,4 @@
+using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
@@ -21,7 +22,6 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
         services.AddSingleton<IApprovalAuditPublisher>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
         services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
-        services.AddSingleton<IPlanReviewRenderer, KubernetesPlanReviewRenderer>();
         services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
         services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
         services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
@@ -71,6 +71,8 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
         services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
         services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
+        services.AddSingleton<IApprovalPageRenderer>(sp =>
+            new ApprovalPageRenderer(sp, sp.GetRequiredService<ILoggerFactory>()));
         services.AddKubernetesAdapter();
         services.AddSingleton<DownstreamToolRegistry>();
         services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
@@ -83,6 +85,7 @@ public sealed class GatewayDiWiringTests
         using var provider = services.BuildServiceProvider();
 
         Assert.NotNull(provider.GetRequiredService<IGatewayApprovalService>());
+        Assert.NotNull(provider.GetRequiredService<IApprovalPageRenderer>());
         Assert.NotNull(provider.GetRequiredService<GuardedToolRunner>());
         Assert.NotNull(provider.GetRequiredService<IApprovalPreExecutionGate>());
         Assert.NotNull(provider.GetRequiredService<PlanStatusResourceHandler>());
