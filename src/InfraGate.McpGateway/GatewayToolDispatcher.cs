@@ -27,9 +27,10 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
     private readonly IApprovalPreExecutionGate preExecutionGate;
     private readonly IHttpContextAccessor httpContextAccessor;
     private readonly ISubscriptionRegistry subscriptionRegistry;
+    private readonly IGuardrailAuditStore auditStore;
     private readonly ILogger<GatewayToolDispatcher> logger;
 
-    public GatewayToolDispatcher( // NOSONAR:S107 — 11-param DI constructor. Aggregates would add indirection; explicit DI surfaces failures immediately.
+    public GatewayToolDispatcher( // NOSONAR:S107 — 12-param DI constructor. Aggregates would add indirection; explicit DI surfaces failures immediately.
         DownstreamToolRegistry registry,
         GuardedToolRunner guardedRunner,
         IDomainAdapter domainAdapter,
@@ -40,6 +41,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         IApprovalPreExecutionGate preExecutionGate,
         IHttpContextAccessor httpContextAccessor,
         ISubscriptionRegistry subscriptionRegistry,
+        IGuardrailAuditStore auditStore,
         ILogger<GatewayToolDispatcher> logger)
     {
         this.registry = registry;
@@ -52,6 +54,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         this.preExecutionGate = preExecutionGate;
         this.httpContextAccessor = httpContextAccessor;
         this.subscriptionRegistry = subscriptionRegistry;
+        this.auditStore = auditStore;
         this.logger = logger;
     }
 
@@ -99,7 +102,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (toolName.Equals(McpGatewayConventions.ToolNames.ApplyApprovedPlan, StringComparison.Ordinal))
         {
-            var scopeResult = RequireMutationScope(toolName);
+            var scopeResult = await RequireMutationScopeAsync(toolName).ConfigureAwait(false);
             if (scopeResult is not null)
             {
                 return scopeResult;
@@ -120,7 +123,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (toolName.StartsWith(McpGatewayConventions.ToolNames.RequestToolPrefix, StringComparison.Ordinal))
         {
-            var scopeResult = RequireMutationScope(toolName);
+            var scopeResult = await RequireMutationScopeAsync(toolName).ConfigureAwait(false);
             if (scopeResult is not null)
             {
                 return scopeResult;
@@ -657,7 +660,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         Content = [new TextContentBlock { Text = text }]
     };
 
-    private CallToolResult? RequireMutationScope(string toolName)
+    private async Task<CallToolResult?> RequireMutationScopeAsync(string toolName)
     {
         var user = httpContextAccessor.HttpContext?.User;
         if (user is null)
@@ -668,10 +671,24 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (!GatewayAuthentication.HasRequiredScope(user, GatewayAuthConventions.DefaultOAuthScope))
         {
+            var identity = GatewayAuditIdentityResolver.Resolve(user);
+
             logger.LogWarning(
                 "Tool '{ToolName}' denied: caller lacks required scope '{RequiredScope}'.",
                 toolName,
                 GatewayAuthConventions.DefaultOAuthScope);
+
+            var auditEvent = new GuardrailAuditEvent(
+                toolName,
+                McpGatewayConventions.GuardrailAudit.RequestDirection,
+                McpGatewayConventions.GuardrailAudit.DenyAction,
+                [McpGatewayConventions.GuardrailCategories.ScopeDenied],
+                PlanId: null,
+                identity.Subject,
+                identity.AuthenticationType,
+                identity.IdentityKind);
+
+            await auditStore.WriteAsync(auditEvent, CancellationToken.None).ConfigureAwait(false);
 
             return ErrorResult(
                 $"Refused: tool '{toolName}' requires the '{GatewayAuthConventions.DefaultOAuthScope}' scope.");

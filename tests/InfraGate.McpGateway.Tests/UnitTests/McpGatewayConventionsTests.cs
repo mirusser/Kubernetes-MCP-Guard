@@ -34,4 +34,19 @@ public sealed class McpGatewayConventionsTests
 
         Assert.Equal(configKey, mappings.GetConfigurationKey(envVar));
     }
+
+    [Fact]
+    public void GuardrailAudit_DenyAction_IsScopeDenied()
+    {
+        Assert.Equal("scope.denied", McpGatewayConventions.GuardrailAudit.DenyAction);
+    }
+
+    [Fact]
+    public void GuardrailAudit_HasExpectedActionConstants()
+    {
+        Assert.Equal("warn", McpGatewayConventions.GuardrailAudit.WarnAction);
+        Assert.Equal("warn_redact", McpGatewayConventions.GuardrailAudit.WarnRedactAction);
+        Assert.Equal("redact_manifest", McpGatewayConventions.GuardrailAudit.RedactManifestAction);
+        Assert.Equal("scope.denied", McpGatewayConventions.GuardrailAudit.DenyAction);
+    }
 }

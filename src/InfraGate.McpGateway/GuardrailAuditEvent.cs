@@ -7,4 +7,5 @@ public sealed record class GuardrailAuditEvent(
     string[] Categories,
     string? PlanId,
     string? Subject,
-    string? AuthenticationType);
+    string? AuthenticationType,
+    string IdentityKind = "Human");

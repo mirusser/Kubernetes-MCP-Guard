@@ -174,6 +174,7 @@ internal static class McpGatewayConventions
         public const string WarnAction = "warn";
         public const string WarnRedactAction = "warn_redact";
         public const string RedactManifestAction = "redact_manifest";
+        public const string DenyAction = "scope.denied";
     }
 
     public static class GuardrailCategories
@@ -184,6 +185,7 @@ internal static class McpGatewayConventions
         public const string SecretExfiltration = "secret-exfiltration";
         public const string AuthorityOverride = "authority-override";
         public const string ManifestEchoCategory = "manifest-echo";
+        public const string ScopeDenied = "scope";
     }
 
     public static class GuardrailLocations
