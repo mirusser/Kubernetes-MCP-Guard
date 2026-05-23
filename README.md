@@ -1,14 +1,15 @@
 # 🛡️ Kubernetes MCP Guard
 
-**A security-first bridge between AI agents and Kubernetes, with out of band Human-in-the-Loop (HITL) approval for every gateway-exposed mutation.**
+**A reference implementation for safe AI-driven Kubernetes remediation.**  
 
-An *experimental* .NET 10 MCP gateway for AI-assisted Kubernetes operations. 
-
-Agents can inspect a narrow cluster surface and propose changes, but writes are staged as server-side dry-run plans and execute only after an OAuth-authenticated human approves the exact review snapshot in a separate browser session.
-
-<sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments rather than production-certified infrastructure.</em></sub>
-
-<sub><em>Kubernetes MCP Guard is internally named **InfraGate**, </em></sub>
+> **Safe remediations, by design:**  
+>
+> Observe freely.  
+> Plan with evidence.  
+> Approve out-of-band.  
+> Execute only digest-bound changes.  
+> Audit everything.  
+>  
 
 [![Unit Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/ci.yml)
 [![Integration Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml)
@@ -18,6 +19,16 @@ Agents can inspect a narrow cluster surface and propose changes, but writes are 
 ![Badge Hi Mom]<br>
 
 <sub>![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?style=flat-square&logo=dotnet) ![Kubernetes](https://img.shields.io/badge/Kubernetes-Cloud--Native-326ce5?style=flat-square&logo=kubernetes) ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ed?style=flat-square&logo=docker) ![MCP](https://img.shields.io/badge/MCP-HTTP%20Gateway-black?style=flat-square)</sub>
+
+### 📝 TL;DR
+**A security-first bridge between AI agents and Kubernetes, with out of band Human-in-the-Loop (HITL) plan based approval for every gateway-exposed mutation.**
+
+Agents can inspect a narrow cluster surface and propose changes, but writes are staged as server-side dry-run plans and execute only after an OAuth-authenticated human approves the exact review snapshot in a separate browser session.
+
+<sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments rather than production-certified infrastructure.</em></sub>
+
+<sub><em>Kubernetes MCP Guard is internally named **InfraGate**. </em></sub>
+
 
 ## 🎯 What It Demonstrates
 
@@ -168,7 +179,7 @@ Direct Kubernetes mutation tools exist inside the private server surface for the
 
 ### 📦 Run Published Images
 
-Prerequisites: [Docker Compose v2](https://docs.docker.com/compose/install/), [minikube](https://minikube.sigs.k8s.io/docs/start/), and `git`.
+Prerequisites: [Docker Compose v2](https://docs.docker.com/compose/install/), [minikube](https://minikube.sigs.k8s.io/docs/start/), and [git](https://git-scm.com/).
 
 ```bash
 git clone https://github.com/mirusser/Kubernetes-MCP-Guard.git
@@ -184,7 +195,7 @@ This starts the local Keycloak-backed OAuth path and the published gateway image
 
 ### 🛠️ Build From Source
 
-Prerequisites: [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), Docker Compose v2, minikube, and `git`.
+Prerequisites: [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), [Docker Compose v2](https://docs.docker.com/compose/install/), [minikube](https://minikube.sigs.k8s.io/docs/start/), and [git](https://git-scm.com/).
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
@@ -286,6 +297,12 @@ See [docs/security-model.md](docs/security-model.md) for the full threat model.
 - Contributing guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - Release process: [docs/releasing.md](docs/releasing.md)
+
+---
+
+<p align="center">
+  <sub><em>Built with ❤️ and ☕</em></sub>
+</p>
 
 
 [Badge Hi Mom]: https://img.shields.io/badge/Hi-mom!-ff69b4

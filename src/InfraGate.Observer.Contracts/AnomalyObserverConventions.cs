@@ -14,6 +14,12 @@ public static class AnomalyObserverConventions
     public const int MaxToolIterations = 8;
     public const int MinMaxToolIterations = 1;
     public const int MaxMaxToolIterations = 20;
+    public const int DefaultDedupeSuppressionWindow = 5;
+    public const int MinDedupeSuppressionWindow = 1;
+    public const int MaxDedupeSuppressionWindow = 30;
+    public const int DefaultDedupeResolutionThreshold = 2;
+    public const int MinDedupeResolutionThreshold = 1;
+    public const int MaxDedupeResolutionThreshold = 10;
     public const string DefaultLlmModel = "claude-sonnet-4-6";
 
     public static string ComputeAnomalyId(AnomalyKind kind, ResourceRef target)

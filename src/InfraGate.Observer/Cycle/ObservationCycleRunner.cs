@@ -3,6 +3,7 @@ using InfraGate.Observer.Classification;
 using InfraGate.Observer.Mcp;
 using InfraGate.Observer.Prompts;
 using InfraGate.Observer.Snapshot;
+using InfraGate.Observer.State;
 
 namespace InfraGate.Observer.Cycle;
 
@@ -15,6 +16,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
     private readonly IChatClient chatClient;
     private readonly ISeverityClassifier severityClassifier;
     private readonly IObserverMcpClient mcpClient;
+    private readonly IAnomalyDedupeStore dedupeStore;
     private readonly ILogger<ObservationCycleRunner> logger;
 
     public ObservationCycleRunner(
@@ -25,6 +27,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         IChatClient chatClient,
         ISeverityClassifier severityClassifier,
         IObserverMcpClient mcpClient,
+        IAnomalyDedupeStore dedupeStore,
         ILogger<ObservationCycleRunner> logger)
     {
         this.options = options;
@@ -34,6 +37,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         this.chatClient = chatClient;
         this.severityClassifier = severityClassifier;
         this.mcpClient = mcpClient;
+        this.dedupeStore = dedupeStore;
         this.logger = logger;
     }
 
@@ -103,14 +107,26 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
             };
         }
 
+        var detectedAt = DateTimeOffset.UtcNow;
+        var (dedupedReports, resolvedReports) = dedupeStore.ProcessReports(
+            cycleId,
+            allReports,
+            opts.DedupeSuppressionWindow,
+            opts.DedupeResolutionThreshold,
+            detectedAt);
+
+        var finalReports = new List<AnomalyReport>(dedupedReports.Count + resolvedReports.Count);
+        finalReports.AddRange(dedupedReports);
+        finalReports.AddRange(resolvedReports);
+
         logger.LogInformation(
-            "Cycle {CycleId} complete. Reports={ReportCount} ToolCalls={ToolCalls} Disagreements={Disagreements} Duration={DurationMs}ms",
-            cycleId, allReports.Count, totalToolCalls, totalDisagreements, (long)stopwatch.Elapsed.TotalMilliseconds);
+            "Cycle {CycleId} complete. Reports={ReportCount} Emitted={Emitted} Resolved={Resolved} ToolCalls={ToolCalls} Disagreements={Disagreements} Duration={DurationMs}ms",
+            cycleId, finalReports.Count, dedupedReports.Count, resolvedReports.Count, totalToolCalls, totalDisagreements, (long)stopwatch.Elapsed.TotalMilliseconds);
 
         return new CycleResult
         {
             CycleId = cycleId,
-            Reports = allReports,
+            Reports = finalReports,
             IsTruncated = false,
             ToolCallsUsed = totalToolCalls,
             SeverityDisagreements = totalDisagreements,
@@ -312,9 +328,11 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         return text[startIndex..(endIndex + 1)];
     }
 
+    private const string ToolCallPrefix = "TOOL_CALL:";
+
     private static (string ToolName, IReadOnlyDictionary<string, object?> Arguments)? TryParseToolCall(string text)
     {
-        var prefixIndex = text.IndexOf("TOOL_CALL:", StringComparison.Ordinal);
+        var prefixIndex = text.IndexOf(ToolCallPrefix, StringComparison.Ordinal);
         if (prefixIndex < 0)
         {
             return null;

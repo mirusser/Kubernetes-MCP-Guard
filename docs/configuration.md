@@ -41,6 +41,8 @@ The Anomaly Observer listens on port `3003` by default and polls the MCP gateway
 | `INFRA_GATE_OBSERVER_CLIENT_SECRET` | `InfraGate.Observer` | Yes | None | (secret) | OAuth client secret for client_credentials flow. | Use a secret manager in production; env var is development-only. |
 | `INFRA_GATE_OBSERVER_OAUTH_AUTHORITY` | `InfraGate.Observer` | Yes | None | `http://keycloak:8080/realms/infra-gate` | OAuth token endpoint authority. | Match the gateway's issuer. |
 | `INFRA_GATE_OBSERVER_OAUTH_SCOPE` | `InfraGate.Observer` | No | `mcp:tools.readonly` | `mcp:tools.readonly` | OAuth scope requested by the Observer. | Must include `mcp:tools.readonly` for gateway access. |
+| `INFRA_GATE_OBSERVER_DEDUPE_SUPPRESSION_WINDOW` | `InfraGate.Observer` | No | `5` | `5` | Number of cycles within which repeated detection of the same anomaly is suppressed (deduplication window). Bounds: 1–30. | Lower values increase report noise; higher values delay re-emission of persistent anomalies. |
+| `INFRA_GATE_OBSERVER_DEDUPE_RESOLUTION_THRESHOLD` | `InfraGate.Observer` | No | `2` | `2` | Number of consecutive cycles an anomaly must be absent before emitting a `Resolved` report. Bounds: 1–10. | Lower values clear anomalies faster; higher values prevent transient flapping. |
 
 ## McpGateway
 

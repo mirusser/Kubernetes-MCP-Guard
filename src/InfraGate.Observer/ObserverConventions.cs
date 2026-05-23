@@ -24,6 +24,8 @@ internal static class ObserverConventions
         public const string LlmProvider = "InfraGate:Observer:LlmProvider";
         public const string LlmModel = "InfraGate:Observer:LlmModel";
         public const string LlmApiKey = "InfraGate:Observer:LlmApiKey";
+        public const string DedupeSuppressionWindow = "InfraGate:Observer:DedupeSuppressionWindow";
+        public const string DedupeResolutionThreshold = "InfraGate:Observer:DedupeResolutionThreshold";
     }
 
     public static class EnvironmentVariables
@@ -41,6 +43,8 @@ internal static class ObserverConventions
         public const string ClientSecret = "INFRA_GATE_OBSERVER_CLIENT_SECRET";
         public const string OAuthAuthority = "INFRA_GATE_OBSERVER_OAUTH_AUTHORITY";
         public const string OAuthScope = "INFRA_GATE_OBSERVER_OAUTH_SCOPE";
+        public const string DedupeSuppressionWindow = "INFRA_GATE_OBSERVER_DEDUPE_SUPPRESSION_WINDOW";
+        public const string DedupeResolutionThreshold = "INFRA_GATE_OBSERVER_DEDUPE_RESOLUTION_THRESHOLD";
     }
 
     public static class ToolNames

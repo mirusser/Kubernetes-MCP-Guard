@@ -232,6 +232,22 @@ _Avoid_: Requester, Approver, Gateway Service Identity, user token passthrough
 The act of the **Anomaly Observer** publishing one or more **Anomaly Reports** to a downstream consumer such as the future executor agent. The contract shape is defined by the v1 **Anomaly Observer** implementation; the transport is defined when the executor is in scope.
 _Avoid_: Plan Envelope, Approval Notification, Approval Grant, Audit Spine event
 
+**Dedupe Key**:
+The tuple `(AnomalyKind, ResourceKind, Namespace, Name)` that uniquely identifies an anomaly for deduplication purposes. Two **Anomaly Reports** with the same **Dedupe Key** are considered the same underlying anomaly regardless of which **Observation Cycle** produced them.
+_Avoid_: Anomaly Report primary key, resource identity
+
+**Dedupe State**:
+The in-memory `ConcurrentDictionary<DedupKey, ActiveAnomalyState>` that tracks which anomalies are currently active, their first-seen and last-seen cycle numbers, and their most recent **Severity**. The **Dedupe State** is the source of truth for suppression and resolution decisions.
+_Avoid_: Approval grant set, audit ledger, persistent database
+
+**Suppression Window**:
+A configurable number of consecutive **Observation Cycles** (default `5`) within which repeated detection of the same anomaly is suppressed — the **Anomaly Observer** skips emitting redundant **Anomaly Reports**. After the window elapses, persistent anomalies re-emit.
+_Avoid_: cooldown period, debounce interval
+
+**Resolution Emission**:
+When an active anomaly tracked in the **Dedupe State** is absent from **Anomaly Reports** for a configurable number of consecutive cycles (default `2`), the **Anomaly Observer** emits one **Anomaly Report** with `Status = Resolved` and `Severity = Low`, then removes the **Dedupe Key** from the **Dedupe State**.
+_Avoid_: cleanup event, archive notification
+
 ## Relationships
 
 - A **Plan Envelope** wraps exactly one **Mutation Intent**
@@ -312,6 +328,10 @@ _Avoid_: Plan Envelope, Approval Notification, Approval Grant, Audit Spine event
 - An **Anomaly Observer** does not bypass any **Pre-Execution Gate** and does not call execution tools
 - An **Anomaly Handoff** carries one or more **Anomaly Reports**
 - An **Anomaly Handoff** is not an **Approval Grant** and does not authorize **Approval-Bound Execution**
+- An **Anomaly Report** emission may be suppressed by the **Suppression Window** in the **Dedupe State**
+- An **Anomaly Report** emission may be a **Resolution Emission** when the tracked anomaly is absent beyond the resolution threshold
+- A **Dedupe Key** uniquely identifies an **Anomaly** within the **Dedupe State**
+- The **Dedupe State** tracks active anomalies across **Observation Cycles** and drives the **Suppression Window** and **Resolution Emission**
 
 ## Example Dialogue
 

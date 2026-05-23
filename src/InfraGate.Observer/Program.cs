@@ -7,6 +7,7 @@ using InfraGate.Observer.Llm;
 using InfraGate.Observer.Mcp;
 using InfraGate.Observer.Prompts;
 using InfraGate.Observer.Snapshot;
+using InfraGate.Observer.State;
 using InfraGate.Observability;
 using InfraGate.RuntimeSafety;
 using Microsoft.Extensions.Configuration;
@@ -23,6 +24,8 @@ builder.Configuration.AddInfraGateEnvironmentVariables(mappings =>
     mappings.Map(ObserverConventions.EnvironmentVariables.LlmProvider, ObserverConventions.ConfigurationKeys.LlmProvider);
     mappings.Map(ObserverConventions.EnvironmentVariables.LlmModel, ObserverConventions.ConfigurationKeys.LlmModel);
     mappings.Map(ObserverConventions.EnvironmentVariables.LlmApiKey, ObserverConventions.ConfigurationKeys.LlmApiKey);
+    mappings.Map(ObserverConventions.EnvironmentVariables.DedupeSuppressionWindow, ObserverConventions.ConfigurationKeys.DedupeSuppressionWindow);
+    mappings.Map(ObserverConventions.EnvironmentVariables.DedupeResolutionThreshold, ObserverConventions.ConfigurationKeys.DedupeResolutionThreshold);
     RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
 });
 
@@ -63,6 +66,7 @@ builder.Services.AddSingleton<IChatClient>(sp =>
     var factory = sp.GetRequiredService<IChatClientFactory>();
     return factory.Create();
 });
+builder.Services.AddSingleton<IAnomalyDedupeStore, AnomalyDedupeStore>();
 builder.Services.AddSingleton<IObservationCycleRunner, ObservationCycleRunner>();
 builder.Services.AddHostedService<ObservationCycleLoop>();
 

@@ -1,6 +1,7 @@
 using InfraGate.Observer.Classification;
 using InfraGate.Observer.Cycle;
 using InfraGate.Observer.Prompts;
+using InfraGate.Observer.State;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace InfraGate.Observer.Tests.UnitTests;
@@ -51,6 +52,7 @@ public sealed class ObservationCycleRunnerTests
 
         var mcpClient = Substitute.For<IObserverMcpClient>();
 
+        var dedupeStore = new AnomalyDedupeStore();
         var logger = NullLogger<ObservationCycleRunner>.Instance;
 
         return new ObservationCycleRunner(
@@ -61,6 +63,7 @@ public sealed class ObservationCycleRunnerTests
             chatClient,
             severityClassifier,
             mcpClient,
+            dedupeStore,
             logger);
     }
 
@@ -122,10 +125,12 @@ public sealed class ObservationCycleRunnerTests
     [Fact]
     public async Task RunAsync_AnomalyId_IsStableAcrossCalls()
     {
-        var runner = CreateRunner(ValidLlmJson("High", "PodUnhealthy"));
+        var json = ValidLlmJson("High", "PodUnhealthy");
+        var runner1 = CreateRunner(json);
+        var runner2 = CreateRunner(json);
 
-        var result1 = await runner.RunAsync(CancellationToken.None);
-        var result2 = await runner.RunAsync(CancellationToken.None);
+        var result1 = await runner1.RunAsync(CancellationToken.None);
+        var result2 = await runner2.RunAsync(CancellationToken.None);
 
         var id1 = result1.Reports[0].AnomalyId;
         var id2 = result2.Reports[0].AnomalyId;
@@ -258,6 +263,7 @@ public sealed class ObservationCycleRunnerTests
             chatClient,
             new SeverityClassifier(),
             mcpClient,
+            new AnomalyDedupeStore(),
             NullLogger<ObservationCycleRunner>.Instance);
 
         var result = await runner.RunAsync(CancellationToken.None);
@@ -400,6 +406,7 @@ public sealed class ObservationCycleRunnerTests
             chatClient,
             new SeverityClassifier(),
             mcpClient,
+            new AnomalyDedupeStore(),
             NullLogger<ObservationCycleRunner>.Instance);
 
         var result = await runner.RunAsync(CancellationToken.None);
@@ -447,6 +454,7 @@ public sealed class ObservationCycleRunnerTests
             chatClient,
             new SeverityClassifier(),
             mcpClient,
+            new AnomalyDedupeStore(),
             NullLogger<ObservationCycleRunner>.Instance);
 
         var result = await runner.RunAsync(CancellationToken.None);
@@ -454,5 +462,197 @@ public sealed class ObservationCycleRunnerTests
         Assert.True(result.IsTruncated);
         Assert.Empty(result.Reports);
         Assert.Equal(2, result.ToolCallsUsed);
+    }
+
+    [Fact]
+    public async Task RunAsync_SnapshotFetchThrows_PropagatesToCaller()
+    {
+        var options = DefaultOptions();
+        var optionsSnapshot = Substitute.For<IOptions<ObserverOptions>>();
+        optionsSnapshot.Value.Returns(options);
+        var optionsMonitor = Substitute.For<IOptionsMonitor<ObserverOptions>>();
+        optionsMonitor.CurrentValue.Returns(options);
+
+        var snapshotFetcher = Substitute.For<ISnapshotFetcher>();
+        snapshotFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns<Task<SnapshotDocument>>(_ =>
+                Task.FromException<SnapshotDocument>(new HttpRequestException("Gateway unreachable")));
+
+        var runner = new ObservationCycleRunner(
+            optionsSnapshot,
+            optionsMonitor,
+            snapshotFetcher,
+            Substitute.For<ISystemPromptProvider>(),
+            Substitute.For<IChatClient>(),
+            new SeverityClassifier(),
+            Substitute.For<IObserverMcpClient>(),
+            new AnomalyDedupeStore(),
+            NullLogger<ObservationCycleRunner>.Instance);
+
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(
+            () => runner.RunAsync(CancellationToken.None));
+
+        Assert.Equal("Gateway unreachable", ex.Message);
+    }
+
+    // ── Dedupe integration ───────────────────────────────────────
+
+    [Fact]
+    public async Task RunAsync_SameAnomalyAcrossCycles_SuppressesWithinWindow()
+    {
+        var sharedDedupeStore = new AnomalyDedupeStore();
+        var json = ValidLlmJson("High", "PodUnhealthy");
+
+        var result1 = await CreateRunnerWithDedupe(json, sharedDedupeStore).RunAsync(CancellationToken.None);
+        Assert.Single(result1.Reports);
+        Assert.Equal(AnomalyStatus.Active, result1.Reports[0].Status);
+
+        var result2 = await CreateRunnerWithDedupe(json, sharedDedupeStore).RunAsync(CancellationToken.None);
+        Assert.Empty(result2.Reports);
+    }
+
+    [Fact]
+    public async Task RunAsync_DifferentAnomalies_AllEmitFirstTime()
+    {
+        var sharedDedupeStore = new AnomalyDedupeStore();
+
+        var podJson = ValidLlmJson("Medium", "PodUnhealthy");
+        var deploymentJson = """
+        [
+          {
+            "Kind": "DeploymentUnavailable",
+            "Severity": "High",
+            "Target": { "ApiVersion": "apps/v1", "Kind": "Deployment", "Namespace": "default", "Name": "nginx" },
+            "Summary": "Deployment unavailable",
+            "Evidence": [],
+            "Annotations": { "ReplicasDesired": "3", "ReplicasAvailable": "0" }
+          }
+        ]
+        """;
+
+        var result1 = await CreateRunnerWithDedupe(podJson, sharedDedupeStore).RunAsync(CancellationToken.None);
+        var result2 = await CreateRunnerWithDedupe(deploymentJson, sharedDedupeStore).RunAsync(CancellationToken.None);
+
+        Assert.Single(result1.Reports);
+        Assert.Single(result2.Reports);
+        Assert.NotEqual(result1.Reports[0].AnomalyId, result2.Reports[0].AnomalyId);
+    }
+
+    [Fact]
+    public async Task RunAsync_TruncatedCycle_DoesNotConsumeSuppressionWindow()
+    {
+        var sharedDedupeStore = new AnomalyDedupeStore();
+        var json = ValidLlmJson("High", "PodUnhealthy");
+
+        // First cycle emits normally
+        var result1 = await CreateRunnerWithDedupe(json, sharedDedupeStore).RunAsync(CancellationToken.None);
+        Assert.Single(result1.Reports);
+
+        // Create runner with 1s cap that will truncate
+        var options = DefaultOptions() with { WallClockCapSeconds = 1 };
+        var optionsSnapshot = Substitute.For<IOptions<ObserverOptions>>();
+        optionsSnapshot.Value.Returns(options);
+        var optionsMonitor = Substitute.For<IOptionsMonitor<ObserverOptions>>();
+        optionsMonitor.CurrentValue.Returns(options);
+
+        var snapshotFetcher = Substitute.For<ISnapshotFetcher>();
+        snapshotFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(async callInfo =>
+            {
+                var ct = callInfo.Arg<CancellationToken>();
+                await Task.Delay(2000, ct);
+                return new SnapshotDocument("default", "{}", "{}", "{}", "{}", "{}", "{}", DateTimeOffset.UtcNow);
+            });
+
+        var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
+        systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("prompt");
+
+        var chatClient = new FixtureChatClient(json);
+        var mcpClient = Substitute.For<IObserverMcpClient>();
+
+        var truncatedRunner = new ObservationCycleRunner(
+            optionsSnapshot,
+            optionsMonitor,
+            snapshotFetcher,
+            systemPromptProvider,
+            chatClient,
+            new SeverityClassifier(),
+            mcpClient,
+            sharedDedupeStore,
+            NullLogger<ObservationCycleRunner>.Instance);
+
+        var truncatedResult = await truncatedRunner.RunAsync(CancellationToken.None);
+        Assert.True(truncatedResult.IsTruncated);
+        Assert.Empty(truncatedResult.Reports);
+
+        // After truncated cycle, the same anomaly should still be in the suppression window
+        // (truncated cycle didn't advance the counter)
+        var result3 = await CreateRunnerWithDedupe(json, sharedDedupeStore).RunAsync(CancellationToken.None);
+        Assert.Empty(result3.Reports);
+    }
+
+    [Fact]
+    public async Task RunAsync_ResolutionEmission_WhenAnomalyFixed()
+    {
+        var sharedDedupeStore = new AnomalyDedupeStore();
+        var json = ValidLlmJson("High", "PodUnhealthy");
+        var resolverOptions = DefaultOptions() with { DedupeResolutionThreshold = 2 };
+
+        // Cycle 1: anomaly detected
+        var runner1 = CreateRunnerWithDedupe(json, sharedDedupeStore, resolverOptions);
+        var result1 = await runner1.RunAsync(CancellationToken.None);
+        Assert.Single(result1.Reports);
+        Assert.Equal(AnomalyStatus.Active, result1.Reports[0].Status);
+
+        // Cycle 2: no anomalies (empty LLM output)
+        var emptyJson = "[]";
+        var runner2 = CreateRunnerWithDedupe(emptyJson, sharedDedupeStore, resolverOptions);
+        var result2 = await runner2.RunAsync(CancellationToken.None);
+        Assert.Empty(result2.Reports);
+
+        // Cycle 3: still absent — resolved emitted
+        var result3 = await CreateRunnerWithDedupe(emptyJson, sharedDedupeStore, resolverOptions).RunAsync(CancellationToken.None);
+        Assert.Single(result3.Reports);
+        Assert.Equal(AnomalyStatus.Resolved, result3.Reports[0].Status);
+        Assert.Equal(Severity.Low, result3.Reports[0].Severity);
+    }
+
+    private static IObservationCycleRunner CreateRunnerWithDedupe(
+        string llmResponseJson,
+        IAnomalyDedupeStore dedupeStore,
+        ObserverOptions? opts = null)
+    {
+        var options = opts ?? DefaultOptions();
+        var optionsSnapshot = Substitute.For<IOptions<ObserverOptions>>();
+        optionsSnapshot.Value.Returns(options);
+        var optionsMonitor = Substitute.For<IOptionsMonitor<ObserverOptions>>();
+        optionsMonitor.CurrentValue.Returns(options);
+
+        var snapshotFetcher = Substitute.For<ISnapshotFetcher>();
+        snapshotFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new SnapshotDocument(
+                "default", "{}", "{}", "{}", "{}", "{}", "{}",
+                DateTimeOffset.UtcNow)));
+
+        var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
+        systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("system prompt");
+
+        var chatClient = new FixtureChatClient(_ =>
+        {
+            return new ChatResponse(new ChatMessage(ChatRole.Assistant, llmResponseJson));
+        });
+
+        var mcpClient = Substitute.For<IObserverMcpClient>();
+
+        return new ObservationCycleRunner(
+            optionsSnapshot,
+            optionsMonitor,
+            snapshotFetcher,
+            systemPromptProvider,
+            chatClient,
+            new SeverityClassifier(),
+            mcpClient,
+            dedupeStore,
+            NullLogger<ObservationCycleRunner>.Instance);
     }
 }
