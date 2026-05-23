@@ -15,4 +15,4 @@
 
 The adapter depends on `InfraGate.Approvals` for the generic envelope and plan seams. `InfraGate.Approvals` must not depend on this project. `InfraGate.McpGateway` composes this adapter in `Program.cs`; generic gateway code should not contain Kubernetes tool names, argument names, or policy logic.
 
-Review HTML rendered by this adapter exposes semantic `data-section` attributes such as `objects`, `submitted-manifest`, `policy-findings`, `dry-run-results`, and `diff`. Tests should use those attributes rather than heading text or CSS classes when locating sections.
+Review HTML is rendered by `InfraGate.ApprovalUi` Razor components, not by this adapter. The `IPlanReview.Description` and `IPlanReview.Targets` properties (mapped from the Kubernetes payload) supply content for those components. Tests should use the semantic `data-section`, `data-field`, and `data-action` attributes provided by the ApprovalUi components rather than heading text or CSS classes when locating sections.

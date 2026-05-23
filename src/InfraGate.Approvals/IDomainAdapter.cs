@@ -1,5 +1,5 @@
 namespace InfraGate.Approvals;
 
-public interface IDomainAdapter : IDomainPlanBuilder, IDomainPlanExecutor, IPlanReviewAdapter, IPlanReviewRenderer
+public interface IDomainAdapter : IDomainPlanBuilder, IDomainPlanExecutor, IPlanReviewAdapter
 {
 }

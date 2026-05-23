@@ -1,3 +1,4 @@
+using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
@@ -7,214 +8,87 @@ namespace InfraGate.McpGateway.Tests.UnitTests;
 public sealed class GatewayApprovalEndpointsTests
 {
     private static readonly DateTimeOffset FixedTime = new(2026, 5, 13, 12, 0, 0, TimeSpan.Zero);
-    private static readonly IPlanReviewRenderer Renderer = new KubernetesPlanReviewRenderer();
 
     [Fact]
-    public void Html_EncodesSpecialCharacters()
-    {
-        var result = GatewayApprovalEndpoints.Html("<script>alert('x')</script> & \"quotes\"");
-
-        Assert.Contains("&lt;script&gt;", result);
-        Assert.Contains("&amp;", result);
-        Assert.Contains("&quot;", result);
-    }
-
-    [Fact]
-    public void Html_PreservesPlainText()
-    {
-        var result = GatewayApprovalEndpoints.Html("hello-world-123");
-
-        Assert.Equal("hello-world-123", result);
-    }
-
-    [Fact]
-    public void RenderDocument_ProducesValidHtmlShell()
-    {
-        var result = GatewayApprovalEndpoints.RenderDocument("Test Title", "<p>body content</p>");
-
-        Assert.Contains("<!doctype html>", result);
-        Assert.Contains("<html lang=\"en\">", result);
-        Assert.Contains("<title>Test Title - InfraGate</title>", result);
-        Assert.Contains("<p>body content</p>", result);
-        Assert.Contains("</html>", result);
-    }
-
-    [Fact]
-    public void RenderDocument_EncodesTitle()
-    {
-        var result = GatewayApprovalEndpoints.RenderDocument("<b>XSS</b>", "<p>body</p>");
-
-        Assert.Contains("<title>&lt;b&gt;XSS&lt;/b&gt; - InfraGate</title>", result);
-        Assert.DoesNotContain("<title><b>XSS</b>", result);
-    }
-
-    [Fact]
-    public void RenderDecisionPage_Succeeded_RendersApprovalRecorded()
-    {
-        var result = GatewayApprovalEndpoints.RenderDecisionPage(new ApprovalDecisionResult(true, "Plan was approved."));
-
-        AssertHtmlContainsSemantic(result, "data-section", "decision-result");
-        AssertHtmlContainsSemantic(result, "data-field", "decision-message");
-    }
-
-    [Fact]
-    public void RenderDecisionPage_Failed_RendersApprovalFailed()
-    {
-        var result = GatewayApprovalEndpoints.RenderDecisionPage(new ApprovalDecisionResult(false, "Hash mismatch."));
-
-        AssertHtmlContainsSemantic(result, "data-section", "decision-result");
-        AssertHtmlContainsSemantic(result, "data-field", "decision-message");
-    }
-
-    [Fact]
-    public void RenderApprovalPage_CannotDecide_ShowsError()
-    {
-        var page = new ApprovalPageModel(false, "Challenge expired.", null, null);
-
-        var result = GatewayApprovalEndpoints.RenderApprovalPage(page, Renderer, null);
-
-        AssertHtmlContainsSemantic(result, "data-section", "approval-unavailable");
-        AssertHtmlContainsSemantic(result, "data-field", "error-message");
-    }
-
-    [Fact]
-    public void RenderApprovalPage_CanDecide_DelegatesToForm()
+    public void BuildApprovalPageData_CanDecide_MapsAllFields()
     {
         var challenge = CreateChallenge();
         var plan = CreatePlan();
-        var page = new ApprovalPageModel(true, null, challenge, plan);
+        var model = new ApprovalPageModel(true, null, challenge, plan);
 
-        var result = GatewayApprovalEndpoints.RenderApprovalPage(page, Renderer, "test-token");
+        var result = GatewayApprovalEndpoints.BuildApprovalPageData(model, "tok-123");
 
-        AssertHtmlContainsSemantic(result, "data-section", "plan-summary");
-        Assert.Contains(plan.Envelope.Id, result);
+        Assert.True(result.CanDecide);
+        Assert.Null(result.Error);
+        Assert.NotNull(result.Challenge);
+        Assert.Equal(challenge.Id, result.Challenge.ChallengeId);
+        Assert.Equal(challenge.PlanId, result.Challenge.PlanId);
+        Assert.Equal(challenge.RequesterSubject, result.Challenge.RequesterSubject);
+        Assert.Equal(challenge.RequesterAuthenticationType, result.Challenge.RequesterAuthenticationType);
+        Assert.Equal(challenge.CreatedAtUtc, result.Challenge.CreatedAtUtc);
+        Assert.Equal(challenge.ExpiresAtUtc, result.Challenge.ExpiresAtUtc);
+        Assert.Equal(challenge.Status, result.Challenge.Status);
+        Assert.Same(plan, result.PlanReview);
     }
 
     [Fact]
-    public void RenderApprovalForm_ContainsPlanMetadata()
+    public void BuildApprovalPageData_CanDecide_BuildsActionUrls()
     {
         var challenge = CreateChallenge();
-        var plan = CreatePlan();
+        var model = new ApprovalPageModel(true, null, challenge, CreatePlan());
 
-        var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
+        var result = GatewayApprovalEndpoints.BuildApprovalPageData(model, "tok-123");
 
-        Assert.Contains("data-section=\"plan-summary\"", result);
-        Assert.Contains("data-field=\"plan-id\"", result);
-        Assert.Contains(plan.Envelope.Id, result);
-        Assert.Contains("data-field=\"operation\"", result);
-        Assert.Contains(plan.Envelope.Operation, result);
-        Assert.Contains("data-field=\"intent-digest\"", result);
-        Assert.Contains(plan.Envelope.IntentDigest.Value, result);
-        Assert.Contains("data-field=\"review-digest\"", result);
-        Assert.Contains(plan.Envelope.ReviewDigest.Value, result);
-        Assert.Contains("data-field=\"requester\"", result);
-        Assert.Contains(challenge.RequesterSubject, result);
-        Assert.Contains("data-field=\"expires-at\"", result);
-        Assert.Contains(challenge.ExpiresAtUtc.ToString("O"), result);
+        Assert.Equal($"/approvals/{challenge.Id}/approve", result.Actions.ApproveUrl);
+        Assert.Equal($"/approvals/{challenge.Id}/deny", result.Actions.DenyUrl);
+        Assert.Equal($"/approvals/{challenge.Id}/cancel", result.Actions.CancelUrl);
+        Assert.Equal("__RequestVerificationToken", result.Actions.AntiforgeryFieldName);
+        Assert.Equal("tok-123", result.Actions.AntiforgeryToken);
     }
 
     [Fact]
-    public void RenderApprovalForm_ContainsAntiForgeryToken()
+    public void BuildApprovalPageData_CannotDecide_SetsErrorAndNullChallenge()
     {
-        var challenge = CreateChallenge();
-        var plan = CreatePlan();
+        var model = new ApprovalPageModel(false, "Challenge expired.", null, null);
 
-        var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "abc123");
+        var result = GatewayApprovalEndpoints.BuildApprovalPageData(model, null);
 
-        Assert.Contains("abc123", result);
+        Assert.False(result.CanDecide);
+        Assert.Equal("Challenge expired.", result.Error);
+        Assert.Null(result.Challenge);
+        Assert.Null(result.PlanReview);
     }
 
     [Fact]
-    public void RenderApprovalForm_ContainsCancelAction()
+    public void BuildApprovalPageData_CannotDecide_UsesEmptyIdsInUrls()
     {
-        var challenge = CreateChallenge();
-        var plan = CreatePlan();
+        var model = new ApprovalPageModel(false, "Error", null, null);
 
-        var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
+        var result = GatewayApprovalEndpoints.BuildApprovalPageData(model, null);
 
-        Assert.Contains($"/approvals/{challenge.Id}/cancel", result);
-        Assert.Contains("data-action=\"cancel\"", result);
+        Assert.Equal("/approvals//approve", result.Actions.ApproveUrl);
+        Assert.Equal("/approvals//deny", result.Actions.DenyUrl);
+        Assert.Equal("/approvals//cancel", result.Actions.CancelUrl);
     }
 
     [Fact]
-    public void RenderApprovalForm_ApproveButtonDisabled_WhenCannotBeApproved()
+    public void BuildDecisionPageData_Succeeded_MapsCorrectly()
     {
-        var challenge = CreateChallenge();
-        var plan = CreatePlan(canBeApproved: false);
+        var result = GatewayApprovalEndpoints.BuildDecisionPageData(
+            new ApprovalDecisionResult(true, "Plan approved."));
 
-        var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
-
-        Assert.Contains("data-action=\"approve\" disabled", result);
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Plan approved.", result.Message);
     }
 
     [Fact]
-    public void RenderApprovalForm_DisplaysChallengeCreatedAtUtc()
+    public void BuildDecisionPageData_Failed_MapsCorrectly()
     {
-        var challenge = CreateChallenge();
-        var plan = CreatePlan();
+        var result = GatewayApprovalEndpoints.BuildDecisionPageData(
+            new ApprovalDecisionResult(false, "Hash mismatch."));
 
-        var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
-
-        Assert.Contains("data-field=\"created-at\"", result);
-        Assert.Contains(challenge.CreatedAtUtc.ToString("O"), result);
-    }
-
-    [Fact]
-    public void RenderApprovalForm_DisplaysChallengeStatus()
-    {
-        var challenge = CreateChallenge();
-        var plan = CreatePlan();
-
-        var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
-
-        Assert.Contains("data-field=\"status\"", result);
-        Assert.Contains(">pending</span>", result);
-    }
-
-    [Fact]
-    public void RenderApprovalForm_HasCardLayout()
-    {
-        var challenge = CreateChallenge();
-        var plan = CreatePlan();
-
-        var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
-
-        Assert.Contains("data-section=\"plan-summary\"", result);
-        Assert.Contains("data-section=\"approval-actions\"", result);
-    }
-
-    [Fact]
-    public void RenderApprovalForm_UsesKvGridLayout()
-    {
-        var challenge = CreateChallenge();
-        var plan = CreatePlan();
-
-        var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
-
-        Assert.Contains("data-field=\"plan-id\"", result);
-        Assert.Contains("data-field=\"operation\"", result);
-        Assert.Contains("data-field=\"status\"", result);
-    }
-
-    [Fact]
-    public void RenderDocument_DarkModeDefault()
-    {
-        var result = GatewayApprovalEndpoints.RenderDocument("Title", "<p>body</p>");
-
-        Assert.Contains("color-scheme: dark", result);
-        Assert.DoesNotContain("color-scheme: light dark", result, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void RenderApprovalForm_DisplaysRequesterAuthType()
-    {
-        var challenge = CreateChallenge();
-        var plan = CreatePlan();
-
-        var result = GatewayApprovalEndpoints.RenderApprovalForm(challenge, plan, Renderer, "token");
-
-        Assert.Contains("data-field=\"requester-auth\"", result);
-        Assert.Contains("OAuth", result);
+        Assert.False(result.IsSuccess);
+        Assert.Equal("Hash mismatch.", result.Message);
     }
 
     private static ApprovalChallenge CreateChallenge()
@@ -278,7 +152,4 @@ public sealed class GatewayApprovalEndpointsTests
 
         return KubernetesApprovalAdapter.Materialize(envelope);
     }
-
-    private static void AssertHtmlContainsSemantic(string html, string attributeName, string expectedValue)
-        => Assert.Contains($"{attributeName}=\"{expectedValue}\"", html);
 }

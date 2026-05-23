@@ -12,6 +12,7 @@
     <InternalsVisibleTo Include="InfraGate.McpGateway.KeycloakTests" />
     <InternalsVisibleTo Include="InfraGate.McpServer.Tests" />
     <InternalsVisibleTo Include="InfraGate.Safety.E2E.Tests" />
+    <InternalsVisibleTo Include="InfraGate.ApprovalUi.Tests" />
   </ItemGroup>
 
   <ItemGroup>

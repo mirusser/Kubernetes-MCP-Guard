@@ -1,0 +1,69 @@
+@namespace InfraGate.ApprovalUi.Components
+
+@{
+    var className = Data.IsSuccess ? "success" : "error";
+    var title = Data.IsSuccess ? "Approval Recorded" : "Approval Failed";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>@title - InfraGate</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            font-family: system-ui, -apple-system, sans-serif;
+            --color-bg: #0f1117;
+            --color-card-bg: #1a1d28;
+        }
+        @@media (prefers-color-scheme: light) {
+            :root {
+                color-scheme: light;
+                --color-bg: #f8f9fb;
+                --color-card-bg: #ffffff;
+            }
+        }
+        body {
+            margin: 0;
+            background: var(--color-bg);
+            font-family: system-ui, -apple-system, sans-serif;
+            color: var(--color-text, #e1e4ea);
+            line-height: 1.6;
+        }
+        main {
+            max-width: 920px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+        h1 {
+            font-size: 26px;
+            font-weight: 700;
+            margin: 0 0 32px;
+            color: var(--color-text, #e1e4ea);
+        }
+        .card {
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-border, #2a2d3a);
+            border-radius: 10px;
+            padding: 24px;
+            margin-bottom: 16px;
+        }
+        .error { color: var(--color-error, #f87171); font-weight: 700; }
+        .success { color: var(--color-success, #34d399); font-weight: 700; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>@title</h1>
+        <section class="card" data-section="decision-result">
+            <p class="@className" data-field="decision-message">@Data.Message</p>
+        </section>
+    </main>
+</body>
+</html>
+
+@code {
+    [Parameter] public DecisionPageData Data { get; set; } = default!;
+}

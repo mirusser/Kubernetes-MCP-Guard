@@ -12,14 +12,13 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
     private readonly IApprovalChallengeWorkflow approvalChallenges;
     private readonly IApprovalAuditPublisher auditPublisher;
     private readonly IPlanReviewAdapter planReviewAdapter;
-    private readonly IPlanReviewRenderer planReviewRenderer;
     private readonly IAuthorizationCheck authorizationCheck;
     private readonly McpGatewayOptions options;
     private readonly IHttpContextAccessor httpContextAccessor;
     private readonly IApprovalNotificationDispatcher notificationDispatcher;
     private readonly ILogger<GatewayApprovalService> logger;
 
-    // Justification: S107 — DI constructor with 10 parameters. See GatewayToolDispatcher
+    // Justification: S107 — DI constructor with 9 parameters. See GatewayToolDispatcher
     // for the rationale. The approval-service constructor mirrors the dispatcher pattern
     // for consistency.
     public GatewayApprovalService(
@@ -27,7 +26,6 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         IApprovalChallengeWorkflow approvalChallenges,
         IApprovalAuditPublisher auditPublisher,
         IPlanReviewAdapter planReviewAdapter,
-        IPlanReviewRenderer planReviewRenderer,
         IAuthorizationCheck authorizationCheck,
         McpGatewayOptions options,
         IHttpContextAccessor httpContextAccessor,
@@ -38,7 +36,6 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         this.approvalChallenges = approvalChallenges;
         this.auditPublisher = auditPublisher;
         this.planReviewAdapter = planReviewAdapter;
-        this.planReviewRenderer = planReviewRenderer;
         this.authorizationCheck = authorizationCheck;
         this.options = options;
         this.httpContextAccessor = httpContextAccessor;
@@ -156,7 +153,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         {
             var approvalUrl = CreateApprovalUrl(existingChallenge.Id);
             return ApprovalGateResult.RequiresApproval(
-                planReviewRenderer.RenderApprovalRequiredMessage(
+                ApprovalMessageFormatter.RenderApprovalRequiredMessage(
                     pendingPlan,
                     approvalUrl,
                     existingChallenge.ExpiresAtUtc),
@@ -196,7 +193,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
 
         var challengeApprovalUrl = CreateApprovalUrl(challenge.Id);
         return ApprovalGateResult.RequiresApproval(
-            planReviewRenderer.RenderApprovalRequiredMessage(
+            ApprovalMessageFormatter.RenderApprovalRequiredMessage(
                 pendingPlan,
                 challengeApprovalUrl,
                 challenge.ExpiresAtUtc),

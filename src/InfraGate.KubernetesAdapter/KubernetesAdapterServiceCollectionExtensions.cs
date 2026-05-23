@@ -10,11 +10,9 @@ public static class KubernetesAdapterServiceCollectionExtensions
         services.AddSingleton<KubernetesPlanBuilder>();
         services.AddSingleton<KubernetesPlanExecutor>();
         services.AddSingleton<KubernetesPlanReviewAdapter>();
-        services.AddSingleton<KubernetesPlanReviewRenderer>();
         services.AddSingleton<IDomainPlanBuilder>(sp => sp.GetRequiredService<KubernetesPlanBuilder>());
         services.AddSingleton<IDomainPlanExecutor>(sp => sp.GetRequiredService<KubernetesPlanExecutor>());
         services.AddSingleton<IPlanReviewAdapter>(sp => sp.GetRequiredService<KubernetesPlanReviewAdapter>());
-        services.AddSingleton<IPlanReviewRenderer>(sp => sp.GetRequiredService<KubernetesPlanReviewRenderer>());
         services.AddSingleton<IDomainAdapter, KubernetesDomainAdapter>();
         return services;
     }

@@ -1,0 +1,31 @@
+@namespace InfraGate.ApprovalUi.Components
+@using InfraGate.KubernetesAdapter
+
+@if (PlanReview is KubernetesPlan k8sPlan)
+{
+    <KubernetesEvidence Plan="@k8sPlan" />
+}
+else if (PlanReview is not null)
+{
+    <section class="card" data-section="targets">
+        <h2>Targets</h2>
+        <p data-field="description">@PlanReview.Description</p>
+        <ul>
+            @foreach (var target in PlanReview.Targets)
+            {
+                <li>@target.Attributes.GetValueOrDefault(KubernetesAdapterConventions.PlanAttributeKeys.ApiVersion, "?") @target.Type @target.Scope/@target.Name</li>
+            }
+        </ul>
+    </section>
+}
+else
+{
+    <section class="card" data-section="unsupported-evidence">
+        <h2>Review Evidence</h2>
+        <p class="error">Review evidence is not available for this plan type.</p>
+    </section>
+}
+
+@code {
+    [Parameter] public IPlanReview? PlanReview { get; set; }
+}

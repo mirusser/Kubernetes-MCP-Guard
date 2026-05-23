@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
@@ -15,6 +16,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -960,6 +962,8 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                 services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
                 services.AddHttpContextAccessor();
                 services.AddLogging();
+                services.AddSingleton<IApprovalPageRenderer>(sp =>
+                    new ApprovalPageRenderer(sp, sp.GetRequiredService<ILoggerFactory>()));
                 services.AddAntiforgery();
                 services.AddGatewayAuthentication(options.Auth);
                 if (approvalOAuthBackchannel is not null)

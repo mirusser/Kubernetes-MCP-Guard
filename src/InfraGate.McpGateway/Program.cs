@@ -1,3 +1,4 @@
+using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
 using InfraGate.Approvals.Postgres;
 using InfraGate.KubernetesAdapter;
@@ -56,6 +57,8 @@ builder.Services.AddPostgresApprovalPersistence(
     builder.Configuration[McpGatewayConventions.ConfigurationKeys.ApprovalPostgresConnectionString]);
 builder.Services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
 builder.Services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
+builder.Services.AddSingleton<IApprovalPageRenderer>(sp =>
+    new ApprovalPageRenderer(sp.GetRequiredService<IServiceProvider>(), sp.GetRequiredService<ILoggerFactory>()));
 builder.Services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
 builder.Services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
 builder.Services.AddKubernetesAdapter();

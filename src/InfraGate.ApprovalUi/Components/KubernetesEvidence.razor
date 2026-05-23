@@ -1,0 +1,134 @@
+@namespace InfraGate.ApprovalUi.Components
+@using InfraGate.KubernetesAdapter
+
+<section class="card" data-section="targets">
+    <h2>Targets</h2>
+    <p data-field="description">@Plan.Description</p>
+    <ul>
+        @foreach (var obj in Plan.Objects)
+        {
+            <li>@obj.ApiVersion @obj.Kind @obj.Namespace/@obj.Name</li>
+        }
+    </ul>
+</section>
+
+@if (!string.IsNullOrEmpty(Plan.Manifest))
+{
+    <section class="card" data-section="submitted-manifest">
+        <h2>Submitted Manifest</h2>
+        <details>
+            <summary>View manifest</summary>
+            <pre><code>@Plan.Manifest</code></pre>
+        </details>
+    </section>
+}
+
+<section class="card" data-section="policy-findings">
+    <h2>Policy Findings</h2>
+    @if (Plan.PolicyFindings.Length == 0)
+    {
+        <p>None</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var finding in Plan.PolicyFindings)
+            {
+                <li>
+                    <span class="badge badge-@finding.Severity.ToUpperInvariant()">@finding.Severity</span>
+                    [@finding.Code] @finding.Message
+                    <span class="kv-label">@finding.ObjectRef</span>
+                </li>
+            }
+        </ul>
+    }
+</section>
+
+@if (Plan.DryRun is not null)
+{
+    var dr = Plan.DryRun;
+    var statusClass = string.Equals(dr.Status, "succeeded", StringComparison.OrdinalIgnoreCase) ? "success" : "error";
+
+    <section class="card" data-section="dry-run-results">
+        <h2>Dry-run Results</h2>
+        <p class="@statusClass">Server-side dry-run: @dr.Status</p>
+        <div class="kv-grid">
+            <span class="kv-label">Checked at UTC</span>
+            <span class="kv-value">@dr.CheckedAtUtc.ToString("O")</span>
+            <span class="kv-label">Message</span>
+            <span class="kv-value">@dr.Message</span>
+        </div>
+        <h3>Dry-run Objects</h3>
+        <ul>
+            @foreach (var obj in dr.Objects)
+            {
+                <li>@obj.Object</li>
+            }
+        </ul>
+        <h3>Admission Warnings</h3>
+        <ul>
+            @if (dr.Warnings.Length == 0)
+            {
+                <li>None</li>
+            }
+            else
+            {
+                @foreach (var warning in dr.Warnings)
+                {
+                    <li>@warning</li>
+                }
+            }
+        </ul>
+    </section>
+}
+
+@if (Plan.Diffs.Length > 0)
+{
+    <section class="card" data-section="diff">
+        <h2>Diff</h2>
+        @foreach (var diff in Plan.Diffs)
+        {
+            <div class="diff-block">
+                <h3>@diff.Summary</h3>
+                <div class="kv-grid">
+                    <span class="kv-label">Change</span>
+                    <span class="kv-value">@diff.ChangeType</span>
+                    <span class="kv-label">Object</span>
+                    <span class="kv-value">@diff.Object.ApiVersion @diff.Object.Kind @diff.Object.Namespace/@diff.Object.Name</span>
+                </div>
+                <details>
+                    <summary>Changed paths</summary>
+                    <div class="kv-grid">
+                        <span class="kv-label">Added</span>
+                        <span class="kv-value">@RenderPathList(diff.AddedPaths)</span>
+                        <span class="kv-label">Removed</span>
+                        <span class="kv-value">@RenderPathList(diff.RemovedPaths)</span>
+                        <span class="kv-label">Changed</span>
+                        <span class="kv-value">@RenderPathList(diff.ChangedPaths)</span>
+                    </div>
+                </details>
+                <pre><code>@diff.UnifiedDiff</code></pre>
+            </div>
+        }
+    </section>
+}
+else
+{
+    <section class="card" data-section="diff">
+        <h2>Diff</h2>
+        <p class="error">No diff was recorded for this plan.</p>
+    </section>
+}
+
+@code {
+    [Parameter] public KubernetesPlan Plan { get; set; } = default!;
+
+    private static string RenderPathList(string[] paths)
+    {
+        if (paths.Length == 0)
+        {
+            return "None";
+        }
+        return string.Join(", ", paths);
+    }
+}

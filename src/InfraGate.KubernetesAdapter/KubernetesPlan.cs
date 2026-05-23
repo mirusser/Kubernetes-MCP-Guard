@@ -16,6 +16,8 @@ public sealed record class KubernetesPlan(PlanEnvelope Envelope, KubernetesPlanP
 
     public string Description => Payload.Description;
 
+    public IReadOnlyList<PlanReviewTarget> Targets { get; } = MapTargets(Payload.Objects);
+
     public Dictionary<string, string> Parameters => Payload.Parameters;
 
     public KubernetesObjectRef[] Objects => Payload.Objects;
@@ -32,7 +34,17 @@ public sealed record class KubernetesPlan(PlanEnvelope Envelope, KubernetesPlanP
         DryRun is not null && (Diffs.Length > 0 || IsDryRunOnlyOperation(Operation));
 
     bool IPlanReview.CanBeApproved => !PolicyFindings.Any(f =>
-        string.Equals(f.Severity, "Deny", StringComparison.Ordinal));
+        string.Equals(f.Severity, KubernetesAdapterConventions.PolicySeverities.Deny, StringComparison.Ordinal));
+
+    private static IReadOnlyList<PlanReviewTarget> MapTargets(KubernetesObjectRef[] objects) =>
+        objects.Select(obj => new PlanReviewTarget(
+            obj.Kind,
+            obj.Name,
+            obj.Namespace,
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [KubernetesAdapterConventions.PlanAttributeKeys.ApiVersion] = obj.ApiVersion
+            })).ToArray();
 
     private static bool IsDryRunOnlyOperation(string operation) =>
         operation is KubernetesAdapterConventions.PlanOperations.Scale

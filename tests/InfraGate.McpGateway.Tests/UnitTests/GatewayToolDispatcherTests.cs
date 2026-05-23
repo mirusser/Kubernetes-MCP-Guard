@@ -469,7 +469,6 @@ public sealed class GatewayToolDispatcherTests
             workflow,
             workflow,
             new KubernetesPlanReviewAdapter(),
-            new KubernetesPlanReviewRenderer(),
             new SameSubjectAuthorizationCheck(),
             gatewayOptions,
             httpContextAccessor,
@@ -657,11 +656,6 @@ public sealed class GatewayToolDispatcherTests
             error = null;
             return null;
         }
-
-        public string RenderReviewContent(IPlanReview planReview) => string.Empty;
-
-        public string RenderApprovalRequiredMessage(IPlanReview planReview, string approvalUrl, DateTimeOffset expiresAtUtc) =>
-            string.Empty;
     }
 
     private sealed class FakeDomainPlanBuilder(PlanBuildResult result) : IDomainPlanBuilder
