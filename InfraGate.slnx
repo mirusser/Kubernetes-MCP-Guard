@@ -13,6 +13,7 @@
     <Project Path="src/InfraGate.ApprovalUi/InfraGate.ApprovalUi.csproj" />
     <Project Path="src/InfraGate.McpGateway/InfraGate.McpGateway.csproj" />
     <Project Path="src/InfraGate.McpServer/InfraGate.McpServer.csproj" />
+    <Project Path="src/InfraGate.Observer/InfraGate.Observer.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/InfraGate.ClientCredentials.Tests/InfraGate.ClientCredentials.Tests.csproj" />
@@ -27,6 +28,7 @@
     <Project Path="tests/InfraGate.RunProfiles.Tests/InfraGate.RunProfiles.Tests.csproj" />
     <Project Path="tests/InfraGate.ApprovalUi.Tests/InfraGate.ApprovalUi.Tests.csproj" />
     <Project Path="tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj" />
+    <Project Path="tests/InfraGate.Observer.Tests/InfraGate.Observer.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/approval-postgres-migrations/ApplyApprovalPostgresMigrations.csproj" />

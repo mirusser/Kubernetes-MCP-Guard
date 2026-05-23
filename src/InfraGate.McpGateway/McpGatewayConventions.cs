@@ -154,6 +154,11 @@ internal static class McpGatewayConventions
         public const string WaitForPlanApproval = "wait_for_plan_approval";
     }
 
+    public static class ToolScopeRequirements
+    {
+        public const string MutationScope = "mcp:tools";
+    }
+
     public static class ToolArguments
     {
         public const string PlanId = "planId";

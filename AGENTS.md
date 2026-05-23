@@ -130,6 +130,7 @@ Load only the project README you need:
   - [InfraGate.RuntimeSafety](src/InfraGate.RuntimeSafety/README.md): runtime mode resolution, production safety validation, and environment variable conventions.
   - [InfraGate.Observability](src/InfraGate.Observability/README.md): shared Serilog structured logging configuration for the MCP Gateway and MCP Server.
   - [InfraGate.RunProfiles](src/InfraGate.RunProfiles/README.md): CLI tool that compiles named run profiles from `deploy/run-profiles.yaml` into `.env` files and appsettings JSON for Docker Compose and .NET runtime binding.
+  - [InfraGate.Observer](src/InfraGate.Observer/README.md): Anomaly Observer — LLM-driven periodic cluster inspection through the MCP gateway read-only tools.
   - InfraGate.DownstreamAuth (`src/InfraGate.DownstreamAuth/`): client credentials token provider and downstream MCP server auth filter; no README yet — read source directly (`DownstreamAuthConventions`, `DownstreamAuthOptions`, `IDownstreamServiceTokenProvider`).
 - Test projects:
   - [InfraGate.McpServer.Tests](tests/InfraGate.McpServer.Tests/README.md): server unit tests and opt-in Kubernetes integration coverage.

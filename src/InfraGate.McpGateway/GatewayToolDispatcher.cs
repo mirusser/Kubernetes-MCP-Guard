@@ -666,17 +666,17 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         if (user is null)
         {
             return ErrorResult(
-                $"Refused: '{toolName}' requires an authenticated session with the '{GatewayAuthConventions.DefaultOAuthScope}' scope.");
+                $"Refused: '{toolName}' requires an authenticated session with the '{McpGatewayConventions.ToolScopeRequirements.MutationScope}' scope.");
         }
 
-        if (!GatewayAuthentication.HasRequiredScope(user, GatewayAuthConventions.DefaultOAuthScope))
+        if (!GatewayAuthentication.HasRequiredScope(user, McpGatewayConventions.ToolScopeRequirements.MutationScope))
         {
             var identity = GatewayAuditIdentityResolver.Resolve(user);
 
             logger.LogWarning(
                 "Tool '{ToolName}' denied: caller lacks required scope '{RequiredScope}'.",
                 toolName,
-                GatewayAuthConventions.DefaultOAuthScope);
+                McpGatewayConventions.ToolScopeRequirements.MutationScope);
 
             var auditEvent = new GuardrailAuditEvent(
                 toolName,
@@ -691,7 +691,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             await auditStore.WriteAsync(auditEvent, CancellationToken.None).ConfigureAwait(false);
 
             return ErrorResult(
-                $"Refused: tool '{toolName}' requires the '{GatewayAuthConventions.DefaultOAuthScope}' scope.");
+                $"Refused: tool '{toolName}' requires the '{McpGatewayConventions.ToolScopeRequirements.MutationScope}' scope.");
         }
 
         return null;

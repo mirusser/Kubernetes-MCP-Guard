@@ -22,6 +22,26 @@ Defaults below come from the current source code and workflows. Paths shown as `
 | `K8S_MCP_ALLOWED_NAMESPACES` | `InfraGate.McpServer` | Required in Production | `mcp-nginx-demo` | `mcp-nginx-demo,staging` | Comma-separated namespace allow-list. Requests outside this set are rejected before Kubernetes API calls. | Keep this aligned with Kubernetes RBAC; do not use it as a substitute for RBAC. Production requires an explicit non-empty value. |
 | `K8S_MCP_LOG_PATH` | `InfraGate.McpServer` | No | Unset | `/tmp/mcp-server.log` | Optional file path for MCP server debug logs (structured JSON via Serilog). When set, all log output is written to this file in JSON format in addition to the stderr transport. No file is created when this variable is unset. | Use for diagnosing connectivity issues in containerised deployments; disable in steady-state production to avoid unbounded log growth. |
 
+## InfraGate.Observer
+
+The Anomaly Observer listens on port `3003` by default and polls the MCP gateway on a configurable cadence. All variables use the `INFRA_GATE_OBSERVER_*` prefix.
+
+| Variable | Component | Required | Default | Example | Description | Production guidance |
+| --- | --- | :---: | --- | --- | --- | --- |
+| `ASPNETCORE_URLS` | `InfraGate.Observer` | No | `http://127.0.0.1:3003` | `http://0.0.0.0:3003` | ASP.NET Core bind URL for the Observer HTTP server (`/health` endpoint). | Bind intentionally; put behind TLS if exposing outside loopback. |
+| `INFRA_GATE_OBSERVER_CYCLE_INTERVAL_SECONDS` | `InfraGate.Observer` | No | `60` | `60` | Observation cycle cadence in seconds. Bounds: 10–3600. | Below 10s hammers gateway + LLM; above 1h is not observation. |
+| `INFRA_GATE_OBSERVER_WALL_CLOCK_CAP_SECONDS` | `InfraGate.Observer` | No | `20` | `20` | Per-cycle wall-clock cap. Truncated cycles emit no reports. | Keep below cadence so cycles never overlap; below `/observe-now` HTTP timeout (30s). |
+| `INFRA_GATE_OBSERVER_MAX_TOOL_ITERATIONS` | `InfraGate.Observer` | No | `8` | `8` | Maximum LLM tool-call iterations per cycle. | Bounds agentic loops independent of clock time. |
+| `INFRA_GATE_OBSERVER_GATEWAY_BASE_URL` | `InfraGate.Observer` | Yes | None | `http://127.0.0.1:3001/mcp` | Base URL of the MCP gateway HTTP endpoint. | Must be reachable from the Observer process. |
+| `INFRA_GATE_OBSERVER_ALLOWED_NAMESPACES` | `InfraGate.Observer` | No | Unset | `mcp-nginx-demo` | Comma-separated namespace allow-list for snapshot fetching. | Align with gateway namespace allowlist. |
+| `INFRA_GATE_OBSERVER_LLM_PROVIDER` | `InfraGate.Observer` | No | Unset (Phase 3) | `anthropic` | LLM provider for anomaly detection (Phase 3). | Use a provider supported by `Microsoft.Extensions.AI`. |
+| `INFRA_GATE_OBSERVER_LLM_MODEL` | `InfraGate.Observer` | No | Unset (Phase 3) | `claude-sonnet-4-6` | LLM model name (Phase 3). | Model selection affects token cost and detection quality. |
+| `INFRA_GATE_OBSERVER_LLM_API_KEY` | `InfraGate.Observer` | No | Unset (Phase 3) | (secret) | LLM provider API key (Phase 3). Never log. | Use a secret manager in production; env var is development-only. |
+| `INFRA_GATE_OBSERVER_CLIENT_ID` | `InfraGate.Observer` | No | `infra-gate-observer` | `infra-gate-observer` | OAuth client ID for the Observer service account. | Register this client with the IdP and grant `mcp:tools.readonly` scope. |
+| `INFRA_GATE_OBSERVER_CLIENT_SECRET` | `InfraGate.Observer` | Yes | None | (secret) | OAuth client secret for client_credentials flow. | Use a secret manager in production; env var is development-only. |
+| `INFRA_GATE_OBSERVER_OAUTH_AUTHORITY` | `InfraGate.Observer` | Yes | None | `http://keycloak:8080/realms/infra-gate` | OAuth token endpoint authority. | Match the gateway's issuer. |
+| `INFRA_GATE_OBSERVER_OAUTH_SCOPE` | `InfraGate.Observer` | No | `mcp:tools.readonly` | `mcp:tools.readonly` | OAuth scope requested by the Observer. | Must include `mcp:tools.readonly` for gateway access. |
+
 ## McpGateway
 
 | Variable | Component | Required | Default | Example | Description | Production guidance |

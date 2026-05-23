@@ -10,6 +10,8 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.8" />
+    <PackageReference Include="NSubstitute" Version="5.3.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
       <PrivateAssets>all</PrivateAssets>
@@ -22,13 +24,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\InfraGate.Observer\InfraGate.Observer.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.Observer.Contracts\InfraGate.Observer.Contracts.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="public-api-baseline.txt">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
 
 </Project>

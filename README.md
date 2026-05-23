@@ -277,6 +277,7 @@ See [docs/security-model.md](docs/security-model.md) for the full threat model.
 - [src/InfraGate.Approvals/README.md](src/InfraGate.Approvals/README.md): generic approval storage, challenges, grants, gates, and audit payloads.
 - [src/InfraGate.KubernetesAdapter/README.md](src/InfraGate.KubernetesAdapter/README.md): Kubernetes mutation intent, evidence, policy, freshness checks, and execution.
 - [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md): private Kubernetes MCP server and typed tool surface.
+- [src/InfraGate.Observer/README.md](src/InfraGate.Observer/README.md): LLM-driven anomaly observer — periodic cluster inspection and Anomaly Report emission.
 
 ## 📜 Governance
 
