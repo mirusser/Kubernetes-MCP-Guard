@@ -21,6 +21,9 @@ internal static class ObserverConventions
         public const string MaxToolIterations = "InfraGate:Observer:MaxToolIterations";
         public const string GatewayBaseUrl = "InfraGate:Observer:GatewayBaseUrl";
         public const string AllowedNamespaces = "InfraGate:Observer:AllowedNamespaces";
+        public const string LlmProvider = "InfraGate:Observer:LlmProvider";
+        public const string LlmModel = "InfraGate:Observer:LlmModel";
+        public const string LlmApiKey = "InfraGate:Observer:LlmApiKey";
     }
 
     public static class EnvironmentVariables

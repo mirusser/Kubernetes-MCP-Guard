@@ -1,14 +1,16 @@
 namespace InfraGate.Observer.Contracts;
 
-public sealed record class AnomalyReport(
-    string AnomalyId,
-    Guid CycleId,
-    DateTimeOffset DetectedAt,
-    AnomalyKind Kind,
-    ResourceRef Target,
-    Severity Severity,
-    AnomalyStatus Status,
-    string Summary,
-    IReadOnlyList<EvidenceItem> Evidence,
-    RemediationHint? Suggested,
-    IReadOnlyDictionary<string, string> Annotations);
+public sealed record class AnomalyReport
+{
+    public required string AnomalyId { get; init; }
+    public required string CycleId { get; init; }
+    public required DateTimeOffset DetectedAt { get; init; }
+    public required AnomalyKind Kind { get; init; }
+    public required ResourceRef Target { get; init; }
+    public required Severity Severity { get; init; }
+    public required AnomalyStatus Status { get; init; }
+    public required string Summary { get; init; }
+    public required IReadOnlyList<EvidenceItem> Evidence { get; init; }
+    public RemediationHint? Suggested { get; init; }
+    public required IReadOnlyDictionary<string, string> Annotations { get; init; }
+}

@@ -7,6 +7,9 @@ public sealed record class ObserverOptions
     public int MaxToolIterations { get; init; } = AnomalyObserverConventions.MaxToolIterations;
     public string GatewayBaseUrl { get; init; } = string.Empty;
     public IReadOnlyList<string> AllowedNamespaces { get; init; } = Array.Empty<string>();
+    public string LlmProvider { get; init; } = string.Empty;
+    public string LlmModel { get; init; } = string.Empty;
+    public string LlmApiKey { get; init; } = string.Empty;
 
     public void Validate()
     {
