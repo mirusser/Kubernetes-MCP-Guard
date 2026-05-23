@@ -26,6 +26,7 @@ internal static class ObserverConventions
         public const string LlmApiKey = "InfraGate:Observer:LlmApiKey";
         public const string DedupeSuppressionWindow = "InfraGate:Observer:DedupeSuppressionWindow";
         public const string DedupeResolutionThreshold = "InfraGate:Observer:DedupeResolutionThreshold";
+        public const string FileSinkRoot = "InfraGate:Observer:FileSink:Root";
     }
 
     public static class EnvironmentVariables
@@ -45,6 +46,7 @@ internal static class ObserverConventions
         public const string OAuthScope = "INFRA_GATE_OBSERVER_OAUTH_SCOPE";
         public const string DedupeSuppressionWindow = "INFRA_GATE_OBSERVER_DEDUPE_SUPPRESSION_WINDOW";
         public const string DedupeResolutionThreshold = "INFRA_GATE_OBSERVER_DEDUPE_RESOLUTION_THRESHOLD";
+        public const string FileSinkRoot = "INFRA_GATE_OBSERVER_FILE_SINK_ROOT";
     }
 
     public static class ToolNames

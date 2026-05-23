@@ -23,7 +23,8 @@ public sealed class ObservationCycleRunnerTests
 
     private static IObservationCycleRunner CreateRunner(
         string llmResponseJson,
-        ObserverOptions? opts = null)
+        ObserverOptions? opts = null,
+        IAnomalyHandoffSink? handoffSink = null)
     {
         var options = opts ?? DefaultOptions();
 
@@ -55,6 +56,8 @@ public sealed class ObservationCycleRunnerTests
         var dedupeStore = new AnomalyDedupeStore();
         var logger = NullLogger<ObservationCycleRunner>.Instance;
 
+        handoffSink ??= Substitute.For<IAnomalyHandoffSink>();
+
         return new ObservationCycleRunner(
             optionsSnapshot,
             optionsMonitor,
@@ -64,6 +67,7 @@ public sealed class ObservationCycleRunnerTests
             severityClassifier,
             mcpClient,
             dedupeStore,
+            handoffSink,
             logger);
     }
 
@@ -264,6 +268,7 @@ public sealed class ObservationCycleRunnerTests
             new SeverityClassifier(),
             mcpClient,
             new AnomalyDedupeStore(),
+            Substitute.For<IAnomalyHandoffSink>(),
             NullLogger<ObservationCycleRunner>.Instance);
 
         var result = await runner.RunAsync(CancellationToken.None);
@@ -407,6 +412,7 @@ public sealed class ObservationCycleRunnerTests
             new SeverityClassifier(),
             mcpClient,
             new AnomalyDedupeStore(),
+            Substitute.For<IAnomalyHandoffSink>(),
             NullLogger<ObservationCycleRunner>.Instance);
 
         var result = await runner.RunAsync(CancellationToken.None);
@@ -455,6 +461,7 @@ public sealed class ObservationCycleRunnerTests
             new SeverityClassifier(),
             mcpClient,
             new AnomalyDedupeStore(),
+            Substitute.For<IAnomalyHandoffSink>(),
             NullLogger<ObservationCycleRunner>.Instance);
 
         var result = await runner.RunAsync(CancellationToken.None);
@@ -487,6 +494,7 @@ public sealed class ObservationCycleRunnerTests
             new SeverityClassifier(),
             Substitute.For<IObserverMcpClient>(),
             new AnomalyDedupeStore(),
+            Substitute.For<IAnomalyHandoffSink>(),
             NullLogger<ObservationCycleRunner>.Instance);
 
         var ex = await Assert.ThrowsAsync<HttpRequestException>(
@@ -579,6 +587,7 @@ public sealed class ObservationCycleRunnerTests
             new SeverityClassifier(),
             mcpClient,
             sharedDedupeStore,
+            Substitute.For<IAnomalyHandoffSink>(),
             NullLogger<ObservationCycleRunner>.Instance);
 
         var truncatedResult = await truncatedRunner.RunAsync(CancellationToken.None);
@@ -620,7 +629,8 @@ public sealed class ObservationCycleRunnerTests
     private static IObservationCycleRunner CreateRunnerWithDedupe(
         string llmResponseJson,
         IAnomalyDedupeStore dedupeStore,
-        ObserverOptions? opts = null)
+        ObserverOptions? opts = null,
+        IAnomalyHandoffSink? handoffSink = null)
     {
         var options = opts ?? DefaultOptions();
         var optionsSnapshot = Substitute.For<IOptions<ObserverOptions>>();
@@ -644,6 +654,8 @@ public sealed class ObservationCycleRunnerTests
 
         var mcpClient = Substitute.For<IObserverMcpClient>();
 
+        handoffSink ??= Substitute.For<IAnomalyHandoffSink>();
+
         return new ObservationCycleRunner(
             optionsSnapshot,
             optionsMonitor,
@@ -653,6 +665,89 @@ public sealed class ObservationCycleRunnerTests
             new SeverityClassifier(),
             mcpClient,
             dedupeStore,
+            handoffSink,
             NullLogger<ObservationCycleRunner>.Instance);
+    }
+
+    // ── Handoff sink integration ─────────────────────────────────
+
+    [Fact]
+    public async Task RunAsync_PublishesBatchToHandoffSink()
+    {
+        var handoffSink = Substitute.For<IAnomalyHandoffSink>();
+        var runner = CreateRunner(ValidLlmJson("High", "PodUnhealthy"), handoffSink: handoffSink);
+
+        var result = await runner.RunAsync(CancellationToken.None);
+
+        Assert.False(result.IsTruncated);
+        Assert.NotEmpty(result.Reports);
+
+        await handoffSink.Received(1).PublishAsync(
+            Arg.Is<AnomalyHandoffBatch>(b =>
+                b.Reports.Count == 1 &&
+                b.Reports[0].AnomalyId == result.Reports[0].AnomalyId &&
+                b.Reports[0].Kind == result.Reports[0].Kind),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_EmptyBatch_DoesNotPublish()
+    {
+        var handoffSink = Substitute.For<IAnomalyHandoffSink>();
+        var options = DefaultOptions() with { AllowedNamespaces = Array.Empty<string>() };
+        var runner = CreateRunner(ValidLlmJson(), options, handoffSink);
+
+        await runner.RunAsync(CancellationToken.None);
+
+        await handoffSink.DidNotReceive().PublishAsync(
+            Arg.Any<AnomalyHandoffBatch>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_TruncatedCycle_DoesNotPublish()
+    {
+        var handoffSink = Substitute.For<IAnomalyHandoffSink>();
+        var options = DefaultOptions() with { WallClockCapSeconds = 1 };
+
+        var optionsSnapshot = Substitute.For<IOptions<ObserverOptions>>();
+        optionsSnapshot.Value.Returns(options);
+        var optionsMonitor = Substitute.For<IOptionsMonitor<ObserverOptions>>();
+        optionsMonitor.CurrentValue.Returns(options);
+
+        var snapshotFetcher = Substitute.For<ISnapshotFetcher>();
+        snapshotFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(async callInfo =>
+            {
+                var ct = callInfo.Arg<CancellationToken>();
+                await Task.Delay(2000, ct);
+                return new SnapshotDocument("default", "{}", "{}", "{}", "{}", "{}", "{}", DateTimeOffset.UtcNow);
+            });
+
+        var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
+        systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("prompt");
+
+        var chatClient = new FixtureChatClient(ValidLlmJson());
+        var mcpClient = Substitute.For<IObserverMcpClient>();
+
+        var runner = new ObservationCycleRunner(
+            optionsSnapshot,
+            optionsMonitor,
+            snapshotFetcher,
+            systemPromptProvider,
+            chatClient,
+            new SeverityClassifier(),
+            mcpClient,
+            new AnomalyDedupeStore(),
+            handoffSink,
+            NullLogger<ObservationCycleRunner>.Instance);
+
+        var result = await runner.RunAsync(CancellationToken.None);
+
+        Assert.True(result.IsTruncated);
+
+        await handoffSink.DidNotReceive().PublishAsync(
+            Arg.Any<AnomalyHandoffBatch>(),
+            Arg.Any<CancellationToken>());
     }
 }

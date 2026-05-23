@@ -12,6 +12,7 @@ public sealed record class ObserverOptions
     public string LlmApiKey { get; init; } = string.Empty;
     public int DedupeSuppressionWindow { get; init; } = AnomalyObserverConventions.DefaultDedupeSuppressionWindow;
     public int DedupeResolutionThreshold { get; init; } = AnomalyObserverConventions.DefaultDedupeResolutionThreshold;
+    public string FileSinkRoot { get; init; } = string.Empty;
 
     public void Validate()
     {

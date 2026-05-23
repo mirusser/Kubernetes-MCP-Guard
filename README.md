@@ -2,13 +2,13 @@
 
 **A reference implementation for safe AI-driven Kubernetes remediation.**  
 
-> **Safe remediations, by design:**  
+> **Safe remediation, by design:**  
 >
-> Observe freely.  
-> Plan with evidence.  
-> Approve out-of-band.  
-> Execute only digest-bound changes.  
-> Audit everything.  
+> AI observes.  
+> AI proposes a plan with evidence.  
+> Human approves out-of-band.  
+> System executes only the approved digest.  
+> Everything is auditable.  
 >  
 
 [![Unit Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/ci.yml)
@@ -18,7 +18,8 @@
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=mirusser_Kubernetes-MCP-Guard&metric=coverage)](https://sonarcloud.io/summary/new_code?id=mirusser_Kubernetes-MCP-Guard)
 ![Badge Hi Mom]<br>
 
-<sub>![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?style=flat-square&logo=dotnet) ![Kubernetes](https://img.shields.io/badge/Kubernetes-Cloud--Native-326ce5?style=flat-square&logo=kubernetes) ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ed?style=flat-square&logo=docker) ![MCP](https://img.shields.io/badge/MCP-HTTP%20Gateway-black?style=flat-square)</sub>
+<sub>![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?style=flat-square&logo=dotnet) ![Kubernetes](https://img.shields.io/badge/Kubernetes-Cloud--Native-326ce5?style=flat-square&logo=kubernetes) ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ed?style=flat-square&logo=docker) ![MCP](https://img.shields.io/badge/MCP-HTTP%20Gateway-black?style=flat-square) ![AI Agents](https://img.shields.io/badge/AI%20Agents-Observer%20%2F%20Executor-7c3aed?style=flat-square)</sub>
+
 
 ### 📝 TL;DR
 **A security-first bridge between AI agents and Kubernetes, with out of band Human-in-the-Loop (HITL) plan based approval for every gateway-exposed mutation.**

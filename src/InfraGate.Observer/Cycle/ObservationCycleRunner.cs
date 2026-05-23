@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using InfraGate.Observer.Classification;
+using InfraGate.Observer.Handoff;
 using InfraGate.Observer.Mcp;
 using InfraGate.Observer.Prompts;
 using InfraGate.Observer.Snapshot;
@@ -17,6 +18,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
     private readonly ISeverityClassifier severityClassifier;
     private readonly IObserverMcpClient mcpClient;
     private readonly IAnomalyDedupeStore dedupeStore;
+    private readonly IAnomalyHandoffSink handoffSink;
     private readonly ILogger<ObservationCycleRunner> logger;
 
     public ObservationCycleRunner(
@@ -28,6 +30,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         ISeverityClassifier severityClassifier,
         IObserverMcpClient mcpClient,
         IAnomalyDedupeStore dedupeStore,
+        IAnomalyHandoffSink handoffSink,
         ILogger<ObservationCycleRunner> logger)
     {
         this.options = options;
@@ -38,6 +41,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         this.severityClassifier = severityClassifier;
         this.mcpClient = mcpClient;
         this.dedupeStore = dedupeStore;
+        this.handoffSink = handoffSink;
         this.logger = logger;
     }
 
@@ -118,6 +122,18 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         var finalReports = new List<AnomalyReport>(dedupedReports.Count + resolvedReports.Count);
         finalReports.AddRange(dedupedReports);
         finalReports.AddRange(resolvedReports);
+
+        if (finalReports.Count > 0)
+        {
+            var handoffBatch = new AnomalyHandoffBatch
+            {
+                CycleId = cycleId,
+                EmittedAt = detectedAt,
+                Reports = finalReports,
+            };
+
+            await handoffSink.PublishAsync(handoffBatch, shutdownToken).ConfigureAwait(false);
+        }
 
         logger.LogInformation(
             "Cycle {CycleId} complete. Reports={ReportCount} Emitted={Emitted} Resolved={Resolved} ToolCalls={ToolCalls} Disagreements={Disagreements} Duration={DurationMs}ms",

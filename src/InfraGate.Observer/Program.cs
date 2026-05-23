@@ -3,6 +3,7 @@ using InfraGate.Observer;
 using InfraGate.Observer.Classification;
 using InfraGate.Observer.Cycle;
 using InfraGate.Observer.Endpoints;
+using InfraGate.Observer.Handoff;
 using InfraGate.Observer.Llm;
 using InfraGate.Observer.Mcp;
 using InfraGate.Observer.Prompts;
@@ -26,6 +27,7 @@ builder.Configuration.AddInfraGateEnvironmentVariables(mappings =>
     mappings.Map(ObserverConventions.EnvironmentVariables.LlmApiKey, ObserverConventions.ConfigurationKeys.LlmApiKey);
     mappings.Map(ObserverConventions.EnvironmentVariables.DedupeSuppressionWindow, ObserverConventions.ConfigurationKeys.DedupeSuppressionWindow);
     mappings.Map(ObserverConventions.EnvironmentVariables.DedupeResolutionThreshold, ObserverConventions.ConfigurationKeys.DedupeResolutionThreshold);
+    mappings.Map(ObserverConventions.EnvironmentVariables.FileSinkRoot, ObserverConventions.ConfigurationKeys.FileSinkRoot);
     RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
 });
 
@@ -69,6 +71,24 @@ builder.Services.AddSingleton<IChatClient>(sp =>
 builder.Services.AddSingleton<IAnomalyDedupeStore, AnomalyDedupeStore>();
 builder.Services.AddSingleton<IObservationCycleRunner, ObservationCycleRunner>();
 builder.Services.AddHostedService<ObservationCycleLoop>();
+
+builder.Services.AddSingleton<LoggingAnomalyHandoffSink>();
+builder.Services.AddSingleton<IAnomalyHandoffSink>(sp =>
+{
+    var sinks = new List<IAnomalyHandoffSink>
+    {
+        sp.GetRequiredService<LoggingAnomalyHandoffSink>(),
+    };
+
+    var fileSinkRoot = sp.GetRequiredService<IOptions<ObserverOptions>>().Value.FileSinkRoot;
+    if (!string.IsNullOrEmpty(fileSinkRoot))
+    {
+        sinks.Add(new JsonFileAnomalyHandoffSink(fileSinkRoot));
+    }
+
+    var logger = sp.GetRequiredService<ILogger<CompositeAnomalyHandoffSink>>();
+    return new CompositeAnomalyHandoffSink(sinks, logger);
+});
 
 var app = builder.Build();
 
