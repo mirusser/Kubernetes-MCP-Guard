@@ -28,6 +28,9 @@ using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Testcontainers.Keycloak;
 
+// ASPDEPR004/ASPDEPR008: WebHostBuilder + TestServer are deprecated in favor of WebApplicationBuilder.
+// Suppressed because: Safety E2E tests use TestServer for in-process gateway hosting;
+// WebApplicationFactory<T> would require a public Program class — overkill for opt-in E2E tests.
 #pragma warning disable ASPDEPR004
 #pragma warning disable ASPDEPR008
 

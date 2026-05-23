@@ -22,6 +22,9 @@ using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Testcontainers.Keycloak;
 
+// ASPDEPR004/ASPDEPR008: WebHostBuilder + TestServer are deprecated in favor of WebApplicationBuilder.
+// Suppressed because: Keycloak integration tests use TestServer for in-process gateway hosting;
+// WebApplicationFactory<T> would require a public Program class — overkill for opt-in integration tests.
 #pragma warning disable ASPDEPR004
 #pragma warning disable ASPDEPR008
 

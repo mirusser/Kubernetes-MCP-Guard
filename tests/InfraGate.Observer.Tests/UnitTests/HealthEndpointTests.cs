@@ -1,3 +1,7 @@
+// ASPDEPR004: WebHostBuilder is deprecated in favor of WebApplicationBuilder.
+// ASPDEPR008: TestServer(IWebHostBuilder) is deprecated — use IServiceProvider ctor.
+// Suppressed because: WebApplicationFactory<T> requires InternalsVisibleTo
+// and a public Program class, which is overkill for three endpoint tests.
 #pragma warning disable ASPDEPR004
 #pragma warning disable ASPDEPR008
 using System.Text.Json;
