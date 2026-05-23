@@ -194,6 +194,44 @@ _Avoid_: Session store, connection pool
 A server-to-client MCP `notifications/resources/updated` message sent when an **Approval Challenge** is approved, carrying the plan status resource URI so the AI agent's host can read the updated status and retry execution without manual prompting.
 _Avoid_: Push event, callback
 
+### Anomaly Observation
+
+**Anomaly Observer**:
+A non-human MCP client that periodically inspects target-system state through the gateway's read-only tools and emits structured **Anomaly Reports**. The **Anomaly Observer** is a peer MCP client, not a participant in the approval lifecycle.
+_Avoid_: Approver, Requester, Domain Adapter, generic monitoring system
+
+**Anomaly**:
+A condition in the target system that deviates from a defined healthy state in a way the **Anomaly Observer** can detect through gateway read-only tools. Initial examples include Pod `CrashLoopBackOff`, Deployment with `availableReplicas < spec.replicas`, Service with zero endpoints, and recent Warning events from `events.k8s.io/v1`.
+_Avoid_: Application error, performance trend, security incident
+
+**Observation Cycle**:
+One iteration of the **Anomaly Observer's** loop: **Snapshot** fetch, analysis (optionally with deep-dive read-only tool calls), **Anomaly Report** emission, and deduplication against the previous cycle.
+_Avoid_: Kubernetes reconciliation loop, Kubernetes watch
+
+**Snapshot**:
+The aggregated read-only state captured at the start of an **Observation Cycle** before analysis. The **Snapshot** is the deterministic input to a single **Observation Cycle's** analysis step.
+_Avoid_: Plan Evidence, audit record
+
+**Detection Rule**:
+A documented condition under which the **Anomaly Observer** classifies a **Snapshot** signal as an **Anomaly**. **Detection Rules** live in the **Anomaly Observer's** system prompt and supporting code; they are not part of the **Generic Approval Core**.
+_Avoid_: Approval Policy, Domain Policy Check, Pre-Execution Gate
+
+**Anomaly Report**:
+A single **Anomaly** reported by an **Observation Cycle**, carrying anomaly kind, target resource reference, **Severity**, **Status** (`Active` or `Resolved`), evidence summary, and detection timestamp. An **Anomaly Report** is informational; it does not authorize any mutation.
+_Avoid_: Plan Envelope, Approval Challenge, Audit Spine event, policy finding
+
+**Severity**:
+The **Anomaly Observer's** classification of an **Anomaly Report's** urgency. Initial scale: `High` (resource unavailable to users), `Medium` (degraded but serving), `Low` (warning signal worth noting).
+_Avoid_: Approval Policy, Kubernetes event type
+
+**Observer Service Identity**:
+The machine identity the **Anomaly Observer** uses to authenticate to the gateway via OAuth client_credentials. Separate from **Requester**, **Approver**, and **Gateway Service Identity**, and not authorized for any mutation tool.
+_Avoid_: Requester, Approver, Gateway Service Identity, user token passthrough
+
+**Anomaly Handoff**:
+The act of the **Anomaly Observer** publishing one or more **Anomaly Reports** to a downstream consumer such as the future executor agent. The contract shape is defined by the v1 **Anomaly Observer** implementation; the transport is defined when the executor is in scope.
+_Avoid_: Plan Envelope, Approval Notification, Approval Grant, Audit Spine event
+
 ## Relationships
 
 - A **Plan Envelope** wraps exactly one **Mutation Intent**
@@ -260,6 +298,21 @@ _Avoid_: Push event, callback
 - A **Single-Execution Plan** is the default **Execution Reuse Policy**
 - A **Reusable Plan** is an explicit opt-in exception to **Single-Execution Plan**
 
+### Anomaly Observation
+
+- An **Anomaly Observer** runs zero or more **Observation Cycles**
+- An **Observation Cycle** reads exactly one **Snapshot** and produces zero or more **Anomaly Reports**
+- An **Anomaly Report** describes exactly one **Anomaly**
+- An **Anomaly Report** carries exactly one **Severity**
+- An **Anomaly Report** carries exactly one **Status** (`Active` or `Resolved`)
+- An **Anomaly Report** is produced by one or more **Detection Rules**
+- An **Anomaly Observer** authenticates with exactly one **Observer Service Identity**
+- An **Observer Service Identity** is not a **Requester** or an **Approver**
+- An **Observer Service Identity** does not produce **Plan Envelopes**, **Approval Grants**, or **Challenge Outcomes**
+- An **Anomaly Observer** does not bypass any **Pre-Execution Gate** and does not call execution tools
+- An **Anomaly Handoff** carries one or more **Anomaly Reports**
+- An **Anomaly Handoff** is not an **Approval Grant** and does not authorize **Approval-Bound Execution**
+
 ## Example Dialogue
 
 > **Dev:** "Does the **Plan Envelope** describe how to scale a Kubernetes Deployment?"
@@ -289,3 +342,5 @@ _Avoid_: Push event, callback
 - "approval page" was treated as a UI detail only — resolved: **Review Surface** rendering is implementation-specific, but it must present the trusted **Review Digest** snapshot instead of model-supplied approval content.
 - "standard" was too strong for current positioning — resolved: InfraGate is currently an **Experimental Reference Implementation** for a possible **Mutation Approval Profile**.
 - "gateway-to-server auth" was treated as user authorization — resolved: **Gateway Service Identity** authenticates the private downstream call and does not carry **Requester** or **Approver** authority.
+- "observer" could read as a Kubernetes controller, generic monitoring system, or human reviewer — resolved: **Anomaly Observer** is a non-human MCP client bound by gateway read-only tools, separate from the approval lifecycle, and not authorized for any mutation.
+- "finding" was informally used for **Plan Evidence** policy findings — resolved: the **Anomaly Observer** emits **Anomaly Reports**, not findings, so the two concepts stay separate.
