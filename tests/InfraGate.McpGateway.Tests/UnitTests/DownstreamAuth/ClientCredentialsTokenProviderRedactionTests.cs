@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using InfraGate.ClientCredentials;
 using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway.DownstreamAuth;
 using Microsoft.Extensions.Logging;
@@ -30,6 +31,16 @@ public sealed class ClientCredentialsTokenProviderRedactionTests
             Scope = FakeScope,
         };
 
+    private static ClientCredentialsTokenOptions ToClientOptions(DownstreamAuthOptions opts) => new()
+    {
+        Authority = opts.Authority,
+        MetadataAddress = opts.MetadataAddress,
+        RequireHttpsMetadata = opts.RequireHttpsMetadata,
+        ClientId = opts.GatewayClientId,
+        ClientSecret = opts.GatewayClientSecret,
+        Scope = opts.Scope,
+    };
+
     private static string TokenEndpoint() => $"{FakeAuthority}/protocol/openid-connect/token";
 
     private static string BuildOidcDiscoveryJson(string tokenEndpoint) =>
@@ -40,20 +51,25 @@ public sealed class ClientCredentialsTokenProviderRedactionTests
 
     private static ClientCredentialsDownstreamServiceTokenProvider CreateProvider(
         MockHttpMessageHandler handler,
-        CapturingLogger<ClientCredentialsDownstreamServiceTokenProvider> logger)
+        CapturingLogger<ClientCredentialsTokenProvider> logger)
     {
         var httpClient = new HttpClient(handler);
-        return new ClientCredentialsDownstreamServiceTokenProvider(
-            CreateOptions(),
+        var options = CreateOptions();
+        var clientOptions = ToClientOptions(options);
+
+        var innerProvider = new ClientCredentialsTokenProvider(
+            clientOptions,
             httpClient,
             new ManualTimeProvider(),
             logger);
+
+        return new ClientCredentialsDownstreamServiceTokenProvider(innerProvider);
     }
 
     [Fact]
     public async Task GetServiceTokenAsync_SuccessfulAcquisition_TokenValueNotInAnyLogMessage()
     {
-        var logger = new CapturingLogger<ClientCredentialsDownstreamServiceTokenProvider>();
+        var logger = new CapturingLogger<ClientCredentialsTokenProvider>();
         var handler = new MockHttpMessageHandler(request =>
         {
             if (IsMetadataRequest(request))
@@ -81,7 +97,7 @@ public sealed class ClientCredentialsTokenProviderRedactionTests
     [Fact]
     public async Task GetServiceTokenAsync_TokenEndpointHttpError_ClientSecretNotInAnyLogMessage()
     {
-        var logger = new CapturingLogger<ClientCredentialsDownstreamServiceTokenProvider>();
+        var logger = new CapturingLogger<ClientCredentialsTokenProvider>();
         var handler = new MockHttpMessageHandler(request =>
         {
             if (IsMetadataRequest(request))
@@ -112,7 +128,7 @@ public sealed class ClientCredentialsTokenProviderRedactionTests
     public async Task GetServiceTokenAsync_TokenEndpointError_ExceptionMessageDoesNotContainTokenValue(
         HttpStatusCode statusCode)
     {
-        var logger = new CapturingLogger<ClientCredentialsDownstreamServiceTokenProvider>();
+        var logger = new CapturingLogger<ClientCredentialsTokenProvider>();
         var handler = new MockHttpMessageHandler(request =>
         {
             if (IsMetadataRequest(request))

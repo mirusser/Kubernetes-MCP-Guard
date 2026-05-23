@@ -296,7 +296,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             return;
         }
 
-        var options = new InfraGate.DownstreamAuth.DownstreamAuthOptions
+        var downstreamOptions = new InfraGate.DownstreamAuth.DownstreamAuthOptions
         {
             Required = true,
             Authority = RealmAuthority(),
@@ -306,12 +306,23 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             Scope = GatewayServiceScope,
         };
 
+        var clientOptions = new InfraGate.ClientCredentials.ClientCredentialsTokenOptions
+        {
+            Authority = downstreamOptions.Authority,
+            RequireHttpsMetadata = downstreamOptions.RequireHttpsMetadata,
+            ClientId = downstreamOptions.GatewayClientId,
+            ClientSecret = downstreamOptions.GatewayClientSecret,
+            Scope = downstreamOptions.Scope,
+        };
+
         using var httpClient = new HttpClient();
-        var provider = new InfraGate.McpGateway.DownstreamAuth.ClientCredentialsDownstreamServiceTokenProvider(
-            options,
+        var innerProvider = new InfraGate.ClientCredentials.ClientCredentialsTokenProvider(
+            clientOptions,
             httpClient,
             TimeProvider.System,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<InfraGate.McpGateway.DownstreamAuth.ClientCredentialsDownstreamServiceTokenProvider>.Instance);
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<InfraGate.ClientCredentials.ClientCredentialsTokenProvider>.Instance);
+        var provider = new InfraGate.McpGateway.DownstreamAuth.ClientCredentialsDownstreamServiceTokenProvider(
+            innerProvider);
 
         string bearerHeader = await provider.GetServiceTokenAsync(CancellationToken.None);
 

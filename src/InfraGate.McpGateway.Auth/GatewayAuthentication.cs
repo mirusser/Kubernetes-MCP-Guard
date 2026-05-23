@@ -71,6 +71,12 @@ public static class GatewayAuthentication
                 oauthOptions => ConfigureApprovalOAuthOptions(oauthOptions, options));
     }
 
+    internal static readonly string[] AcceptedScopes =
+    [
+        GatewayAuthConventions.DefaultOAuthScope,
+        GatewayAuthConventions.DefaultReadOnlyOAuthScope
+    ];
+
     private static void AddGatewayAuthorization(IServiceCollection services, GatewayAuthOptions options)
     {
         services
@@ -78,7 +84,7 @@ public static class GatewayAuthentication
             .AddPolicy(GatewayAuthConventions.Schemes.PolicyName, policy =>
             {
                 policy.RequireAuthenticatedUser();
-                policy.RequireAssertion(context => HasRequiredScope(context.User, options.OAuthScope));
+                policy.RequireAssertion(context => HasAnyAcceptedScope(context.User, options.OAuthScope));
             })
             .AddPolicy(GatewayAuthConventions.Schemes.ApprovalPolicyName, policy =>
             {
@@ -196,7 +202,17 @@ public static class GatewayAuthentication
     private static string ResourceMetadataUrl(HttpRequest request) =>
         $"{request.Scheme}://{request.Host}{request.PathBase}{GatewayAuthConventions.Metadata.ProtectedResourcePath}";
 
-    private static bool HasRequiredScope(ClaimsPrincipal user, string requiredScope)
+    internal static bool HasAnyAcceptedScope(ClaimsPrincipal user, string primaryScope)
+    {
+        var userScopes = user.Claims
+            .Where(claim => claim.Type is GatewayAuthConventions.Claims.Scope or GatewayAuthConventions.Claims.Scp)
+            .SelectMany(claim => claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .ToHashSet(StringComparer.Ordinal);
+
+        return userScopes.Contains(primaryScope) || userScopes.Contains(GatewayAuthConventions.DefaultReadOnlyOAuthScope);
+    }
+
+    public static bool HasRequiredScope(ClaimsPrincipal user, string requiredScope)
     {
         return user.Claims
             .Where(claim => claim.Type is GatewayAuthConventions.Claims.Scope or GatewayAuthConventions.Claims.Scp)

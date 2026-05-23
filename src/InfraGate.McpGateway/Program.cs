@@ -5,6 +5,7 @@ using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using Npgsql;
 using InfraGate.McpGateway.Auth;
+using InfraGate.ClientCredentials;
 using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.McpGateway.Notifications;
 using InfraGate.Observability;
@@ -182,13 +183,19 @@ static void RegisterDownstreamAuth(WebApplicationBuilder builder, McpGatewayOpti
     if (downstreamAuth.Required)
     {
         builder.Services.AddSingleton(downstreamAuth);
-        builder.Services.AddHttpClient();
+        var clientOptions = new ClientCredentialsTokenOptions
+        {
+            Authority = downstreamAuth.Authority,
+            MetadataAddress = downstreamAuth.MetadataAddress,
+            RequireHttpsMetadata = downstreamAuth.RequireHttpsMetadata,
+            ClientId = downstreamAuth.GatewayClientId,
+            ClientSecret = downstreamAuth.GatewayClientSecret,
+            Scope = downstreamAuth.Scope
+        };
+        builder.Services.AddClientCredentialsTokenProvider(clientOptions);
         builder.Services.AddSingleton<IDownstreamServiceTokenProvider>(sp =>
             new ClientCredentialsDownstreamServiceTokenProvider(
-                sp.GetRequiredService<InfraGate.DownstreamAuth.DownstreamAuthOptions>(),
-                sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(ClientCredentialsDownstreamServiceTokenProvider)),
-                TimeProvider.System,
-                sp.GetRequiredService<ILogger<ClientCredentialsDownstreamServiceTokenProvider>>()));
+                sp.GetRequiredService<IClientCredentialsTokenProvider>()));
     }
     else
     {

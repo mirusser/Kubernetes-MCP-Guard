@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using InfraGate.Approvals;
 using InfraGate.Approvals.AuditPayloads;
@@ -98,6 +99,12 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (toolName.Equals(McpGatewayConventions.ToolNames.ApplyApprovedPlan, StringComparison.Ordinal))
         {
+            var scopeResult = RequireMutationScope(toolName);
+            if (scopeResult is not null)
+            {
+                return scopeResult;
+            }
+
             return await HandleApplyApprovedPlanAsync(request, ct).ConfigureAwait(false);
         }
 
@@ -113,6 +120,12 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (toolName.StartsWith(McpGatewayConventions.ToolNames.RequestToolPrefix, StringComparison.Ordinal))
         {
+            var scopeResult = RequireMutationScope(toolName);
+            if (scopeResult is not null)
+            {
+                return scopeResult;
+            }
+
             return await HandleRequestMutationAsync(toolName, request, ct).ConfigureAwait(false);
         }
 
@@ -643,4 +656,27 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         IsError = true,
         Content = [new TextContentBlock { Text = text }]
     };
+
+    private CallToolResult? RequireMutationScope(string toolName)
+    {
+        var user = httpContextAccessor.HttpContext?.User;
+        if (user is null)
+        {
+            return ErrorResult(
+                $"Refused: '{toolName}' requires an authenticated session with the '{GatewayAuthConventions.DefaultOAuthScope}' scope.");
+        }
+
+        if (!GatewayAuthentication.HasRequiredScope(user, GatewayAuthConventions.DefaultOAuthScope))
+        {
+            logger.LogWarning(
+                "Tool '{ToolName}' denied: caller lacks required scope '{RequiredScope}'.",
+                toolName,
+                GatewayAuthConventions.DefaultOAuthScope);
+
+            return ErrorResult(
+                $"Refused: tool '{toolName}' requires the '{GatewayAuthConventions.DefaultOAuthScope}' scope.");
+        }
+
+        return null;
+    }
 }

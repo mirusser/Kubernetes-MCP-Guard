@@ -87,6 +87,42 @@ public sealed class GatewayAuditIdentityResolverTests
     }
 
     [Fact]
+    public void Resolve_ServiceClientWithAzpClaim_IdentifiesAsService()
+    {
+        var principal = AuthenticatedPrincipal(
+            new Claim(GatewayAuthConventions.Claims.AuthorizedParty, GatewayAuthConventions.ServiceClients.ObserverClientId),
+            new Claim(GatewayAuthConventions.Claims.Subject, "service:observer"),
+            new Claim(GatewayAuthConventions.Claims.ClientId, "infra-gate-observer"));
+
+        var result = GatewayAuditIdentityResolver.Resolve(principal);
+
+        Assert.Equal(GatewayAuthConventions.Audit.ServiceIdentityKind, result.IdentityKind);
+    }
+
+    [Fact]
+    public void Resolve_HumanTokenWithoutAzp_IdentifiesAsHuman()
+    {
+        var principal = AuthenticatedPrincipal(
+            new Claim(GatewayAuthConventions.Claims.Subject, "user-123"));
+
+        var result = GatewayAuditIdentityResolver.Resolve(principal);
+
+        Assert.Equal(GatewayAuthConventions.Audit.HumanIdentityKind, result.IdentityKind);
+    }
+
+    [Fact]
+    public void Resolve_UnknownAzpValue_IdentifiesAsHuman()
+    {
+        var principal = AuthenticatedPrincipal(
+            new Claim(GatewayAuthConventions.Claims.AuthorizedParty, "some-unknown-client"),
+            new Claim(GatewayAuthConventions.Claims.Subject, "unknown"));
+
+        var result = GatewayAuditIdentityResolver.Resolve(principal);
+
+        Assert.Equal(GatewayAuthConventions.Audit.HumanIdentityKind, result.IdentityKind);
+    }
+
+    [Fact]
     public void Resolve_SubClaimTakesPriorityOverClientId()
     {
         var principal = AuthenticatedPrincipal(
