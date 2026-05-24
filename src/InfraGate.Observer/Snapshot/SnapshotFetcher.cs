@@ -25,12 +25,12 @@ internal sealed class SnapshotFetcher : ISnapshotFetcher
     {
         var arguments = new Dictionary<string, object?>(StringComparer.Ordinal) { ["namespace"] = namespaceName };
 
-        var statusTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sStatus, arguments, namespaceName, cancellationToken);
-        var eventsTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sEvents, arguments, namespaceName, cancellationToken);
-        var podsTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sPods, arguments, namespaceName, cancellationToken);
-        var deploymentsTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sDeployments, arguments, namespaceName, cancellationToken);
-        var servicesTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sServices, arguments, namespaceName, cancellationToken);
-        var endpointsTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sEndpoints, arguments, namespaceName, cancellationToken);
+        Task<string?> statusTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sStatus, arguments, namespaceName, cancellationToken);
+        Task<string?> eventsTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sEvents, arguments, namespaceName, cancellationToken);
+        Task<string?> podsTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sPods, arguments, namespaceName, cancellationToken);
+        Task<string?> deploymentsTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sDeployments, arguments, namespaceName, cancellationToken);
+        Task<string?> servicesTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sServices, arguments, namespaceName, cancellationToken);
+        Task<string?> endpointsTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sEndpoints, arguments, namespaceName, cancellationToken);
 
         await Task.WhenAll(statusTask, eventsTask, podsTask, deploymentsTask, servicesTask, endpointsTask).ConfigureAwait(false);
 

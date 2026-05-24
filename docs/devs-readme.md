@@ -295,11 +295,14 @@ dotnet run --project src/InfraGate.RunProfiles -- validate
 dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak"
 INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak"
 INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build
+dotnet test tests/InfraGate.Observer.IntegrationTests/InfraGate.Observer.IntegrationTests.csproj --no-build
+dotnet test tests/InfraGate.Observer.E2E.Tests/InfraGate.Observer.E2E.Tests.csproj --no-build --filter "Category=ObserverE2E"
 dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj --no-build --filter "Category=Keycloak"  # requires Docker
 ./scripts/coverage.sh
 kubectl --kubeconfig .kube/mcp-nginx-demo.config -n mcp-nginx-demo get deployment,service,configmap,pods,replicasets -o wide
 ```
 
 The stdio integration test drives the MCP server directly, while the gateway integration test drives the HTTP MCP endpoint, downstream stdio bridge, gateway guardrails, approval plans, and Kubernetes path. Both live integration modes expect a usable kubeconfig, defaulting to `.kube/mcp-nginx-demo.config` when `KUBECONFIG` is unset.
+The Observer integration tests use an in-process stub MCP gateway and do not require Docker, Keycloak, or Kubernetes. The Observer E2E contract tests are discovered in the default run but early-return unless `INFRA_GATE_RUN_OBSERVER_E2E=1`; when enabled they call the Observer at `INFRA_GATE_OBSERVER_E2E_BASE_URL` (default `http://127.0.0.1:3003`) and use the same response-shape assertions for the optional `INFRA_GATE_OBSERVER_REAL_LLM=1` path.
 Code coverage HTML reports are generated at `coverage-report/index.html` by running `./scripts/coverage.sh`.
 Local SonarQube pre-push analysis is documented in [tools/sonarqube/README.md](../tools/sonarqube/README.md).

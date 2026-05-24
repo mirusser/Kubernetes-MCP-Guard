@@ -32,6 +32,70 @@ public sealed class ClientCredentialsTokenProviderTests
     }
 
     [Fact]
+    public async Task GetTokenAsync_BeforeRefreshSkew_ReturnsCachedToken()
+    {
+        using var httpClient = CreateTokenHttpClient(out var handler, expiresInSeconds: 60);
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-24T12:00:00Z"));
+        var options = ValidOptions() with { RefreshSkewSeconds = 30 };
+
+        var provider = new ClientCredentialsTokenProvider(
+            options,
+            httpClient,
+            timeProvider,
+            NullLogger<ClientCredentialsTokenProvider>.Instance);
+
+        string first = await provider.GetTokenAsync(CancellationToken.None);
+        timeProvider.Advance(TimeSpan.FromSeconds(29));
+        string second = await provider.GetTokenAsync(CancellationToken.None);
+
+        Assert.Equal(first, second);
+        Assert.Equal(1, handler.TokenRequestCount);
+    }
+
+    [Fact]
+    public async Task GetTokenAsync_InsideRefreshSkew_AcquiresFreshToken()
+    {
+        using var httpClient = CreateTokenHttpClient(out var handler, expiresInSeconds: 60);
+        var timeProvider = new ManualTimeProvider(DateTimeOffset.Parse("2026-05-24T12:00:00Z"));
+        var options = ValidOptions() with { RefreshSkewSeconds = 30 };
+
+        var provider = new ClientCredentialsTokenProvider(
+            options,
+            httpClient,
+            timeProvider,
+            NullLogger<ClientCredentialsTokenProvider>.Instance);
+
+        string first = await provider.GetTokenAsync(CancellationToken.None);
+        timeProvider.Advance(TimeSpan.FromSeconds(30));
+        string second = await provider.GetTokenAsync(CancellationToken.None);
+
+        Assert.NotEqual(first, second);
+        Assert.Equal(2, handler.TokenRequestCount);
+    }
+
+    [Fact]
+    public async Task GetTokenAsync_ConcurrentAcquisition_RequestsOneToken()
+    {
+        using var httpClient = CreateTokenHttpClient(out var handler);
+        var options = ValidOptions();
+
+        var provider = new ClientCredentialsTokenProvider(
+            options,
+            httpClient,
+            TimeProvider.System,
+            NullLogger<ClientCredentialsTokenProvider>.Instance);
+
+        var requests = Enumerable.Range(0, 12)
+            .Select(_ => provider.GetTokenAsync(CancellationToken.None));
+
+        var tokens = await Task.WhenAll(requests);
+
+        Assert.All(tokens, token => Assert.Equal(tokens[0], token));
+        Assert.Equal(1, handler.DiscoveryRequestCount);
+        Assert.Equal(1, handler.TokenRequestCount);
+    }
+
+    [Fact]
     public async Task RefreshTokenAsync_ForceRefreshes()
     {
         using var httpClient = CreateTokenHttpClient(out var handler);
@@ -70,9 +134,11 @@ public sealed class ClientCredentialsTokenProviderTests
         Assert.StartsWith("my-access-token-", token);
     }
 
-    private static HttpClient CreateTokenHttpClient(out FakeOidcHttpMessageHandler handler)
+    private static HttpClient CreateTokenHttpClient(
+        out FakeOidcHttpMessageHandler handler,
+        int expiresInSeconds = 3600)
     {
-        handler = new FakeOidcHttpMessageHandler();
+        handler = new FakeOidcHttpMessageHandler(expiresInSeconds);
         return new HttpClient(handler);
     }
 
@@ -86,9 +152,19 @@ public sealed class ClientCredentialsTokenProviderTests
 
     private sealed class FakeOidcHttpMessageHandler : HttpMessageHandler
     {
+        private readonly int expiresInSeconds;
         private int callCount;
+        private int discoveryRequestCount;
+        private int tokenRequestCount;
+
+        public FakeOidcHttpMessageHandler(int expiresInSeconds)
+        {
+            this.expiresInSeconds = expiresInSeconds;
+        }
 
         public int CallCount => callCount;
+        public int DiscoveryRequestCount => discoveryRequestCount;
+        public int TokenRequestCount => tokenRequestCount;
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
@@ -97,6 +173,7 @@ public sealed class ClientCredentialsTokenProviderTests
 
             if (request.RequestUri!.AbsolutePath.Contains("openid-configuration"))
             {
+                Interlocked.Increment(ref discoveryRequestCount);
                 var discovery = JsonSerializer.Serialize(new
                 {
                     token_endpoint = "https://auth.example.com/token"
@@ -107,15 +184,33 @@ public sealed class ClientCredentialsTokenProviderTests
                 });
             }
 
+            Interlocked.Increment(ref tokenRequestCount);
             var response = JsonSerializer.Serialize(new
             {
                 access_token = $"my-access-token-{call}",
-                expires_in = 3600
+                expires_in = expiresInSeconds
             });
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(response)
             });
+        }
+    }
+
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        private DateTimeOffset now;
+
+        public ManualTimeProvider(DateTimeOffset initialNow)
+        {
+            now = initialNow;
+        }
+
+        public override DateTimeOffset GetUtcNow() => now;
+
+        public void Advance(TimeSpan delta)
+        {
+            now += delta;
         }
     }
 }

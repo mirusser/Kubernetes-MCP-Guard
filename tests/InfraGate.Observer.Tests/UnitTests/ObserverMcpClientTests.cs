@@ -7,10 +7,16 @@ public sealed class ObserverMcpClientTests
 {
     private static ObserverMcpClient CreateClient(string gatewayBaseUrl = "http://localhost:3001/mcp")
     {
+        return CreateClient(gatewayBaseUrl, Substitute.For<IClientCredentialsTokenProvider>());
+    }
+
+    private static ObserverMcpClient CreateClient(
+        string gatewayBaseUrl,
+        IClientCredentialsTokenProvider tokenProvider)
+    {
         var options = Substitute.For<IOptions<ObserverOptions>>();
         options.Value.Returns(new ObserverOptions { GatewayBaseUrl = gatewayBaseUrl });
 
-        var tokenProvider = Substitute.For<IClientCredentialsTokenProvider>();
         var logger = NullLogger<ObserverMcpClient>.Instance;
         var loggerFactory = NullLoggerFactory.Instance;
 
@@ -38,6 +44,25 @@ public sealed class ObserverMcpClientTests
         var client = CreateClient();
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => client.GetToolResultAsync("request_scale_deployment", null, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("request_scale_deployment")]
+    [InlineData("execute_approved_plan")]
+    [InlineData("apply_manifest")]
+    [InlineData("delete_resource")]
+    [InlineData("restart_deployment")]
+    [InlineData("set_image")]
+    public async Task GetToolResultAsync_MutationTool_RejectsBeforeTokenAcquisition(string toolName)
+    {
+        var tokenProvider = Substitute.For<IClientCredentialsTokenProvider>();
+        var client = CreateClient("http://localhost:3001/mcp", tokenProvider);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => client.GetToolResultAsync(toolName, null, CancellationToken.None));
+
+        await tokenProvider.DidNotReceive().GetTokenAsync(Arg.Any<CancellationToken>());
+        await tokenProvider.DidNotReceive().RefreshTokenAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -7,7 +7,7 @@
 - `Program.cs` starts an ASP.NET WebApplication on port 3003, registers the MCP HTTP client with OAuth bearer auth, the snapshot fetcher, the observation cycle loop (`IHostedService`), the `/health` endpoint, and the `/observe-now` on-demand trigger.
 - `ObservationCycleLoop` ticks on a configurable cadence (default 60s), invoking the full `ObservationCycleRunner`: snapshot fetch, LLM-driven anomaly detection, rules-derived severity classification, deduplication against active anomaly state, and resolution emission for cleared anomalies.
 - `ObserverMcpClient` wraps the MCP client SDK, injects OAuth bearer tokens via `ClientCredentialsBearerHandler`, and enforces a client-side read-only tool whitelist before each call.
-- `SnapshotFetcher` fetches status, events, pods, deployments, services, and endpoints in parallel for each allowed namespace. Individual tool failures degrade gracefully (partial snapshot with structured warning).
+- `SnapshotFetcher` fetches status, events, pods, deployments, services, and endpoints through the MCP gateway for each allowed namespace. Individual tool failures degrade gracefully (partial snapshot with structured warning).
 - `HealthEndpoint` exposes `GET /health` returning 200 when the OAuth token is valid, 503 otherwise.
 - `ObserveNowEndpoint` exposes `POST /observe-now` for on-demand manual triggering. Invokes one synchronous observation cycle (30s timeout, returns `AnomalyReport[]` on 200, empty array on truncated, 504 on timeout, 500 on errors). Serialises with the background scheduled cycle via a shared semaphore — at most one cycle runs at any time. The background schedule is unaffected by manual triggers.
 
@@ -47,4 +47,6 @@ Runtime environment variables, defaults, and production guidance are documented 
 ## Verification
 
 - Main tests: `dotnet test tests/InfraGate.Observer.Tests/InfraGate.Observer.Tests.csproj`
+- Integration tests: `dotnet test tests/InfraGate.Observer.IntegrationTests/InfraGate.Observer.IntegrationTests.csproj`
+- Opt-in E2E contract tests: `dotnet test tests/InfraGate.Observer.E2E.Tests/InfraGate.Observer.E2E.Tests.csproj`
 - Full solution check: `dotnet test InfraGate.slnx`

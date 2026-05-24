@@ -29,6 +29,8 @@
     <Project Path="tests/InfraGate.ApprovalUi.Tests/InfraGate.ApprovalUi.Tests.csproj" />
     <Project Path="tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj" />
     <Project Path="tests/InfraGate.Observer.Tests/InfraGate.Observer.Tests.csproj" />
+    <Project Path="tests/InfraGate.Observer.IntegrationTests/InfraGate.Observer.IntegrationTests.csproj" />
+    <Project Path="tests/InfraGate.Observer.E2E.Tests/InfraGate.Observer.E2E.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/approval-postgres-migrations/ApplyApprovalPostgresMigrations.csproj" />

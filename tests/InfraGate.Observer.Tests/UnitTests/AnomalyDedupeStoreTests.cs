@@ -138,6 +138,30 @@ public sealed class AnomalyDedupeStoreTests
         Assert.Single(fourthEmitted);
     }
 
+    [Fact]
+    public void ProcessReports_FiveCycleWindow_EmitsAndSuppressesExactSequence()
+    {
+        var store = new AnomalyDedupeStore();
+        var report = CreateReport(AnomalyKind.PodUnhealthy, "Pod", "default", "crash-pod");
+        var detectedAt = DateTimeOffset.UtcNow;
+        const int window = 5;
+
+        var c1 = store.ProcessReports("c1", new[] { report }, window, 2, detectedAt);
+        var c2 = store.ProcessReports("c2", new[] { report }, window, 2, detectedAt);
+        var c3 = store.ProcessReports("c3", new[] { report }, window, 2, detectedAt);
+        var c4 = store.ProcessReports("c4", new[] { report }, window, 2, detectedAt);
+        var c5 = store.ProcessReports("c5", new[] { report }, window, 2, detectedAt);
+        var c6 = store.ProcessReports("c6", new[] { report }, window, 2, detectedAt);
+
+        Assert.Single(c1.Emitted);
+        Assert.Empty(c2.Emitted);
+        Assert.Empty(c3.Emitted);
+        Assert.Empty(c4.Emitted);
+        Assert.Empty(c5.Emitted);
+        Assert.Single(c6.Emitted);
+        Assert.All(new[] { c1, c2, c3, c4, c5, c6 }, cycle => Assert.Empty(cycle.Resolved));
+    }
+
     // ── Resolution emission ───────────────────────────────────────
 
     [Fact]
