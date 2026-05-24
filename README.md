@@ -4,9 +4,9 @@
 
 > **Safe remediation, by design:**  
 >
-> Observer AI agent detects.  
-> Executor AI agent proposes.  
-> Human approves out-of-band.  
+> Observer agent detects anomalies.  
+> Executor agent proposes a plan.  
+> Human reviewer approves out-of-band.  
 > System executes only the approved digest.  
 > Everything is auditable.  
 >
@@ -32,7 +32,7 @@ Agents can inspect a narrow cluster surface and propose changes, but writes are 
 <sub><em>Kubernetes MCP Guard is internally named **InfraGate**. </em></sub>
 
 
-## 🎯 What It Demonstrates
+## 🧠 Core Ideas
 
 Kubernetes MCP Guard explores a practical safety pattern for AI-assisted operations:
 
@@ -138,6 +138,24 @@ The central safety property is that approval is necessary but not sufficient. A 
 
 ## 🧰 Current Capabilities
 
+### 🤖🔎 Anomaly Observer
+
+The [InfraGate.Observer](src/InfraGate.Observer/README.md) is an LLM-driven agent that periodically inspects the cluster through the gateway's read-only tools and emits structured Anomaly Reports.
+
+| Capability | Description |
+| --- | --- |
+| Scheduled observation | Background `IHostedService` runs cycles on a configurable cadence (default 60s). |
+| On-demand trigger | `POST /observe-now` returns a synchronous `AnomalyReport[]` with a 30s timeout. |
+| Anomaly detection | LLM-assisted classification across four categories: Pod unhealthy, Deployment unavailable, Service no endpoints, Warning events. |
+| Severity classification | Rules-derived `High`/`Medium`/`Low` with LLM disagreement telemetry. |
+| Deduplication & resolution | In-memory dedupe window suppresses repeat reports; automatic `Resolved` emission when anomalies clear. |
+| Handoff | Log sink always on; JSON file sink opt-in via `INFRA_GATE_OBSERVER_FILE_SINK_ROOT`. |
+
+### 🤖🛠️ Executor
+
+> Planned: consumes Anomaly Reports, requests bounded remediation plans, and executes only after out-of-band approval.
+
+
 ### 🛡️ Gateway Protections
 
 | Layer | Current behavior |
@@ -162,18 +180,6 @@ The central safety property is that approval is necessary but not sufficient. A 
 | `get_pod_diagnostics` | Inspect Pod status, conditions, container state, and Events. |
 | `get_service_diagnostics` | Inspect Service endpoints, backing Pods, and Events. |
 
-### 🤖 Anomaly Observer
-
-The [InfraGate.Observer](src/InfraGate.Observer/README.md) is an LLM-driven agent that periodically inspects the cluster through the gateway's read-only tools and emits structured Anomaly Reports.
-
-| Capability | Description |
-| --- | --- |
-| Scheduled observation | Background `IHostedService` runs cycles on a configurable cadence (default 60s). |
-| On-demand trigger | `POST /observe-now` returns a synchronous `AnomalyReport[]` with a 30s timeout. |
-| Anomaly detection | LLM-assisted classification across four categories: Pod unhealthy, Deployment unavailable, Service no endpoints, Warning events. |
-| Severity classification | Rules-derived `High`/`Medium`/`Low` with LLM disagreement telemetry. |
-| Deduplication & resolution | In-memory dedupe window suppresses repeat reports; automatic `Resolved` emission when anomalies clear. |
-| Handoff | Log sink always on; JSON file sink opt-in via `INFRA_GATE_OBSERVER_FILE_SINK_ROOT`. |
 
 ### ✅ Gateway Approval Tools
 
@@ -223,7 +229,7 @@ docker compose --env-file deploy/generated/local-compose.env \
 
 Other run modes and full setup details are in [docs/setup-guide.md](docs/setup-guide.md).
 
-### 🤖 Connect Codex CLI
+### ⌨️ Connect Codex CLI
 
 Add this to `~/.codex/config.toml`:
 
@@ -241,7 +247,7 @@ codex mcp login infra-gate
 codex
 ```
 
-### 💬 Connect Claude Code
+### 💬 Connect Claude Code 
 
 ```bash
 claude mcp add-json --scope user infra-gate \
@@ -279,15 +285,6 @@ Use specific release tags for stable demos. The `:dev` tag tracks the developmen
 | Container registries | GHCR, Docker Hub |
 | Platforms | linux/amd64 initially |
 
-## ⚖️ Boundaries And Non-Goals
-
-- The project is experimental and not production-certified.
-- The local Keycloak realm runs in development mode over HTTP and is not a production identity provider.
-- Prompt-injection guardrails are defense-in-depth, not a guaranteed hard security boundary.
-- The tool surface does not expose shell execution, `kubectl` passthrough, exec, attach, port-forward, namespace creation, RBAC manipulation, Secret reads, raw manifest reads, or cluster-scoped writes.
-- This is not a full Kubernetes policy engine and not an MCP standard.
-
-See [docs/security-model.md](docs/security-model.md) for the full threat model.
 
 ## 🧭 Project Map
 
@@ -304,6 +301,16 @@ See [docs/security-model.md](docs/security-model.md) for the full threat model.
 - [src/InfraGate.KubernetesAdapter/README.md](src/InfraGate.KubernetesAdapter/README.md): Kubernetes mutation intent, evidence, policy, freshness checks, and execution.
 - [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md): private Kubernetes MCP server and typed tool surface.
 - [src/InfraGate.Observer/README.md](src/InfraGate.Observer/README.md): LLM-driven anomaly observer — periodic cluster inspection and Anomaly Report emission.
+
+## ⚖️ Boundaries And Non-Goals
+
+- The project is experimental and not production-certified.
+- The local Keycloak realm runs in development mode over HTTP and is not a production identity provider.
+- Prompt-injection guardrails are defense-in-depth, not a guaranteed hard security boundary.
+- The tool surface does not expose shell execution, `kubectl` passthrough, exec, attach, port-forward, namespace creation, RBAC manipulation, Secret reads, raw manifest reads, or cluster-scoped writes.
+- This is not a full Kubernetes policy engine and not an MCP standard.
+
+See [docs/security-model.md](docs/security-model.md) for the full threat model.
 
 ## 📜 Governance
 

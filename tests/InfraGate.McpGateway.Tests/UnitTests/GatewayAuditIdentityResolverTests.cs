@@ -87,15 +87,16 @@ public sealed class GatewayAuditIdentityResolverTests
     }
 
     [Fact]
-    public void Resolve_ServiceClientWithAzpClaim_IdentifiesAsService()
+    public void Resolve_ServiceClientWithAzpClaim_FormatsSubjectAndIdentifiesAsService()
     {
         var principal = AuthenticatedPrincipal(
             new Claim(GatewayAuthConventions.Claims.AuthorizedParty, GatewayAuthConventions.ServiceClients.ObserverClientId),
-            new Claim(GatewayAuthConventions.Claims.Subject, "service:observer"),
+            new Claim(GatewayAuthConventions.Claims.Subject, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
             new Claim(GatewayAuthConventions.Claims.ClientId, "infra-gate-observer"));
 
         var result = GatewayAuditIdentityResolver.Resolve(principal);
 
+        Assert.Equal("service:infra-gate-observer", result.Subject);
         Assert.Equal(GatewayAuthConventions.Audit.ServiceIdentityKind, result.IdentityKind);
     }
 

@@ -171,6 +171,12 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         CallToolRequestParams request,
         CancellationToken ct)
     {
+        var scopeResult = await RequireAnyToolScopeAsync(toolName).ConfigureAwait(false);
+        if (scopeResult is not null)
+        {
+            return scopeResult;
+        }
+
         var arguments = ConvertArguments(request.Arguments);
         var result = await guardedRunner.CallAsync(toolName, arguments, ct).ConfigureAwait(false);
 
@@ -660,6 +666,24 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         Content = [new TextContentBlock { Text = text }]
     };
 
+    private async Task<CallToolResult?> RequireAnyToolScopeAsync(string toolName)
+    {
+        var user = httpContextAccessor.HttpContext?.User;
+        if (user is null)
+        {
+            return ErrorResult(
+                $"Refused: '{toolName}' requires an authenticated session.");
+        }
+
+        if (!GatewayAuthentication.HasRequiredScope(user, McpGatewayConventions.ToolScopeRequirements.MutationScope) &&
+            !GatewayAuthentication.HasRequiredScope(user, McpGatewayConventions.ToolScopeRequirements.ReadOnlyScope))
+        {
+            return await DenyAndAuditAsync(toolName, $"{McpGatewayConventions.ToolScopeRequirements.MutationScope} or {McpGatewayConventions.ToolScopeRequirements.ReadOnlyScope}").ConfigureAwait(false);
+        }
+
+        return null;
+    }
+
     private async Task<CallToolResult?> RequireMutationScopeAsync(string toolName)
     {
         var user = httpContextAccessor.HttpContext?.User;
@@ -671,29 +695,41 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (!GatewayAuthentication.HasRequiredScope(user, McpGatewayConventions.ToolScopeRequirements.MutationScope))
         {
-            var identity = GatewayAuditIdentityResolver.Resolve(user);
-
-            logger.LogWarning(
-                "Tool '{ToolName}' denied: caller lacks required scope '{RequiredScope}'.",
-                toolName,
-                McpGatewayConventions.ToolScopeRequirements.MutationScope);
-
-            var auditEvent = new GuardrailAuditEvent(
-                toolName,
-                McpGatewayConventions.GuardrailAudit.RequestDirection,
-                McpGatewayConventions.GuardrailAudit.DenyAction,
-                [McpGatewayConventions.GuardrailCategories.ScopeDenied],
-                PlanId: null,
-                identity.Subject,
-                identity.AuthenticationType,
-                identity.IdentityKind);
-
-            await auditStore.WriteAsync(auditEvent, CancellationToken.None).ConfigureAwait(false);
-
-            return ErrorResult(
-                $"Refused: tool '{toolName}' requires the '{McpGatewayConventions.ToolScopeRequirements.MutationScope}' scope.");
+            return await DenyAndAuditAsync(toolName, McpGatewayConventions.ToolScopeRequirements.MutationScope).ConfigureAwait(false);
         }
 
         return null;
+    }
+
+    private async Task<CallToolResult?> DenyAndAuditAsync(string toolName, string requiredScope)
+    {
+        var user = httpContextAccessor.HttpContext?.User;
+        if (user is null)
+        {
+            return ErrorResult(
+                $"Refused: '{toolName}' requires an authenticated session with the '{requiredScope}' scope.");
+        }
+
+        var identity = GatewayAuditIdentityResolver.Resolve(user);
+
+        logger.LogWarning(
+            "Tool '{ToolName}' denied: caller lacks required scope '{RequiredScope}'.",
+            toolName,
+            requiredScope);
+
+        var auditEvent = new GuardrailAuditEvent(
+            toolName,
+            McpGatewayConventions.GuardrailAudit.RequestDirection,
+            McpGatewayConventions.GuardrailAudit.DenyAction,
+            [McpGatewayConventions.GuardrailCategories.ScopeDenied],
+            PlanId: null,
+            identity.Subject,
+            identity.AuthenticationType,
+            identity.IdentityKind);
+
+        await auditStore.WriteAsync(auditEvent, CancellationToken.None).ConfigureAwait(false);
+
+        return ErrorResult(
+            $"Refused: tool '{toolName}' requires the '{requiredScope}' scope.");
     }
 }

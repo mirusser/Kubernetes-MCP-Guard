@@ -431,6 +431,46 @@ public sealed class GatewayToolDispatcherTests
     }
 
     [Fact]
+    public async Task CallToolAsync_ReadOnlyToolWithReadOnlyScope_Succeeds()
+    {
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            httpScope: GatewayAuthConventions.DefaultReadOnlyOAuthScope);
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = "get_allowed_namespaces"
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError is not true);
+        Assert.Contains(context.Downstream.Calls, call => call == "get_allowed_namespaces");
+    }
+
+    [Fact]
+    public async Task CallToolAsync_ReadOnlyToolWithoutScope_WritesScopeDeniedAudit()
+    {
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            httpScope: "");
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = "get_allowed_namespaces"
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.DoesNotContain(context.Downstream.Calls, call => call == "get_allowed_namespaces");
+
+        var auditEvent = Assert.Single(context.GuardrailAudit.Events);
+        Assert.Equal("get_allowed_namespaces", auditEvent.ToolName);
+        Assert.Equal(McpGatewayConventions.GuardrailAudit.DenyAction, auditEvent.Action);
+    }
+
+    [Fact]
     public async Task CallToolAsync_MutationToolWithReadOnlyScope_WritesScopeDeniedAudit()
     {
         var context = CreateContext(

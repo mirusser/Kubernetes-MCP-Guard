@@ -24,19 +24,24 @@ public static class GatewayAuditIdentityResolver
 
     private static GatewayAuditIdentity OAuthIdentity(ClaimsPrincipal user)
     {
-        var subject = ClaimValue(GatewayAuthConventions.Claims.Subject) ??
-                      ClaimValue(GatewayAuthConventions.Claims.ClientId) ??
-                      ClaimValue(GatewayAuthConventions.Claims.PreferredUsername) ??
-                      ClaimValue(GatewayAuthConventions.Claims.Email);
-
+        string? subject;
         string identityKind = GatewayAuthConventions.Audit.HumanIdentityKind;
 
         // Check azp (authorized party) claim — identifies the OAuth client that requested the token.
-        // Service clients (machine identities) are resolved to a distinguished identity kind.
+        // Service clients (machine identities) get a formatted subject and distinguished identity kind.
         string? azp = ClaimValue(GatewayAuthConventions.Claims.AuthorizedParty);
         if (azp is not null && KnownServiceClients.Contains(azp))
         {
+            subject = FormatServiceSubject(
+                ClaimValue(GatewayAuthConventions.Claims.ClientId) ?? azp);
             identityKind = GatewayAuthConventions.Audit.ServiceIdentityKind;
+        }
+        else
+        {
+            subject = ClaimValue(GatewayAuthConventions.Claims.Subject) ??
+                      ClaimValue(GatewayAuthConventions.Claims.ClientId) ??
+                      ClaimValue(GatewayAuthConventions.Claims.PreferredUsername) ??
+                      ClaimValue(GatewayAuthConventions.Claims.Email);
         }
 
         return new GatewayAuditIdentity(subject, GatewayAuthConventions.Audit.OAuthAuthenticationType, identityKind);
@@ -46,4 +51,6 @@ public static class GatewayAuditIdentityResolver
             return user.FindFirst(claimType)?.Value;
         }
     }
+
+    private static string FormatServiceSubject(string clientId) => $"service:{clientId}";
 }

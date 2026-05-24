@@ -157,6 +157,7 @@ internal static class McpGatewayConventions
     public static class ToolScopeRequirements
     {
         public const string MutationScope = "mcp:tools";
+        public const string ReadOnlyScope = "mcp:tools.readonly";
     }
 
     public static class ToolArguments
