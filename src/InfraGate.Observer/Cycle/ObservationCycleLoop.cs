@@ -8,18 +8,20 @@ internal sealed class ObservationCycleLoop : IHostedService, IDisposable
 {
     private readonly IOptionsMonitor<ObserverOptions> options;
     private readonly IObservationCycleRunner cycleRunner;
+    private readonly CycleSerialisation cycleSerialisation;
     private readonly ILogger<ObservationCycleLoop> logger;
     private Timer? timer;
     private CancellationTokenSource? shutdownCts;
-    private int isExecuting;
 
     public ObservationCycleLoop(
         IOptionsMonitor<ObserverOptions> options,
         IObservationCycleRunner cycleRunner,
+        CycleSerialisation cycleSerialisation,
         ILogger<ObservationCycleLoop> logger)
     {
         this.options = options;
         this.cycleRunner = cycleRunner;
+        this.cycleSerialisation = cycleSerialisation;
         this.logger = logger;
     }
 
@@ -68,15 +70,18 @@ internal sealed class ObservationCycleLoop : IHostedService, IDisposable
     private async void ExecuteCycle(object? state)
 #pragma warning restore MA0155
     {
-        if (Interlocked.CompareExchange(ref isExecuting, 1, 0) != 0)
-        {
-            ObserverLogEvents.LogCycleSkipped(logger);
-            return;
-        }
+        var shutdownToken = shutdownCts?.Token ?? CancellationToken.None;
+        bool acquired = false;
 
         try
         {
-            var shutdownToken = shutdownCts?.Token ?? CancellationToken.None;
+            if (!await cycleSerialisation.TryAcquireScheduledAsync(shutdownToken).ConfigureAwait(false))
+            {
+                ObserverLogEvents.LogCycleSkipped(logger);
+                return;
+            }
+
+            acquired = true;
 
             var result = await cycleRunner.RunAsync(shutdownToken).ConfigureAwait(false);
 
@@ -107,7 +112,10 @@ internal sealed class ObservationCycleLoop : IHostedService, IDisposable
         }
         finally
         {
-            Interlocked.Exchange(ref isExecuting, 0);
+            if (acquired)
+            {
+                cycleSerialisation.Release();
+            }
         }
     }
 }

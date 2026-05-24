@@ -126,6 +126,23 @@ internal static partial class ObserverLogEvents
         Message = "Anomaly Report: CycleId={CycleId} AnomalyId={AnomalyId} Kind={Kind} Severity={Severity} Status={Status} Target={Target} Summary={Summary}")]
     public static partial void LogAnomalyReport(ILogger logger, string cycleId, string anomalyId, string kind, string severity, string status, string target, string summary);
 
+    // ── Observe‑Now ──────────────────────────────────────────────
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "On-demand observation cycle triggered")]
+    public static partial void LogObserveNowTriggered(ILogger logger);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "On-demand observation cycle timed out")]
+    public static partial void LogObserveNowTimeout(ILogger logger);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "On-demand observation cycle failed")]
+    public static partial void LogObserveNowError(ILogger logger, Exception ex);
+
     // ── LLM ──────────────────────────────────────────────────────
 
     [LoggerMessage(

@@ -28,7 +28,9 @@ public sealed class ObservationCycleLoopTests
                 Duration = TimeSpan.Zero,
             }));
 
-        return new ObservationCycleLoop(options, cycleRunner, NullLogger<ObservationCycleLoop>.Instance);
+        var cycleSerialisation = new CycleSerialisation();
+
+        return new ObservationCycleLoop(options, cycleRunner, cycleSerialisation, NullLogger<ObservationCycleLoop>.Instance);
     }
 
     [Fact]
@@ -78,7 +80,7 @@ public sealed class ObservationCycleLoopTests
         options.CurrentValue.Returns((ObserverOptions)null!);
 
         var cycleRunner = Substitute.For<IObservationCycleRunner>();
-        var loop = new ObservationCycleLoop(options, cycleRunner, NullLogger<ObservationCycleLoop>.Instance);
+        var loop = new ObservationCycleLoop(options, cycleRunner, new CycleSerialisation(), NullLogger<ObservationCycleLoop>.Instance);
         await Assert.ThrowsAsync<NullReferenceException>(() => loop.StartAsync(CancellationToken.None));
     }
 
@@ -108,7 +110,7 @@ public sealed class ObservationCycleLoopTests
         var options = Substitute.For<IOptionsMonitor<ObserverOptions>>();
         options.CurrentValue.Returns(new ObserverOptions { GatewayBaseUrl = "http://localhost:3001/mcp", CycleIntervalSeconds = 60 });
 
-        var loop = new ObservationCycleLoop(options, cycleRunner, NullLogger<ObservationCycleLoop>.Instance);
+        var loop = new ObservationCycleLoop(options, cycleRunner, new CycleSerialisation(), NullLogger<ObservationCycleLoop>.Instance);
         await loop.StartAsync(CancellationToken.None);
 
         await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -133,7 +135,7 @@ public sealed class ObservationCycleLoopTests
         var options = Substitute.For<IOptionsMonitor<ObserverOptions>>();
         options.CurrentValue.Returns(new ObserverOptions { GatewayBaseUrl = "http://localhost:3001/mcp", CycleIntervalSeconds = 60 });
 
-        var loop = new ObservationCycleLoop(options, cycleRunner, NullLogger<ObservationCycleLoop>.Instance);
+        var loop = new ObservationCycleLoop(options, cycleRunner, new CycleSerialisation(), NullLogger<ObservationCycleLoop>.Instance);
         await loop.StartAsync(CancellationToken.None);
 
         await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -169,7 +171,7 @@ public sealed class ObservationCycleLoopTests
         var options = Substitute.For<IOptionsMonitor<ObserverOptions>>();
         options.CurrentValue.Returns(new ObserverOptions { GatewayBaseUrl = "http://localhost:3001/mcp", CycleIntervalSeconds = 1 });
 
-        var loop = new ObservationCycleLoop(options, cycleRunner, NullLogger<ObservationCycleLoop>.Instance);
+        var loop = new ObservationCycleLoop(options, cycleRunner, new CycleSerialisation(), NullLogger<ObservationCycleLoop>.Instance);
         await loop.StartAsync(CancellationToken.None);
 
         await firstCycleRunning.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -205,7 +207,7 @@ public sealed class ObservationCycleLoopTests
         var options = Substitute.For<IOptionsMonitor<ObserverOptions>>();
         options.CurrentValue.Returns(new ObserverOptions { GatewayBaseUrl = "http://localhost:3001/mcp", CycleIntervalSeconds = 60 });
 
-        var loop = new ObservationCycleLoop(options, cycleRunner, NullLogger<ObservationCycleLoop>.Instance);
+        var loop = new ObservationCycleLoop(options, cycleRunner, new CycleSerialisation(), NullLogger<ObservationCycleLoop>.Instance);
         await loop.StartAsync(CancellationToken.None);
 
         await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5));

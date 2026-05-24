@@ -43,6 +43,16 @@ The Anomaly Observer listens on port `3003` by default and polls the MCP gateway
 | `INFRA_GATE_OBSERVER_OAUTH_SCOPE` | `InfraGate.Observer` | No | `mcp:tools.readonly` | `mcp:tools.readonly` | OAuth scope requested by the Observer. | Must include `mcp:tools.readonly` for gateway access. |
 | `INFRA_GATE_OBSERVER_DEDUPE_SUPPRESSION_WINDOW` | `InfraGate.Observer` | No | `5` | `5` | Number of cycles within which repeated detection of the same anomaly is suppressed (deduplication window). Bounds: 1–30. | Lower values increase report noise; higher values delay re-emission of persistent anomalies. |
 | `INFRA_GATE_OBSERVER_DEDUPE_RESOLUTION_THRESHOLD` | `InfraGate.Observer` | No | `2` | `2` | Number of consecutive cycles an anomaly must be absent before emitting a `Resolved` report. Bounds: 1–10. | Lower values clear anomalies faster; higher values prevent transient flapping. |
+| `INFRA_GATE_OBSERVER_FILE_SINK_ROOT` | `InfraGate.Observer` | No | Unset | `/data/observer/findings` | Directory for the opt-in JSON file handoff sink. When set and non-empty, each cycle writes a `{cycleId}.json` file atomically. | Use a durable bind-mount; operator owns cleanup and rotation. |
+
+### On-Demand Observation Trigger
+
+The Observer exposes `POST /observe-now` for manual on-demand cycle triggering:
+- Returns `200` with `AnomalyReport[]` on success, `504` on 30-second timeout, `500` on errors.
+- Serialises with the background scheduled cycle via a shared semaphore — at most one cycle runs at any time.
+- Waits up to 2 seconds for an in-flight scheduled cycle to complete before starting.
+- Background schedule is unaffected and continues on its normal cadence.
+- The 30-second timeout and 2-second slack window are **hardcoded** and not configurable via environment variables.
 
 ## McpGateway
 

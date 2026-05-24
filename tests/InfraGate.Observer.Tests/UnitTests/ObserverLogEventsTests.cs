@@ -284,4 +284,36 @@ public sealed class ObserverLogEventsTests
         Assert.Equal("Pod/crash-pod", logger.Entries[0].Properties["Target"]);
         Assert.Equal("Pod is crash-looping", logger.Entries[0].Properties["Summary"]);
     }
+
+    [Fact]
+    public void LogObserveNowTriggered_LogsAtInformationLevel()
+    {
+        var logger = new CapturingLogger<ObserverLogEventsTests>();
+        ObserverLogEvents.LogObserveNowTriggered(logger);
+
+        Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Information, logger.Entries[0].Level);
+    }
+
+    [Fact]
+    public void LogObserveNowTimeout_LogsAtWarningLevel()
+    {
+        var logger = new CapturingLogger<ObserverLogEventsTests>();
+        ObserverLogEvents.LogObserveNowTimeout(logger);
+
+        Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Warning, logger.Entries[0].Level);
+    }
+
+    [Fact]
+    public void LogObserveNowError_LogsAtErrorLevel_WithException()
+    {
+        var logger = new CapturingLogger<ObserverLogEventsTests>();
+        var ex = new InvalidOperationException("cycle failure");
+        ObserverLogEvents.LogObserveNowError(logger, ex);
+
+        Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Error, logger.Entries[0].Level);
+        Assert.Same(ex, logger.Entries[0].Exception);
+    }
 }

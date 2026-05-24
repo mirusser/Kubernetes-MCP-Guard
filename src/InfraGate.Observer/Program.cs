@@ -97,6 +97,7 @@ builder.Services.AddSingleton<IObservationCycleRunner>(sp =>
         sp.GetRequiredService<ILogger<ObservationCycleRunner>>(),
         ObserverMetrics.Meter);
 });
+builder.Services.AddSingleton<CycleSerialisation>();
 builder.Services.AddHostedService<ObservationCycleLoop>();
 
 builder.Services.AddSingleton<LoggingAnomalyHandoffSink>();
@@ -122,6 +123,7 @@ var app = builder.Build();
 await ConnectObserverMcpClientAsync(app).ConfigureAwait(false);
 
 app.MapObserverHealthEndpoint();
+app.MapObserverObserveNowEndpoint();
 app.Use(async (context, next) =>
 {
     if (context.Request.Path == "/")

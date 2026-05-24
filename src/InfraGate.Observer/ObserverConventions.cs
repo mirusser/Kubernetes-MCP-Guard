@@ -10,6 +10,9 @@ internal static class ObserverConventions
     public const string DefaultUrl = LoopbackHttpScheme + UriSchemeSeparator + LoopbackHost + ":" + DefaultPort;
 
     public const string HealthEndpointPath = "/health";
+    public const string ObserveNowEndpointPath = "/observe-now";
+    public const int ObserveNowTimeoutSeconds = 30;
+    public const int OnDemandSlackWindowSeconds = 2;
     public const string DefaultClientId = "infra-gate-observer";
     public const string DefaultOAuthScope = "mcp:tools.readonly";
 

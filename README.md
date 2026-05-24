@@ -4,12 +4,13 @@
 
 > **Safe remediation, by design:**  
 >
-> AI observes.  
-> AI proposes a plan with evidence.  
+> Observer AI agent detects.  
+> Executor AI agent proposes.  
 > Human approves out-of-band.  
 > System executes only the approved digest.  
 > Everything is auditable.  
->  
+>
+
 
 [![Unit Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/ci.yml)
 [![Integration Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml)
@@ -160,6 +161,19 @@ The central safety property is that approval is necessary but not sufficient. A 
 | `get_deployment_diagnostics` | Inspect Deployment health, related Pods, ReplicaSets, and Events. |
 | `get_pod_diagnostics` | Inspect Pod status, conditions, container state, and Events. |
 | `get_service_diagnostics` | Inspect Service endpoints, backing Pods, and Events. |
+
+### 🤖 Anomaly Observer
+
+The [InfraGate.Observer](src/InfraGate.Observer/README.md) is an LLM-driven agent that periodically inspects the cluster through the gateway's read-only tools and emits structured Anomaly Reports.
+
+| Capability | Description |
+| --- | --- |
+| Scheduled observation | Background `IHostedService` runs cycles on a configurable cadence (default 60s). |
+| On-demand trigger | `POST /observe-now` returns a synchronous `AnomalyReport[]` with a 30s timeout. |
+| Anomaly detection | LLM-assisted classification across four categories: Pod unhealthy, Deployment unavailable, Service no endpoints, Warning events. |
+| Severity classification | Rules-derived `High`/`Medium`/`Low` with LLM disagreement telemetry. |
+| Deduplication & resolution | In-memory dedupe window suppresses repeat reports; automatic `Resolved` emission when anomalies clear. |
+| Handoff | Log sink always on; JSON file sink opt-in via `INFRA_GATE_OBSERVER_FILE_SINK_ROOT`. |
 
 ### ✅ Gateway Approval Tools
 
