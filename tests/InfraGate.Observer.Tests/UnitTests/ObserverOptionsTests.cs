@@ -137,4 +137,64 @@ public sealed class ObserverOptionsTests
         var exception = Record.Exception(() => options.Validate());
         Assert.Null(exception);
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(31)]
+    public void Validate_DedupeSuppressionWindowOutOfBounds_Throws(int window)
+    {
+        var options = new ObserverOptions
+        {
+            GatewayBaseUrl = "http://localhost:3001/mcp",
+            DedupeSuppressionWindow = window
+        };
+
+        Assert.Throws<InvalidOperationException>(() => options.Validate());
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    [InlineData(30)]
+    public void Validate_DedupeSuppressionWindowWithinBounds_DoesNotThrow(int window)
+    {
+        var options = new ObserverOptions
+        {
+            GatewayBaseUrl = "http://localhost:3001/mcp",
+            DedupeSuppressionWindow = window
+        };
+
+        var exception = Record.Exception(() => options.Validate());
+        Assert.Null(exception);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(11)]
+    public void Validate_DedupeResolutionThresholdOutOfBounds_Throws(int threshold)
+    {
+        var options = new ObserverOptions
+        {
+            GatewayBaseUrl = "http://localhost:3001/mcp",
+            DedupeResolutionThreshold = threshold
+        };
+
+        Assert.Throws<InvalidOperationException>(() => options.Validate());
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(10)]
+    public void Validate_DedupeResolutionThresholdWithinBounds_DoesNotThrow(int threshold)
+    {
+        var options = new ObserverOptions
+        {
+            GatewayBaseUrl = "http://localhost:3001/mcp",
+            DedupeResolutionThreshold = threshold
+        };
+
+        var exception = Record.Exception(() => options.Validate());
+        Assert.Null(exception);
+    }
 }

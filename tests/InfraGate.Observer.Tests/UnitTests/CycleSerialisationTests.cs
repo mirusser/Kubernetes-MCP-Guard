@@ -109,5 +109,24 @@ public sealed class CycleSerialisationTests
         Assert.True(secondCompleted.Task.IsCompleted);
     }
 
+    [Fact]
+    public void Dispose_CanBeCalledWithoutException()
+    {
+        var serialisation = new CycleSerialisation();
+        var exception = Record.Exception(() => serialisation.Dispose());
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void Dispose_AfterAcquire_DoesNotThrow()
+    {
+        var serialisation = new CycleSerialisation();
+
+        _ = serialisation.TryAcquireScheduledAsync(CancellationToken.None);
+        var exception = Record.Exception(() => serialisation.Dispose());
+
+        Assert.Null(exception);
+    }
+
 #pragma warning restore MA0167
 }
