@@ -77,7 +77,8 @@ public sealed class ObserverMcpClientTests
     public async Task DisposeAsync_NotConnected_DoesNotThrow()
     {
         var client = CreateClient();
-        await client.DisposeAsync();
+        var ex = await Record.ExceptionAsync(() => client.DisposeAsync().AsTask());
+        Assert.Null(ex);
     }
 
     [Fact]

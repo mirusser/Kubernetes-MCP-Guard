@@ -80,7 +80,7 @@ public sealed class AnomalyReportTests
             Annotations = new Dictionary<string, string>(),
         };
 
-        Assert.IsAssignableFrom<IReadOnlyList<EvidenceItem>>(report.Evidence);
+        Assert.IsType<IReadOnlyList<EvidenceItem>>(report.Evidence, exactMatch: false);
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public sealed class AnomalyReportTests
             Annotations = new Dictionary<string, string>(),
         };
 
-        Assert.IsAssignableFrom<IReadOnlyDictionary<string, string>>(report.Annotations);
+        Assert.IsType<IReadOnlyDictionary<string, string>>(report.Annotations, exactMatch: false);
     }
 }
 
@@ -148,7 +148,7 @@ public sealed class AnomalyHandoffBatchTests
             Reports = [],
         };
 
-        Assert.IsAssignableFrom<IReadOnlyList<AnomalyReport>>(batch.Reports);
+        Assert.IsType<IReadOnlyList<AnomalyReport>>(batch.Reports, exactMatch: false);
     }
 }
 

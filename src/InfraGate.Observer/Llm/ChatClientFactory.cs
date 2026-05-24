@@ -39,9 +39,10 @@ internal sealed class ChatClientFactory : IChatClientFactory
             ? AnomalyObserverConventions.DefaultLlmModel
             : options.Value.LlmModel;
 
+        const string AnthropicApiBase = "https://api.anthropic.com";
         var httpClient = new HttpClient
         {
-            BaseAddress = new Uri("https://api.anthropic.com"),
+            BaseAddress = new Uri(AnthropicApiBase),
             DefaultRequestHeaders =
             {
                 { "x-api-key", apiKey },

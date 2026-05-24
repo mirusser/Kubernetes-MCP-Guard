@@ -93,7 +93,6 @@ builder.Services.AddSingleton<IAnomalyDedupeStore, AnomalyDedupeStore>();
 builder.Services.AddSingleton<IObservationCycleRunner>(sp =>
 {
     return new ObservationCycleRunner(
-        sp.GetRequiredService<IOptions<ObserverOptions>>(),
         sp.GetRequiredService<IOptionsMonitor<ObserverOptions>>(),
         sp.GetRequiredService<ISnapshotFetcher>(),
         sp.GetRequiredService<ISystemPromptProvider>(),

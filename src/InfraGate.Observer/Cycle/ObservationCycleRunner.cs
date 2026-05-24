@@ -13,7 +13,6 @@ namespace InfraGate.Observer.Cycle;
 
 internal sealed class ObservationCycleRunner : IObservationCycleRunner
 {
-    private readonly IOptions<ObserverOptions> options;
     private readonly IOptionsMonitor<ObserverOptions> optionsMonitor;
     private readonly ISnapshotFetcher snapshotFetcher;
     private readonly ISystemPromptProvider systemPromptProvider;
@@ -29,8 +28,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
     private readonly Counter<long>? reportsEmittedCounter;
     private readonly Histogram<double>? cycleDurationHistogram;
 
-    public ObservationCycleRunner(
-        IOptions<ObserverOptions> options,
+    public ObservationCycleRunner( // NOSONAR:S107 — DI constructor; all params are required services.
         IOptionsMonitor<ObserverOptions> optionsMonitor,
         ISnapshotFetcher snapshotFetcher,
         ISystemPromptProvider systemPromptProvider,
@@ -42,7 +40,6 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         ILogger<ObservationCycleRunner> logger,
         Meter? meter = null)
     {
-        this.options = options;
         this.optionsMonitor = optionsMonitor;
         this.snapshotFetcher = snapshotFetcher;
         this.systemPromptProvider = systemPromptProvider;
@@ -95,6 +92,8 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         }
         catch (OperationCanceledException)
         {
+            isTruncated = true;
+
             if (shutdownToken.IsCancellationRequested)
             {
                 ObserverLogEvents.LogCycleCancelled(logger);
@@ -103,16 +102,10 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
             {
                 ObserverLogEvents.LogCycleTruncated(logger);
             }
-
-            isTruncated = true;
         }
 
         stopwatch.Stop();
-
-        if (toolCallsCounter is not null)
-        {
-            toolCallsCounter.Add(totalToolCalls);
-        }
+        toolCallsCounter?.Add(totalToolCalls);
 
         if (isTruncated)
         {
@@ -132,13 +125,22 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
             };
         }
 
+        return await CompleteCycleAsync(cycleId, allReports, totalToolCalls, totalDisagreements,
+            stopwatch.Elapsed, shutdownToken).ConfigureAwait(false);
+    }
+
+    private async Task<CycleResult> CompleteCycleAsync(
+        string cycleId,
+        List<AnomalyReport> allReports,
+        int totalToolCalls,
+        int totalDisagreements,
+        TimeSpan duration,
+        CancellationToken shutdownToken)
+    {
         var detectedAt = DateTimeOffset.UtcNow;
+        var opts = optionsMonitor.CurrentValue;
         var (dedupedReports, resolvedReports) = dedupeStore.ProcessReports(
-            cycleId,
-            allReports,
-            opts.DedupeSuppressionWindow,
-            opts.DedupeResolutionThreshold,
-            detectedAt);
+            cycleId, allReports, opts.DedupeSuppressionWindow, opts.DedupeResolutionThreshold, detectedAt);
 
         var finalReports = new List<AnomalyReport>(dedupedReports.Count + resolvedReports.Count);
         finalReports.AddRange(dedupedReports);
@@ -158,11 +160,11 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
 
         ObserverLogEvents.LogCycleCompletedDetailed(
             logger, cycleId, finalReports.Count, dedupedReports.Count, resolvedReports.Count,
-            totalToolCalls, totalDisagreements, (long)stopwatch.Elapsed.TotalMilliseconds);
+            totalToolCalls, totalDisagreements, (long)duration.TotalMilliseconds);
 
         cycleCountCounter?.Add(1,
             new KeyValuePair<string, object?>(ObserverMetrics.ResultTag, ObserverMetrics.ResultCompleted));
-        cycleDurationHistogram?.Record(stopwatch.Elapsed.TotalMilliseconds);
+        cycleDurationHistogram?.Record(duration.TotalMilliseconds);
 
         if (severityDisagreementCounter is not null && totalDisagreements > 0)
         {
@@ -191,7 +193,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
             IsTruncated = false,
             ToolCallsUsed = totalToolCalls,
             SeverityDisagreements = totalDisagreements,
-            Duration = stopwatch.Elapsed,
+            Duration = duration,
         };
     }
 
@@ -423,6 +425,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         }
         catch (JsonException)
         {
+            // Benign — LLM sometimes returns non-JSON tool calls; skip and continue.
         }
 
         return null;
@@ -531,6 +534,8 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
 
     // ── LLM output DTOs ─────────────────────────────────────
 
+    // JSON deserialization DTOs; properties set by System.Text.Json at runtime.
+#pragma warning disable S1144, S3459
     private sealed class LlmAnomalyOutput
     {
         public string? Kind { get; set; }
@@ -542,6 +547,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         public Dictionary<string, string>? Annotations { get; set; }
     }
 
+    // JSON deserialization DTOs.
     private sealed class LlmTargetOutput
     {
         public string? ApiVersion { get; set; }
@@ -550,6 +556,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         public string? Name { get; set; }
     }
 
+    // JSON deserialization DTOs.
     private sealed class LlmEvidenceOutput
     {
         public string? Source { get; set; }
@@ -557,15 +564,18 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         public string? CapturedAt { get; set; }
     }
 
+    // JSON deserialization DTOs.
     private sealed class LlmRemediationOutput
     {
         public string? Action { get; set; }
         public string? Explanation { get; set; }
     }
 
+    // JSON deserialization DTOs.
     private sealed class LlmToolCall
     {
         public string? Tool { get; set; }
         public Dictionary<string, object?>? Arguments { get; set; }
     }
+#pragma warning restore S1144, S3459
 }

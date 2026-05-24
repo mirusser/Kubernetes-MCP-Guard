@@ -59,7 +59,6 @@ public sealed class ObservationCycleRunnerTests
         handoffSink ??= Substitute.For<IAnomalyHandoffSink>();
 
         return new ObservationCycleRunner(
-            optionsSnapshot,
             optionsMonitor,
             snapshotFetcher,
             systemPromptProvider,
@@ -260,7 +259,6 @@ public sealed class ObservationCycleRunnerTests
         var mcpClient = Substitute.For<IObserverMcpClient>();
 
         var runner = new ObservationCycleRunner(
-            optionsSnapshot,
             optionsMonitor,
             snapshotFetcher,
             systemPromptProvider,
@@ -404,7 +402,6 @@ public sealed class ObservationCycleRunnerTests
             .Returns(Task.FromResult("{}"));
 
         var runner = new ObservationCycleRunner(
-            optionsSnapshot,
             optionsMonitor,
             snapshotFetcher,
             systemPromptProvider,
@@ -453,7 +450,6 @@ public sealed class ObservationCycleRunnerTests
             .Returns(Task.FromResult("{}"));
 
         var runner = new ObservationCycleRunner(
-            optionsSnapshot,
             optionsMonitor,
             snapshotFetcher,
             systemPromptProvider,
@@ -486,7 +482,6 @@ public sealed class ObservationCycleRunnerTests
                 Task.FromException<SnapshotDocument>(new HttpRequestException("Gateway unreachable")));
 
         var runner = new ObservationCycleRunner(
-            optionsSnapshot,
             optionsMonitor,
             snapshotFetcher,
             Substitute.For<ISystemPromptProvider>(),
@@ -579,7 +574,6 @@ public sealed class ObservationCycleRunnerTests
         var mcpClient = Substitute.For<IObserverMcpClient>();
 
         var truncatedRunner = new ObservationCycleRunner(
-            optionsSnapshot,
             optionsMonitor,
             snapshotFetcher,
             systemPromptProvider,
@@ -657,7 +651,6 @@ public sealed class ObservationCycleRunnerTests
         handoffSink ??= Substitute.For<IAnomalyHandoffSink>();
 
         return new ObservationCycleRunner(
-            optionsSnapshot,
             optionsMonitor,
             snapshotFetcher,
             systemPromptProvider,
@@ -731,7 +724,6 @@ public sealed class ObservationCycleRunnerTests
         var mcpClient = Substitute.For<IObserverMcpClient>();
 
         var runner = new ObservationCycleRunner(
-            optionsSnapshot,
             optionsMonitor,
             snapshotFetcher,
             systemPromptProvider,

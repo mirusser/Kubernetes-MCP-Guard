@@ -80,7 +80,7 @@ internal static partial class ObserverLogEvents
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Cycle {CycleId} complete. Reports={ReportCount} Emitted={Emitted} Resolved={Resolved} ToolCalls={ToolCalls} Disagreements={Disagreements} Duration={DurationMs}ms")]
-    public static partial void LogCycleCompletedDetailed(ILogger logger, string cycleId, int reportCount, int emitted, int resolved, int toolCalls, int disagreements, long durationMs);
+    public static partial void LogCycleCompletedDetailed(ILogger logger, string cycleId, int reportCount, int emitted, int resolved, int toolCalls, int disagreements, long durationMs); // NOSONAR:S107 — structured audit log with many dimensions.
 
     [LoggerMessage(
         Level = LogLevel.Warning,
@@ -124,7 +124,7 @@ internal static partial class ObserverLogEvents
     [LoggerMessage(
         Level = LogLevel.Information,
         Message = "Anomaly Report: CycleId={CycleId} AnomalyId={AnomalyId} Kind={Kind} Severity={Severity} Status={Status} Target={Target} Summary={Summary}")]
-    public static partial void LogAnomalyReport(ILogger logger, string cycleId, string anomalyId, string kind, string severity, string status, string target, string summary);
+    public static partial void LogAnomalyReport(ILogger logger, string cycleId, string anomalyId, string kind, string severity, string status, string target, string summary); // NOSONAR:S107 — structured audit log with many dimensions.
 
     // ── Observe‑Now ──────────────────────────────────────────────
 

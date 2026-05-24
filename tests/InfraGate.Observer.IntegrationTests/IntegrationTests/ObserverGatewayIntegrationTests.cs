@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
 using InfraGate.ClientCredentials;
@@ -150,7 +151,6 @@ public sealed class ObserverGatewayIntegrationTests
         var optionsMonitor = new FixedOptionsMonitor<ObserverOptions>(observerOptions);
 
         return new ObservationCycleRunner(
-            Options.Create(observerOptions),
             optionsMonitor,
             new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, ObserverMetrics.Meter),
             new SystemPromptProvider(),
@@ -259,9 +259,9 @@ public sealed class ObserverGatewayIntegrationTests
 
         public StubTokenProvider TokenProvider { get; }
 
-        public List<GatewayToolCall> Calls { get; } = [];
+        public ConcurrentBag<GatewayToolCall> Calls { get; } = [];
 
-        public List<string> AuthorizationHeaders { get; } = [];
+        public ConcurrentBag<string> AuthorizationHeaders { get; } = [];
 
         public static ObserverGatewayFixture Create()
         {

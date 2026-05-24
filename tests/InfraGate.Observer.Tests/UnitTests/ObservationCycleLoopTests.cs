@@ -37,16 +37,20 @@ public sealed class ObservationCycleLoopTests
     public async Task StartAsync_ValidOptions_CompletesWithoutException()
     {
         var loop = CreateLoop();
-        await loop.StartAsync(CancellationToken.None);
-        await loop.StopAsync(CancellationToken.None);
+        var startEx = await Record.ExceptionAsync(() => loop.StartAsync(CancellationToken.None));
+        Assert.Null(startEx);
+        var stopEx = await Record.ExceptionAsync(() => loop.StopAsync(CancellationToken.None));
+        Assert.Null(stopEx);
     }
 
     [Fact]
     public async Task StartAsync_WhenCalledTwice_DisposesPreviousTimer()
     {
         var loop = CreateLoop();
-        await loop.StartAsync(CancellationToken.None);
-        await loop.StartAsync(CancellationToken.None);
+        var firstStartEx = await Record.ExceptionAsync(() => loop.StartAsync(CancellationToken.None));
+        Assert.Null(firstStartEx);
+        var secondStartEx = await Record.ExceptionAsync(() => loop.StartAsync(CancellationToken.None));
+        Assert.Null(secondStartEx);
         await loop.StopAsync(CancellationToken.None);
     }
 
@@ -54,23 +58,28 @@ public sealed class ObservationCycleLoopTests
     public async Task StopAsync_WithoutStart_CompletesWithoutException()
     {
         var loop = CreateLoop();
-        await loop.StopAsync(CancellationToken.None);
+        var ex = await Record.ExceptionAsync(() => loop.StopAsync(CancellationToken.None));
+        Assert.Null(ex);
     }
 
     [Fact]
     public void Dispose_DisposesResources()
     {
         var loop = CreateLoop();
-        loop.Dispose();
+        var ex = Record.Exception(() => loop.Dispose());
+        Assert.Null(ex);
     }
 
     [Fact]
     public async Task Dispose_AfterStartAndStop_DoesNotThrow()
     {
         var loop = CreateLoop();
-        await loop.StartAsync(CancellationToken.None);
-        await loop.StopAsync(CancellationToken.None);
-        loop.Dispose();
+        var startEx = await Record.ExceptionAsync(() => loop.StartAsync(CancellationToken.None));
+        Assert.Null(startEx);
+        var stopEx = await Record.ExceptionAsync(() => loop.StopAsync(CancellationToken.None));
+        Assert.Null(stopEx);
+        var disposeEx = Record.Exception(() => loop.Dispose());
+        Assert.Null(disposeEx);
     }
 
     [Fact]

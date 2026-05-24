@@ -145,6 +145,9 @@ internal sealed class AnthropicChatClient : IChatClient
 
     // ── Anthropic API DTOs ──────────────────────────────────
 
+    // JSON serialization/deserialization DTOs; properties set by
+    // JsonSerializer.Serialize / JsonSerializer.Deserialize at runtime.
+#pragma warning disable S1144, S3459
     private sealed class AnthropicRequestBody
     {
         public string? Model { get; set; }
@@ -153,12 +156,14 @@ internal sealed class AnthropicChatClient : IChatClient
         public List<AnthropicApiMessage>? Messages { get; set; }
     }
 
+    // JSON serialization DTOs.
     private sealed class AnthropicApiMessage
     {
         public string? Role { get; set; }
         public string? Content { get; set; }
     }
 
+    // JSON deserialization DTOs.
     private sealed class AnthropicResponseBody
     {
         public string? Id { get; set; }
@@ -167,15 +172,18 @@ internal sealed class AnthropicChatClient : IChatClient
         public AnthropicUsageInfo? Usage { get; set; }
     }
 
+    // JSON deserialization DTOs.
     private sealed class AnthropicContentBlock
     {
         public string? Type { get; set; }
         public string? Text { get; set; }
     }
 
+    // JSON deserialization DTOs.
     private sealed class AnthropicUsageInfo
     {
         public int InputTokens { get; set; }
         public int OutputTokens { get; set; }
     }
+#pragma warning restore S1144, S3459
 }

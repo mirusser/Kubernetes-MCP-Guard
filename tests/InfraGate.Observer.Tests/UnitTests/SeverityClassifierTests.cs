@@ -48,7 +48,7 @@ public sealed class SeverityClassifierTests
         var (severity, rule) = classifier.Classify(evidence);
 
         Assert.Equal(Severity.Low, severity);
-        Assert.Equal(SeverityRules.RuleNames.Default, rule);
+        Assert.Equal(SeverityRules.RuleNames.DefaultRule, rule);
     }
 
     // ── Deployment ───────────────────────────────────────────
@@ -101,7 +101,7 @@ public sealed class SeverityClassifierTests
         var (severity, rule) = classifier.Classify(evidence);
 
         Assert.Equal(Severity.Low, severity);
-        Assert.Equal(SeverityRules.RuleNames.Default, rule);
+        Assert.Equal(SeverityRules.RuleNames.DefaultRule, rule);
     }
 
     [Fact]
@@ -118,7 +118,7 @@ public sealed class SeverityClassifierTests
         var (severity, rule) = classifier.Classify(evidence);
 
         Assert.Equal(Severity.Low, severity);
-        Assert.Equal(SeverityRules.RuleNames.Default, rule);
+        Assert.Equal(SeverityRules.RuleNames.DefaultRule, rule);
     }
 
     // ── Pod ──────────────────────────────────────────────────
@@ -177,7 +177,7 @@ public sealed class SeverityClassifierTests
         var (severity, rule) = classifier.Classify(evidence);
 
         Assert.Equal(Severity.Low, severity);
-        Assert.Equal(SeverityRules.RuleNames.Default, rule);
+        Assert.Equal(SeverityRules.RuleNames.DefaultRule, rule);
     }
 
     [Fact]
@@ -244,7 +244,7 @@ public sealed class SeverityClassifierTests
         var (severity, rule) = classifier.Classify(evidence);
 
         Assert.Equal(Severity.Low, severity);
-        Assert.Equal(SeverityRules.RuleNames.Default, rule);
+        Assert.Equal(SeverityRules.RuleNames.DefaultRule, rule);
     }
 
     [Fact]
@@ -259,7 +259,7 @@ public sealed class SeverityClassifierTests
         var (severity, rule) = classifier.Classify(evidence);
 
         Assert.Equal(Severity.Low, severity);
-        Assert.Equal(SeverityRules.RuleNames.Default, rule);
+        Assert.Equal(SeverityRules.RuleNames.DefaultRule, rule);
     }
 
     // ── Warning Events ───────────────────────────────────────
@@ -343,7 +343,7 @@ public sealed class SeverityClassifierTests
             SeverityRules.RuleNames.PodPendingWithinGrace,
             SeverityRules.RuleNames.WarningSustained,
             SeverityRules.RuleNames.WarningOneOff,
-            SeverityRules.RuleNames.Default,
+            SeverityRules.RuleNames.DefaultRule,
         };
 
         Assert.Equal(10, ruleNames.Distinct().Count());

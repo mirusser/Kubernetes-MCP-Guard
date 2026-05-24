@@ -57,6 +57,8 @@ internal sealed class ObservationCycleLoop : IHostedService, IDisposable
         }
         catch (ObjectDisposedException)
         {
+            // Justification: benign race during shutdown — the CTS may be disposed
+            // between the null check and CancelAsync.
         }
     }
 

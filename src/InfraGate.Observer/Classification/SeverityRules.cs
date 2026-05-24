@@ -4,7 +4,7 @@ internal static class SeverityRules
 {
     public static readonly TimeSpan PodPendingGracePeriod = TimeSpan.FromMinutes(5);
 
-    public static readonly (Severity Severity, string MatchedRule) Default = (Severity.Low, RuleNames.Default);
+    public static readonly (Severity Severity, string MatchedRule) Default = (Severity.Low, RuleNames.DefaultRule);
 
     public static class RuleNames
     {
@@ -17,6 +17,6 @@ internal static class SeverityRules
         public const string PodPendingWithinGrace = "pod-pending-within-grace";
         public const string WarningSustained = "warning-sustained";
         public const string WarningOneOff = "warning-one-off";
-        public const string Default = "default-low";
+        public const string DefaultRule = "default-low";
     }
 }
