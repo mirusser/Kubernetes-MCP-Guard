@@ -1,4 +1,5 @@
 using InfraGate.ClientCredentials;
+using InfraGate.Observer.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace InfraGate.Observer.Endpoints;
@@ -16,7 +17,7 @@ internal static class HealthEndpoint
                 string token = await tokenProvider.GetTokenAsync(cancellationToken).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(token))
                 {
-                    logger.LogWarning("Health check: token has not been acquired yet");
+                    ObserverLogEvents.LogHealthCheckStarting(logger);
                     return Results.Json(new { status = "starting" }, statusCode: 503);
                 }
 
@@ -24,7 +25,7 @@ internal static class HealthEndpoint
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Health check: token acquisition failed");
+                ObserverLogEvents.LogHealthCheckFailed(logger, ex);
                 return Results.Json(new { status = "unhealthy", reason = "token_acquisition_failed" }, statusCode: 503);
             }
         });

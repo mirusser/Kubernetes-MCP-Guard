@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace InfraGate.Observer.Handoff;
 
-internal sealed partial class CompositeAnomalyHandoffSink : IAnomalyHandoffSink
+internal sealed class CompositeAnomalyHandoffSink : IAnomalyHandoffSink
 {
     private readonly IReadOnlyList<IAnomalyHandoffSink> sinks;
     private readonly ILogger<CompositeAnomalyHandoffSink> logger;
@@ -33,7 +33,7 @@ internal sealed partial class CompositeAnomalyHandoffSink : IAnomalyHandoffSink
             }
             catch (Exception ex)
             {
-                LogHandoffSinkFailed(logger, sink.GetType().Name, ex.Message, ex);
+                ObserverLogEvents.LogHandoffSinkFailed(logger, sink.GetType().Name, ex.Message, ex);
 
                 if (handoffFailedCounter is not null)
                 {
@@ -43,13 +43,4 @@ internal sealed partial class CompositeAnomalyHandoffSink : IAnomalyHandoffSink
             }
         }
     }
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "Handoff sink '{SinkName}' failed: {ErrorMessage}")]
-    private static partial void LogHandoffSinkFailed(
-        ILogger logger,
-        string sinkName,
-        string errorMessage,
-        Exception ex);
 }

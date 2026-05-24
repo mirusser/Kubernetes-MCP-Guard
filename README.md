@@ -302,8 +302,7 @@ See [docs/security-model.md](docs/security-model.md) for the full threat model.
 ---
 
 <p align="center">
-  <sub><em>Built with ❤️ and ☕</em></sub>
+  <sub><em>Built with ❤️, ☕ and careful little guardrails 🛡️✨</em></sub>
 </p>
-
 
 [Badge Hi Mom]: https://img.shields.io/badge/Hi-mom!-ff69b4

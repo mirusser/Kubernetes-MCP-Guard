@@ -1,10 +1,13 @@
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using InfraGate.Observer.Classification;
+using InfraGate.Observer.Diagnostics;
 using InfraGate.Observer.Handoff;
 using InfraGate.Observer.Mcp;
 using InfraGate.Observer.Prompts;
 using InfraGate.Observer.Snapshot;
 using InfraGate.Observer.State;
+using Serilog.Context;
 
 namespace InfraGate.Observer.Cycle;
 
@@ -20,6 +23,11 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
     private readonly IAnomalyDedupeStore dedupeStore;
     private readonly IAnomalyHandoffSink handoffSink;
     private readonly ILogger<ObservationCycleRunner> logger;
+    private readonly Counter<long>? cycleCountCounter;
+    private readonly Counter<long>? toolCallsCounter;
+    private readonly Counter<long>? severityDisagreementCounter;
+    private readonly Counter<long>? reportsEmittedCounter;
+    private readonly Histogram<double>? cycleDurationHistogram;
 
     public ObservationCycleRunner(
         IOptions<ObserverOptions> options,
@@ -31,7 +39,8 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         IObserverMcpClient mcpClient,
         IAnomalyDedupeStore dedupeStore,
         IAnomalyHandoffSink handoffSink,
-        ILogger<ObservationCycleRunner> logger)
+        ILogger<ObservationCycleRunner> logger,
+        Meter? meter = null)
     {
         this.options = options;
         this.optionsMonitor = optionsMonitor;
@@ -43,12 +52,18 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         this.dedupeStore = dedupeStore;
         this.handoffSink = handoffSink;
         this.logger = logger;
+
+        cycleCountCounter = ObserverMetrics.CreateCycleCountCounter(meter);
+        toolCallsCounter = ObserverMetrics.CreateToolCallsCounter(meter);
+        severityDisagreementCounter = ObserverMetrics.CreateSeverityDisagreementCounter(meter);
+        reportsEmittedCounter = ObserverMetrics.CreateReportsEmittedCounter(meter);
+        cycleDurationHistogram = ObserverMetrics.CreateCycleDurationHistogram(meter);
     }
 
     public async Task<CycleResult> RunAsync(CancellationToken shutdownToken)
     {
         var cycleId = Guid.NewGuid().ToString("D");
-        using var _ = logger.BeginScope(new Dictionary<string, object?>(StringComparer.Ordinal) { ["CycleId"] = cycleId });
+        using var _ = LogContext.PushProperty("CycleId", cycleId);
 
         var opts = optionsMonitor.CurrentValue;
         var stopwatch = Stopwatch.StartNew();
@@ -82,11 +97,11 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         {
             if (shutdownToken.IsCancellationRequested)
             {
-                logger.LogInformation("Observation cycle {CycleId} cancelled: host shutting down", cycleId);
+                ObserverLogEvents.LogCycleCancelled(logger);
             }
             else
             {
-                logger.LogWarning("Observation cycle {CycleId} truncated: wall-clock cap reached", cycleId);
+                ObserverLogEvents.LogCycleTruncated(logger);
             }
 
             isTruncated = true;
@@ -94,11 +109,17 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
 
         stopwatch.Stop();
 
+        if (toolCallsCounter is not null)
+        {
+            toolCallsCounter.Add(totalToolCalls);
+        }
+
         if (isTruncated)
         {
-            logger.LogWarning(
-                "Cycle {CycleId} truncated — emitting no reports. ToolCalls={ToolCalls}",
-                cycleId, totalToolCalls);
+            ObserverLogEvents.LogTruncatedNoReports(logger, cycleId, totalToolCalls);
+
+            cycleCountCounter?.Add(1,
+                new KeyValuePair<string, object?>(ObserverMetrics.ResultTag, ObserverMetrics.ResultTruncated));
 
             return new CycleResult
             {
@@ -135,9 +156,33 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
             await handoffSink.PublishAsync(handoffBatch, shutdownToken).ConfigureAwait(false);
         }
 
-        logger.LogInformation(
-            "Cycle {CycleId} complete. Reports={ReportCount} Emitted={Emitted} Resolved={Resolved} ToolCalls={ToolCalls} Disagreements={Disagreements} Duration={DurationMs}ms",
-            cycleId, finalReports.Count, dedupedReports.Count, resolvedReports.Count, totalToolCalls, totalDisagreements, (long)stopwatch.Elapsed.TotalMilliseconds);
+        ObserverLogEvents.LogCycleCompletedDetailed(
+            logger, cycleId, finalReports.Count, dedupedReports.Count, resolvedReports.Count,
+            totalToolCalls, totalDisagreements, (long)stopwatch.Elapsed.TotalMilliseconds);
+
+        cycleCountCounter?.Add(1,
+            new KeyValuePair<string, object?>(ObserverMetrics.ResultTag, ObserverMetrics.ResultCompleted));
+        cycleDurationHistogram?.Record(stopwatch.Elapsed.TotalMilliseconds);
+
+        if (severityDisagreementCounter is not null && totalDisagreements > 0)
+        {
+            severityDisagreementCounter.Add(totalDisagreements);
+        }
+
+        if (reportsEmittedCounter is not null)
+        {
+            foreach (var report in finalReports)
+            {
+                var statusTag = report.Status switch
+                {
+                    AnomalyStatus.Active => "active",
+                    AnomalyStatus.Resolved => "resolved",
+                    _ => "unknown",
+                };
+                reportsEmittedCounter.Add(1,
+                    new KeyValuePair<string, object?>(ObserverMetrics.StatusTag, statusTag));
+            }
+        }
 
         return new CycleResult
         {
@@ -199,7 +244,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
                 catch (Exception ex)
                 {
                     toolResult = $"Error executing tool '{toolCall.Value.ToolName}': {ex.Message}";
-                    logger.LogWarning(ex, "Tool call failed: {ToolName}", toolCall.Value.ToolName);
+                    ObserverLogEvents.LogToolCallFailed(logger, toolCall.Value.ToolName, ex);
                 }
 
                 messages.Add(new ChatMessage(ChatRole.User, toolResult));
@@ -239,7 +284,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         var json = ExtractJsonArray(llmOutput);
         if (json is null)
         {
-            logger.LogWarning("Failed to extract JSON array from LLM output for namespace {Namespace}", namespaceName);
+            ObserverLogEvents.LogJsonArrayExtractFailed(logger, namespaceName);
             return (reports, disagreements);
         }
 
@@ -250,7 +295,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         }
         catch (JsonException ex)
         {
-            logger.LogWarning(ex, "Failed to parse LLM output as JSON array for namespace {Namespace}", namespaceName);
+            ObserverLogEvents.LogJsonParseFailed(logger, namespaceName, ex);
             return (reports, disagreements);
         }
 
@@ -277,9 +322,8 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
             if (classifierSeverity != llmSeverity)
             {
                 disagreements++;
-                logger.LogInformation(
-                    "Severity disagreement: LLM={LlmSeverity} Classifier={ClassifierSeverity} Rule={Rule} Kind={Kind} Target={Target}",
-                    llmSeverity, classifierSeverity, matchedRule, kind, $"{target.Kind}/{target.Name}");
+                ObserverLogEvents.LogSeverityDisagreement(
+                    logger, llmSeverity.ToString(), classifierSeverity.ToString(), matchedRule, kind.ToString(), $"{target.Kind}/{target.Name}");
             }
 
             var anomalyId = AnomalyObserverConventions.ComputeAnomalyId(kind, target);

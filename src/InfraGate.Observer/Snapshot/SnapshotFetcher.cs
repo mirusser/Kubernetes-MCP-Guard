@@ -1,3 +1,5 @@
+using System.Diagnostics.Metrics;
+using InfraGate.Observer.Diagnostics;
 using InfraGate.Observer.Mcp;
 using Microsoft.Extensions.Logging;
 
@@ -7,13 +9,16 @@ internal sealed class SnapshotFetcher : ISnapshotFetcher
 {
     private readonly IObserverMcpClient mcpClient;
     private readonly ILogger<SnapshotFetcher> logger;
+    private readonly Counter<long>? snapshotFetchErrorsCounter;
 
     public SnapshotFetcher(
         IObserverMcpClient mcpClient,
-        ILogger<SnapshotFetcher> logger)
+        ILogger<SnapshotFetcher> logger,
+        Meter? meter = null)
     {
         this.mcpClient = mcpClient;
         this.logger = logger;
+        snapshotFetchErrorsCounter = ObserverMetrics.CreateSnapshotFetchErrorsCounter(meter);
     }
 
     public async Task<SnapshotDocument> FetchAsync(string namespaceName, CancellationToken cancellationToken)
@@ -52,7 +57,14 @@ internal sealed class SnapshotFetcher : ISnapshotFetcher
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to fetch {ToolName} for namespace {Namespace}", toolName, namespaceName);
+            ObserverLogEvents.LogSnapshotFetchFailed(logger, toolName, namespaceName, ex);
+
+            if (snapshotFetchErrorsCounter is not null)
+            {
+                snapshotFetchErrorsCounter.Add(1,
+                    new KeyValuePair<string, object?>(ObserverMetrics.ToolNameTag, toolName));
+            }
+
             return null;
         }
     }

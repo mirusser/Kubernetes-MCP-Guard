@@ -1,3 +1,4 @@
+using InfraGate.Observer.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -30,7 +31,7 @@ internal sealed class ObservationCycleLoop : IHostedService, IDisposable
         timer?.Dispose();
 #pragma warning restore CA1849
         int cadenceSeconds = options.CurrentValue.CycleIntervalSeconds;
-        logger.LogInformation("Observer starting with cadence {CycleIntervalSeconds}s", cadenceSeconds);
+        ObserverLogEvents.LogObserverStarting(logger, cadenceSeconds);
         timer = new Timer(
             ExecuteCycle,
             null,
@@ -42,7 +43,7 @@ internal sealed class ObservationCycleLoop : IHostedService, IDisposable
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        logger.LogInformation("Observer stopping");
+        ObserverLogEvents.LogObserverStopping(logger);
         timer?.Change(Timeout.Infinite, Timeout.Infinite);
 
         try
@@ -69,7 +70,7 @@ internal sealed class ObservationCycleLoop : IHostedService, IDisposable
     {
         if (Interlocked.CompareExchange(ref isExecuting, 1, 0) != 0)
         {
-            logger.LogWarning("Observation cycle skipped: previous cycle still executing");
+            ObserverLogEvents.LogCycleSkipped(logger);
             return;
         }
 
@@ -81,16 +82,16 @@ internal sealed class ObservationCycleLoop : IHostedService, IDisposable
 
             if (result.IsTruncated && !shutdownToken.IsCancellationRequested)
             {
-                logger.LogWarning(
-                    "observer.cycle.truncated CycleId={CycleId} ToolCalls={ToolCalls} Duration={DurationMs}ms",
+                ObserverLogEvents.LogCycleTruncatedWithDetails(
+                    logger,
                     result.CycleId,
                     result.ToolCallsUsed,
                     (long)result.Duration.TotalMilliseconds);
             }
             else if (!result.IsTruncated)
             {
-                logger.LogInformation(
-                    "observer.cycle.completed CycleId={CycleId} Reports={ReportCount} Duration={DurationMs}ms",
+                ObserverLogEvents.LogCycleCompleted(
+                    logger,
                     result.CycleId,
                     result.Reports.Count,
                     (long)result.Duration.TotalMilliseconds);
@@ -98,11 +99,11 @@ internal sealed class ObservationCycleLoop : IHostedService, IDisposable
         }
         catch (OperationCanceledException) when (shutdownCts?.IsCancellationRequested == true)
         {
-            logger.LogInformation("Observation cycle cancelled: host shutting down");
+            ObserverLogEvents.LogCycleCancelled(logger);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Unhandled exception in observation cycle");
+            ObserverLogEvents.LogCycleError(logger, ex);
         }
         finally
         {

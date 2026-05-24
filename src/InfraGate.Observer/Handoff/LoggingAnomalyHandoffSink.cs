@@ -1,8 +1,9 @@
+using InfraGate.Observer.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace InfraGate.Observer.Handoff;
 
-internal sealed partial class LoggingAnomalyHandoffSink : IAnomalyHandoffSink
+internal sealed class LoggingAnomalyHandoffSink : IAnomalyHandoffSink
 {
     private readonly ILogger<LoggingAnomalyHandoffSink> logger;
 
@@ -15,7 +16,7 @@ internal sealed partial class LoggingAnomalyHandoffSink : IAnomalyHandoffSink
     {
         foreach (var report in batch.Reports)
         {
-            LogReport(
+            ObserverLogEvents.LogAnomalyReport(
                 logger,
                 batch.CycleId,
                 report.AnomalyId,
@@ -28,17 +29,4 @@ internal sealed partial class LoggingAnomalyHandoffSink : IAnomalyHandoffSink
 
         return Task.CompletedTask;
     }
-
-    [LoggerMessage(
-        Level = LogLevel.Information,
-        Message = "Anomaly Report: CycleId={CycleId} AnomalyId={AnomalyId} Kind={Kind} Severity={Severity} Status={Status} Target={Target} Summary={Summary}")]
-    private static partial void LogReport(
-        ILogger logger,
-        string cycleId,
-        string anomalyId,
-        string kind,
-        string severity,
-        string status,
-        string target,
-        string summary);
 }

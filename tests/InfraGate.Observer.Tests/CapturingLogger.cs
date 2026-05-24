@@ -30,8 +30,8 @@ internal sealed class CapturingLogger<T> : ILogger<T>
             }
         }
 
-        entries.Add(new LogEntry(logLevel, message, properties));
+        entries.Add(new LogEntry(logLevel, message, properties, exception));
     }
 
-    internal sealed record class LogEntry(LogLevel Level, string Message, IReadOnlyDictionary<string, object?> Properties);
+    internal sealed record class LogEntry(LogLevel Level, string Message, IReadOnlyDictionary<string, object?> Properties, Exception? Exception);
 }

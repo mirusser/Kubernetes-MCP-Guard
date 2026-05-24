@@ -1,4 +1,6 @@
+using System.Diagnostics.Metrics;
 using System.Net.Http.Headers;
+using InfraGate.Observer.Diagnostics;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,17 +15,19 @@ internal sealed class AnthropicChatClient : IChatClient
     private readonly HttpClient httpClient;
     private readonly string model;
     private readonly ILogger<AnthropicChatClient> logger;
+    private readonly Counter<long>? llmTokensCounter;
 
     public AnthropicChatClient(HttpClient httpClient, string model)
-        : this(httpClient, model, NullLoggerFactory.Instance)
+        : this(httpClient, model, NullLoggerFactory.Instance, null)
     {
     }
 
-    public AnthropicChatClient(HttpClient httpClient, string model, ILoggerFactory loggerFactory)
+    public AnthropicChatClient(HttpClient httpClient, string model, ILoggerFactory loggerFactory, Meter? meter = null)
     {
         this.httpClient = httpClient;
         this.model = model;
         logger = loggerFactory.CreateLogger<AnthropicChatClient>();
+        llmTokensCounter = ObserverMetrics.CreateLlmTokensCounter(meter);
     }
 
     public async Task<ChatResponse> GetResponseAsync(
@@ -63,10 +67,14 @@ internal sealed class AnthropicChatClient : IChatClient
             ? string.Concat(textBlocks)
             : string.Empty;
 
-        logger.LogDebug(
-            "LLM response token usage: input={InputTokens}, output={OutputTokens}",
+        ObserverLogEvents.LogLlmTokenUsage(logger,
             anthropicResponse.Usage?.InputTokens ?? 0,
             anthropicResponse.Usage?.OutputTokens ?? 0);
+
+        if (llmTokensCounter is not null && anthropicResponse.Usage is not null)
+        {
+            llmTokensCounter.Add(anthropicResponse.Usage.InputTokens + anthropicResponse.Usage.OutputTokens);
+        }
 
         return new ChatResponse(new ChatMessage(ChatRole.Assistant, responseText))
         {

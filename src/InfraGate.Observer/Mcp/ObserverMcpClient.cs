@@ -1,4 +1,5 @@
 using InfraGate.ClientCredentials;
+using InfraGate.Observer.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol.Client;
@@ -55,7 +56,7 @@ internal sealed class ObserverMcpClient : IObserverMcpClient, IAsyncDisposable
 
         mcpClient = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
-        logger.LogInformation("Connected to MCP gateway at {GatewayBaseUrl}", GatewayBaseUrl);
+        ObserverLogEvents.LogMcpConnected(logger, GatewayBaseUrl);
     }
 
     public async Task<string> GetToolResultAsync(string toolName, IReadOnlyDictionary<string, object?>? arguments, CancellationToken cancellationToken)

@@ -1,7 +1,9 @@
+using System.Diagnostics.Metrics;
 using InfraGate.ClientCredentials;
 using InfraGate.Observer;
 using InfraGate.Observer.Classification;
 using InfraGate.Observer.Cycle;
+using InfraGate.Observer.Diagnostics;
 using InfraGate.Observer.Endpoints;
 using InfraGate.Observer.Handoff;
 using InfraGate.Observer.Llm;
@@ -59,17 +61,42 @@ var authOptions = new ClientCredentialsTokenOptions
 builder.Services.AddClientCredentialsTokenProvider(authOptions);
 
 builder.Services.AddSingleton<IObserverMcpClient, ObserverMcpClient>();
-builder.Services.AddSingleton<ISnapshotFetcher, SnapshotFetcher>();
+builder.Services.AddSingleton<ISnapshotFetcher>(sp =>
+{
+    return new SnapshotFetcher(
+        sp.GetRequiredService<IObserverMcpClient>(),
+        sp.GetRequiredService<ILogger<SnapshotFetcher>>(),
+        ObserverMetrics.Meter);
+});
 builder.Services.AddSingleton<ISystemPromptProvider, SystemPromptProvider>();
 builder.Services.AddSingleton<ISeverityClassifier, SeverityClassifier>();
-builder.Services.AddSingleton<IChatClientFactory, ChatClientFactory>();
+builder.Services.AddSingleton<IChatClientFactory>(sp =>
+{
+    return new ChatClientFactory(
+        sp.GetRequiredService<IOptions<ObserverOptions>>(),
+        ObserverMetrics.Meter);
+});
 builder.Services.AddSingleton<IChatClient>(sp =>
 {
     var factory = sp.GetRequiredService<IChatClientFactory>();
     return factory.Create();
 });
 builder.Services.AddSingleton<IAnomalyDedupeStore, AnomalyDedupeStore>();
-builder.Services.AddSingleton<IObservationCycleRunner, ObservationCycleRunner>();
+builder.Services.AddSingleton<IObservationCycleRunner>(sp =>
+{
+    return new ObservationCycleRunner(
+        sp.GetRequiredService<IOptions<ObserverOptions>>(),
+        sp.GetRequiredService<IOptionsMonitor<ObserverOptions>>(),
+        sp.GetRequiredService<ISnapshotFetcher>(),
+        sp.GetRequiredService<ISystemPromptProvider>(),
+        sp.GetRequiredService<IChatClient>(),
+        sp.GetRequiredService<ISeverityClassifier>(),
+        sp.GetRequiredService<IObserverMcpClient>(),
+        sp.GetRequiredService<IAnomalyDedupeStore>(),
+        sp.GetRequiredService<IAnomalyHandoffSink>(),
+        sp.GetRequiredService<ILogger<ObservationCycleRunner>>(),
+        ObserverMetrics.Meter);
+});
 builder.Services.AddHostedService<ObservationCycleLoop>();
 
 builder.Services.AddSingleton<LoggingAnomalyHandoffSink>();
@@ -132,8 +159,8 @@ static async Task ConnectObserverMcpClientAsync(WebApplication app)
             null,
             CancellationToken.None).ConfigureAwait(false);
 
-        logger.LogInformation(
-            "observer.startup.connected Gateway={GatewayBaseUrl} AllowedNamespaces={AllowedNamespaces}",
+        ObserverLogEvents.LogStartupConnected(
+            logger,
             mcpClient.GatewayBaseUrl,
             allowedNsResponse);
     }
@@ -143,12 +170,12 @@ static async Task ConnectObserverMcpClientAsync(WebApplication app)
         var scope = configuration[ObserverConventions.EnvironmentVariables.OAuthScope] ?? ObserverConventions.DefaultOAuthScope;
         var clientId = configuration[ObserverConventions.EnvironmentVariables.ClientId] ?? ObserverConventions.DefaultClientId;
 
-        logger.LogWarning(
-            ex,
-            "observer.startup.connection_failed Gateway={GatewayBaseUrl} Authority={Authority} Scope={Scope} ClientId={ClientId}",
+        ObserverLogEvents.LogStartupConnectionFailed(
+            logger,
             mcpClient.GatewayBaseUrl,
             authority,
             scope,
-            clientId);
+            clientId,
+            ex);
     }
 }
