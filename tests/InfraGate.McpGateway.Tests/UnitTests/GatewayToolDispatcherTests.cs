@@ -430,10 +430,75 @@ public sealed class GatewayToolDispatcherTests
         Assert.Contains($@"""namespace"": ""{targetNamespace}""", auditJson);
     }
 
+    [Fact]
+    public async Task CallToolAsync_ReadOnlyToolWithReadOnlyScope_Succeeds()
+    {
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            httpScope: GatewayAuthConventions.DefaultReadOnlyOAuthScope);
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = "get_allowed_namespaces"
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError is not true);
+        Assert.Contains(context.Downstream.Calls, call => call == "get_allowed_namespaces");
+    }
+
+    [Fact]
+    public async Task CallToolAsync_ReadOnlyToolWithoutScope_WritesScopeDeniedAudit()
+    {
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            httpScope: "");
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = "get_allowed_namespaces"
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.DoesNotContain(context.Downstream.Calls, call => call == "get_allowed_namespaces");
+
+        var auditEvent = Assert.Single(context.GuardrailAudit.Events);
+        Assert.Equal("get_allowed_namespaces", auditEvent.ToolName);
+        Assert.Equal(McpGatewayConventions.GuardrailAudit.DenyAction, auditEvent.Action);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_MutationToolWithReadOnlyScope_WritesScopeDeniedAudit()
+    {
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            httpScope: GatewayAuthConventions.DefaultReadOnlyOAuthScope);
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = "request_scale_deployment"
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Contains(GatewayAuthConventions.DefaultOAuthScope, result.Content.OfType<TextContentBlock>().Single().Text);
+
+        var auditEvent = Assert.Single(context.GuardrailAudit.Events);
+        Assert.Equal("request_scale_deployment", auditEvent.ToolName);
+        Assert.Equal(McpGatewayConventions.GuardrailAudit.DenyAction, auditEvent.Action);
+        Assert.Equal("request", auditEvent.Direction);
+        Assert.Equal(Subject, auditEvent.Subject);
+    }
+
     private static TestContext CreateContext(
         IDomainPlanExecutor planExecutor,
         IDomainPlanBuilder? planBuilder = null,
-        IGatewayApprovalService? approvals = null)
+        IGatewayApprovalService? approvals = null,
+        string? httpScope = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-dispatcher-tests", Guid.NewGuid().ToString("N"));
         var workflow = new TestApprovalWorkflow();
@@ -450,7 +515,7 @@ public sealed class GatewayToolDispatcherTests
             User = new ClaimsPrincipal(new ClaimsIdentity(
             [
                 new Claim(GatewayAuthConventions.Claims.Subject, Subject),
-                new Claim(GatewayAuthConventions.Claims.Scope, "mcp:tools")
+                new Claim(GatewayAuthConventions.Claims.Scope, httpScope ?? "mcp:tools")
             ], "test"))
         };
         var httpContextAccessor = new HttpContextAccessor
@@ -480,6 +545,8 @@ public sealed class GatewayToolDispatcherTests
             planExecutor);
         var subscriptions = new SubscriptionRegistry();
 
+        var guardrailAudit = new InMemoryAuditStore();
+
         return new TestContext(
             new GatewayToolDispatcher(
                 new DownstreamToolRegistry(downstream),
@@ -492,11 +559,13 @@ public sealed class GatewayToolDispatcherTests
                 new ApprovalPreExecutionGate(workflow, workflow),
                 httpContextAccessor,
                 subscriptions,
+                guardrailAudit,
                 NullLogger<GatewayToolDispatcher>.Instance),
             workflow,
             downstream,
             subscriptions,
-            httpContext);
+            httpContext,
+            guardrailAudit);
     }
 
     private static async Task<PlanEnvelope> CreateGrantedPlanAsync(
@@ -700,8 +769,13 @@ public sealed class GatewayToolDispatcherTests
 
     private sealed class InMemoryAuditStore : IGuardrailAuditStore
     {
-        public Task WriteAsync(GuardrailAuditEvent auditEvent, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public List<GuardrailAuditEvent> Events { get; } = [];
+
+        public Task WriteAsync(GuardrailAuditEvent auditEvent, CancellationToken cancellationToken)
+        {
+            Events.Add(auditEvent);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class FakeSessionNotifier(string sessionId) : ISessionNotifier
@@ -746,7 +820,8 @@ public sealed class GatewayToolDispatcherTests
         TestApprovalWorkflow Workflow,
         FakeDownstream Downstream,
         SubscriptionRegistry Subscriptions,
-        DefaultHttpContext HttpContext);
+        DefaultHttpContext HttpContext,
+        InMemoryAuditStore GuardrailAudit);
 
     private sealed class NullNotificationDispatcher : IApprovalNotificationDispatcher
     {

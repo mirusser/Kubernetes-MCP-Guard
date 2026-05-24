@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using InfraGate.ClientCredentials;
 using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway.DownstreamAuth;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -14,6 +15,16 @@ public sealed class ClientCredentialsDownstreamServiceTokenProviderTests
     private const string FakeClientSecret = "secret";
     private const string FakeScope = "mcp:downstream";
     private const string FakeAccessToken = "eyJ.fake.token";
+
+    private static ClientCredentialsTokenOptions ToClientOptions(DownstreamAuthOptions opts) => new()
+    {
+        Authority = opts.Authority,
+        MetadataAddress = opts.MetadataAddress,
+        RequireHttpsMetadata = opts.RequireHttpsMetadata,
+        ClientId = opts.GatewayClientId,
+        ClientSecret = opts.GatewayClientSecret,
+        Scope = opts.Scope,
+    };
 
     private static DownstreamAuthOptions CreateOptions(string? metadataAddress = null) =>
         new()
@@ -43,12 +54,15 @@ public sealed class ClientCredentialsDownstreamServiceTokenProviderTests
         var httpClient = new HttpClient(handler);
         var opts = options ?? CreateOptions();
         var time = timeProvider ?? new ManualTimeProvider();
+        var clientOptions = ToClientOptions(opts);
 
-        return new ClientCredentialsDownstreamServiceTokenProvider(
-            opts,
+        var innerProvider = new ClientCredentialsTokenProvider(
+            clientOptions,
             httpClient,
             time,
-            NullLogger<ClientCredentialsDownstreamServiceTokenProvider>.Instance);
+            NullLogger<ClientCredentialsTokenProvider>.Instance);
+
+        return new ClientCredentialsDownstreamServiceTokenProvider(innerProvider);
     }
 
     [Fact]
@@ -78,7 +92,7 @@ public sealed class ClientCredentialsDownstreamServiceTokenProviderTests
     }
 
     [Fact]
-    public async Task GetServiceTokenAsync_TokenWithin60sOfExpiry_TriggersRefresh()
+    public async Task GetServiceTokenAsync_TokenWithin30sOfExpiry_TriggersRefresh()
     {
         var timeProvider = new ManualTimeProvider();
         int tokenCallCount = 0;
@@ -99,8 +113,8 @@ public sealed class ClientCredentialsDownstreamServiceTokenProviderTests
         string first = await provider.GetServiceTokenAsync(CancellationToken.None);
         Assert.Equal(DownstreamAuthConventions.BearerPrefix + "first-token", first);
 
-        // Advance time so token is within the 60s skew window (expires_in=3600, advance 3541s)
-        timeProvider.Advance(TimeSpan.FromSeconds(3541));
+        // Advance time so token is within the 30s skew window (expires_in=3600, advance 3571s)
+        timeProvider.Advance(TimeSpan.FromSeconds(3571));
 
         string second = await provider.GetServiceTokenAsync(CancellationToken.None);
         Assert.Equal(DownstreamAuthConventions.BearerPrefix + "refreshed-token", second);
@@ -108,7 +122,7 @@ public sealed class ClientCredentialsDownstreamServiceTokenProviderTests
     }
 
     [Fact]
-    public async Task GetServiceTokenAsync_TokenMoreThan60sFromExpiry_DoesNotRefresh()
+    public async Task GetServiceTokenAsync_TokenMoreThan30sFromExpiry_DoesNotRefresh()
     {
         var timeProvider = new ManualTimeProvider();
         int tokenCallCount = 0;
@@ -127,7 +141,7 @@ public sealed class ClientCredentialsDownstreamServiceTokenProviderTests
 
         await provider.GetServiceTokenAsync(CancellationToken.None);
 
-        // Advance time but stay more than 60s from expiry (advance 3000s, 600s remain, skew=60s)
+        // Advance time but stay more than 30s from expiry (advance 3000s, 600s remain, skew=30s)
         timeProvider.Advance(TimeSpan.FromSeconds(3000));
 
         await provider.GetServiceTokenAsync(CancellationToken.None);

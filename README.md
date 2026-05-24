@@ -1,14 +1,16 @@
 # 🛡️ Kubernetes MCP Guard
 
-**A security-first bridge between AI agents and Kubernetes, with out of band Human-in-the-Loop (HITL) approval for every gateway-exposed mutation.**
+**A reference implementation for safe AI-driven Kubernetes remediation.**  
 
-An *experimental* .NET 10 MCP gateway for AI-assisted Kubernetes operations. 
+> **Safe remediation, by design:**  
+>
+> Observer agent detects anomalies.  
+> Executor agent proposes a plan.  
+> Human reviewer approves out-of-band.  
+> System executes only the approved digest.  
+> Everything is auditable.  
+>
 
-Agents can inspect a narrow cluster surface and propose changes, but writes are staged as server-side dry-run plans and execute only after an OAuth-authenticated human approves the exact review snapshot in a separate browser session.
-
-<sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments rather than production-certified infrastructure.</em></sub>
-
-<sub><em>Kubernetes MCP Guard is internally named **InfraGate**, </em></sub>
 
 [![Unit Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/ci.yml)
 [![Integration Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml)
@@ -17,9 +19,20 @@ Agents can inspect a narrow cluster surface and propose changes, but writes are 
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=mirusser_Kubernetes-MCP-Guard&metric=coverage)](https://sonarcloud.io/summary/new_code?id=mirusser_Kubernetes-MCP-Guard)
 ![Badge Hi Mom]<br>
 
-<sub>![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?style=flat-square&logo=dotnet) ![Kubernetes](https://img.shields.io/badge/Kubernetes-Cloud--Native-326ce5?style=flat-square&logo=kubernetes) ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ed?style=flat-square&logo=docker) ![MCP](https://img.shields.io/badge/MCP-HTTP%20Gateway-black?style=flat-square)</sub>
+<sub>![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?style=flat-square&logo=dotnet) ![Kubernetes](https://img.shields.io/badge/Kubernetes-Cloud--Native-326ce5?style=flat-square&logo=kubernetes) ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ed?style=flat-square&logo=docker) ![MCP](https://img.shields.io/badge/MCP-HTTP%20Gateway-black?style=flat-square) ![AI Agents](https://img.shields.io/badge/AI%20Agents-Observer%20%2F%20Executor-7c3aed?style=flat-square)</sub>
 
-## 🎯 What It Demonstrates
+
+### 📝 TL;DR
+**A security-first bridge between AI agents and Kubernetes, with out of band Human-in-the-Loop (HITL) plan based approval for every gateway-exposed mutation.**
+
+Agents can inspect a narrow cluster surface and propose changes, but writes are staged as server-side dry-run plans and execute only after an OAuth-authenticated human approves the exact review snapshot in a separate browser session.
+
+<sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments rather than production-certified infrastructure.</em></sub>
+
+<sub><em>Kubernetes MCP Guard is internally named **InfraGate**. </em></sub>
+
+
+## 🧠 Core Ideas
 
 Kubernetes MCP Guard explores a practical safety pattern for AI-assisted operations:
 
@@ -125,6 +138,24 @@ The central safety property is that approval is necessary but not sufficient. A 
 
 ## 🧰 Current Capabilities
 
+### 🤖🔎 Anomaly Observer
+
+The [InfraGate.Observer](src/InfraGate.Observer/README.md) is an LLM-driven agent that periodically inspects the cluster through the gateway's read-only tools and emits structured Anomaly Reports.
+
+| Capability | Description |
+| --- | --- |
+| Scheduled observation | Background `IHostedService` runs cycles on a configurable cadence (default 60s). |
+| On-demand trigger | `POST /observe-now` returns a synchronous `AnomalyReport[]` with a 30s timeout. |
+| Anomaly detection | LLM-assisted classification across four categories: Pod unhealthy, Deployment unavailable, Service no endpoints, Warning events. |
+| Severity classification | Rules-derived `High`/`Medium`/`Low` with LLM disagreement telemetry. |
+| Deduplication & resolution | In-memory dedupe window suppresses repeat reports; automatic `Resolved` emission when anomalies clear. |
+| Handoff | Log sink always on; JSON file sink opt-in via `INFRA_GATE_OBSERVER_FILE_SINK_ROOT`. |
+
+### 🤖🛠️ Executor
+
+> Planned: consumes Anomaly Reports, requests bounded remediation plans, and executes only after out-of-band approval.
+
+
 ### 🛡️ Gateway Protections
 
 | Layer | Current behavior |
@@ -149,6 +180,7 @@ The central safety property is that approval is necessary but not sufficient. A 
 | `get_pod_diagnostics` | Inspect Pod status, conditions, container state, and Events. |
 | `get_service_diagnostics` | Inspect Service endpoints, backing Pods, and Events. |
 
+
 ### ✅ Gateway Approval Tools
 
 | Tool | Purpose |
@@ -168,7 +200,7 @@ Direct Kubernetes mutation tools exist inside the private server surface for the
 
 ### 📦 Run Published Images
 
-Prerequisites: [Docker Compose v2](https://docs.docker.com/compose/install/), [minikube](https://minikube.sigs.k8s.io/docs/start/), and `git`.
+Prerequisites: [Docker Compose v2](https://docs.docker.com/compose/install/), [minikube](https://minikube.sigs.k8s.io/docs/start/), and [git](https://git-scm.com/).
 
 ```bash
 git clone https://github.com/mirusser/Kubernetes-MCP-Guard.git
@@ -184,7 +216,7 @@ This starts the local Keycloak-backed OAuth path and the published gateway image
 
 ### 🛠️ Build From Source
 
-Prerequisites: [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), Docker Compose v2, minikube, and `git`.
+Prerequisites: [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), [Docker Compose v2](https://docs.docker.com/compose/install/), [minikube](https://minikube.sigs.k8s.io/docs/start/), and [git](https://git-scm.com/).
 
 ```bash
 ./scripts/create-demo-kubeconfig.sh --compose
@@ -197,7 +229,7 @@ docker compose --env-file deploy/generated/local-compose.env \
 
 Other run modes and full setup details are in [docs/setup-guide.md](docs/setup-guide.md).
 
-### 🤖 Connect Codex CLI
+### ⌨️ Connect Codex CLI
 
 Add this to `~/.codex/config.toml`:
 
@@ -215,7 +247,7 @@ codex mcp login infra-gate
 codex
 ```
 
-### 💬 Connect Claude Code
+### 💬 Connect Claude Code 
 
 ```bash
 claude mcp add-json --scope user infra-gate \
@@ -253,15 +285,6 @@ Use specific release tags for stable demos. The `:dev` tag tracks the developmen
 | Container registries | GHCR, Docker Hub |
 | Platforms | linux/amd64 initially |
 
-## ⚖️ Boundaries And Non-Goals
-
-- The project is experimental and not production-certified.
-- The local Keycloak realm runs in development mode over HTTP and is not a production identity provider.
-- Prompt-injection guardrails are defense-in-depth, not a guaranteed hard security boundary.
-- The tool surface does not expose shell execution, `kubectl` passthrough, exec, attach, port-forward, namespace creation, RBAC manipulation, Secret reads, raw manifest reads, or cluster-scoped writes.
-- This is not a full Kubernetes policy engine and not an MCP standard.
-
-See [docs/security-model.md](docs/security-model.md) for the full threat model.
 
 ## 🧭 Project Map
 
@@ -277,6 +300,17 @@ See [docs/security-model.md](docs/security-model.md) for the full threat model.
 - [src/InfraGate.Approvals/README.md](src/InfraGate.Approvals/README.md): generic approval storage, challenges, grants, gates, and audit payloads.
 - [src/InfraGate.KubernetesAdapter/README.md](src/InfraGate.KubernetesAdapter/README.md): Kubernetes mutation intent, evidence, policy, freshness checks, and execution.
 - [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md): private Kubernetes MCP server and typed tool surface.
+- [src/InfraGate.Observer/README.md](src/InfraGate.Observer/README.md): LLM-driven anomaly observer — periodic cluster inspection and Anomaly Report emission.
+
+## ⚖️ Boundaries And Non-Goals
+
+- The project is experimental and not production-certified.
+- The local Keycloak realm runs in development mode over HTTP and is not a production identity provider.
+- Prompt-injection guardrails are defense-in-depth, not a guaranteed hard security boundary.
+- The tool surface does not expose shell execution, `kubectl` passthrough, exec, attach, port-forward, namespace creation, RBAC manipulation, Secret reads, raw manifest reads, or cluster-scoped writes.
+- This is not a full Kubernetes policy engine and not an MCP standard.
+
+See [docs/security-model.md](docs/security-model.md) for the full threat model.
 
 ## 📜 Governance
 
@@ -286,5 +320,10 @@ See [docs/security-model.md](docs/security-model.md) for the full threat model.
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - Release process: [docs/releasing.md](docs/releasing.md)
 
+---
+
+<p align="center">
+  <sub><em>Built with ❤️, ☕ and careful little guardrails 🛡️✨</em></sub>
+</p>
 
 [Badge Hi Mom]: https://img.shields.io/badge/Hi-mom!-ff69b4

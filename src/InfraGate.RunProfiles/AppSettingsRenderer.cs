@@ -22,6 +22,7 @@ internal static class AppSettingsRenderer
             WriteAuth(writer, profile);
             WriteApproval(writer, profile);
             WriteKubernetes(writer, profile);
+            WriteObserver(writer, profile);
             writer.WriteEndObject();
             writer.WriteEndObject();
         }
@@ -185,6 +186,50 @@ internal static class AppSettingsRenderer
         {
             writer.WriteString(propertyName, value);
         }
+    }
+
+    private static void WriteObserver(Utf8JsonWriter writer, RunProfile profile)
+    {
+        if (profile.Observer is null)
+        {
+            return;
+        }
+
+        ObserverProfile observer = profile.Observer;
+        bool hasAnyValue =
+            !string.IsNullOrEmpty(observer.GatewayBaseUrl) ||
+            !string.IsNullOrEmpty(observer.TokenEndpoint) ||
+            !string.IsNullOrEmpty(observer.ClientId) ||
+            !string.IsNullOrEmpty(observer.ClientSecret) ||
+            !string.IsNullOrEmpty(observer.Scope) ||
+            !string.IsNullOrEmpty(observer.LlmProvider) ||
+            !string.IsNullOrEmpty(observer.LlmModel) ||
+            !string.IsNullOrEmpty(observer.LlmApiKey) ||
+            !string.IsNullOrEmpty(observer.CycleCadenceSeconds) ||
+            !string.IsNullOrEmpty(observer.CycleWallClockCapSeconds) ||
+            !string.IsNullOrEmpty(observer.MaxToolIterations) ||
+            !string.IsNullOrEmpty(observer.FileSinkRoot);
+
+        if (!hasAnyValue)
+        {
+            return;
+        }
+
+        writer.WritePropertyName(RunProfileConventions.AppSettings.Observer);
+        writer.WriteStartObject();
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverGatewayBaseUrl, observer.GatewayBaseUrl);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverTokenEndpoint, observer.TokenEndpoint);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverClientId, observer.ClientId);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverClientSecret, observer.ClientSecret);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverScope, observer.Scope);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverLlmProvider, observer.LlmProvider);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverLlmModel, observer.LlmModel);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverLlmApiKey, observer.LlmApiKey);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverCycleIntervalSeconds, observer.CycleCadenceSeconds);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverCycleWallClockCapSeconds, observer.CycleWallClockCapSeconds);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverMaxToolIterations, observer.MaxToolIterations);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverFileSinkRoot, observer.FileSinkRoot);
+        writer.WriteEndObject();
     }
 
     private static void WriteBooleanIfSet(Utf8JsonWriter writer, string propertyName, string? value)

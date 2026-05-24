@@ -1,0 +1,82 @@
+using System.Net;
+using System.Net.Http.Headers;
+using Microsoft.Extensions.Logging;
+
+namespace InfraGate.ClientCredentials;
+
+public sealed class ClientCredentialsBearerHandler : DelegatingHandler
+{
+    private readonly IClientCredentialsTokenProvider tokenProvider;
+    private readonly ILogger<ClientCredentialsBearerHandler> logger;
+
+    public ClientCredentialsBearerHandler(
+        IClientCredentialsTokenProvider tokenProvider,
+        ILogger<ClientCredentialsBearerHandler> logger)
+    {
+        this.tokenProvider = tokenProvider;
+        this.logger = logger;
+    }
+
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        string token = await tokenProvider.GetTokenAsync(cancellationToken).ConfigureAwait(false);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            logger.LogWarning("Got 401; refreshing client credentials token and retrying once.");
+            string refreshedToken = await tokenProvider.RefreshTokenAsync(cancellationToken).ConfigureAwait(false);
+            var retryRequest = await CloneRequestAsync(request, cancellationToken).ConfigureAwait(false);
+            retryRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", refreshedToken);
+            return await base.SendAsync(retryRequest, cancellationToken).ConfigureAwait(false);
+        }
+
+        return response;
+    }
+
+    private static async Task<HttpRequestMessage> CloneRequestAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        var clone = new HttpRequestMessage(request.Method, request.RequestUri);
+        if (request.Content is not null)
+        {
+            clone.Content = await CloneContentAsync(request.Content, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (request.Headers is not null)
+        {
+            foreach (var (key, value) in request.Headers)
+            {
+                clone.Headers.TryAddWithoutValidation(key, value);
+            }
+        }
+
+        foreach (var (key, value) in request.Options)
+        {
+            clone.Options.TryAdd(key, value);
+        }
+
+        return clone;
+    }
+
+    private static async Task<StreamContent> CloneContentAsync(
+        HttpContent content,
+        CancellationToken cancellationToken)
+    {
+        var stream = new MemoryStream();
+        await content.CopyToAsync(stream, cancellationToken).ConfigureAwait(false);
+        stream.Position = 0;
+        var cloned = new StreamContent(stream);
+        foreach (var (key, value) in content.Headers)
+        {
+            cloned.Headers.TryAddWithoutValidation(key, value);
+        }
+
+        return cloned;
+    }
+}

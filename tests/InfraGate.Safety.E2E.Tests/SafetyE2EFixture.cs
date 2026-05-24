@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
 using InfraGate.DownstreamAuth;
 using InfraGate.KubernetesAdapter;
@@ -19,6 +20,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Client;
@@ -26,6 +28,9 @@ using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Testcontainers.Keycloak;
 
+// ASPDEPR004/ASPDEPR008: WebHostBuilder + TestServer are deprecated in favor of WebApplicationBuilder.
+// Suppressed because: Safety E2E tests use TestServer for in-process gateway hosting;
+// WebApplicationFactory<T> would require a public Program class — overkill for opt-in E2E tests.
 #pragma warning disable ASPDEPR004
 #pragma warning disable ASPDEPR008
 
@@ -514,6 +519,10 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                 services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
                 services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
                 services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
+                services.AddSingleton<IApprovalPageRenderer>(sp =>
+                    new ApprovalPageRenderer(
+                        sp.GetRequiredService<IServiceProvider>(),
+                        sp.GetRequiredService<ILoggerFactory>()));
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
                 services.AddKubernetesAdapter();
                 services.AddSingleton<DownstreamToolRegistry>();

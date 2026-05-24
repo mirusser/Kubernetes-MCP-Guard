@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\InfraGate.ClientCredentials\InfraGate.ClientCredentials.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -1,0 +1,85 @@
+class InfraGate.Observer.Contracts.AnomalyEvidence
+  Nullable<Int32> AvailableReplicas { get; set; }
+  Nullable<Int32> EndpointCount { get; set; }
+  String EventType { get; set; }
+  Boolean HasHealthySiblings { get; set; }
+  Boolean IsAllPodsAffected { get; set; }
+  Boolean IsPending { get; set; }
+  Boolean IsSustained { get; set; }
+  AnomalyKind Kind { get; set; }
+  Nullable<TimeSpan> PendingDuration { get; set; }
+  String PodCondition { get; set; }
+  Nullable<Int32> RestartCount { get; set; }
+  Nullable<Int32> RestartCountSinceLastCycle { get; set; }
+  Nullable<Int32> SpecReplicas { get; set; }
+  ResourceRef Target { get; set; }
+  Int32 WarningCount { get; set; }
+
+class InfraGate.Observer.Contracts.AnomalyHandoffBatch
+  String CycleId { get; set; }
+  DateTimeOffset EmittedAt { get; set; }
+  IReadOnlyList<AnomalyReport> Reports { get; set; }
+
+enum InfraGate.Observer.Contracts.AnomalyKind
+  DeploymentUnavailable
+  PodUnhealthy
+  ServiceNoEndpoints
+  WarningEvent
+
+class InfraGate.Observer.Contracts.AnomalyObserverConventions
+  const Int32 DefaultCadenceSeconds
+  const Int32 DefaultDedupeResolutionThreshold
+  const Int32 DefaultDedupeSuppressionWindow
+  const String DefaultLlmModel
+  const Int32 MaxCadenceSeconds
+  const Int32 MaxDedupeResolutionThreshold
+  const Int32 MaxDedupeSuppressionWindow
+  const Int32 MaxMaxToolIterations
+  const Int32 MaxToolIterations
+  const Int32 MaxWallClockCapSeconds
+  const Int32 MinCadenceSeconds
+  const Int32 MinDedupeResolutionThreshold
+  const Int32 MinDedupeSuppressionWindow
+  const Int32 MinMaxToolIterations
+  const Int32 MinWallClockCapSeconds
+  const Int32 WallClockCapSeconds
+
+class InfraGate.Observer.Contracts.AnomalyReport
+  IReadOnlyDictionary<String, String> Annotations { get; set; }
+  String AnomalyId { get; set; }
+  String CycleId { get; set; }
+  DateTimeOffset DetectedAt { get; set; }
+  IReadOnlyList<EvidenceItem> Evidence { get; set; }
+  AnomalyKind Kind { get; set; }
+  Severity Severity { get; set; }
+  AnomalyStatus Status { get; set; }
+  RemediationHint Suggested { get; set; }
+  String Summary { get; set; }
+  ResourceRef Target { get; set; }
+
+enum InfraGate.Observer.Contracts.AnomalyStatus
+  Active
+  Resolved
+
+class InfraGate.Observer.Contracts.EvidenceItem
+  DateTimeOffset CapturedAt { get; set; }
+  String Content { get; set; }
+  String Source { get; set; }
+
+interface InfraGate.Observer.Contracts.IAnomalyHandoffSink
+  Task PublishAsync(AnomalyHandoffBatch batch, CancellationToken cancellationToken)
+
+class InfraGate.Observer.Contracts.RemediationHint
+  String Action { get; set; }
+  String Explanation { get; set; }
+
+class InfraGate.Observer.Contracts.ResourceRef
+  String ApiVersion { get; set; }
+  String Kind { get; set; }
+  String Name { get; set; }
+  String Namespace { get; set; }
+
+enum InfraGate.Observer.Contracts.Severity
+  High
+  Low
+  Medium

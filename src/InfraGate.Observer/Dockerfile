@@ -1,0 +1,30 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
+WORKDIR /src
+
+COPY Directory.Build.props .
+COPY .editorconfig .
+COPY src/InfraGate.Observer.Contracts/InfraGate.Observer.Contracts.csproj src/InfraGate.Observer.Contracts/
+COPY src/InfraGate.ClientCredentials/InfraGate.ClientCredentials.csproj src/InfraGate.ClientCredentials/
+COPY src/InfraGate.Observability/InfraGate.Observability.csproj src/InfraGate.Observability/
+COPY src/InfraGate.RuntimeSafety/InfraGate.RuntimeSafety.csproj src/InfraGate.RuntimeSafety/
+COPY src/InfraGate.Observer/InfraGate.Observer.csproj src/InfraGate.Observer/
+RUN dotnet restore src/InfraGate.Observer/InfraGate.Observer.csproj
+
+COPY src/InfraGate.Observer.Contracts/ src/InfraGate.Observer.Contracts/
+COPY src/InfraGate.ClientCredentials/ src/InfraGate.ClientCredentials/
+COPY src/InfraGate.Observability/ src/InfraGate.Observability/
+COPY src/InfraGate.RuntimeSafety/ src/InfraGate.RuntimeSafety/
+COPY src/InfraGate.Observer/ src/InfraGate.Observer/
+RUN dotnet publish src/InfraGate.Observer/InfraGate.Observer.csproj \
+    --configuration Release \
+    --output /app/observer \
+    --no-restore
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
+WORKDIR /app/observer
+COPY --from=build /app/observer .
+ENV INFRA_GATE_ENVIRONMENT=Production
+ENV ASPNETCORE_URLS=http://+:3003
+EXPOSE 3003
+USER $APP_UID
+ENTRYPOINT ["dotnet", "InfraGate.Observer.dll"]

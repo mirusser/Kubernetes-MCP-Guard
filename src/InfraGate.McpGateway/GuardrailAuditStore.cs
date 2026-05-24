@@ -20,7 +20,8 @@ public sealed class GuardrailAuditStore(McpGatewayOptions options) : IGuardrailA
             categories = auditEvent.Categories,
             planId = auditEvent.PlanId,
             subject = auditEvent.Subject,
-            authenticationType = auditEvent.AuthenticationType
+            authenticationType = auditEvent.AuthenticationType,
+            identityKind = auditEvent.IdentityKind
         };
         var line = JsonSerializer.Serialize(entry, JsonOptions) + Environment.NewLine;
 

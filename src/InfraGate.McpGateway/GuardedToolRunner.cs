@@ -78,7 +78,8 @@ public sealed partial class GuardedToolRunner
                 requestScan.Categories,
                 ExtractPlanId(arguments, null),
                 auditIdentity.Subject,
-                auditIdentity.AuthenticationType),
+                auditIdentity.AuthenticationType,
+                auditIdentity.IdentityKind),
             cancellationToken).ConfigureAwait(false);
 
         return true;
@@ -106,7 +107,8 @@ public sealed partial class GuardedToolRunner
                         : [McpGatewayConventions.GuardrailCategories.ManifestEchoCategory],
                     ExtractPlanId(arguments, response.Text),
                     auditIdentity.Subject,
-                    auditIdentity.AuthenticationType),
+                    auditIdentity.AuthenticationType,
+                    auditIdentity.IdentityKind),
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -120,7 +122,7 @@ public sealed partial class GuardedToolRunner
     {
         var identity = GatewayAuditIdentityResolver.Resolve(httpContextAccessor?.HttpContext?.User);
 
-        return new AuditIdentity(identity.Subject, identity.AuthenticationType);
+        return new AuditIdentity(identity.Subject, identity.AuthenticationType, identity.IdentityKind);
     }
 
     private static string? ExtractPlanId(IReadOnlyDictionary<string, object?> arguments, string? text)
@@ -146,5 +148,5 @@ public sealed partial class GuardedToolRunner
         matchTimeoutMilliseconds: McpGatewayConventions.RegexTimeoutMilliseconds)]
     private static partial Regex PlanIdRegex();
 
-    private sealed record class AuditIdentity(string? Subject, string? AuthenticationType);
+    private sealed record class AuditIdentity(string? Subject, string? AuthenticationType, string IdentityKind);
 }

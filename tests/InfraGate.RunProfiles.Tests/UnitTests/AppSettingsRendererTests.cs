@@ -91,6 +91,7 @@ public sealed class AppSettingsRendererTests
             null,
             [],
             null,
+            null,
             null);
 
         string result = AppSettingsRenderer.Render("config.yaml", profile);
@@ -112,6 +113,7 @@ public sealed class AppSettingsRendererTests
             null,
             null,
             [new DomainAdapterProfile("k8s", "kubernetes", null)],
+            null,
             null,
             null);
 
@@ -248,6 +250,36 @@ public sealed class AppSettingsRendererTests
         Assert.Equal(3, k8s.GetProperty("AllowedNamespaces").GetArrayLength());
     }
 
+    [Fact]
+    public void Render_ObserverCadencePresent_WritesCycleIntervalSeconds()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            Observer = new ObserverProfile(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "60",
+                null,
+                null,
+                null,
+                null)
+        };
+
+        string result = AppSettingsRenderer.Render("config.yaml", profile);
+
+        using var doc = JsonDocument.Parse(result);
+        JsonElement observer = doc.RootElement.GetProperty("InfraGate").GetProperty("Observer");
+        Assert.Equal("60", observer.GetProperty("CycleIntervalSeconds").GetString());
+        Assert.False(observer.TryGetProperty("CycleCadenceSeconds", out _));
+    }
+
     private static RunProfile CreateMinimalProfile() =>
         new(
             "test",
@@ -259,6 +291,7 @@ public sealed class AppSettingsRendererTests
             null,
             [new DomainAdapterProfile("k8s", "kubernetes",
                 new KubernetesAdapterProfile("/run/kube/config", ["default"]))],
+            null,
             null,
             null);
 }

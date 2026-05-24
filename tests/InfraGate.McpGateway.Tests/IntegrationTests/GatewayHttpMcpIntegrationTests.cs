@@ -34,6 +34,9 @@ using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
+// ASPDEPR004/ASPDEPR008: WebHostBuilder + TestServer are deprecated in favor of WebApplicationBuilder.
+// Suppressed because: these integration tests use TestServer for in-process gateway hosting;
+// WebApplicationFactory<T> would require a public Program class and adds overhead for 400+ tests.
 #pragma warning disable ASPDEPR004
 #pragma warning disable ASPDEPR008
 

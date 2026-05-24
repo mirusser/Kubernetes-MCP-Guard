@@ -55,6 +55,20 @@ profiles:
           kubeconfig: /run/kube/mcp-nginx-demo.compose.config
           allowedNamespaces:
             - mcp-nginx-demo
+    observer:
+      aspnetcoreUrls: http://0.0.0.0:3003
+      gatewayBaseUrl: http://gateway:3001/mcp
+      tokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
+      clientId: infra-gate-observer
+      clientSecret: observer-secret
+      scope: mcp:tools.readonly
+      llmProvider: anthropic
+      llmModel: claude-sonnet-4-6
+      cycleCadenceSeconds: "60"
+      cycleWallClockCapSeconds: "20"
+      maxToolIterations: "8"
+      fileSinkRoot: /data/observer/findings
+      observerHostPath: ../.mcp-observer/findings
 
   local-source-gateway:
     kind: dotnet
@@ -78,6 +92,19 @@ profiles:
           kubeconfig: .kube/mcp-nginx-demo.config
           allowedNamespaces:
             - mcp-nginx-demo
+    observer:
+      aspnetcoreUrls: http://0.0.0.0:3003
+      gatewayBaseUrl: http://127.0.0.1:3001/mcp
+      tokenEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token
+      clientId: infra-gate-observer
+      clientSecret: observer-secret
+      scope: mcp:tools.readonly
+      llmProvider: anthropic
+      llmModel: claude-sonnet-4-6
+      cycleCadenceSeconds: "60"
+      cycleWallClockCapSeconds: "20"
+      maxToolIterations: "8"
+      fileSinkRoot: .mcp-observer/findings
 
   local-stdio:
     kind: mcp-stdio

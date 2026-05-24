@@ -13,6 +13,8 @@ using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 
+// ASPDEPR004/ASPDEPR008: WebHostBuilder + TestServer are deprecated in favor of WebApplicationBuilder.
+// Suppressed because: WebApplicationFactory<T> requires a public Program class — overkill for isolated auth tests.
 #pragma warning disable ASPDEPR004
 #pragma warning disable ASPDEPR008
 

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using InfraGate.Approvals;
 using InfraGate.Approvals.AuditPayloads;
@@ -26,9 +27,10 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
     private readonly IApprovalPreExecutionGate preExecutionGate;
     private readonly IHttpContextAccessor httpContextAccessor;
     private readonly ISubscriptionRegistry subscriptionRegistry;
+    private readonly IGuardrailAuditStore auditStore;
     private readonly ILogger<GatewayToolDispatcher> logger;
 
-    public GatewayToolDispatcher( // NOSONAR:S107 — 11-param DI constructor. Aggregates would add indirection; explicit DI surfaces failures immediately.
+    public GatewayToolDispatcher( // NOSONAR:S107 — 12-param DI constructor. Aggregates would add indirection; explicit DI surfaces failures immediately.
         DownstreamToolRegistry registry,
         GuardedToolRunner guardedRunner,
         IDomainAdapter domainAdapter,
@@ -39,6 +41,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         IApprovalPreExecutionGate preExecutionGate,
         IHttpContextAccessor httpContextAccessor,
         ISubscriptionRegistry subscriptionRegistry,
+        IGuardrailAuditStore auditStore,
         ILogger<GatewayToolDispatcher> logger)
     {
         this.registry = registry;
@@ -51,6 +54,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         this.preExecutionGate = preExecutionGate;
         this.httpContextAccessor = httpContextAccessor;
         this.subscriptionRegistry = subscriptionRegistry;
+        this.auditStore = auditStore;
         this.logger = logger;
     }
 
@@ -98,6 +102,12 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (toolName.Equals(McpGatewayConventions.ToolNames.ApplyApprovedPlan, StringComparison.Ordinal))
         {
+            var scopeResult = await RequireMutationScopeAsync(toolName).ConfigureAwait(false);
+            if (scopeResult is not null)
+            {
+                return scopeResult;
+            }
+
             return await HandleApplyApprovedPlanAsync(request, ct).ConfigureAwait(false);
         }
 
@@ -113,6 +123,12 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (toolName.StartsWith(McpGatewayConventions.ToolNames.RequestToolPrefix, StringComparison.Ordinal))
         {
+            var scopeResult = await RequireMutationScopeAsync(toolName).ConfigureAwait(false);
+            if (scopeResult is not null)
+            {
+                return scopeResult;
+            }
+
             return await HandleRequestMutationAsync(toolName, request, ct).ConfigureAwait(false);
         }
 
@@ -155,6 +171,12 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         CallToolRequestParams request,
         CancellationToken ct)
     {
+        var scopeResult = await RequireAnyToolScopeAsync(toolName).ConfigureAwait(false);
+        if (scopeResult is not null)
+        {
+            return scopeResult;
+        }
+
         var arguments = ConvertArguments(request.Arguments);
         var result = await guardedRunner.CallAsync(toolName, arguments, ct).ConfigureAwait(false);
 
@@ -643,4 +665,71 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         IsError = true,
         Content = [new TextContentBlock { Text = text }]
     };
+
+    private async Task<CallToolResult?> RequireAnyToolScopeAsync(string toolName)
+    {
+        var user = httpContextAccessor.HttpContext?.User;
+        if (user is null)
+        {
+            return ErrorResult(
+                $"Refused: '{toolName}' requires an authenticated session.");
+        }
+
+        if (!GatewayAuthentication.HasRequiredScope(user, McpGatewayConventions.ToolScopeRequirements.MutationScope) &&
+            !GatewayAuthentication.HasRequiredScope(user, McpGatewayConventions.ToolScopeRequirements.ReadOnlyScope))
+        {
+            return await DenyAndAuditAsync(toolName, $"{McpGatewayConventions.ToolScopeRequirements.MutationScope} or {McpGatewayConventions.ToolScopeRequirements.ReadOnlyScope}").ConfigureAwait(false);
+        }
+
+        return null;
+    }
+
+    private async Task<CallToolResult?> RequireMutationScopeAsync(string toolName)
+    {
+        var user = httpContextAccessor.HttpContext?.User;
+        if (user is null)
+        {
+            return ErrorResult(
+                $"Refused: '{toolName}' requires an authenticated session with the '{McpGatewayConventions.ToolScopeRequirements.MutationScope}' scope.");
+        }
+
+        if (!GatewayAuthentication.HasRequiredScope(user, McpGatewayConventions.ToolScopeRequirements.MutationScope))
+        {
+            return await DenyAndAuditAsync(toolName, McpGatewayConventions.ToolScopeRequirements.MutationScope).ConfigureAwait(false);
+        }
+
+        return null;
+    }
+
+    private async Task<CallToolResult?> DenyAndAuditAsync(string toolName, string requiredScope)
+    {
+        var user = httpContextAccessor.HttpContext?.User;
+        if (user is null)
+        {
+            return ErrorResult(
+                $"Refused: '{toolName}' requires an authenticated session with the '{requiredScope}' scope.");
+        }
+
+        var identity = GatewayAuditIdentityResolver.Resolve(user);
+
+        logger.LogWarning(
+            "Tool '{ToolName}' denied: caller lacks required scope '{RequiredScope}'.",
+            toolName,
+            requiredScope);
+
+        var auditEvent = new GuardrailAuditEvent(
+            toolName,
+            McpGatewayConventions.GuardrailAudit.RequestDirection,
+            McpGatewayConventions.GuardrailAudit.DenyAction,
+            [McpGatewayConventions.GuardrailCategories.ScopeDenied],
+            PlanId: null,
+            identity.Subject,
+            identity.AuthenticationType,
+            identity.IdentityKind);
+
+        await auditStore.WriteAsync(auditEvent, CancellationToken.None).ConfigureAwait(false);
+
+        return ErrorResult(
+            $"Refused: tool '{toolName}' requires the '{requiredScope}' scope.");
+    }
 }

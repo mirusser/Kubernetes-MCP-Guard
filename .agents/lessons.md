@@ -47,3 +47,4 @@
 [run-profiles] Don't hide missing required Compose variables with optional interpolation — add required values to the generating run profile instead. (cause: smoke downstream-auth warnings)
 [mcp-spec] Don't rely on older MCP spec versions when debugging protocol behavior — check the latest dated specification first. (cause: protocol version drift)
 [mcp-testing] Don't use kubectl when the user is testing InfraGate MCP behavior — perform Kubernetes inspection and mutation through infra-gate tools only. (cause: tool-path validation)
+[pragmas] Don't leave `#pragma warning disable` with no explanation — every pragma must have a comment immediately above it explaining WHY the suppression is needed. (cause: suppressed warnings without rationale become permanent accidental debt)
