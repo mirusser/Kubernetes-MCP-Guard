@@ -42,6 +42,8 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
                             created_at_utc,
                             valid_from_utc,
                             valid_until_utc,
+                            policy_kind,
+                            operator_group,
                             intent_digest_algorithm,
                             intent_digest_canonicalization,
                             intent_digest_value,
@@ -61,6 +63,8 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
                             @CreatedAtUtc,
                             @ValidFromUtc,
                             @ValidUntilUtc,
+                            @PolicyKind,
+                            @OperatorGroup,
                             @IntentDigestAlgorithm,
                             @IntentDigestCanonicalization,
                             @IntentDigestValue,
@@ -82,6 +86,10 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
                             envelope.CreatedAtUtc,
                             envelope.ValidFromUtc,
                             envelope.ValidUntilUtc,
+                            PolicyKind = envelope.ApprovalPolicy.Type,
+                            OperatorGroup = GetPolicyParameter(
+                                envelope.ApprovalPolicy,
+                                ApprovalConventions.ApprovalPolicyParameters.OperatorGroup),
                             IntentDigestAlgorithm = envelope.IntentDigest.Algorithm,
                             IntentDigestCanonicalization = envelope.IntentDigest.Canonicalization,
                             IntentDigestValue = envelope.IntentDigest.Value,
@@ -1025,6 +1033,15 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
             },
             transaction,
             cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
+    private static string? GetPolicyParameter(ApprovalPolicy policy, string parameterName)
+    {
+        return policy.Parameters is not null &&
+               policy.Parameters.TryGetValue(parameterName, out var value) &&
+               !string.IsNullOrWhiteSpace(value)
+            ? value
+            : null;
     }
 
     private static async Task InsertChallengeOutcomeAsync(

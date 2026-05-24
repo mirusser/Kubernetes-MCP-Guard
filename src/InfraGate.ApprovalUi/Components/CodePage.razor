@@ -1,0 +1,122 @@
+@namespace InfraGate.ApprovalUi.Components
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Approval Code - InfraGate</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            font-family: system-ui, -apple-system, sans-serif;
+            --color-bg: #0f1117;
+            --color-card-bg: #1a1d28;
+            --color-text: #e1e4ea;
+            --color-text-muted: #8b8fa3;
+            --color-border: #2a2d3a;
+            --color-input-bg: #0d0f16;
+            --color-primary: #2563eb;
+            --color-error: #f87171;
+        }
+        @@media (prefers-color-scheme: light) {
+            :root {
+                color-scheme: light;
+                --color-bg: #f8f9fb;
+                --color-card-bg: #ffffff;
+                --color-text: #1f2937;
+                --color-text-muted: #6b7280;
+                --color-border: #e2e4e9;
+                --color-input-bg: #ffffff;
+                --color-primary: #1d4ed8;
+                --color-error: #991b1b;
+            }
+        }
+        body {
+            margin: 0;
+            background: var(--color-bg);
+            color: var(--color-text);
+            line-height: 1.6;
+        }
+        main {
+            max-width: 560px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+        h1 {
+            font-size: 26px;
+            font-weight: 700;
+            margin: 0 0 24px;
+            color: var(--color-text);
+        }
+        .card {
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-border);
+            border-radius: 10px;
+            padding: 24px;
+        }
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 650;
+            color: var(--color-text-muted);
+            margin-bottom: 8px;
+        }
+        input {
+            box-sizing: border-box;
+            width: 100%;
+            min-height: 44px;
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            background: var(--color-input-bg);
+            color: var(--color-text);
+            font: 18px ui-monospace, SFMono-Regular, Consolas, monospace;
+            letter-spacing: 0;
+            padding: 8px 10px;
+            text-transform: uppercase;
+        }
+        button {
+            min-height: 42px;
+            margin-top: 16px;
+            border: 0;
+            border-radius: 6px;
+            background: var(--color-primary);
+            color: #ffffff;
+            font-weight: 700;
+            padding: 9px 16px;
+            cursor: pointer;
+        }
+        .error {
+            color: var(--color-error);
+            font-weight: 700;
+            margin: 0 0 16px;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Approval Code</h1>
+        <section class="card" data-section="approval-code">
+            @if (!string.IsNullOrWhiteSpace(Data.Error))
+            {
+                <p class="error" data-field="code-error">@Data.Error</p>
+            }
+            <form method="post" action="@Data.ActionUrl">
+                <input type="hidden" name="@Data.AntiforgeryFieldName" value="@Data.AntiforgeryToken">
+                <label for="approval-code-input">Code</label>
+                <input id="approval-code-input"
+                       name="@Data.CodeFieldName"
+                       value="@Data.SubmittedCode"
+                       maxlength="8"
+                       autocomplete="one-time-code"
+                       required>
+                <button type="submit">Continue</button>
+            </form>
+        </section>
+    </main>
+</body>
+</html>
+
+@code {
+    [Parameter] public ApprovalCodePageData Data { get; set; } = default!;
+}

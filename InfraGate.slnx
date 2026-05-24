@@ -5,6 +5,7 @@
     <Project Path="src/InfraGate.ClientCredentials/InfraGate.ClientCredentials.csproj" />
     <Project Path="src/InfraGate.DownstreamAuth/InfraGate.DownstreamAuth.csproj" />
     <Project Path="src/InfraGate.Observer.Contracts/InfraGate.Observer.Contracts.csproj" />
+    <Project Path="src/InfraGate.Remediation.Contracts/InfraGate.Remediation.Contracts.csproj" />
     <Project Path="src/InfraGate.KubernetesAdapter/InfraGate.KubernetesAdapter.csproj" />
     <Project Path="src/InfraGate.RuntimeSafety/InfraGate.RuntimeSafety.csproj" />
     <Project Path="src/InfraGate.Observability/InfraGate.Observability.csproj" />
@@ -19,6 +20,7 @@
     <Project Path="tests/InfraGate.ClientCredentials.Tests/InfraGate.ClientCredentials.Tests.csproj" />
     <Project Path="tests/InfraGate.DownstreamAuth.Tests/InfraGate.DownstreamAuth.Tests.csproj" />
     <Project Path="tests/InfraGate.Observer.Contracts.Tests/InfraGate.Observer.Contracts.Tests.csproj" />
+    <Project Path="tests/InfraGate.Remediation.Contracts.Tests/InfraGate.Remediation.Contracts.Tests.csproj" />
     <Project Path="tests/InfraGate.Approvals.Postgres.Tests/InfraGate.Approvals.Postgres.Tests.csproj" />
     <Project Path="tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj" />
     <Project Path="tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj" />

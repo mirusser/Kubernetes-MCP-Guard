@@ -406,78 +406,26 @@ public sealed class ApprovalStore : IApprovalPlanWorkflow, IApprovalAuditPublish
         string.IsNullOrWhiteSpace(reviewSurfaceContext.Renderer);
 
     private static bool IsSupportedPolicy(ApprovalPolicy policy) =>
-        string.Equals(policy.Type, ApprovalConventions.ApprovalPolicyTypes.SameSubject, StringComparison.Ordinal);
+        string.Equals(policy.Type, ApprovalConventions.ApprovalPolicyTypes.SameSubject, StringComparison.Ordinal) ||
+        IsSupportedOperatorApprovalPolicy(policy);
 
     private static bool IsSupportedReusePolicy(ExecutionReusePolicy policy) =>
         string.Equals(policy.Type, ApprovalConventions.ExecutionReusePolicyTypes.SingleExecution, StringComparison.Ordinal);
 
     private static ResultFailure? ValidateGrant(PlanEnvelope envelope, ApprovalGrant grant)
     {
-        var now = DateTimeOffset.UtcNow;
-        if (envelope.ValidFromUtc > now)
-        {
-            return new ResultFailure(
-                $"Plan '{envelope.Id}' is not valid yet.",
-                ApprovalConventions.ResultReasonCodes.PlanNotStarted);
-        }
+        var validation = ApprovalGrantValidation.Validate(envelope, grant);
 
-        if (envelope.ValidUntilUtc <= now)
-        {
-            return new ResultFailure(
-                $"Plan '{envelope.Id}' expired before execution.",
-                ApprovalConventions.ResultReasonCodes.PlanExpired);
-        }
-
-        if (grant.ExpiresAtUtc <= now)
-        {
-            return new ResultFailure(
-                $"Approval grant '{grant.Id}' expired before execution.",
-                ApprovalConventions.ResultReasonCodes.GrantExpired);
-        }
-
-        if (!string.Equals(grant.PlanId, envelope.Id, StringComparison.Ordinal) ||
-            !string.Equals(grant.RequesterSubject, envelope.Requester.Subject, StringComparison.Ordinal) ||
-            !SameDigest(grant.IntentDigest, envelope.IntentDigest) ||
-            !SameDigest(grant.ReviewDigest, envelope.ReviewDigest) ||
-            !SamePolicy(grant.ApprovalPolicy, envelope.ApprovalPolicy) ||
-            !SameReusePolicy(grant.ExecutionReusePolicy, envelope.ExecutionReusePolicy))
-        {
-            return new ResultFailure(
-                $"Approval grant '{grant.Id}' no longer matches plan '{envelope.Id}'.",
-                ApprovalConventions.ResultReasonCodes.InvalidGrant);
-        }
-
-        if (string.Equals(envelope.ApprovalPolicy.Type, ApprovalConventions.ApprovalPolicyTypes.SameSubject, StringComparison.Ordinal) &&
-            !string.Equals(grant.RequesterSubject, grant.ApproverSubject, StringComparison.Ordinal))
-        {
-            return new ResultFailure(
-                $"Approval grant '{grant.Id}' violates same-subject approval policy.",
-                ApprovalConventions.ResultReasonCodes.InvalidGrant);
-        }
-
-        var actualReviewDigest = PlanEnvelopeFactory.ComputeReviewDigest(envelope);
-        if (!SameDigest(envelope.ReviewDigest, actualReviewDigest))
-        {
-            return new ResultFailure(
-                $"Plan '{envelope.Id}' review digest no longer matches the pending plan.",
-                ApprovalConventions.ResultReasonCodes.DigestChanged);
-        }
-
-        return null;
+        return validation is { } failure
+            ? new ResultFailure(failure.Message, failure.ReasonCode)
+            : null;
     }
 
-    private static bool SameDigest(ApprovalDigest left, ApprovalDigest right)
-    {
-        return string.Equals(left.Algorithm, right.Algorithm, StringComparison.Ordinal) &&
-               string.Equals(left.Canonicalization, right.Canonicalization, StringComparison.Ordinal) &&
-               FixedTimeStringComparer.Equals(left.Value, right.Value);
-    }
-
-    private static bool SamePolicy(ApprovalPolicy left, ApprovalPolicy right) =>
-        string.Equals(left.Type, right.Type, StringComparison.Ordinal);
-
-    private static bool SameReusePolicy(ExecutionReusePolicy left, ExecutionReusePolicy right) =>
-        string.Equals(left.Type, right.Type, StringComparison.Ordinal);
+    private static bool IsSupportedOperatorApprovalPolicy(ApprovalPolicy policy) =>
+        string.Equals(policy.Type, ApprovalConventions.ApprovalPolicyTypes.OperatorApproval, StringComparison.Ordinal) &&
+        policy.Parameters is not null &&
+        policy.Parameters.TryGetValue(ApprovalConventions.ApprovalPolicyParameters.OperatorGroup, out var operatorGroup) &&
+        !string.IsNullOrWhiteSpace(operatorGroup);
 
     private PlanEnvelope ToUntypedEnvelope<TPayload>(PlanEnvelope<TPayload> envelope)
     {

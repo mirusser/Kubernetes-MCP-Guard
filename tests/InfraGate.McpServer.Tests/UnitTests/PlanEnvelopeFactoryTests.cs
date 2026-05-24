@@ -130,6 +130,65 @@ public sealed class PlanEnvelopeFactoryTests
     }
 
     [Fact]
+    public void Create_WhenApprovalPolicyChanges_ChangesReviewDigest()
+    {
+        var createdAtUtc = DateTimeOffset.Parse("2026-05-15T00:00:00Z");
+        var requester = new PlanRequester("test-subject", "test");
+        var intentDigest = ApprovalDigest.ComputeSha256(
+            "dummy.intent.v1",
+            new { operation = "scale", name = "demo" });
+        var payload = new Dictionary<string, string>
+        {
+            ["name"] = "demo"
+        };
+
+        var sameSubject = PlanEnvelopeFactory.Create(
+            "p-11111111111111111111111111111111",
+            "dummy",
+            "scale",
+            createdAtUtc,
+            requester,
+            intentDigest,
+            new ReviewSurfaceContext(ApprovalConventions.ReviewSurfaces.GatewayBrowser, "dummy-review-v1"),
+            payload);
+        var operatorApproval = PlanEnvelopeFactory.Create(
+            "p-11111111111111111111111111111111",
+            "dummy",
+            "scale",
+            createdAtUtc,
+            requester,
+            intentDigest,
+            new ReviewSurfaceContext(ApprovalConventions.ReviewSurfaces.GatewayBrowser, "dummy-review-v1"),
+            payload,
+            approvalPolicy: ApprovalPolicy.OperatorApproval("kubernetes-operators"));
+
+        Assert.NotEqual(sameSubject.ReviewDigest, operatorApproval.ReviewDigest);
+    }
+
+    [Fact]
+    public void Create_WhenSameSubjectPolicyIsUsed_DoesNotSerializeNullParameters()
+    {
+        var createdAtUtc = DateTimeOffset.Parse("2026-05-15T00:00:00Z");
+        var requester = new PlanRequester("test-subject", "test");
+        var intentDigest = ApprovalDigest.ComputeSha256(
+            "dummy.intent.v1",
+            new { operation = "scale", name = "demo" });
+
+        var envelope = PlanEnvelopeFactory.Create(
+            "p-11111111111111111111111111111111",
+            "dummy",
+            "scale",
+            createdAtUtc,
+            requester,
+            intentDigest,
+            new ReviewSurfaceContext(ApprovalConventions.ReviewSurfaces.GatewayBrowser, "dummy-review-v1"),
+            new Dictionary<string, string> { ["name"] = "demo" });
+        string canonicalJson = ApprovalCanonicalJson.Serialize(envelope.ApprovalPolicy);
+
+        Assert.DoesNotContain("parameters", canonicalJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Create_WhenEvidenceArtifactRedactionMetadataChanges_ChangesReviewDigest()
     {
         var createdAtUtc = DateTimeOffset.Parse("2026-05-15T00:00:00Z");

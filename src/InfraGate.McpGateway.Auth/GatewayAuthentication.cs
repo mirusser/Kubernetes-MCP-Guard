@@ -74,7 +74,9 @@ public static class GatewayAuthentication
     internal static readonly string[] AcceptedScopes =
     [
         GatewayAuthConventions.DefaultOAuthScope,
-        GatewayAuthConventions.DefaultReadOnlyOAuthScope
+        GatewayAuthConventions.DefaultReadOnlyOAuthScope,
+        GatewayAuthConventions.DefaultProposeOAuthScope,
+        GatewayAuthConventions.DefaultExecuteOAuthScope
     ];
 
     private static void AddGatewayAuthorization(IServiceCollection services, GatewayAuthOptions options)
@@ -145,13 +147,18 @@ public static class GatewayAuthentication
         mcpOptions.ResourceMetadataUri = new Uri(
             GatewayAuthConventions.Metadata.ProtectedResourcePath,
             UriKind.Relative);
-        mcpOptions.ResourceMetadata = new ProtectedResourceMetadata
+        var metadata = new ProtectedResourceMetadata
         {
             Resource = options.OAuthResource,
             ResourceName = GatewayAuthConventions.Metadata.ResourceName,
-            AuthorizationServers = { oauthAuthority },
-            ScopesSupported = { options.OAuthScope }
+            AuthorizationServers = { oauthAuthority }
         };
+        foreach (string scope in DistinctValues([options.OAuthScope, .. AcceptedScopes]))
+        {
+            metadata.ScopesSupported.Add(scope);
+        }
+
+        mcpOptions.ResourceMetadata = metadata;
     }
 
     private static void ConfigureApprovalOAuthOptions(OAuthOptions oauthOptions, GatewayAuthOptions options)
@@ -209,7 +216,8 @@ public static class GatewayAuthentication
             .SelectMany(claim => claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             .ToHashSet(StringComparer.Ordinal);
 
-        return userScopes.Contains(primaryScope) || userScopes.Contains(GatewayAuthConventions.DefaultReadOnlyOAuthScope);
+        return userScopes.Contains(primaryScope) ||
+               AcceptedScopes.Any(userScopes.Contains);
     }
 
     public static bool HasRequiredScope(ClaimsPrincipal user, string requiredScope)

@@ -4,10 +4,13 @@ namespace InfraGate.McpGateway.Auth;
 
 public static class GatewayAuditIdentityResolver
 {
-    private static readonly IReadOnlySet<string> KnownServiceClients =
-        new HashSet<string>(StringComparer.Ordinal)
+    private static readonly IReadOnlyDictionary<string, string> KnownServiceClients =
+        new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            GatewayAuthConventions.ServiceClients.ObserverClientId
+            [GatewayAuthConventions.ServiceClients.ObserverClientId] =
+                FormatServiceSubject(GatewayAuthConventions.ServiceClients.ObserverClientId),
+            [GatewayAuthConventions.ServiceClients.PlannerClientId] = "service:planner",
+            [GatewayAuthConventions.ServiceClients.ExecutorClientId] = "service:executor"
         };
 
     public static GatewayAuditIdentity Resolve(ClaimsPrincipal? user)
@@ -30,10 +33,9 @@ public static class GatewayAuditIdentityResolver
         // Check azp (authorized party) claim — identifies the OAuth client that requested the token.
         // Service clients (machine identities) get a formatted subject and distinguished identity kind.
         string? azp = ClaimValue(GatewayAuthConventions.Claims.AuthorizedParty);
-        if (azp is not null && KnownServiceClients.Contains(azp))
+        if (azp is not null && KnownServiceClients.TryGetValue(azp, out var serviceSubject))
         {
-            subject = FormatServiceSubject(
-                ClaimValue(GatewayAuthConventions.Claims.ClientId) ?? azp);
+            subject = serviceSubject;
             identityKind = GatewayAuthConventions.Audit.ServiceIdentityKind;
         }
         else

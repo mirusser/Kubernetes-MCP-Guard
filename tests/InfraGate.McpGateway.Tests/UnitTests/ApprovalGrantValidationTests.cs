@@ -130,6 +130,30 @@ public sealed class ApprovalGrantValidationTests
     }
 
     [Fact]
+    public void Validate_OperatorApprovalPolicyWithDifferentApprover_ReturnsNull()
+    {
+        var envelope = BuildValidEnvelope(
+            approvalPolicy: ApprovalPolicy.OperatorApproval("kubernetes-operators"));
+        var grant = BuildMatchingGrant(envelope) with { ApproverSubject = "operator-user" };
+
+        var result = ApprovalGrantValidation.Validate(envelope, grant);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void Validate_OperatorApprovalPolicyWithoutOperatorGroup_ReturnsInvalidGrantError()
+    {
+        var envelope = BuildValidEnvelope(
+            approvalPolicy: new ApprovalPolicy(ApprovalConventions.ApprovalPolicyTypes.OperatorApproval));
+        var grant = BuildMatchingGrant(envelope) with { ApproverSubject = "operator-user" };
+
+        var (_, reasonCode) = ApprovalGrantValidation.Validate(envelope, grant)!.Value;
+
+        Assert.Equal(ApprovalConventions.ResultReasonCodes.InvalidGrant, reasonCode);
+    }
+
+    [Fact]
     public void Validate_ReviewDigestTamperedOnEnvelope_ReturnsDigestChangedError()
     {
         var envelope = BuildValidEnvelope();
@@ -166,6 +190,15 @@ public sealed class ApprovalGrantValidationTests
             new ApprovalPolicy(type1), new ApprovalPolicy(type2)));
     }
 
+    [Fact]
+    public void SamePolicy_ParameterMismatch_ReturnsFalse()
+    {
+        var left = ApprovalPolicy.OperatorApproval("kubernetes-operators");
+        var right = ApprovalPolicy.OperatorApproval("platform-operators");
+
+        Assert.False(ApprovalGrantValidation.SamePolicy(left, right));
+    }
+
     [Theory]
     [InlineData("reuse-a", "reuse-a", true)]
     [InlineData("reuse-a", "reuse-b", false)]
@@ -177,7 +210,8 @@ public sealed class ApprovalGrantValidationTests
 
     private static PlanEnvelope BuildValidEnvelope(
         DateTimeOffset? validFrom = null,
-        DateTimeOffset? validUntil = null)
+        DateTimeOffset? validUntil = null,
+        ApprovalPolicy? approvalPolicy = null)
     {
         var now = DateTimeOffset.UtcNow;
         var intentDigest = ApprovalDigest.ComputeSha256("test.intent.v1", new { operation = "test-op" });
@@ -191,7 +225,7 @@ public sealed class ApprovalGrantValidationTests
             validFrom ?? now.AddSeconds(-1),
             validUntil ?? now.AddHours(1),
             new PlanRequester(Subject, "test-auth"),
-            ApprovalPolicy.SameSubject(),
+            approvalPolicy ?? ApprovalPolicy.SameSubject(),
             ExecutionReusePolicy.SingleExecution(),
             FreshnessPolicy.Empty,
             new ReviewSurfaceContext(ApprovalConventions.ReviewSurfaces.GatewayBrowser, "renderer-v1"),

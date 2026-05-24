@@ -25,12 +25,13 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
     private readonly IApprovalExecutionWorkflow approvalExecution;
     private readonly IApprovalAuditPublisher auditPublisher;
     private readonly IApprovalPreExecutionGate preExecutionGate;
+    private readonly IProposePlanHandler proposePlanHandler;
     private readonly IHttpContextAccessor httpContextAccessor;
     private readonly ISubscriptionRegistry subscriptionRegistry;
     private readonly IGuardrailAuditStore auditStore;
     private readonly ILogger<GatewayToolDispatcher> logger;
 
-    public GatewayToolDispatcher( // NOSONAR:S107 — 12-param DI constructor. Aggregates would add indirection; explicit DI surfaces failures immediately.
+    public GatewayToolDispatcher( // NOSONAR:S107 — 13-param DI constructor. Aggregates would add indirection; explicit DI surfaces failures immediately.
         DownstreamToolRegistry registry,
         GuardedToolRunner guardedRunner,
         IDomainAdapter domainAdapter,
@@ -39,6 +40,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         IApprovalExecutionWorkflow approvalExecution,
         IApprovalAuditPublisher auditPublisher,
         IApprovalPreExecutionGate preExecutionGate,
+        IProposePlanHandler proposePlanHandler,
         IHttpContextAccessor httpContextAccessor,
         ISubscriptionRegistry subscriptionRegistry,
         IGuardrailAuditStore auditStore,
@@ -52,6 +54,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         this.approvalExecution = approvalExecution;
         this.auditPublisher = auditPublisher;
         this.preExecutionGate = preExecutionGate;
+        this.proposePlanHandler = proposePlanHandler;
         this.httpContextAccessor = httpContextAccessor;
         this.subscriptionRegistry = subscriptionRegistry;
         this.auditStore = auditStore;
@@ -89,6 +92,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         tools.Add(CreateApplyApprovedPlanTool());
         tools.Add(CreateGetPlanStatusTool());
+        tools.Add(CreateProposePlanTool());
         tools.Add(CreateWaitForPlanApprovalTool());
 
         return new ListToolsResult { Tools = tools };
@@ -102,7 +106,10 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (toolName.Equals(McpGatewayConventions.ToolNames.ApplyApprovedPlan, StringComparison.Ordinal))
         {
-            var scopeResult = await RequireMutationScopeAsync(toolName).ConfigureAwait(false);
+            var scopeResult = await RequireAnyScopeAsync(
+                toolName,
+                McpGatewayConventions.ToolScopeRequirements.MutationScope,
+                McpGatewayConventions.ToolScopeRequirements.ExecuteScope).ConfigureAwait(false);
             if (scopeResult is not null)
             {
                 return scopeResult;
@@ -113,12 +120,41 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (toolName.Equals(McpGatewayConventions.ToolNames.GetPlanStatus, StringComparison.Ordinal))
         {
+            var scopeResult = await RequireMutationScopeAsync(toolName).ConfigureAwait(false);
+            if (scopeResult is not null)
+            {
+                return scopeResult;
+            }
+
             return await HandleGetPlanStatusAsync(request, ct).ConfigureAwait(false);
         }
 
         if (toolName.Equals(McpGatewayConventions.ToolNames.WaitForPlanApproval, StringComparison.Ordinal))
         {
+            var scopeResult = await RequireAnyScopeAsync(
+                toolName,
+                McpGatewayConventions.ToolScopeRequirements.MutationScope,
+                McpGatewayConventions.ToolScopeRequirements.ExecuteScope).ConfigureAwait(false);
+            if (scopeResult is not null)
+            {
+                return scopeResult;
+            }
+
             return await HandleWaitForPlanApprovalAsync(request, ct).ConfigureAwait(false);
+        }
+
+        if (toolName.Equals(McpGatewayConventions.ToolNames.ProposePlan, StringComparison.Ordinal))
+        {
+            var scopeResult = await RequireAnyScopeAsync(
+                toolName,
+                McpGatewayConventions.ToolScopeRequirements.MutationScope,
+                McpGatewayConventions.ToolScopeRequirements.ProposeScope).ConfigureAwait(false);
+            if (scopeResult is not null)
+            {
+                return scopeResult;
+            }
+
+            return await HandleProposePlanAsync(request, ct).ConfigureAwait(false);
         }
 
         if (toolName.StartsWith(McpGatewayConventions.ToolNames.RequestToolPrefix, StringComparison.Ordinal))
@@ -208,6 +244,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             mutationToolName,
             args,
             new PlanRequester(identity.Subject, identity.AuthenticationType),
+            ApprovalPolicy.SameSubject(),
             ct).ConfigureAwait(false);
 
         if (!planResult.Succeeded || planResult.Envelope is null)
@@ -398,6 +435,29 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         };
     }
 
+    private async Task<CallToolResult> HandleProposePlanAsync(
+        CallToolRequestParams request,
+        CancellationToken ct)
+    {
+        var args = ConvertArguments(request.Arguments);
+        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.OperationType, out var operationTypeObj) ||
+            operationTypeObj is not string operationType ||
+            string.IsNullOrWhiteSpace(operationType))
+        {
+            return ErrorResult("Missing required argument: operationType.");
+        }
+
+        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.OperationArguments, out var argumentsObj) ||
+            argumentsObj is not JsonElement argumentsElement ||
+            argumentsElement.ValueKind != JsonValueKind.Object)
+        {
+            return ErrorResult("Missing required argument: arguments.");
+        }
+
+        var operationArguments = ConvertObjectArguments(argumentsElement);
+        return await proposePlanHandler.ProposeAsync(operationType, operationArguments, ct).ConfigureAwait(false);
+    }
+
     private static CallToolResult HandleUnapprovedGate(ApprovalGateResult gate)
     {
         return gate.Status switch
@@ -492,6 +552,12 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
     private static readonly string[] WaitForPlanApprovalRequiredArgs = [McpGatewayConventions.ToolArguments.PlanId];
 
+    private static readonly string[] ProposePlanRequiredArgs =
+    [
+        McpGatewayConventions.ToolArguments.OperationType,
+        McpGatewayConventions.ToolArguments.OperationArguments
+    ];
+
     private static Tool CreateApplyApprovedPlanTool()
     {
         return new Tool
@@ -570,6 +636,33 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         };
     }
 
+    private static Tool CreateProposePlanTool()
+    {
+        return new Tool
+        {
+            Name = McpGatewayConventions.ToolNames.ProposePlan,
+            Description = "Creates an operator-approved remediation plan and sends an approval access code.",
+            InputSchema = JsonSerializer.SerializeToElement(new
+            {
+                type = "object",
+                properties = new
+                {
+                    operationType = new
+                    {
+                        type = "string",
+                        description = "Allowed values: restart_deployment, scale_deployment."
+                    },
+                    arguments = new
+                    {
+                        type = "object",
+                        description = "Operation-specific arguments for the selected remediation operation."
+                    }
+                },
+                required = ProposePlanRequiredArgs
+            })
+        };
+    }
+
     private static IReadOnlyDictionary<string, object?> ConvertArguments(IDictionary<string, JsonElement>? args)
     {
         if (args is null || args.Count == 0)
@@ -581,6 +674,17 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         foreach (var (key, element) in args)
         {
             result[key] = JsonElementToObject(element);
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyDictionary<string, object?> ConvertObjectArguments(JsonElement element)
+    {
+        var result = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var property in element.EnumerateObject())
+        {
+            result[property.Name] = JsonElementToObject(property.Value);
         }
 
         return result;
@@ -675,13 +779,10 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
                 $"Refused: '{toolName}' requires an authenticated session.");
         }
 
-        if (!GatewayAuthentication.HasRequiredScope(user, McpGatewayConventions.ToolScopeRequirements.MutationScope) &&
-            !GatewayAuthentication.HasRequiredScope(user, McpGatewayConventions.ToolScopeRequirements.ReadOnlyScope))
-        {
-            return await DenyAndAuditAsync(toolName, $"{McpGatewayConventions.ToolScopeRequirements.MutationScope} or {McpGatewayConventions.ToolScopeRequirements.ReadOnlyScope}").ConfigureAwait(false);
-        }
-
-        return null;
+        return await RequireAnyScopeAsync(
+            toolName,
+            McpGatewayConventions.ToolScopeRequirements.MutationScope,
+            McpGatewayConventions.ToolScopeRequirements.ReadOnlyScope).ConfigureAwait(false);
     }
 
     private async Task<CallToolResult?> RequireMutationScopeAsync(string toolName)
@@ -696,6 +797,23 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         if (!GatewayAuthentication.HasRequiredScope(user, McpGatewayConventions.ToolScopeRequirements.MutationScope))
         {
             return await DenyAndAuditAsync(toolName, McpGatewayConventions.ToolScopeRequirements.MutationScope).ConfigureAwait(false);
+        }
+
+        return null;
+    }
+
+    private async Task<CallToolResult?> RequireAnyScopeAsync(string toolName, params string[] requiredScopes)
+    {
+        var user = httpContextAccessor.HttpContext?.User;
+        if (user is null)
+        {
+            return ErrorResult(
+                $"Refused: '{toolName}' requires an authenticated session with one of these scopes: {string.Join(", ", requiredScopes)}.");
+        }
+
+        if (!requiredScopes.Any(scope => GatewayAuthentication.HasRequiredScope(user, scope)))
+        {
+            return await DenyAndAuditAsync(toolName, string.Join(" or ", requiredScopes)).ConfigureAwait(false);
         }
 
         return null;

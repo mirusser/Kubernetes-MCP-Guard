@@ -3,6 +3,7 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Email;
 using InfraGate.McpGateway.Notifications;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
@@ -70,6 +71,9 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton<PlanStatusResourceHandler>();
         services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
         services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
+        services.AddSingleton<IApprovalAccessCodeStore, InMemoryApprovalAccessCodeStore>();
+        services.AddSingleton<IApprovalEmailSender, NullApprovalEmailSender>();
+        services.AddSingleton<IProposePlanHandler, ProposePlanHandler>();
         services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
         services.AddSingleton<IApprovalPageRenderer>(sp =>
             new ApprovalPageRenderer(sp, sp.GetRequiredService<ILoggerFactory>()));
@@ -135,6 +139,12 @@ public sealed class GatewayDiWiringTests
     private sealed class NullAuditStore : IGuardrailAuditStore
     {
         public Task WriteAsync(GuardrailAuditEvent auditEvent, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+    }
+
+    private sealed class NullApprovalEmailSender : IApprovalEmailSender
+    {
+        public Task SendAsync(ApprovalEmailContent content, CancellationToken cancellationToken) =>
             Task.CompletedTask;
     }
 }

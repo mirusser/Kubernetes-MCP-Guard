@@ -64,6 +64,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     env_file:
       # Compose --env-file supplies interpolation values; env_file passes the
       # same generated profile into the gateway container runtime.
@@ -81,6 +83,11 @@ services:
       INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT: ${INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT}
       INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT: ${INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT}
       INFRA_GATE_APPROVAL_BASE_URL: ${INFRA_GATE_APPROVAL_BASE_URL}
+      INFRA_GATE_OPERATOR_GROUP: ${INFRA_GATE_OPERATOR_GROUP:-kubernetes-operators}
+      INFRA_GATE_OPERATOR_EMAIL: ${INFRA_GATE_OPERATOR_EMAIL:-operators@example.local}
+      INFRA_GATE_GATEWAY_SMTP_HOST: ${INFRA_GATE_GATEWAY_SMTP_HOST:-mailpit}
+      INFRA_GATE_GATEWAY_SMTP_PORT: ${INFRA_GATE_GATEWAY_SMTP_PORT:-1025}
+      INFRA_GATE_GATEWAY_SMTP_FROM: ${INFRA_GATE_GATEWAY_SMTP_FROM:-infragate@example.local}
       INFRA_GATE_DOWNSTREAM_ASSEMBLY: ${INFRA_GATE_DOWNSTREAM_ASSEMBLY}
       INFRA_GATE_GUARD_AUDIT_ROOT: ${INFRA_GATE_GUARD_AUDIT_ROOT}
       INFRA_GATE_DOWNSTREAM_AUTH_REQUIRED: ${INFRA_GATE_DOWNSTREAM_AUTH_REQUIRED}
@@ -107,6 +114,14 @@ services:
     networks:
       - default
       - k8s
+
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    ports:
+      - "${MAILPIT_BIND_ADDRESS:-127.0.0.1}:${MAILPIT_WEB_PORT:-8025}:8025"
+      - "${MAILPIT_BIND_ADDRESS:-127.0.0.1}:${MAILPIT_SMTP_PORT:-1025}:1025"
+    networks:
+      - default
 
   observer:
     image: ${INFRA_GATE_OBSERVER_IMAGE:-infragate-observer}

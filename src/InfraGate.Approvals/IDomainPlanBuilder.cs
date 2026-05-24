@@ -6,5 +6,6 @@ public interface IDomainPlanBuilder
         string mutationToolName,
         IReadOnlyDictionary<string, object?> arguments,
         PlanRequester requester,
+        ApprovalPolicy approvalPolicy,
         CancellationToken ct);
 }

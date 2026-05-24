@@ -19,6 +19,7 @@ public static class PostgresApprovalPersistenceServiceCollectionExtensions
         services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<IApprovalPersistence>());
         services.AddSingleton<IApprovalExecutionWorkflow>(sp => sp.GetRequiredService<IApprovalPersistence>());
         services.AddSingleton<IApprovalAuditPublisher>(sp => sp.GetRequiredService<IApprovalPersistence>());
+        services.AddSingleton<IApprovalAccessCodeStore, PostgresApprovalAccessCodeStore>();
         services.AddSingleton<PostgresApprovalSchemaValidator>();
 
         return services;

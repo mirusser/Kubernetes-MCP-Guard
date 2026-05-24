@@ -81,6 +81,36 @@ public sealed class ApprovalStoreTests
         Assert.Equal(PlanStatus.Applied, result.Status);
     }
 
+    [Fact]
+    public async Task GetPendingPlanAsync_OperatorApprovalPolicy_RoundTripsParameters()
+    {
+        var store = CreateStore();
+        var created = await CreatePlanAsync(store, approvalPolicy: ApprovalPolicy.OperatorApproval("kubernetes-operators"));
+
+        var pending = await store.GetPendingPlanAsync(created.Envelope.Id, CancellationToken.None);
+
+        Assert.True(pending.IsPending);
+        Assert.Equal(created.Envelope.ApprovalPolicy, pending.Envelope?.ApprovalPolicy);
+        Assert.Equal(
+            "kubernetes-operators",
+            pending.Envelope?.ApprovalPolicy.Parameters?[ApprovalConventions.ApprovalPolicyParameters.OperatorGroup]);
+    }
+
+    [Fact]
+    public async Task GetGrantAsync_OperatorApprovalPolicy_RoundTripsParameters()
+    {
+        var store = CreateStore();
+        var created = await CreatePlanAsync(store, approvalPolicy: ApprovalPolicy.OperatorApproval("kubernetes-operators"));
+
+        await store.CreateGrantAsync(created.Envelope, "operator-user", "challenge-1", CancellationToken.None);
+        var grant = await store.GetGrantAsync(created.Envelope.Id, CancellationToken.None);
+
+        Assert.Equal(created.Envelope.ApprovalPolicy, grant?.ApprovalPolicy);
+        Assert.Equal(
+            "kubernetes-operators",
+            grant?.ApprovalPolicy.Parameters?[ApprovalConventions.ApprovalPolicyParameters.OperatorGroup]);
+    }
+
     private static ApprovalStore CreateStore()
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-plan-status-tests", Guid.NewGuid().ToString("N"));
@@ -90,7 +120,8 @@ public sealed class ApprovalStoreTests
 
     private static Task<ApprovalPlanResult> CreatePlanAsync(
         ApprovalStore store,
-        DateTimeOffset? createdAtUtc = null)
+        DateTimeOffset? createdAtUtc = null,
+        ApprovalPolicy? approvalPolicy = null)
     {
         DateTimeOffset createdAt = createdAtUtc ?? DateTimeOffset.UtcNow;
         var envelope = PlanEnvelopeFactory.Create(
@@ -101,7 +132,8 @@ public sealed class ApprovalStoreTests
             new PlanRequester(Subject, "test"),
             ApprovalDigest.ComputeSha256("test.intent.v1", new { operation = Operation }),
             new ReviewSurfaceContext(ApprovalConventions.ReviewSurfaces.GatewayBrowser, Renderer),
-            new TestPlanPayload("demo"));
+            new TestPlanPayload("demo"),
+            approvalPolicy: approvalPolicy);
 
         return store.CreatePlanAsync(envelope, TargetNamespace, CancellationToken.None);
     }

@@ -86,7 +86,11 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         }
 
         var grantedAuthz = await authorizationCheck.EvaluateAsync(
-            new PlanAuthorizationContext(decoded.Envelope.Requester.Subject, requester.Subject),
+            new PlanAuthorizationContext(
+                decoded.Envelope.Requester.Subject,
+                requester.Subject,
+                decoded.Envelope.ApprovalPolicy,
+                GetActorGroups()),
             cancellationToken).ConfigureAwait(false);
         if (!grantedAuthz.IsAuthorized)
         {
@@ -124,7 +128,11 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         }
 
         var pendingAuthz = await authorizationCheck.EvaluateAsync(
-            new PlanAuthorizationContext(pendingPlan.Envelope.Requester.Subject, requester.Subject),
+            new PlanAuthorizationContext(
+                pendingPlan.Envelope.Requester.Subject,
+                requester.Subject,
+                pendingPlan.Envelope.ApprovalPolicy,
+                GetActorGroups()),
             cancellationToken).ConfigureAwait(false);
         if (!pendingAuthz.IsAuthorized)
         {
@@ -296,18 +304,13 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 ApprovalConventions.ResultReasonCodes.ChallengeAlreadyTerminal);
         }
 
-        if (!SameSubject(challenge.RequesterSubject, approver.Subject))
+        var policyFailure = await ValidateChallengeDecisionPolicyAsync(
+            challenge,
+            approver,
+            cancellationToken).ConfigureAwait(false);
+        if (policyFailure is not null)
         {
-            await WriteChallengeRejectedAuditAsync(
-                challenge,
-                approver.Subject,
-                "Approver subject did not match requester subject.",
-                cancellationToken).ConfigureAwait(false);
-
-            return new ApprovalDecisionResult(
-                false,
-                "Approval must be denied by the same authenticated subject that requested it.",
-                McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired);
+            return policyFailure;
         }
 
         var decidedAt = DateTimeOffset.UtcNow;
@@ -433,7 +436,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         }
 
         var approver = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
-        var approverError = await ValidateApproverAsync(challenge, approver, cancellationToken).ConfigureAwait(false);
+        var approverError = ValidateApprover(challenge, approver);
         if (approverError is not null)
         {
             return approverError;
@@ -445,6 +448,13 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         if (pendingError is not null)
         {
             return pendingError;
+        }
+
+        var policyError = await ValidateApprovalPolicyAsync(challenge, pending.Envelope!, approver, cancellationToken)
+            .ConfigureAwait(false);
+        if (policyError is not null)
+        {
+            return policyError;
         }
 
         return await ValidateDecodedReviewAsync(challenge, pending, approver!.Subject, cancellationToken)
@@ -479,8 +489,8 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         return null;
     }
 
-    private async Task<ChallengeValidation?> ValidateApproverAsync(
-        ApprovalChallenge challenge, GatewayApprovalIdentity? approver, CancellationToken ct)
+    private static ChallengeValidation? ValidateApprover(
+        ApprovalChallenge challenge, GatewayApprovalIdentity? approver)
     {
         if (approver is null)
         {
@@ -490,19 +500,85 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 challenge);
         }
 
-        if (!SameSubject(challenge.RequesterSubject, approver.Subject))
-        {
-            await WriteChallengeRejectedAuditAsync(
-                challenge, approver.Subject,
-                "Approver subject did not match requester subject.", ct).ConfigureAwait(false);
+        return null;
+    }
 
-            return ChallengeValidation.Invalid(
-                "Approval requires the same authenticated subject that requested the plan.",
-                McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired,
-                challenge);
+    private async Task<ChallengeValidation?> ValidateApprovalPolicyAsync(
+        ApprovalChallenge challenge,
+        PlanEnvelope envelope,
+        GatewayApprovalIdentity approver,
+        CancellationToken ct)
+    {
+        if (IsActorAuthorizedForChallengeOutcome(envelope.ApprovalPolicy, challenge.RequesterSubject, approver.Subject))
+        {
+            return null;
         }
 
-        return null;
+        string reason = envelope.ApprovalPolicy.Type switch
+        {
+            ApprovalConventions.ApprovalPolicyTypes.OperatorApproval =>
+                "Approver is not a member of the required operator group.",
+            _ => "Approver subject did not match requester subject."
+        };
+        string message = envelope.ApprovalPolicy.Type switch
+        {
+            ApprovalConventions.ApprovalPolicyTypes.OperatorApproval =>
+                "Approval requires membership in the configured operator group.",
+            _ => "Approval requires the same authenticated subject that requested the plan."
+        };
+        string reasonCode = envelope.ApprovalPolicy.Type switch
+        {
+            ApprovalConventions.ApprovalPolicyTypes.OperatorApproval =>
+                McpGatewayConventions.ApprovalReasonCodes.OperatorGroupRequired,
+            _ => McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired
+        };
+
+        await WriteChallengeRejectedAuditAsync(challenge, approver.Subject, reason, ct).ConfigureAwait(false);
+
+        return ChallengeValidation.Invalid(message, reasonCode, challenge);
+    }
+
+    private async Task<ApprovalDecisionResult?> ValidateChallengeDecisionPolicyAsync(
+        ApprovalChallenge challenge,
+        GatewayApprovalIdentity actor,
+        CancellationToken ct)
+    {
+        var pending = await approvalPlans.GetPendingPlanAsync(challenge.PlanId, ct).ConfigureAwait(false);
+        if (!pending.IsPending || pending.Envelope is null)
+        {
+            return new ApprovalDecisionResult(
+                false,
+                pending.Message,
+                pending.ReasonCode ?? ApprovalConventions.ResultReasonCodes.PlanNotPending);
+        }
+
+        if (IsActorAuthorizedForChallengeOutcome(pending.Envelope.ApprovalPolicy, challenge.RequesterSubject, actor.Subject))
+        {
+            return null;
+        }
+
+        string reason = pending.Envelope.ApprovalPolicy.Type switch
+        {
+            ApprovalConventions.ApprovalPolicyTypes.OperatorApproval =>
+                "Approver is not a member of the required operator group.",
+            _ => "Approver subject did not match requester subject."
+        };
+        string message = pending.Envelope.ApprovalPolicy.Type switch
+        {
+            ApprovalConventions.ApprovalPolicyTypes.OperatorApproval =>
+                "Approval requires membership in the configured operator group.",
+            _ => "Approval must be denied by the same authenticated subject that requested it."
+        };
+        string reasonCode = pending.Envelope.ApprovalPolicy.Type switch
+        {
+            ApprovalConventions.ApprovalPolicyTypes.OperatorApproval =>
+                McpGatewayConventions.ApprovalReasonCodes.OperatorGroupRequired,
+            _ => McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired
+        };
+
+        await WriteChallengeRejectedAuditAsync(challenge, actor.Subject, reason, ct).ConfigureAwait(false);
+
+        return new ApprovalDecisionResult(false, message, reasonCode);
     }
 
     private async Task<ChallengeValidation?> ValidatePendingPlanStateAsync(
@@ -691,6 +767,57 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
 
     private static bool SameSubject(string left, string right) =>
         string.Equals(left, right, StringComparison.Ordinal);
+
+    private bool IsActorAuthorizedForChallengeOutcome(
+        ApprovalPolicy policy,
+        string requesterSubject,
+        string? actorSubject)
+    {
+        return policy.Type switch
+        {
+            ApprovalConventions.ApprovalPolicyTypes.SameSubject =>
+                actorSubject is not null && SameSubject(requesterSubject, actorSubject),
+            ApprovalConventions.ApprovalPolicyTypes.OperatorApproval =>
+                TryGetOperatorGroup(policy, out var operatorGroup) &&
+                GetActorGroups().Contains(operatorGroup),
+            _ => false
+        };
+    }
+
+    private static bool TryGetOperatorGroup(ApprovalPolicy policy, out string operatorGroup)
+    {
+        if (policy.Parameters is not null &&
+            policy.Parameters.TryGetValue(ApprovalConventions.ApprovalPolicyParameters.OperatorGroup, out var value) &&
+            !string.IsNullOrWhiteSpace(value))
+        {
+            operatorGroup = value;
+            return true;
+        }
+
+        operatorGroup = string.Empty;
+        return false;
+    }
+
+    private IReadOnlySet<string> GetActorGroups()
+    {
+        var groups = new HashSet<string>(StringComparer.Ordinal);
+        var user = httpContextAccessor.HttpContext?.User;
+        if (user is null)
+        {
+            return groups;
+        }
+
+        foreach (var claim in user.FindAll(GatewayAuthConventions.Claims.Groups))
+        {
+            foreach (string group in claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                groups.Add(group);
+                groups.Add(group.TrimStart('/'));
+            }
+        }
+
+        return groups;
+    }
 
     private static bool SameDigest(ApprovalDigest? left, ApprovalDigest right) =>
         left is not null && left == right;

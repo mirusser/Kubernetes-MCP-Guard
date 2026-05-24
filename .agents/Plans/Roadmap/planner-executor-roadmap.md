@@ -261,6 +261,7 @@ Phases are vertical-sliced from Phase 1 onward. Each task is small enough for a 
 - [ ] Existing Same-Subject behaviour unchanged — every existing test passes.
 - [ ] `IDomainPlanBuilder.BuildAsync` signature extended with `ApprovalPolicy approvalPolicy` parameter; all 25+ `Build*Async` implementations in `KubernetesPlanBuilder` updated.
 - [ ] New `OperatorApproval` variant. Grant validation reads `policy.Parameters["operatorGroup"]` and checks the approver's `groups` claim; rejects with appropriate reason code if absent or mismatched.
+  > **Implementation note (verified Phase 1):** The operator-group claim check is done in `GatewayApprovalService.IsActorAuthorizedForChallengeOutcome` during the approval-browser UI flow, not inside `ApprovalGrantValidation.Validate`. Grant validation itself (`ApprovalGrantValidation.ValidatePolicy`) confirms `policy.Parameters["operatorGroup"]` exists. This is a necessary separation — grant validation has no access to the approver's JWT at execution time. The AC above describes the combined security property; the actual check is split across two points in the flow.
 - [ ] `ApprovalCanonicalJson` includes the policy variant tag and parameters; the Review Digest changes deterministically when policy changes.
 - [ ] In-memory `ApprovalStore` mirrors the new shape.
 - [ ] `PostgresApprovalPersistence` migration adds `policy_kind` + `operator_group` columns; old rows default to `same-subject` on read.
@@ -922,6 +923,8 @@ The `SemaphoreSlim` from Task 5.3 is acquired before spawning, released when the
 **Description:** Tests in `tests/InfraGate.McpGateway.Tests/` covering scope enforcement, operationType allowlist enforcement, happy path producing a Plan Envelope + a code in the store + a captured email, email failure does not fail the call, code consume happy + expired + already-used paths.
 
 **Acceptance criteria:** Each path covered; stub `IApprovalEmailSender` used in tests; `CapturingLogger` asserts structured logs.
+
+  > **Implementation note (verified Phase 1):** Existing gateway test fixtures (`GatewayHttpMcpIntegrationTests`, `GatewayApprovalServiceTests`, `GatewayToolDispatcherTests`, `GatewayDiWiringTests`) still register `SameSubjectAuthorizationCheck` rather than `ApprovalPolicyAuthorizationCheck`. These fixtures must be updated to use `ApprovalPolicyAuthorizationCheck` (which handles both `SameSubject` and `OperatorApproval`), and new tests must cover the `OperatorApproval` authorization path through `GatewayApprovalService` — not just through `ApprovalGrantValidationTests`.
 
 **Verification:** `dotnet test tests/InfraGate.McpGateway.Tests/`.
 

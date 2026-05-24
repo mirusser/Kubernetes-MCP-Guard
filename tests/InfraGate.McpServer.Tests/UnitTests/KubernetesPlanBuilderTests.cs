@@ -166,6 +166,28 @@ public sealed class KubernetesPlanBuilderTests
     }
 
     [Fact]
+    public async Task BuildAsync_ApprovalPolicyProvided_StampsPolicyOnEnvelope()
+    {
+        var dryRun = MakeDryRun("demo", "nginx");
+        var diff = MakeDiff("demo", "nginx");
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_scale_deployment", DryRunJson(dryRun))
+            .With("diff_deployment", DiffJson([diff]));
+        var builder = new KubernetesPlanBuilder(toolCaller);
+        var approvalPolicy = ApprovalPolicy.OperatorApproval("kubernetes-operators");
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["name"] = "nginx", ["replicas"] = 3 },
+            TestRequester,
+            approvalPolicy,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(approvalPolicy, result.Envelope!.ApprovalPolicy);
+    }
+
+    [Fact]
     public async Task BuildAsync_RestartDeployment_HappyPath_ReturnsPlanWithEnvelope()
     {
         var dryRun = MakeDryRun("demo", "nginx");
