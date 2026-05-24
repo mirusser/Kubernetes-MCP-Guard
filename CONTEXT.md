@@ -79,8 +79,8 @@ The rule that determines which **Approvers** may record an approved or denied **
 _Avoid_: OAuth scope, RBAC rule
 
 **Same-Subject Approval**:
-An **Approval Policy** requiring the **Approver** to be the same authenticated subject as the **Requester**.
-_Avoid_: Self-approval
+An **Approval Policy** requiring the **Approver** to be the same authenticated subject as the **Requester**. Used for **Plan Envelopes** originated by human-driven MCP clients. For autonomous-originated plans, see **Operator Approval Policy**.
+_Avoid_: Self-approval, Operator Approval Policy
 
 **Plan Validity Window**:
 The outer time period during which a **Plan Envelope** may participate in approval or execution, subject to **Challenge TTL**, **Approval Grant** expiry, reuse constraints, and **Freshness Policy**.
@@ -229,7 +229,7 @@ The machine identity the **Anomaly Observer** uses to authenticate to the gatewa
 _Avoid_: Requester, Approver, Gateway Service Identity, user token passthrough
 
 **Anomaly Handoff**:
-The act of the **Anomaly Observer** publishing one or more **Anomaly Reports** to a downstream consumer such as the future executor agent. The contract shape is defined by the v1 **Anomaly Observer** implementation; the transport is defined when the executor is in scope.
+The act of the **Anomaly Observer** publishing one or more **Anomaly Reports** to the **Remediation Planner**. The contract is `AnomalyHandoffBatch` (defined by the v1 **Anomaly Observer** implementation). The v1 transport is HTTPS POST from `HttpAnomalyHandoffSink` to the **Remediation Planner**'s `/handoff/anomalies` endpoint, authenticated by **Observer Service Identity** bearer.
 _Avoid_: Plan Envelope, Approval Notification, Approval Grant, Audit Spine event
 
 **Dedupe Key**:
@@ -247,6 +247,38 @@ _Avoid_: cooldown period, debounce interval
 **Resolution Emission**:
 When an active anomaly tracked in the **Dedupe State** is absent from **Anomaly Reports** for a configurable number of consecutive cycles (default `2`), the **Anomaly Observer** emits one **Anomaly Report** with `Status = Resolved` and `Severity = Low`, then removes the **Dedupe Key** from the **Dedupe State**.
 _Avoid_: cleanup event, archive notification
+
+### Remediation
+
+> **DRAFT** — added during grilling for the **Remediation Planner** / **Remediation Executor** design. Term names and relationships are subject to refinement once grilling completes (open: v1 mutation scope, identity wiring, ADRs, plan/task breakdown).
+
+**Remediation Planner**:
+A non-human MCP client that consumes **Anomaly Reports** from the **Anomaly Observer**, reasons about candidate remediations with LLM assistance, and proposes one **Mutation Intent** per acted-on **Anomaly** through the gateway's `propose_plan` tool. The **Remediation Planner** does not execute mutations and does not bypass any **Pre-Execution Gate**.
+_Avoid_: Approver, Approval Authority, Remediation Executor, Domain Adapter
+
+**Remediation Executor**:
+A non-human MCP client that consumes **Remediation Proposals** from the **Remediation Planner**, blocks on `wait_for_plan_approval` for each carried **Plan Identifier**, and calls `execute_approved_plan` only after the **Approval Grant** is issued. The **Remediation Executor** does not produce **Plan Envelopes** and does not influence the **Challenge Outcome**.
+_Avoid_: Approver, Approval Authority, Remediation Planner, `IDomainPlanExecutor`
+
+**Operator Approval Policy**:
+An **Approval Policy** subtype permitting any authenticated subject in a configured operator group to record an approved **Challenge Outcome** for a **Plan Envelope** whose **Requester** is a machine identity. Used for **Plan Envelopes** originated through `propose_plan`. Sibling of **Same-Subject Approval**, not a replacement.
+_Avoid_: Same-Subject Approval, Authorization Check, Delegated Approval
+
+**Remediation Proposal**:
+A **Remediation Planner**-produced reference to one approved-pending **Plan Envelope**, carrying the **Plan Identifier**, the originating **Anomaly Identifier**, and the proposal timestamp. A **Remediation Proposal** is informational; it does not authorize execution and does not carry **Mutation Intent** content.
+_Avoid_: Plan Envelope, Approval Grant, Mutation Intent, Anomaly Report
+
+**Approval Access Code**:
+A short-lived one-time-use UX token bound to one **Approval Challenge**, generated when a **Plan Envelope** is created via `propose_plan`, delivered out-of-band (email), and exchanged at the **Review Surface**'s code-entry page for a redirect to the **Approval Challenge** page. Authentication of the **Approver** remains performed by the **Identity Provider**; the **Approval Access Code** is routing, not authentication.
+_Avoid_: Authentication token, OAuth code, magic-link authentication, session token
+
+**Planner Service Identity**:
+The machine identity the **Remediation Planner** uses to authenticate to the gateway via OAuth client_credentials. Separate from **Requester**, **Approver**, **Gateway Service Identity**, **Observer Service Identity**, and **Executor Service Identity**, and authorized only for the `propose_plan` tool.
+_Avoid_: Requester, Approver, Observer Service Identity, Executor Service Identity
+
+**Executor Service Identity**:
+The machine identity the **Remediation Executor** uses to authenticate to the gateway via OAuth client_credentials. Authorized only for `wait_for_plan_approval` and `execute_approved_plan`. Separate from **Planner Service Identity** so that a compromised **Remediation Executor** cannot create new **Plan Envelopes** and a compromised **Remediation Planner** cannot execute approved plans.
+_Avoid_: Planner Service Identity, Approver, Requester, Gateway Service Identity
 
 ## Relationships
 
@@ -333,6 +365,30 @@ _Avoid_: cleanup event, archive notification
 - A **Dedupe Key** uniquely identifies an **Anomaly** within the **Dedupe State**
 - The **Dedupe State** tracks active anomalies across **Observation Cycles** and drives the **Suppression Window** and **Resolution Emission**
 
+### Remediation
+
+> **DRAFT** — added during grilling for the **Remediation Planner** / **Remediation Executor** design. Subject to refinement once grilling completes.
+
+- A **Remediation Planner** consumes **Anomaly Reports** from the **Anomaly Observer** through the **Anomaly Handoff**
+- A **Remediation Planner** produces zero or more **Remediation Proposals** per `AnomalyHandoffBatch`
+- A **Remediation Planner** calls `propose_plan` to create a **Plan Envelope** with **Operator Approval Policy**
+- A **Remediation Planner** authenticates with exactly one **Planner Service Identity**
+- A **Remediation Planner** does not call execution tools and does not bypass any **Pre-Execution Gate**
+- A **Remediation Executor** consumes **Remediation Proposals** from the **Remediation Planner**
+- A **Remediation Executor** authenticates with exactly one **Executor Service Identity**
+- A **Remediation Executor** calls `wait_for_plan_approval` and `execute_approved_plan` through the gateway
+- A **Remediation Executor** does not produce **Plan Envelopes** and does not influence the **Challenge Outcome**
+- `propose_plan` generates exactly one **Approval Access Code** per **Plan Envelope** and delivers it out-of-band
+- An **Approval Access Code** routes to exactly one **Approval Challenge** but does not authenticate the **Approver**
+- An **Approval Access Code** has a lifetime bounded by the **Challenge TTL** of its **Approval Challenge**
+- The **Operator Approval Policy** is an **Approval Policy** subtype evaluated by the **Generic Approval Core** alongside **Same-Subject Approval**
+- A **Planner Service Identity** is not a **Requester** in the lifecycle sense and is not an **Approver**
+- An **Executor Service Identity** is not a **Requester** and is not an **Approver**
+- A **Planner Service Identity** is authorized only for `propose_plan`
+- An **Executor Service Identity** is authorized only for `wait_for_plan_approval` and `execute_approved_plan`
+- A **Plan Envelope** originated by `propose_plan` always declares **Operator Approval Policy**
+- A **Plan Envelope** originated by a human-driven MCP client may declare **Same-Subject Approval**
+
 ## Example Dialogue
 
 > **Dev:** "Does the **Plan Envelope** describe how to scale a Kubernetes Deployment?"
@@ -364,3 +420,6 @@ _Avoid_: cleanup event, archive notification
 - "gateway-to-server auth" was treated as user authorization — resolved: **Gateway Service Identity** authenticates the private downstream call and does not carry **Requester** or **Approver** authority.
 - "observer" could read as a Kubernetes controller, generic monitoring system, or human reviewer — resolved: **Anomaly Observer** is a non-human MCP client bound by gateway read-only tools, separate from the approval lifecycle, and not authorized for any mutation.
 - "finding" was informally used for **Plan Evidence** policy findings — resolved: the **Anomaly Observer** emits **Anomaly Reports**, not findings, so the two concepts stay separate.
+- "executor" could read as `IDomainPlanExecutor` (the generic-core type that the **Kubernetes Adapter** implements) or as an autonomous agent — resolved: `IDomainPlanExecutor` is the generic-core type; **Remediation Executor** is the agent. _(DRAFT — subject to refinement once grilling completes.)_
+- "code" could read as a cryptographic authentication code or an OAuth authorization code — resolved: **Approval Access Code** is a UX routing token; **Approver** authentication remains the **Identity Provider**'s job. _(DRAFT — subject to refinement once grilling completes.)_
+- "propose" was used loosely in the profile narrative for the general "AI proposes" step — resolved: `propose_plan` is the specific gateway tool used by the **Remediation Planner** to create a **Plan Envelope** with **Operator Approval Policy** and emit an **Approval Access Code**. _(DRAFT — subject to refinement once grilling completes.)_
