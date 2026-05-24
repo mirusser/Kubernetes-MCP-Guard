@@ -66,6 +66,7 @@
             "profile",
             "email",
             "mcp:tools",
+            "mcp:tools.readonly",
             "mcp:downstream"
           ]
         }
@@ -117,6 +118,7 @@
     "phone",
     "microprofile-jwt",
     "mcp:tools",
+    "mcp:tools.readonly",
     "mcp:downstream"
   ],
   "clientScopes": [
@@ -348,6 +350,42 @@
       ]
     },
     {
+      "name": "mcp:tools.readonly",
+      "description": "Read-only MCP tool access for observer and other read-only service identities",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "mcp-gateway-audience-readonly",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "http://127.0.0.1:3001/mcp",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        },
+        {
+          "name": "mcp-gateway-subject-readonly",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "sub",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
       "name": "mcp:downstream",
       "description": "Downstream MCP server access for gateway service identity",
       "protocol": "openid-connect",
@@ -457,6 +495,23 @@
       "defaultClientScopes": [
         "basic",
         "mcp:downstream"
+      ],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "infra-gate-observer",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "observer-secret",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "defaultClientScopes": [
+        "basic",
+        "mcp:tools.readonly"
       ],
       "optionalClientScopes": []
     },

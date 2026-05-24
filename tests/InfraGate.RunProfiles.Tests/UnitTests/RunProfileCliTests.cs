@@ -727,7 +727,20 @@ public sealed class RunProfileCliTests
             "INFRA_GATE_KUBECONFIG_HOST_PATH",
             "INFRA_GATE_APPROVAL_HOST_PATH",
             "INFRA_GATE_GUARD_AUDIT_HOST_PATH",
-            "INFRA_GATE_DATA_PROTECTION_HOST_PATH"
+            "INFRA_GATE_DATA_PROTECTION_HOST_PATH",
+            "INFRA_GATE_OBSERVER_ASPNETCORE_URLS",
+            "INFRA_GATE_OBSERVER_GATEWAY_BASE_URL",
+            "INFRA_GATE_OBSERVER_TOKEN_ENDPOINT",
+            "INFRA_GATE_OBSERVER_CLIENT_ID",
+            "INFRA_GATE_OBSERVER_CLIENT_SECRET",
+            "INFRA_GATE_OBSERVER_SCOPE",
+            "INFRA_GATE_OBSERVER_LLM_PROVIDER",
+            "INFRA_GATE_OBSERVER_LLM_MODEL",
+            "INFRA_GATE_OBSERVER_CYCLE_INTERVAL_SECONDS",
+            "INFRA_GATE_OBSERVER_WALL_CLOCK_CAP_SECONDS",
+            "INFRA_GATE_OBSERVER_MAX_TOOL_ITERATIONS",
+            "INFRA_GATE_OBSERVER_FILE_SINK_ROOT",
+            "INFRA_GATE_OBSERVER_HOST_PATH"
         };
 
     private static readonly HashSet<string> SourceGatewayProfileKeys =
@@ -749,7 +762,58 @@ public sealed class RunProfileCliTests
             "INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT",
             "K8S_MCP_APPROVAL_ROOT",
             "KUBECONFIG",
-            "K8S_MCP_ALLOWED_NAMESPACES"
+            "K8S_MCP_ALLOWED_NAMESPACES",
+            "INFRA_GATE_OBSERVER_ASPNETCORE_URLS",
+            "INFRA_GATE_OBSERVER_GATEWAY_BASE_URL",
+            "INFRA_GATE_OBSERVER_TOKEN_ENDPOINT",
+            "INFRA_GATE_OBSERVER_CLIENT_ID",
+            "INFRA_GATE_OBSERVER_CLIENT_SECRET",
+            "INFRA_GATE_OBSERVER_SCOPE",
+            "INFRA_GATE_OBSERVER_LLM_PROVIDER",
+            "INFRA_GATE_OBSERVER_LLM_MODEL",
+            "INFRA_GATE_OBSERVER_CYCLE_INTERVAL_SECONDS",
+            "INFRA_GATE_OBSERVER_WALL_CLOCK_CAP_SECONDS",
+            "INFRA_GATE_OBSERVER_MAX_TOOL_ITERATIONS",
+            "INFRA_GATE_OBSERVER_FILE_SINK_ROOT"
+        };
+
+    private static readonly HashSet<string> SmokeProfileKeys =
+        new(StringComparer.Ordinal)
+        {
+            "INFRA_GATE_ENVIRONMENT",
+            "ASPNETCORE_URLS",
+            "INFRA_GATE_DOWNSTREAM_ASSEMBLY",
+            "INFRA_GATE_GUARD_AUDIT_ROOT",
+            "INFRA_GATE_OAUTH_AUTHORITY",
+            "INFRA_GATE_OAUTH_METADATA_ADDRESS",
+            "INFRA_GATE_OAUTH_RESOURCE",
+            "INFRA_GATE_OAUTH_SCOPE",
+            "INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA",
+            "INFRA_GATE_APPROVAL_BASE_URL",
+            "INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID",
+            "INFRA_GATE_APPROVAL_OAUTH_CALLBACK_PATH",
+            "INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT",
+            "INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT",
+            "INFRA_GATE_DOWNSTREAM_AUTH_REQUIRED",
+            "INFRA_GATE_DOWNSTREAM_AUTH_AUTHORITY",
+            "INFRA_GATE_DOWNSTREAM_AUTH_METADATA_ADDRESS",
+            "INFRA_GATE_DOWNSTREAM_AUTH_REQUIRE_HTTPS_METADATA",
+            "INFRA_GATE_DOWNSTREAM_AUTH_AUDIENCE",
+            "INFRA_GATE_DOWNSTREAM_AUTH_SCOPE",
+            "INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_ID",
+            "INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET",
+            "K8S_MCP_APPROVAL_ROOT",
+            "KUBECONFIG",
+            "K8S_MCP_ALLOWED_NAMESPACES",
+            "INFRA_GATE_BIND_ADDRESS",
+            "INFRA_GATE_BIND_PORT",
+            "INFRA_GATE_GATEWAY_IMAGE",
+            "INFRA_GATE_CONFIG_PATH",
+            "INFRA_GATE_CONFIG_HOST_PATH",
+            "INFRA_GATE_KUBECONFIG_HOST_PATH",
+            "INFRA_GATE_APPROVAL_HOST_PATH",
+            "INFRA_GATE_GUARD_AUDIT_HOST_PATH",
+            "INFRA_GATE_DATA_PROTECTION_HOST_PATH"
         };
 
     private static readonly HashSet<string> MinimalProfileKeys =
@@ -770,8 +834,8 @@ public sealed class RunProfileCliTests
         { "test-integration", MinimalProfileKeys },
         { "test-gateway-integration", MinimalProfileKeys },
         { "test-safety-e2e", MinimalProfileKeys },
-        { "smoke-local", LocalComposeProfileKeys },
-        { "smoke-release", LocalComposeProfileKeys }
+        { "smoke-local", SmokeProfileKeys },
+        { "smoke-release", SmokeProfileKeys }
     };
 
     [Theory]

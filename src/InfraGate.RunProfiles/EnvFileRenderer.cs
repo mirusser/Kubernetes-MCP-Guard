@@ -23,6 +23,7 @@ internal static class EnvFileRenderer
         AppendDownstreamAuth(builder, profile);
         AppendKubernetesAdapter(builder, profile);
         AppendHost(builder, profile);
+        AppendObserver(builder, profile);
 
         return builder.ToString();
     }
@@ -220,5 +221,52 @@ internal static class EnvFileRenderer
         {
             builder.AppendLine($"{key}={value}");
         }
+    }
+
+    private static void AppendObserver(StringBuilder builder, RunProfile profile)
+    {
+        if (profile.Observer is null)
+        {
+            return;
+        }
+
+        ObserverProfile observer = profile.Observer;
+        bool hasAnyValue =
+            !string.IsNullOrEmpty(observer.AspnetcoreUrls) ||
+            !string.IsNullOrEmpty(observer.GatewayBaseUrl) ||
+            !string.IsNullOrEmpty(observer.TokenEndpoint) ||
+            !string.IsNullOrEmpty(observer.ClientId) ||
+            !string.IsNullOrEmpty(observer.ClientSecret) ||
+            !string.IsNullOrEmpty(observer.Scope) ||
+            !string.IsNullOrEmpty(observer.LlmProvider) ||
+            !string.IsNullOrEmpty(observer.LlmModel) ||
+            !string.IsNullOrEmpty(observer.LlmApiKey) ||
+            !string.IsNullOrEmpty(observer.CycleCadenceSeconds) ||
+            !string.IsNullOrEmpty(observer.CycleWallClockCapSeconds) ||
+            !string.IsNullOrEmpty(observer.MaxToolIterations) ||
+            !string.IsNullOrEmpty(observer.FileSinkRoot) ||
+            !string.IsNullOrEmpty(observer.ObserverHostPath);
+
+        if (!hasAnyValue)
+        {
+            return;
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("# Observer");
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverAspnetcoreUrls, observer.AspnetcoreUrls);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverGatewayBaseUrl, observer.GatewayBaseUrl);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverTokenEndpoint, observer.TokenEndpoint);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverClientId, observer.ClientId);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverClientSecret, observer.ClientSecret);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverScope, observer.Scope);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverLlmProvider, observer.LlmProvider);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverLlmModel, observer.LlmModel);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverLlmApiKey, observer.LlmApiKey);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverCycleIntervalSeconds, observer.CycleCadenceSeconds);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverCycleWallClockCapSeconds, observer.CycleWallClockCapSeconds);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverMaxToolIterations, observer.MaxToolIterations);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverFileSinkRoot, observer.FileSinkRoot);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverHostPath, observer.ObserverHostPath);
     }
 }

@@ -6,4 +6,5 @@ internal sealed record class ProfileDefaults(
     ApprovalAuthorityProfile? ApprovalAuthority,
     GenericApprovalCoreProfile? GenericApprovalCore,
     HostProfile? Host,
-    DownstreamAuthProfile? DownstreamAuth);
+    DownstreamAuthProfile? DownstreamAuth,
+    ObserverProfile? Observer);

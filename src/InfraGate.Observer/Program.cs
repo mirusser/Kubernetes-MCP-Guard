@@ -48,7 +48,15 @@ var observerOptions = builder.Configuration
     .GetSection(ObserverConventions.ConfigurationKeys.Observer)
     .Get<ObserverOptions>() ?? new ObserverOptions();
 
-observerOptions.Validate();
+try
+{
+    observerOptions.Validate();
+}
+catch (InvalidOperationException ex)
+{
+    await Console.Error.WriteLineAsync(ex.Message).ConfigureAwait(false);
+    return 1;
+}
 
 var authOptions = new ClientCredentialsTokenOptions
 {
@@ -135,6 +143,8 @@ app.Use(async (context, next) =>
 });
 
 await app.RunAsync().ConfigureAwait(false);
+
+return 0;
 
 static void ConfigureUrls(WebApplicationBuilder builder)
 {

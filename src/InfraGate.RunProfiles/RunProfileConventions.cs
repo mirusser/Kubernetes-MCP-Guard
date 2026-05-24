@@ -44,6 +44,7 @@ internal static class RunProfileConventions
         public const string Auth = "Auth";
         public const string Approval = "Approval";
         public const string Kubernetes = "Kubernetes";
+        public const string Observer = "Observer";
         public const string AllowedNamespaces = "AllowedNamespaces";
         public const string ApprovalOAuthAuthorizationEndpoint = "ApprovalOAuthAuthorizationEndpoint";
         public const string ApprovalOAuthCallbackPath = "ApprovalOAuthCallbackPath";
@@ -64,6 +65,18 @@ internal static class RunProfileConventions
         public const string Postgres = "Postgres";
         public const string PostgresConnectionString = "ConnectionString";
         public const string RunMigrationsOnStartup = "RunMigrationsOnStartup";
+        public const string ObserverCycleIntervalSeconds = "CycleIntervalSeconds";
+        public const string ObserverCycleWallClockCapSeconds = "CycleWallClockCapSeconds";
+        public const string ObserverFileSinkRoot = "FileSinkRoot";
+        public const string ObserverGatewayBaseUrl = "GatewayBaseUrl";
+        public const string ObserverLlmApiKey = "LlmApiKey";
+        public const string ObserverLlmModel = "LlmModel";
+        public const string ObserverLlmProvider = "LlmProvider";
+        public const string ObserverMaxToolIterations = "MaxToolIterations";
+        public const string ObserverTokenEndpoint = "TokenEndpoint";
+        public const string ObserverClientId = "ClientId";
+        public const string ObserverClientSecret = "ClientSecret";
+        public const string ObserverScope = "Scope";
     }
 
     public static class YamlKeys
@@ -105,6 +118,7 @@ internal static class RunProfileConventions
         public const string OauthCallbackPath = "oauthCallbackPath";
         public const string OauthClientId = "oauthClientId";
         public const string OauthTokenEndpoint = "oauthTokenEndpoint";
+        public const string Observer = "observer";
         public const string Profiles = "profiles";
         public const string RealmImport = "realmImport";
         public const string Required = "required";
@@ -114,6 +128,18 @@ internal static class RunProfileConventions
         public const string Scope = "scope";
         public const string Type = "type";
         public const string Version = "version";
+        public const string ClientId = "clientId";
+        public const string ClientSecret = "clientSecret";
+        public const string CycleCadenceSeconds = "cycleCadenceSeconds";
+        public const string CycleWallClockCapSeconds = "cycleWallClockCapSeconds";
+        public const string FileSinkRoot = "fileSinkRoot";
+        public const string GatewayBaseUrl = "gatewayBaseUrl";
+        public const string LlmApiKey = "llmApiKey";
+        public const string LlmModel = "llmModel";
+        public const string LlmProvider = "llmProvider";
+        public const string MaxToolIterations = "maxToolIterations";
+        public const string ObserverHostPath = "observerHostPath";
+        public const string TokenEndpoint = "tokenEndpoint";
     }
 
     public static class Env
@@ -152,6 +178,20 @@ internal static class RunProfileConventions
         public const string OauthRequireHttpsMetadata = "INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA";
         public const string OauthResource = "INFRA_GATE_OAUTH_RESOURCE";
         public const string OauthScope = "INFRA_GATE_OAUTH_SCOPE";
+        public const string ObserverAspnetcoreUrls = "INFRA_GATE_OBSERVER_ASPNETCORE_URLS";
+        public const string ObserverClientId = "INFRA_GATE_OBSERVER_CLIENT_ID";
+        public const string ObserverClientSecret = "INFRA_GATE_OBSERVER_CLIENT_SECRET";
+        public const string ObserverCycleIntervalSeconds = "INFRA_GATE_OBSERVER_CYCLE_INTERVAL_SECONDS";
+        public const string ObserverCycleWallClockCapSeconds = "INFRA_GATE_OBSERVER_WALL_CLOCK_CAP_SECONDS";
+        public const string ObserverFileSinkRoot = "INFRA_GATE_OBSERVER_FILE_SINK_ROOT";
+        public const string ObserverGatewayBaseUrl = "INFRA_GATE_OBSERVER_GATEWAY_BASE_URL";
+        public const string ObserverHostPath = "INFRA_GATE_OBSERVER_HOST_PATH";
+        public const string ObserverLlmApiKey = "INFRA_GATE_OBSERVER_LLM_API_KEY";
+        public const string ObserverLlmModel = "INFRA_GATE_OBSERVER_LLM_MODEL";
+        public const string ObserverLlmProvider = "INFRA_GATE_OBSERVER_LLM_PROVIDER";
+        public const string ObserverMaxToolIterations = "INFRA_GATE_OBSERVER_MAX_TOOL_ITERATIONS";
+        public const string ObserverScope = "INFRA_GATE_OBSERVER_SCOPE";
+        public const string ObserverTokenEndpoint = "INFRA_GATE_OBSERVER_TOKEN_ENDPOINT";
     }
 
     public static class DomainAdapterTypes

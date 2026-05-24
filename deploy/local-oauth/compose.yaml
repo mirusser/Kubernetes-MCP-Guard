@@ -108,6 +108,40 @@ services:
       - default
       - k8s
 
+  observer:
+    image: ${INFRA_GATE_OBSERVER_IMAGE:-infragate-observer}
+    build:
+      context: ../..
+      dockerfile: src/InfraGate.Observer/Dockerfile
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      mcp-gateway:
+        condition: service_started
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      ASPNETCORE_URLS: ${INFRA_GATE_OBSERVER_ASPNETCORE_URLS:-http://0.0.0.0:3003}
+      INFRA_GATE_OBSERVER_GATEWAY_BASE_URL: ${INFRA_GATE_OBSERVER_GATEWAY_BASE_URL:-http://gateway:3001/mcp}
+      INFRA_GATE_OBSERVER_TOKEN_ENDPOINT: ${INFRA_GATE_OBSERVER_TOKEN_ENDPOINT:-http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token}
+      INFRA_GATE_OBSERVER_CLIENT_ID: ${INFRA_GATE_OBSERVER_CLIENT_ID:-infra-gate-observer}
+      INFRA_GATE_OBSERVER_CLIENT_SECRET: ${INFRA_GATE_OBSERVER_CLIENT_SECRET:-observer-secret}
+      INFRA_GATE_OBSERVER_SCOPE: ${INFRA_GATE_OBSERVER_SCOPE:-mcp:tools.readonly}
+      INFRA_GATE_OBSERVER_LLM_PROVIDER: ${INFRA_GATE_OBSERVER_LLM_PROVIDER}
+      INFRA_GATE_OBSERVER_LLM_MODEL: ${INFRA_GATE_OBSERVER_LLM_MODEL}
+      INFRA_GATE_OBSERVER_LLM_API_KEY: ${INFRA_GATE_OBSERVER_LLM_API_KEY}
+      INFRA_GATE_OBSERVER_CYCLE_INTERVAL_SECONDS: ${INFRA_GATE_OBSERVER_CYCLE_INTERVAL_SECONDS:-60}
+      INFRA_GATE_OBSERVER_WALL_CLOCK_CAP_SECONDS: ${INFRA_GATE_OBSERVER_WALL_CLOCK_CAP_SECONDS:-20}
+      INFRA_GATE_OBSERVER_MAX_TOOL_ITERATIONS: ${INFRA_GATE_OBSERVER_MAX_TOOL_ITERATIONS:-8}
+      INFRA_GATE_OBSERVER_FILE_SINK_ROOT: ${INFRA_GATE_OBSERVER_FILE_SINK_ROOT:-/data/observer/findings}
+      INFRA_GATE_OAUTH_AUTHORITY: ${INFRA_GATE_OAUTH_AUTHORITY:-http://keycloak:8080/realms/infra-gate}
+      INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA: ${INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA:-false}
+    volumes:
+      - ${INFRA_GATE_OBSERVER_HOST_PATH:-./.mcp-observer/findings}:/data/observer/findings
+    ports:
+      - "${INFRA_GATE_OBSERVER_BIND_ADDRESS:-127.0.0.1}:${INFRA_GATE_OBSERVER_BIND_PORT:-3003}:3003"
+    networks:
+      - default
+
 volumes:
   pgdata:
 

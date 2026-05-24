@@ -384,6 +384,11 @@ internal static class RunProfileCli
                 Host = ApplyHostOverride(
                     profile.Host ?? new HostProfile(null, null, null, null, null, null, null, null), field, value, path)
             },
+            RunProfileConventions.YamlKeys.Observer => profile with
+            {
+                Observer = ApplyObserverOverride(
+                    profile.Observer ?? new ObserverProfile(null, null, null, null, null, null, null, null, null, null, null, null, null, null), field, value, path)
+            },
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };
     }
@@ -460,6 +465,27 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.ApprovalHostPath => profile with { ApprovalHostPath = value },
             RunProfileConventions.YamlKeys.GuardAuditHostPath => profile with { GuardAuditHostPath = value },
             RunProfileConventions.YamlKeys.DataProtectionHostPath => profile with { DataProtectionHostPath = value },
+            _ => throw new InvalidOperationException($"Unknown --set path: {path}")
+        };
+
+    private static ObserverProfile ApplyObserverOverride(
+        ObserverProfile profile, string field, string value, string path) =>
+        field switch
+        {
+            RunProfileConventions.YamlKeys.AspnetcoreUrls => profile with { AspnetcoreUrls = value },
+            RunProfileConventions.YamlKeys.GatewayBaseUrl => profile with { GatewayBaseUrl = value },
+            RunProfileConventions.YamlKeys.TokenEndpoint => profile with { TokenEndpoint = value },
+            RunProfileConventions.YamlKeys.ClientId => profile with { ClientId = value },
+            RunProfileConventions.YamlKeys.ClientSecret => profile with { ClientSecret = value },
+            RunProfileConventions.YamlKeys.Scope => profile with { Scope = value },
+            RunProfileConventions.YamlKeys.LlmProvider => profile with { LlmProvider = value },
+            RunProfileConventions.YamlKeys.LlmModel => profile with { LlmModel = value },
+            RunProfileConventions.YamlKeys.LlmApiKey => profile with { LlmApiKey = value },
+            RunProfileConventions.YamlKeys.CycleCadenceSeconds => profile with { CycleCadenceSeconds = value },
+            RunProfileConventions.YamlKeys.CycleWallClockCapSeconds => profile with { CycleWallClockCapSeconds = value },
+            RunProfileConventions.YamlKeys.MaxToolIterations => profile with { MaxToolIterations = value },
+            RunProfileConventions.YamlKeys.FileSinkRoot => profile with { FileSinkRoot = value },
+            RunProfileConventions.YamlKeys.ObserverHostPath => profile with { ObserverHostPath = value },
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };
 }

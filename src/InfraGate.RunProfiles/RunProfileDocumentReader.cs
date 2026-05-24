@@ -22,7 +22,8 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.Gateway,
                 RunProfileConventions.YamlKeys.GenericApprovalCore,
                 RunProfileConventions.YamlKeys.Host,
-                RunProfileConventions.YamlKeys.IdentityProvider
+                RunProfileConventions.YamlKeys.IdentityProvider,
+                RunProfileConventions.YamlKeys.Observer
             ],
             StringComparer.Ordinal);
 
@@ -37,6 +38,7 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.Host,
                 RunProfileConventions.YamlKeys.IdentityProvider,
                 RunProfileConventions.YamlKeys.Kind,
+                RunProfileConventions.YamlKeys.Observer,
                 RunProfileConventions.YamlKeys.RuntimeMode
             ],
             StringComparer.Ordinal);
@@ -127,6 +129,26 @@ internal static class RunProfileDocumentReader
             ],
             StringComparer.Ordinal);
 
+    private static readonly IReadOnlySet<string> KnownObserverKeys =
+        new HashSet<string>(
+            [
+                RunProfileConventions.YamlKeys.AspnetcoreUrls,
+                RunProfileConventions.YamlKeys.ClientId,
+                RunProfileConventions.YamlKeys.ClientSecret,
+                RunProfileConventions.YamlKeys.CycleCadenceSeconds,
+                RunProfileConventions.YamlKeys.CycleWallClockCapSeconds,
+                RunProfileConventions.YamlKeys.FileSinkRoot,
+                RunProfileConventions.YamlKeys.GatewayBaseUrl,
+                RunProfileConventions.YamlKeys.LlmApiKey,
+                RunProfileConventions.YamlKeys.LlmModel,
+                RunProfileConventions.YamlKeys.LlmProvider,
+                RunProfileConventions.YamlKeys.MaxToolIterations,
+                RunProfileConventions.YamlKeys.ObserverHostPath,
+                RunProfileConventions.YamlKeys.Scope,
+                RunProfileConventions.YamlKeys.TokenEndpoint
+            ],
+            StringComparer.Ordinal);
+
     public static async Task<RunProfileDocument> ReadAsync(string path, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -179,6 +201,8 @@ internal static class RunProfileDocumentReader
                     $"Run Profile '{profileName}' must declare exactly one Domain Adapter.");
             }
 
+            ObserverProfile? observer = ReadObserver(profileNode);
+
             profiles.Add(new RunProfile(
                 profileName,
                 kind,
@@ -189,7 +213,8 @@ internal static class RunProfileDocumentReader
                 genericApprovalCore,
                 domainAdapters,
                 host,
-                downstreamAuth));
+                downstreamAuth,
+                observer));
         }
 
         return new RunProfileDocument(profiles) { Defaults = defaults };
@@ -217,7 +242,8 @@ internal static class RunProfileDocumentReader
             ReadApprovalAuthority(mapping),
             ReadGenericApprovalCore(mapping),
             ReadHost(mapping),
-            ReadDownstreamAuth(mapping));
+            ReadDownstreamAuth(mapping),
+            ReadObserver(mapping));
     }
 
     private static DownstreamAuthProfile? ReadDownstreamAuth(YamlMappingNode node)
@@ -371,6 +397,39 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ApprovalHostPath),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.GuardAuditHostPath),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.DataProtectionHostPath));
+    }
+
+    private static ObserverProfile? ReadObserver(YamlMappingNode node)
+    {
+        if (!node.Children.TryGetValue(
+                new YamlScalarNode(RunProfileConventions.YamlKeys.Observer),
+                out YamlNode? value))
+        {
+            return null;
+        }
+
+        if (value is not YamlMappingNode mapping)
+        {
+            throw new InvalidOperationException(
+                $"YAML key '{RunProfileConventions.YamlKeys.Observer}' must be a mapping.");
+        }
+
+        ValidateKnownKeys(mapping, KnownObserverKeys);
+        return new ObserverProfile(
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.AspnetcoreUrls),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.GatewayBaseUrl),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.TokenEndpoint),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ClientId),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ClientSecret),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.Scope),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.LlmProvider),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.LlmModel),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.LlmApiKey),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.CycleCadenceSeconds),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.CycleWallClockCapSeconds),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.MaxToolIterations),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.FileSinkRoot),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ObserverHostPath));
     }
 
     private static IReadOnlyList<DomainAdapterProfile> ReadDomainAdapters(YamlMappingNode profileNode)

@@ -26,7 +26,8 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             ApprovalAuthority = MergeApprovalAuthority(profile.ApprovalAuthority, defaults.ApprovalAuthority),
             GenericApprovalCore = MergeGenericApprovalCore(profile.GenericApprovalCore, defaults.GenericApprovalCore),
             Host = MergeHost(profile.Host, defaults.Host),
-            DownstreamAuth = MergeDownstreamAuth(profile.DownstreamAuth, defaults.DownstreamAuth)
+            DownstreamAuth = MergeDownstreamAuth(profile.DownstreamAuth, defaults.DownstreamAuth),
+            Observer = MergeObserver(profile.Observer, defaults.Observer)
         };
     }
 
@@ -121,6 +122,31 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
         {
             PostgresConnectionString = profile.PostgresConnectionString ?? defaults.PostgresConnectionString,
             RunMigrationsOnStartup = profile.RunMigrationsOnStartup ?? defaults.RunMigrationsOnStartup
+        };
+    }
+
+    private static ObserverProfile? MergeObserver(
+        ObserverProfile? profile,
+        ObserverProfile? defaults)
+    {
+        if (profile is null) return null;
+        if (defaults is null) return profile;
+        return profile with
+        {
+            AspnetcoreUrls = profile.AspnetcoreUrls ?? defaults.AspnetcoreUrls,
+            GatewayBaseUrl = profile.GatewayBaseUrl ?? defaults.GatewayBaseUrl,
+            TokenEndpoint = profile.TokenEndpoint ?? defaults.TokenEndpoint,
+            ClientId = profile.ClientId ?? defaults.ClientId,
+            ClientSecret = profile.ClientSecret ?? defaults.ClientSecret,
+            Scope = profile.Scope ?? defaults.Scope,
+            LlmProvider = profile.LlmProvider ?? defaults.LlmProvider,
+            LlmModel = profile.LlmModel ?? defaults.LlmModel,
+            LlmApiKey = profile.LlmApiKey ?? defaults.LlmApiKey,
+            CycleCadenceSeconds = profile.CycleCadenceSeconds ?? defaults.CycleCadenceSeconds,
+            CycleWallClockCapSeconds = profile.CycleWallClockCapSeconds ?? defaults.CycleWallClockCapSeconds,
+            MaxToolIterations = profile.MaxToolIterations ?? defaults.MaxToolIterations,
+            FileSinkRoot = profile.FileSinkRoot ?? defaults.FileSinkRoot,
+            ObserverHostPath = profile.ObserverHostPath ?? defaults.ObserverHostPath
         };
     }
 }

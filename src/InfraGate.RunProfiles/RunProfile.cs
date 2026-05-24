@@ -10,4 +10,5 @@ internal sealed record class RunProfile(
     GenericApprovalCoreProfile? GenericApprovalCore,
     IReadOnlyList<DomainAdapterProfile> DomainAdapters,
     HostProfile? Host,
-    DownstreamAuthProfile? DownstreamAuth);
+    DownstreamAuthProfile? DownstreamAuth,
+    ObserverProfile? Observer);
