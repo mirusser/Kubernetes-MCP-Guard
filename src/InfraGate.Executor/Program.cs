@@ -3,6 +3,7 @@ using InfraGate.Executor.Diagnostics;
 using InfraGate.Executor.Endpoints;
 using InfraGate.Executor.Mcp;
 using InfraGate.Executor.Queue;
+using InfraGate.Executor.Watch;
 using InfraGate.Observability;
 using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -54,6 +55,8 @@ builder.Services.AddClientCredentialsTokenProvider(authOptions);
 
 builder.Services.AddSingleton<IExecutorMcpClient, ExecutorMcpClient>();
 builder.Services.AddSingleton<ProposalQueue>();
+builder.Services.AddSingleton<IExecutorDedupeStore, ExecutorDedupeStore>();
+builder.Services.AddHostedService<PlanWatcher>();
 
 var jwtAuthority = builder.Configuration[ExecutorConventions.EnvironmentVariables.OAuthAuthority] ?? string.Empty;
 builder.Services

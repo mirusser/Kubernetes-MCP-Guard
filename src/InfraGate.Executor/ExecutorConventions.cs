@@ -16,6 +16,8 @@ internal static class ExecutorConventions
     public const int MinWatchTimeoutSeconds = 60;
     public const int MaxWatchTimeoutSeconds = 3600;
 
+    public const int WaitForPlanApprovalPerCallTimeoutSeconds = 55;
+
     public static class EnvironmentVariables
     {
         public const string AspNetCoreUrls = "ASPNETCORE_URLS";
@@ -52,6 +54,15 @@ internal static class ExecutorConventions
     {
         public const string PlanId = "planId";
         public const string TimeoutSeconds = "timeoutSeconds";
+    }
+
+    public static class PlanStatusValues
+    {
+        public const string NotFound = "NotFound";
+        public const string ApprovalRequired = "ApprovalRequired";
+        public const string Approved = "Approved";
+        public const string Applied = "Applied";
+        public const string Expired = "Expired";
     }
 
     public static class Claims
