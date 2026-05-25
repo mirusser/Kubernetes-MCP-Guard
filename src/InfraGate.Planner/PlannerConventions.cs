@@ -1,0 +1,95 @@
+namespace InfraGate.Planner;
+
+internal static class PlannerConventions
+{
+    public const string DefaultClientId = "infra-gate-planner";
+    public const string DefaultOAuthScope = "mcp:tools.propose mcp:tools.readonly";
+    public const string DefaultUrl = "http://localhost:3004";
+    public const string HealthEndpointPath = "/health";
+    public const string HandoffAnomaliesEndpointPath = "/handoff/anomalies";
+
+    public const int DefaultAnomalyWallClockCapSeconds = 30;
+    public const int MinAnomalyWallClockCapSeconds = 5;
+    public const int MaxAnomalyWallClockCapSeconds = 120;
+
+    public const int DefaultBatchWallClockCapSeconds = 300;
+    public const int MinBatchWallClockCapSeconds = 30;
+    public const int MaxBatchWallClockCapSeconds = 900;
+
+    public const int DefaultMaxToolIterations = 4;
+    public const int MinMaxToolIterations = 1;
+    public const int MaxMaxToolIterations = 10;
+
+    public static class EnvironmentVariables
+    {
+        public const string AspNetCoreUrls = "ASPNETCORE_URLS";
+        public const string GatewayBaseUrl = "INFRA_GATE_PLANNER_GATEWAY_BASE_URL";
+        public const string ExecutorHandoffUrl = "INFRA_GATE_PLANNER_EXECUTOR_HANDOFF_URL";
+        public const string AnomalyWallClockCapSeconds = "INFRA_GATE_PLANNER_ANOMALY_WALL_CLOCK_CAP_SECONDS";
+        public const string BatchWallClockCapSeconds = "INFRA_GATE_PLANNER_BATCH_WALL_CLOCK_CAP_SECONDS";
+        public const string MaxToolIterations = "INFRA_GATE_PLANNER_MAX_TOOL_ITERATIONS";
+        public const string LlmProvider = "INFRA_GATE_PLANNER_LLM_PROVIDER";
+        public const string LlmModel = "INFRA_GATE_PLANNER_LLM_MODEL";
+        public const string LlmApiKey = "INFRA_GATE_PLANNER_LLM_API_KEY";
+        public const string ClientId = "INFRA_GATE_PLANNER_CLIENT_ID";
+        public const string ClientSecret = "INFRA_GATE_PLANNER_CLIENT_SECRET";
+        public const string OAuthAuthority = "INFRA_GATE_PLANNER_OAUTH_AUTHORITY";
+        public const string OAuthScope = "INFRA_GATE_PLANNER_OAUTH_SCOPE";
+        public const string FileSinkRoot = "INFRA_GATE_PLANNER_FILE_SINK_ROOT";
+    }
+
+    public static class ConfigurationKeys
+    {
+        public const string Planner = "InfraGate:Planner";
+        public const string GatewayBaseUrl = "InfraGate:Planner:GatewayBaseUrl";
+        public const string ExecutorHandoffUrl = "InfraGate:Planner:ExecutorHandoffUrl";
+        public const string AnomalyWallClockCapSeconds = "InfraGate:Planner:AnomalyWallClockCapSeconds";
+        public const string BatchWallClockCapSeconds = "InfraGate:Planner:BatchWallClockCapSeconds";
+        public const string MaxToolIterations = "InfraGate:Planner:MaxToolIterations";
+        public const string LlmProvider = "InfraGate:Planner:LlmProvider";
+        public const string LlmModel = "InfraGate:Planner:LlmModel";
+        public const string LlmApiKey = "InfraGate:Planner:LlmApiKey";
+        public const string FileSinkRoot = "InfraGate:Planner:FileSink:Root";
+    }
+
+    public static class ToolNames
+    {
+        public const string ProposePlan = "propose_plan";
+        public const string GetAllowedNamespaces = "get_allowed_namespaces";
+        public const string GetK8sStatus = "get_k8s_status";
+        public const string GetK8sEvents = "get_k8s_events";
+        public const string GetK8sPods = "get_k8s_pods";
+        public const string DescribeK8sResource = "describe_k8s_resource";
+        public const string GetK8sDeployments = "get_k8s_deployments";
+        public const string GetK8sServices = "get_k8s_services";
+        public const string GetK8sEndpoints = "get_k8s_endpoints";
+
+        public static readonly IReadOnlySet<string> AllowedToolNames = new HashSet<string>(StringComparer.Ordinal)
+        {
+            ProposePlan,
+            GetAllowedNamespaces,
+            GetK8sStatus,
+            GetK8sEvents,
+            GetK8sPods,
+            DescribeK8sResource,
+            GetK8sDeployments,
+            GetK8sServices,
+            GetK8sEndpoints,
+        };
+    }
+
+    public static class Claims
+    {
+        public const string AuthorizedParty = "azp";
+    }
+
+    public static class ServiceClients
+    {
+        public const string Observer = "infra-gate-observer";
+    }
+
+    public static class Policies
+    {
+        public const string ObserverSender = "ObserverSender";
+    }
+}
