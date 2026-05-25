@@ -38,6 +38,9 @@
     <Project Path="tests/InfraGate.Executor.Tests/InfraGate.Executor.Tests.csproj" />
     <Project Path="tests/InfraGate.Observer.IntegrationTests/InfraGate.Observer.IntegrationTests.csproj" />
     <Project Path="tests/InfraGate.Observer.E2E.Tests/InfraGate.Observer.E2E.Tests.csproj" />
+    <Project Path="tests/InfraGate.Planner.IntegrationTests/InfraGate.Planner.IntegrationTests.csproj" />
+    <Project Path="tests/InfraGate.Executor.IntegrationTests/InfraGate.Executor.IntegrationTests.csproj" />
+    <Project Path="tests/InfraGate.Remediation.E2E.Tests/InfraGate.Remediation.E2E.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/approval-postgres-migrations/ApplyApprovalPostgresMigrations.csproj" />
