@@ -34,12 +34,7 @@ internal sealed class PlannerMcpClient : IPlannerMcpClient, IAsyncDisposable
             return;
         }
 
-        var bearerLogger = loggerFactory.CreateLogger<ClientCredentialsBearerHandler>();
-        var bearerHandler = new ClientCredentialsBearerHandler(TokenProvider, bearerLogger);
-        var httpClient = new HttpClient(bearerHandler)
-        {
-            BaseAddress = new Uri(GatewayBaseUrl)
-        };
+        var httpClient = CreateHttpClient(GatewayBaseUrl, TokenProvider, loggerFactory);
 
         var transport = new HttpClientTransport(
             new HttpClientTransportOptions
@@ -53,6 +48,24 @@ internal sealed class PlannerMcpClient : IPlannerMcpClient, IAsyncDisposable
 
         mcpClient = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    internal static HttpClient CreateHttpClient(
+        string gatewayBaseUrl,
+        IClientCredentialsTokenProvider tokenProvider,
+        ILoggerFactory loggerFactory,
+        HttpMessageHandler? innerHandler = null)
+    {
+        var bearerLogger = loggerFactory.CreateLogger<ClientCredentialsBearerHandler>();
+        var bearerHandler = new ClientCredentialsBearerHandler(tokenProvider, bearerLogger)
+        {
+            InnerHandler = innerHandler ?? new SocketsHttpHandler()
+        };
+
+        return new HttpClient(bearerHandler)
+        {
+            BaseAddress = new Uri(gatewayBaseUrl)
+        };
     }
 
     public async Task<string> CallToolAsync(

@@ -30,6 +30,28 @@ public sealed class ClientCredentialsServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public void AddClientCredentialsTokenProvider_WithoutPreRegisteredHttpClient_RegistersProvider()
+    {
+        var services = new ServiceCollection();
+        var options = new ClientCredentialsTokenOptions
+        {
+            Authority = "https://auth.example.com",
+            ClientId = "my-client",
+            ClientSecret = "my-secret",
+            Scope = "mcp:tools.readonly"
+        };
+
+        services.AddLogging();
+        services.AddClientCredentialsTokenProvider(options);
+
+        var sp = services.BuildServiceProvider();
+        var provider = sp.GetRequiredService<IClientCredentialsTokenProvider>();
+
+        Assert.NotNull(provider);
+        Assert.IsType<ClientCredentialsTokenProvider>(provider);
+    }
+
+    [Fact]
     public void AddClientCredentialsBearerHandler_RegistersDelegatingHandler()
     {
         var services = new ServiceCollection();

@@ -2,6 +2,7 @@ using InfraGate.ClientCredentials;
 using InfraGate.Planner.Mcp;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Net;
 
 namespace InfraGate.Planner.Tests.UnitTests;
 
@@ -83,5 +84,40 @@ public sealed class PlannerMcpClientTests
     {
         var client = CreateClient("http://localhost:3001/mcp");
         Assert.Equal("http://localhost:3001/mcp", client.GatewayBaseUrl);
+    }
+
+    [Fact]
+    public async Task CreateHttpClient_Request_SendsBearerToken()
+    {
+        var tokenProvider = Substitute.For<IClientCredentialsTokenProvider>();
+        tokenProvider.GetTokenAsync(Arg.Any<CancellationToken>())
+            .Returns("planner-token");
+
+        var innerHandler = new CapturingHandler(HttpStatusCode.OK);
+        using var httpClient = PlannerMcpClient.CreateHttpClient(
+            "http://localhost:3001/mcp",
+            tokenProvider,
+            NullLoggerFactory.Instance,
+            innerHandler);
+
+        using var response = await httpClient.GetAsync(string.Empty);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(innerHandler.LastRequest);
+        Assert.Equal("Bearer", innerHandler.LastRequest!.Headers.Authorization!.Scheme);
+        Assert.Equal("planner-token", innerHandler.LastRequest.Headers.Authorization.Parameter);
+    }
+
+    private sealed class CapturingHandler(HttpStatusCode statusCode) : HttpMessageHandler
+    {
+        public HttpRequestMessage? LastRequest { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            return Task.FromResult(new HttpResponseMessage(statusCode));
+        }
     }
 }
