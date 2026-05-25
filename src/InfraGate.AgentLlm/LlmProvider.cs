@@ -1,6 +1,6 @@
-namespace InfraGate.Observer.Llm;
+namespace InfraGate.AgentLlm;
 
-internal enum LlmProvider
+public enum LlmProvider
 {
     Anthropic,
     OpenAI,

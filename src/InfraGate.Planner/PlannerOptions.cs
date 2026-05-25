@@ -19,6 +19,12 @@ public sealed record class PlannerOptions
             throw new InvalidOperationException("GatewayBaseUrl must be configured.");
         }
 
+        if (IsAnthropicProvider() && string.IsNullOrWhiteSpace(LlmApiKey))
+        {
+            throw new InvalidOperationException(
+                $"LlmApiKey must be configured for Anthropic. Set {PlannerConventions.EnvironmentVariables.LlmApiKey}.");
+        }
+
         if (AnomalyWallClockCapSeconds < PlannerConventions.MinAnomalyWallClockCapSeconds ||
             AnomalyWallClockCapSeconds > PlannerConventions.MaxAnomalyWallClockCapSeconds)
         {
@@ -39,5 +45,11 @@ public sealed record class PlannerOptions
             throw new InvalidOperationException(
                 $"MaxToolIterations must be between {PlannerConventions.MinMaxToolIterations} and {PlannerConventions.MaxMaxToolIterations}. Configured: {MaxToolIterations}.");
         }
+    }
+
+    private bool IsAnthropicProvider()
+    {
+        return string.IsNullOrWhiteSpace(LlmProvider) ||
+            LlmProvider.Equals(PlannerConventions.LlmProviders.Anthropic, StringComparison.OrdinalIgnoreCase);
     }
 }

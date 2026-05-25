@@ -6,6 +6,7 @@ using InfraGate.Observer.Cycle;
 using InfraGate.Observer.Diagnostics;
 using InfraGate.Observer.Endpoints;
 using InfraGate.Observer.Handoff;
+using InfraGate.AgentLlm;
 using InfraGate.Observer.Llm;
 using InfraGate.Observer.Mcp;
 using InfraGate.Observer.Prompts;

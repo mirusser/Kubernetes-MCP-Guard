@@ -9,6 +9,7 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Email;
 using InfraGate.McpGateway.Notifications;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Builder;
@@ -976,6 +977,9 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                 services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
                 services.AddHttpContextAccessor();
                 services.AddLogging();
+                services.AddSingleton<IApprovalAccessCodeStore, InMemoryApprovalAccessCodeStore>();
+                services.AddSingleton<IApprovalEmailSender, NullApprovalEmailSender>();
+                services.AddSingleton<IProposePlanHandler, ProposePlanHandler>();
                 services.AddSingleton<IApprovalPageRenderer>(sp =>
                     new ApprovalPageRenderer(sp, sp.GetRequiredService<ILoggerFactory>()));
                 services.AddAntiforgery();
@@ -1097,4 +1101,10 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         public const string Redirect = "redirect";
         public const string Scope = "scope";
     }
+}
+
+internal sealed class NullApprovalEmailSender : IApprovalEmailSender
+{
+    public Task SendAsync(ApprovalEmailContent content, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
 }

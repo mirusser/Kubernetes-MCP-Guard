@@ -5,6 +5,7 @@ internal static class PlannerConventions
     public const string DefaultClientId = "infra-gate-planner";
     public const string DefaultOAuthScope = "mcp:tools.propose mcp:tools.readonly";
     public const string DefaultUrl = "http://localhost:3004";
+    public const string DefaultLlmModel = "claude-sonnet-4-6";
     public const string HealthEndpointPath = "/health";
     public const string HandoffAnomaliesEndpointPath = "/handoff/anomalies";
 
@@ -52,6 +53,55 @@ internal static class PlannerConventions
         public const string FileSinkRoot = "InfraGate:Planner:FileSink:Root";
     }
 
+    public static class Prompts
+    {
+        public const string SystemPromptResourceName = "InfraGate.Planner.Prompts.PlannerSystemPrompt.md";
+    }
+
+    public static class Llm
+    {
+        public const string ToolCallPrefix = "TOOL_CALL:";
+    }
+
+    public static class LlmProviders
+    {
+        public const string Anthropic = "ANTHROPIC";
+        public const string OpenAI = "OPENAI";
+        public const string Google = "GOOGLE";
+        public const string Azure = "AZURE";
+        public const string Ollama = "OLLAMA";
+    }
+
+    public static class OperationTypes
+    {
+        public const string RestartDeployment = "restart_deployment";
+        public const string ScaleDeployment = "scale_deployment";
+
+        public static readonly IReadOnlySet<string> AllowedOperationTypes = new HashSet<string>(StringComparer.Ordinal)
+        {
+            RestartDeployment,
+            ScaleDeployment,
+        };
+    }
+
+    public static class ToolArguments
+    {
+        public const string OperationType = "operationType";
+        public const string OperationArguments = "arguments";
+        public const string Name = "name";
+        public const string Namespace = "namespace";
+        public const string Replicas = "replicas";
+    }
+
+    public static class ProposePlanResponseFields
+    {
+        public const string PlanId = "planId";
+        public const string ContentLower = "content";
+        public const string ContentUpper = "Content";
+        public const string TextLower = "text";
+        public const string TextUpper = "Text";
+    }
+
     public static class ToolNames
     {
         public const string ProposePlan = "propose_plan";
@@ -63,6 +113,18 @@ internal static class PlannerConventions
         public const string GetK8sDeployments = "get_k8s_deployments";
         public const string GetK8sServices = "get_k8s_services";
         public const string GetK8sEndpoints = "get_k8s_endpoints";
+
+        public static readonly IReadOnlySet<string> ReadOnlyToolNames = new HashSet<string>(StringComparer.Ordinal)
+        {
+            GetAllowedNamespaces,
+            GetK8sStatus,
+            GetK8sEvents,
+            GetK8sPods,
+            DescribeK8sResource,
+            GetK8sDeployments,
+            GetK8sServices,
+            GetK8sEndpoints,
+        };
 
         public static readonly IReadOnlySet<string> AllowedToolNames = new HashSet<string>(StringComparer.Ordinal)
         {

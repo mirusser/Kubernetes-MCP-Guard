@@ -102,6 +102,13 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         CallToolRequestParams request,
         CancellationToken ct)
     {
+        return await CallToolAsyncCore(request, ct).ConfigureAwait(false);
+    }
+
+    private async Task<CallToolResult> CallToolAsyncCore(
+        CallToolRequestParams request,
+        CancellationToken ct)
+    {
         string toolName = request.Name;
 
         if (toolName.Equals(McpGatewayConventions.ToolNames.ApplyApprovedPlan, StringComparison.Ordinal))

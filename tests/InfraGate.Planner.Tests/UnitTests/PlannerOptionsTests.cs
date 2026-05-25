@@ -14,9 +14,26 @@ public sealed class PlannerOptionsTests
     [Fact]
     public void Validate_ValidOptions_DoesNotThrow()
     {
-        var options = new PlannerOptions { GatewayBaseUrl = "http://localhost:3001/mcp" };
+        var options = new PlannerOptions
+        {
+            GatewayBaseUrl = "http://localhost:3001/mcp",
+            LlmApiKey = "test-key",
+        };
         var ex = Record.Exception(() => options.Validate());
         Assert.Null(ex);
+    }
+
+    [Fact]
+    public void Validate_MissingAnthropicApiKey_Throws()
+    {
+        var options = new PlannerOptions
+        {
+            GatewayBaseUrl = "http://localhost:3001/mcp",
+            LlmProvider = "anthropic",
+            LlmApiKey = "",
+        };
+
+        Assert.Throws<InvalidOperationException>(() => options.Validate());
     }
 
     [Theory]
@@ -27,6 +44,7 @@ public sealed class PlannerOptionsTests
         var options = new PlannerOptions
         {
             GatewayBaseUrl = "http://localhost:3001/mcp",
+            LlmApiKey = "test-key",
             AnomalyWallClockCapSeconds = value,
         };
         Assert.Throws<InvalidOperationException>(() => options.Validate());
@@ -40,6 +58,7 @@ public sealed class PlannerOptionsTests
         var options = new PlannerOptions
         {
             GatewayBaseUrl = "http://localhost:3001/mcp",
+            LlmApiKey = "test-key",
             BatchWallClockCapSeconds = value,
         };
         Assert.Throws<InvalidOperationException>(() => options.Validate());
@@ -53,15 +72,65 @@ public sealed class PlannerOptionsTests
         var options = new PlannerOptions
         {
             GatewayBaseUrl = "http://localhost:3001/mcp",
+            LlmApiKey = "test-key",
             MaxToolIterations = value,
         };
         Assert.Throws<InvalidOperationException>(() => options.Validate());
     }
 
+    [Theory]
+    [InlineData(PlannerConventions.MinAnomalyWallClockCapSeconds)]
+    [InlineData(PlannerConventions.MaxAnomalyWallClockCapSeconds)]
+    public void Validate_AnomalyWallClockCapAtBoundary_DoesNotThrow(int value)
+    {
+        var options = new PlannerOptions
+        {
+            GatewayBaseUrl = "http://localhost:3001/mcp",
+            LlmApiKey = "test-key",
+            AnomalyWallClockCapSeconds = value,
+        };
+        var ex = Record.Exception(() => options.Validate());
+        Assert.Null(ex);
+    }
+
+    [Theory]
+    [InlineData(PlannerConventions.MinBatchWallClockCapSeconds)]
+    [InlineData(PlannerConventions.MaxBatchWallClockCapSeconds)]
+    public void Validate_BatchWallClockCapAtBoundary_DoesNotThrow(int value)
+    {
+        var options = new PlannerOptions
+        {
+            GatewayBaseUrl = "http://localhost:3001/mcp",
+            LlmApiKey = "test-key",
+            BatchWallClockCapSeconds = value,
+        };
+        var ex = Record.Exception(() => options.Validate());
+        Assert.Null(ex);
+    }
+
+    [Theory]
+    [InlineData(PlannerConventions.MinMaxToolIterations)]
+    [InlineData(PlannerConventions.MaxMaxToolIterations)]
+    public void Validate_MaxToolIterationsAtBoundary_DoesNotThrow(int value)
+    {
+        var options = new PlannerOptions
+        {
+            GatewayBaseUrl = "http://localhost:3001/mcp",
+            LlmApiKey = "test-key",
+            MaxToolIterations = value,
+        };
+        var ex = Record.Exception(() => options.Validate());
+        Assert.Null(ex);
+    }
+
     [Fact]
     public void Defaults_AreWithinValidRange()
     {
-        var options = new PlannerOptions { GatewayBaseUrl = "http://localhost:3001/mcp" };
+        var options = new PlannerOptions
+        {
+            GatewayBaseUrl = "http://localhost:3001/mcp",
+            LlmApiKey = "test-key",
+        };
 
         Assert.InRange(options.AnomalyWallClockCapSeconds,
             PlannerConventions.MinAnomalyWallClockCapSeconds,

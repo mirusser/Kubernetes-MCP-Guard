@@ -48,3 +48,5 @@
 [mcp-spec] Don't rely on older MCP spec versions when debugging protocol behavior — check the latest dated specification first. (cause: protocol version drift)
 [mcp-testing] Don't use kubectl when the user is testing InfraGate MCP behavior — perform Kubernetes inspection and mutation through infra-gate tools only. (cause: tool-path validation)
 [pragmas] Don't leave `#pragma warning disable` with no explanation — every pragma must have a comment immediately above it explaining WHY the suppression is needed. (cause: suppressed warnings without rationale become permanent accidental debt)
+[docker-build] Don't add a project reference to Observer (.csproj) without updating the Observer Dockerfile — it needs both the `.csproj` COPY for the restore layer AND the `src/` COPY for the publish layer. Without both, Docker build fails with MSB9009. (cause: Observer Dockerfile missing AgentLlm project layers)
+[planner-prompt] Don't say the Planner never calls propose_plan — say the LLM returns decision JSON and the Planner service calls propose_plan after validation. (cause: role contradiction)

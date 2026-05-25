@@ -1,20 +1,13 @@
 using System.Diagnostics.Metrics;
 using InfraGate.AgentLlm;
-using InfraGate.Observer.Diagnostics;
+using InfraGate.Planner.Diagnostics;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace InfraGate.Observer.Llm;
+namespace InfraGate.Planner.Llm;
 
-internal sealed class ChatClientFactory : IChatClientFactory
+internal sealed class ChatClientFactory(IOptions<PlannerOptions> options, Meter? meter = null) : IChatClientFactory
 {
-    private readonly IOptions<ObserverOptions> options;
-    private readonly Meter? meter;
-
-    public ChatClientFactory(IOptions<ObserverOptions> options, Meter? meter = null)
-    {
-        this.options = options;
-        this.meter = meter;
-    }
 
     public IChatClient Create()
     {
@@ -23,7 +16,10 @@ internal sealed class ChatClientFactory : IChatClientFactory
         return provider switch
         {
             LlmProvider.Anthropic => CreateAnthropicClient(),
-            _ => throw new NotSupportedException($"LLM provider '{provider}' is not yet implemented."),
+            // Future provider arms are visible here for wiring.
+#pragma warning disable MA0025
+            _ => throw new NotImplementedException($"LLM provider '{provider}' is not yet implemented."),
+#pragma warning restore MA0025
         };
     }
 
@@ -33,11 +29,11 @@ internal sealed class ChatClientFactory : IChatClientFactory
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             throw new InvalidOperationException(
-                $"LLM API key not configured. Set {ObserverConventions.EnvironmentVariables.LlmApiKey}.");
+                $"LLM API key not configured. Set {PlannerConventions.EnvironmentVariables.LlmApiKey}.");
         }
 
         var model = string.IsNullOrWhiteSpace(options.Value.LlmModel)
-            ? AnomalyObserverConventions.DefaultLlmModel
+            ? PlannerConventions.DefaultLlmModel
             : options.Value.LlmModel;
 
         const string AnthropicApiBase = "https://api.anthropic.com";
@@ -51,7 +47,7 @@ internal sealed class ChatClientFactory : IChatClientFactory
             },
         };
 
-        var counter = ObserverMetrics.CreateLlmTokensCounter(meter);
+        var counter = PlannerMetrics.CreateLlmTokensCounter(meter);
         return new AnthropicChatClient(httpClient, model, NullLoggerFactory.Instance, counter);
     }
 

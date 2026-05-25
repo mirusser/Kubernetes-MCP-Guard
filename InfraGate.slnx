@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/InfraGate.Approvals/InfraGate.Approvals.csproj" />
     <Project Path="src/InfraGate.Approvals.Postgres/InfraGate.Approvals.Postgres.csproj" />
+    <Project Path="src/InfraGate.AgentLlm/InfraGate.AgentLlm.csproj" />
     <Project Path="src/InfraGate.ClientCredentials/InfraGate.ClientCredentials.csproj" />
     <Project Path="src/InfraGate.DownstreamAuth/InfraGate.DownstreamAuth.csproj" />
     <Project Path="src/InfraGate.Observer.Contracts/InfraGate.Observer.Contracts.csproj" />

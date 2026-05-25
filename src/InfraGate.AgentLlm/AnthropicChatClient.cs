@@ -1,14 +1,11 @@
 using System.Diagnostics.Metrics;
-using System.Net.Http.Headers;
-using InfraGate.Observer.Diagnostics;
-using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Logging;
+using InfraGate.AgentLlm.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace InfraGate.Observer.Llm;
+namespace InfraGate.AgentLlm;
 
-// Custom IChatClient implementation: no official Microsoft.Extensions.AI.Anthropic NuGet package exists.
-internal sealed class AnthropicChatClient : IChatClient
+// Custom IChatClient implementation: no official Microsoft.Extensions.AI.Anthropic package exists.
+public sealed class AnthropicChatClient : IChatClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -22,12 +19,12 @@ internal sealed class AnthropicChatClient : IChatClient
     {
     }
 
-    public AnthropicChatClient(HttpClient httpClient, string model, ILoggerFactory loggerFactory, Meter? meter = null)
+    public AnthropicChatClient(HttpClient httpClient, string model, ILoggerFactory loggerFactory, Counter<long>? llmTokensCounter = null)
     {
         this.httpClient = httpClient;
         this.model = model;
         logger = loggerFactory.CreateLogger<AnthropicChatClient>();
-        llmTokensCounter = ObserverMetrics.CreateLlmTokensCounter(meter);
+        this.llmTokensCounter = llmTokensCounter;
     }
 
     public async Task<ChatResponse> GetResponseAsync(
@@ -59,15 +56,15 @@ internal sealed class AnthropicChatClient : IChatClient
         }
 
         var textBlocks = anthropicResponse.Content?
-            .Where(c => c is { Type: "text", Text: not null })
-            .Select(c => c.Text!)
+            .Where(static c => c is { Type: "text", Text: not null })
+            .Select(static c => c.Text!)
             .ToList();
 
         var responseText = textBlocks is { Count: > 0 }
             ? string.Concat(textBlocks)
             : string.Empty;
 
-        ObserverLogEvents.LogLlmTokenUsage(logger,
+        AgentLogEvents.LogLlmTokenUsage(logger,
             anthropicResponse.Usage?.InputTokens ?? 0,
             anthropicResponse.Usage?.OutputTokens ?? 0);
 
@@ -117,7 +114,7 @@ internal sealed class AnthropicChatClient : IChatClient
         {
             var textContent = string.Concat(msg.Contents
                 .OfType<TextContent>()
-                .Select(tc => tc.Text));
+                .Select(static tc => tc.Text));
 
             if (msg.Role == ChatRole.System)
             {
@@ -132,7 +129,7 @@ internal sealed class AnthropicChatClient : IChatClient
             }
         }
 
-        var maxTokens = options?.MaxOutputTokens ?? 4096;
+        int maxTokens = options?.MaxOutputTokens ?? 4096;
 
         return new AnthropicRequestBody
         {
@@ -143,12 +140,9 @@ internal sealed class AnthropicChatClient : IChatClient
         };
     }
 
-    // ── Anthropic API DTOs ──────────────────────────────────
-
-    // JSON serialization/deserialization DTOs; properties set by
-    // JsonSerializer.Serialize / JsonSerializer.Deserialize at runtime.
-#pragma warning disable S1144, S3459
-    private sealed class AnthropicRequestBody
+    // JSON serialization/deserialization DTOs; properties set by System.Text.Json at runtime.
+#pragma warning disable S1144, S3459, CA1812
+    private sealed record class AnthropicRequestBody
     {
         public string? Model { get; set; }
         public int MaxTokens { get; set; }
@@ -156,15 +150,13 @@ internal sealed class AnthropicChatClient : IChatClient
         public List<AnthropicApiMessage>? Messages { get; set; }
     }
 
-    // JSON serialization DTOs.
-    private sealed class AnthropicApiMessage
+    private sealed record class AnthropicApiMessage
     {
         public string? Role { get; set; }
         public string? Content { get; set; }
     }
 
-    // JSON deserialization DTOs.
-    private sealed class AnthropicResponseBody
+    private sealed record class AnthropicResponseBody
     {
         public string? Id { get; set; }
         public string? Model { get; set; }
@@ -172,18 +164,16 @@ internal sealed class AnthropicChatClient : IChatClient
         public AnthropicUsageInfo? Usage { get; set; }
     }
 
-    // JSON deserialization DTOs.
-    private sealed class AnthropicContentBlock
+    private sealed record class AnthropicContentBlock
     {
         public string? Type { get; set; }
         public string? Text { get; set; }
     }
 
-    // JSON deserialization DTOs.
-    private sealed class AnthropicUsageInfo
+    private sealed record class AnthropicUsageInfo
     {
         public int InputTokens { get; set; }
         public int OutputTokens { get; set; }
     }
-#pragma warning restore S1144, S3459
+#pragma warning restore S1144, S3459, CA1812
 }

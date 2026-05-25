@@ -1,11 +1,16 @@
 using InfraGate.Planner;
 using InfraGate.Planner.Cycle;
+using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
 using InfraGate.Planner.Endpoints;
+using InfraGate.Planner.Handoff;
+using InfraGate.AgentLlm;
+using InfraGate.Planner.Llm;
 using InfraGate.Planner.Mcp;
 using InfraGate.Observability;
 using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.AI;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -59,7 +64,24 @@ var authOptions = new ClientCredentialsTokenOptions
 builder.Services.AddClientCredentialsTokenProvider(authOptions);
 
 builder.Services.AddSingleton<IPlannerMcpClient, PlannerMcpClient>();
+builder.Services.AddSingleton<IChatClientFactory>(sp =>
+{
+    return new ChatClientFactory(
+        sp.GetRequiredService<IOptions<PlannerOptions>>(),
+        PlannerMetrics.Meter);
+});
+builder.Services.AddSingleton<IChatClient>(sp =>
+{
+    var factory = sp.GetRequiredService<IChatClientFactory>();
+    return factory.Create();
+});
 builder.Services.AddSingleton<AnomalyBatchQueue>();
+builder.Services.AddSingleton<PlannerDedupeStore>();
+builder.Services.AddSingleton<LoggingRemediationProposalSink>();
+builder.Services.AddSingleton<IRemediationProposalSink>(sp =>
+    sp.GetRequiredService<LoggingRemediationProposalSink>());
+builder.Services.AddSingleton<BatchProcessor>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<BatchProcessor>());
 
 var jwtAuthority = builder.Configuration[PlannerConventions.EnvironmentVariables.OAuthAuthority] ?? string.Empty;
 builder.Services

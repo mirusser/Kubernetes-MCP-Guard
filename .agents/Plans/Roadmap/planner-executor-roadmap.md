@@ -515,7 +515,7 @@ Phases are vertical-sliced from Phase 1 onward. Each task is small enough for a 
 
 **Description:** Background `IHostedService` consumes the channel from Task 2.3. Per `AnomalyHandoffBatch`, the pipeline runs inline (no extracted `IAnomalyFilter`, `IRemediationDecider`, or `IPlanProposer` seams — these are private/internal methods within `BatchProcessor`):
 
-1. **Filter** — drops `Status=Resolved`, drops Kinds outside v1 (`PodUnhealthy`, `ServiceNoEndpoints`, `WarningEvent`), drops anomalies already tracked in dedupe store (`ConcurrentDictionary<AnomalyId, ActivePlanState>` capacity 1000).
+1. **Filter** — drops `Status=Resolved`, drops Kinds outside v1 (`PodUnhealthy`, `DeploymentUnavailable`, `ServiceNoEndpoints`, `WarningEvent`), drops anomalies already tracked in dedupe store (`ConcurrentDictionary<AnomalyId, ActivePlanState>` capacity 1000). `DeploymentUnavailable` is intentionally included because the Planner Detection checkpoint expects the `examples/failing-deployment/` scenario to produce a `restart_deployment` proposal.
 2. **Author system prompt** — loads `PlannerSystemPrompt.md` (embedded resource) and caches it.
 3. **Per-anomaly LLM decision** — calls the `IChatClient` with system prompt + AnomalyReport JSON + bounded read-only tools per anomaly. Output parsed as `RemediationDecision { OperationType, Arguments, Reasoning }`. Validates `OperationType` against v1 allowlist, validates argument shapes against per-operation schemas. Returns null + counters on invalid output. Per-anomaly wall-clock cap via `CancellationTokenSource.CancelAfter(30s)`.
 4. **Propose** — calls `propose_plan` on the gateway through the MCP client. Updates dedupe store with new active plan state.
