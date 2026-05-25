@@ -42,6 +42,34 @@ kubectl apply -f examples/failing-deployment/fix.yaml
 
 Within 2 observation cycles (default), the Observer emits `Status=Resolved` reports with `Severity=Low` for each previously-active anomaly.
 
+## Remediation Demo
+
+The [InfraGate.Planner](../../src/InfraGate.Planner/README.md) and [InfraGate.Executor](../../src/InfraGate.Executor/README.md) can consume Observer output, propose an approval-pending plan, send an Approval Access Code through Mailpit, and execute the approved plan through the gateway. The required handoff and SMTP settings are documented in [docs/configuration.md](../../docs/configuration.md).
+
+Current fixture caveat: `deployment.yaml` uses an invalid image. The v1 Planner operation menu is limited to `restart_deployment` and `scale_deployment`, so the autonomous path can demonstrate proposal, approval, and execution, but it does not replace the image by itself. Apply `fix.yaml` after the approved execution if you want to observe the Observer's `Resolved` reports for this fixture.
+
+**Prerequisites:** Bring up the local OAuth stack with Observer, Planner, Executor, Gateway, Keycloak, PostgreSQL, and Mailpit; then apply the broken deployment:
+
+```bash
+kubectl apply -f examples/failing-deployment/deployment.yaml
+```
+
+Wait for the Observer cycle to publish an anomaly batch to the Planner. The Planner should emit a `RemediationProposal` after it creates a plan through `propose_plan`, and Mailpit should receive the Approval Access Code email.
+
+Open Mailpit at `http://127.0.0.1:8025`, copy the 8-character code, then open the gateway code-entry page:
+
+```text
+http://127.0.0.1:3001/approvals/code
+```
+
+Submit the code, sign in through the local Keycloak approval UI when prompted, review the plan, and approve it. The Executor waits through `wait_for_plan_approval`, then calls `execute_approved_plan` for the approved plan.
+
+To observe resolution for the current invalid-image fixture, apply the valid manifest and wait for two more Observer cycles:
+
+```bash
+kubectl apply -f examples/failing-deployment/fix.yaml
+```
+
 **Clean up:**
 
 ```bash

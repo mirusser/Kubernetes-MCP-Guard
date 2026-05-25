@@ -5,9 +5,10 @@
 ## Runtime Flow
 
 - `Program.cs` configures the HTTP MCP server at `/mcp`, registers auth, approval endpoints, guardrails, the downstream client, and the Kubernetes adapter implementation of the generic plan seams.
-- `IGatewayToolDispatcher.cs` / `GatewayToolDispatcher.cs` dynamically forward downstream ReadOnly tools, hide downstream Destructive tools, expose `request_*` wrappers for plan creation, own `execute_approved_plan`, `get_plan_status`, and `wait_for_plan_approval`, and call the generic pre-execution gate before adapter execution.
+- `IGatewayToolDispatcher.cs` / `GatewayToolDispatcher.cs` dynamically forward downstream ReadOnly tools, hide downstream Destructive tools, expose `request_*` wrappers for human-driven plan creation, own `execute_approved_plan`, `get_plan_status`, and `wait_for_plan_approval`, route `propose_plan`, and call the generic pre-execution gate before adapter execution.
+- `ProposePlanHandler.cs` creates Operator Approval Policy plans for the autonomous Planner operation menu, generates Approval Access Codes, and attempts the configured operator email notification.
 - `Notifications/PlanStatusResourceHandler.cs` exposes the `plan://{planId}/status` MCP resource template, reads the same plan-status JSON contract as `get_plan_status`, and owns explicit `resources/subscribe` / `resources/unsubscribe` routing for approval notifications.
-- `IGatewayApprovalService.cs`, `GatewayApprovalService.cs`, and `GatewayApprovalEndpoints.cs` create or reuse short-lived approval URLs and delegate HTML rendering to `InfraGate.ApprovalUi` Razor components; challenge workflows live in `InfraGate.Approvals` behind `IApprovalChallengeWorkflow`. `ApprovalGateResult` separates `Approved`, `ApprovalRequired`, and `Refused` states and carries stable reason codes while preserving the MCP text response.
+- `IGatewayApprovalService.cs`, `GatewayApprovalService.cs`, and `GatewayApprovalEndpoints.cs` create or reuse short-lived approval URLs, expose the `/approvals/code` Approval Access Code route, and delegate HTML rendering to `InfraGate.ApprovalUi` Razor components; challenge workflows live in `InfraGate.Approvals` behind `IApprovalChallengeWorkflow`. `ApprovalGateResult` separates `Approved`, `ApprovalRequired`, and `Refused` states and carries stable reason codes while preserving the MCP text response.
 - `GuardedToolRunner.cs` scans inbound arguments, calls the downstream stdio server, sanitizes risky model-visible output, and writes audit events.
 - `DownstreamMcpClient.cs` starts and reuses the downstream `InfraGate.McpServer` process via the Model Context Protocol client.
 - `PromptInjectionGuard*.cs` contains argument scanning, response redaction, operational-line allow-listing, and regex patterns.
@@ -27,13 +28,15 @@ The controls below are ordered by importance. The downstream service token (in-p
 ## Important Contracts
 
 - Gateway public read-only tool names and generated `request_*` wrappers must stay stable for clients. Raw downstream Destructive tools are not exposed through the gateway and must only be reached by the domain executor after approval gates pass.
+- `propose_plan` is the autonomous Planner entry point. It accepts only the v1 operation allowlist, stamps Operator Approval Policy, and does not change the existing human-driven `request_*` contracts.
 - Logs and Events are untrusted Kubernetes output; keep observability reads routed through `GuardedToolRunner` so response sanitization still applies.
 - Suspicious input is warned and audited, but still forwarded to the downstream server.
 - Suspicious response text and echoed manifest blocks are redacted before returning to the MCP client.
 - Authentication behavior is provided by `InfraGate.McpGateway.Auth`; this project should not duplicate auth rules.
 - OAuth access tokens are terminated at the gateway. The downstream stdio server receives tool calls, not bearer tokens.
-- The gateway binds approval challenges to the requester stored in the generic plan envelope; a different authenticated subject must request a fresh plan.
+- The gateway binds Same-Subject Approval challenges to the requester stored in the generic plan envelope. Operator Approval Policy challenges are decided by authenticated users in the configured operator group.
 - Approval is browser-based and out-of-band: MCP clients receive an approval URL but cannot submit approval content through MCP.
+- Approval Access Codes are one-time routing tokens for Planner-originated plans. They redirect an operator to the existing browser Review Surface and do not authenticate the approver.
 - `get_plan_status` is read-only and returns the current approval plan status so MCP clients can poll after `execute_approved_plan` returns `ApprovalRequired`. `wait_for_plan_approval` is also read-only; it waits up to `timeoutSeconds` (default 55, max 300) and returns `timedOut` without applying the plan.
 - MCP clients that support resources can subscribe to `plan://{planId}/status`; browser approval sends `notifications/resources/updated` for that URI. Notifications are best-effort and require a stateful client session that surfaces MCP resource notifications.
 - Browser approval pages render the stored Kubernetes server-side dry-run status, Intent Digest, Review Digest, and adapter review evidence. Manifest plans require diff evidence; narrow Deployment operations may be dry-run-only.

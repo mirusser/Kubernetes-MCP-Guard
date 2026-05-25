@@ -6,6 +6,7 @@ Kubernetes MCP Guard is a .NET 10 MCP gateway/server for AI-safe Kubernetes oper
 
 - `src/InfraGate.McpServer` is a .NET 10 stdio Kubernetes MCP server using the official C# MCP SDK.
 - `src/InfraGate.McpGateway` is a local HTTP MCP gateway that fronts the MCP server with OAuth auth, browser approval pages, and warn+redact prompt-injection guardrails.
+- `src/InfraGate.Observer`, `src/InfraGate.Planner`, and `src/InfraGate.Executor` are the autonomous read/propose/execute agents. They use separate service identities and narrow gateway scopes.
 - `deploy/local-oauth` is the local OAuth path: Keycloak imports `deploy/keycloak/infra-gate-realm.json` with MCP clients, loopback DCR policy, demo users, and the approval UI client.
 - The MCP server uses the Kubernetes API through `KubernetesClient`, not runtime `kubectl` process execution.
 - Mutating actions are two-step: request a plan through MCP, then approve it in the Gateway browser UI before changing Kubernetes.
@@ -21,7 +22,8 @@ Current architecture delivers:
 - Stdio Kubernetes MCP server (private subprocess, OAuth JWT terminated at gateway; downstream service-token auth available as defense-in-depth)
 - Namespace-scoped RBAC as the hard permission boundary
 - Bounded read-only observability + approval-gated mutation plans
-- Browser-based out-of-band approval with same-subject binding
+- Browser-based out-of-band approval with same-subject binding for human-originated plans and operator-group approval for Planner-originated plans
+- Optional Observer to Planner to Executor remediation handoff
 - Prompt-injection guardrails + JSONL audit logging
 
 ```mermaid

@@ -250,8 +250,6 @@ _Avoid_: cleanup event, archive notification
 
 ### Remediation
 
-> **DRAFT** — added during grilling for the **Remediation Planner** / **Remediation Executor** design. Term names and relationships are subject to refinement once grilling completes (open: v1 mutation scope, identity wiring, ADRs, plan/task breakdown).
-
 **Remediation Planner**:
 A non-human MCP client that consumes **Anomaly Reports** from the **Anomaly Observer**, reasons about candidate remediations with LLM assistance, and proposes one **Mutation Intent** per acted-on **Anomaly** through the gateway's `propose_plan` tool. The **Remediation Planner** does not execute mutations and does not bypass any **Pre-Execution Gate**.
 _Avoid_: Approver, Approval Authority, Remediation Executor, Domain Adapter
@@ -367,8 +365,6 @@ _Avoid_: Planner Service Identity, Approver, Requester, Gateway Service Identity
 
 ### Remediation
 
-> **DRAFT** — added during grilling for the **Remediation Planner** / **Remediation Executor** design. Subject to refinement once grilling completes.
-
 - A **Remediation Planner** consumes **Anomaly Reports** from the **Anomaly Observer** through the **Anomaly Handoff**
 - A **Remediation Planner** produces zero or more **Remediation Proposals** per `AnomalyHandoffBatch`
 - A **Remediation Planner** calls `propose_plan` to create a **Plan Envelope** with **Operator Approval Policy**
@@ -420,6 +416,6 @@ _Avoid_: Planner Service Identity, Approver, Requester, Gateway Service Identity
 - "gateway-to-server auth" was treated as user authorization — resolved: **Gateway Service Identity** authenticates the private downstream call and does not carry **Requester** or **Approver** authority.
 - "observer" could read as a Kubernetes controller, generic monitoring system, or human reviewer — resolved: **Anomaly Observer** is a non-human MCP client bound by gateway read-only tools, separate from the approval lifecycle, and not authorized for any mutation.
 - "finding" was informally used for **Plan Evidence** policy findings — resolved: the **Anomaly Observer** emits **Anomaly Reports**, not findings, so the two concepts stay separate.
-- "executor" could read as `IDomainPlanExecutor` (the generic-core type that the **Kubernetes Adapter** implements) or as an autonomous agent — resolved: `IDomainPlanExecutor` is the generic-core type; **Remediation Executor** is the agent. _(DRAFT — subject to refinement once grilling completes.)_
-- "code" could read as a cryptographic authentication code or an OAuth authorization code — resolved: **Approval Access Code** is a UX routing token; **Approver** authentication remains the **Identity Provider**'s job. _(DRAFT — subject to refinement once grilling completes.)_
-- "propose" was used loosely in the profile narrative for the general "AI proposes" step — resolved: `propose_plan` is the specific gateway tool used by the **Remediation Planner** to create a **Plan Envelope** with **Operator Approval Policy** and emit an **Approval Access Code**. _(DRAFT — subject to refinement once grilling completes.)_
+- "executor" could read as `IDomainPlanExecutor` (the generic-core type that the **Kubernetes Adapter** implements) or as an autonomous agent — resolved: `IDomainPlanExecutor` is the generic-core type; **Remediation Executor** is the agent.
+- "code" could read as a cryptographic authentication code or an OAuth authorization code — resolved: **Approval Access Code** is a UX routing token; **Approver** authentication remains the **Identity Provider**'s job.
+- "propose" was used loosely in the profile narrative for the general "AI proposes" step — resolved: `propose_plan` is the specific gateway tool used by the **Remediation Planner** to create a **Plan Envelope** with **Operator Approval Policy** and emit an **Approval Access Code**.
