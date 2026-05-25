@@ -154,4 +154,9 @@ internal static class PlannerConventions
     {
         public const string ObserverSender = "ObserverSender";
     }
+
+    public static class HttpClients
+    {
+        public const string ExecutorHandoff = "ExecutorHandoff";
+    }
 }

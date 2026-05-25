@@ -77,9 +77,35 @@ builder.Services.AddSingleton<IChatClient>(sp =>
 });
 builder.Services.AddSingleton<AnomalyBatchQueue>();
 builder.Services.AddSingleton<PlannerDedupeStore>();
+builder.Services.AddHttpClient(PlannerConventions.HttpClients.ExecutorHandoff)
+    .AddClientCredentialsBearerHandler();
+
 builder.Services.AddSingleton<LoggingRemediationProposalSink>();
 builder.Services.AddSingleton<IRemediationProposalSink>(sp =>
-    sp.GetRequiredService<LoggingRemediationProposalSink>());
+{
+    var sinks = new List<IRemediationProposalSink>
+    {
+        sp.GetRequiredService<LoggingRemediationProposalSink>(),
+    };
+
+    var options = sp.GetRequiredService<IOptions<PlannerOptions>>().Value;
+
+    if (!string.IsNullOrEmpty(options.FileSinkRoot))
+    {
+        sinks.Add(new JsonFileRemediationProposalSink(options.FileSinkRoot));
+    }
+
+    if (!string.IsNullOrEmpty(options.ExecutorHandoffUrl))
+    {
+        var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+        var httpClient = httpClientFactory.CreateClient(PlannerConventions.HttpClients.ExecutorHandoff);
+        var httpLogger = sp.GetRequiredService<ILogger<HttpRemediationProposalSink>>();
+        sinks.Add(new HttpRemediationProposalSink(httpClient, options.ExecutorHandoffUrl, httpLogger));
+    }
+
+    var logger = sp.GetRequiredService<ILogger<CompositeRemediationProposalSink>>();
+    return new CompositeRemediationProposalSink(sinks, logger);
+});
 builder.Services.AddSingleton<BatchProcessor>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BatchProcessor>());
 

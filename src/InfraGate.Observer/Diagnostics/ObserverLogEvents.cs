@@ -143,5 +143,13 @@ internal static partial class ObserverLogEvents
         Message = "On-demand observation cycle failed")]
     public static partial void LogObserveNowError(ILogger logger, Exception ex);
 
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "observer.handoff.http_failed statusCode={StatusCode}")]
+    public static partial void LogHandoffHttpFailed(ILogger logger, int statusCode);
 
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "observer.handoff.http_backpressure: planner returned 429")]
+    public static partial void LogHandoffHttpBackpressure(ILogger logger);
 }

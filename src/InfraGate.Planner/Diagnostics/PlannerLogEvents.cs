@@ -39,4 +39,13 @@ internal static partial class PlannerLogEvents
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Remediation proposal emitted: cycleId={CycleId} anomalyId={AnomalyId} planId={PlanId} proposedAt={ProposedAt}")]
     public static partial void LogRemediationProposal(ILogger logger, string cycleId, string anomalyId, string planId, DateTimeOffset proposedAt);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "planner.handoff.failed sink={SinkName}: {ErrorMessage}")]
+    public static partial void LogHandoffSinkFailed(ILogger logger, string sinkName, string errorMessage, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "planner.handoff.http_failed statusCode={StatusCode}")]
+    public static partial void LogHandoffHttpFailed(ILogger logger, int statusCode);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "planner.handoff.http_backpressure: executor returned 429")]
+    public static partial void LogHandoffHttpBackpressure(ILogger logger);
 }

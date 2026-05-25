@@ -24,3 +24,4 @@ src/InfraGate.McpGateway/.mcp-guardrails/audit.jsonl
 .codegraph/
 data/state_store.db/mem%3Ahealth.bin
 data/state_store.db/mem%3Aindex%3Abm25.bin
+.codex/
