@@ -11,4 +11,6 @@ internal sealed record class RunProfile(
     IReadOnlyList<DomainAdapterProfile> DomainAdapters,
     HostProfile? Host,
     DownstreamAuthProfile? DownstreamAuth,
-    ObserverProfile? Observer);
+    ObserverProfile? Observer,
+    PlannerProfile? Planner,
+    ExecutorProfile? Executor);

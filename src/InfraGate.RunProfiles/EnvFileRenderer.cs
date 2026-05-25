@@ -24,6 +24,8 @@ internal static class EnvFileRenderer
         AppendKubernetesAdapter(builder, profile);
         AppendHost(builder, profile);
         AppendObserver(builder, profile);
+        AppendPlanner(builder, profile);
+        AppendExecutor(builder, profile);
 
         return builder.ToString();
     }
@@ -221,6 +223,96 @@ internal static class EnvFileRenderer
         {
             builder.AppendLine($"{key}={value}");
         }
+    }
+
+    private static void AppendPlanner(StringBuilder builder, RunProfile profile)
+    {
+        if (profile.Planner is null)
+        {
+            return;
+        }
+
+        PlannerProfile planner = profile.Planner;
+        bool hasAnyValue =
+            !string.IsNullOrEmpty(planner.AspnetcoreUrls) ||
+            !string.IsNullOrEmpty(planner.GatewayBaseUrl) ||
+            !string.IsNullOrEmpty(planner.ExecutorHandoffUrl) ||
+            !string.IsNullOrEmpty(planner.TokenEndpoint) ||
+            !string.IsNullOrEmpty(planner.ClientId) ||
+            !string.IsNullOrEmpty(planner.ClientSecret) ||
+            !string.IsNullOrEmpty(planner.OAuthAuthority) ||
+            !string.IsNullOrEmpty(planner.OAuthScope) ||
+            !string.IsNullOrEmpty(planner.LlmProvider) ||
+            !string.IsNullOrEmpty(planner.LlmModel) ||
+            !string.IsNullOrEmpty(planner.LlmApiKey) ||
+            !string.IsNullOrEmpty(planner.AnomalyWallClockCapSeconds) ||
+            !string.IsNullOrEmpty(planner.BatchWallClockCapSeconds) ||
+            !string.IsNullOrEmpty(planner.MaxToolIterations) ||
+            !string.IsNullOrEmpty(planner.FileSinkRoot) ||
+            !string.IsNullOrEmpty(planner.PlannerHostPath);
+
+        if (!hasAnyValue)
+        {
+            return;
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("# Planner");
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerAspnetcoreUrls, planner.AspnetcoreUrls);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerGatewayBaseUrl, planner.GatewayBaseUrl);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerExecutorHandoffUrl, planner.ExecutorHandoffUrl);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerTokenEndpoint, planner.TokenEndpoint);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerClientId, planner.ClientId);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerClientSecret, planner.ClientSecret);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerOAuthAuthority, planner.OAuthAuthority);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerOAuthScope, planner.OAuthScope);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerLlmProvider, planner.LlmProvider);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerLlmModel, planner.LlmModel);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerLlmApiKey, planner.LlmApiKey);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerAnomalyWallClockCapSeconds, planner.AnomalyWallClockCapSeconds);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerBatchWallClockCapSeconds, planner.BatchWallClockCapSeconds);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerMaxToolIterations, planner.MaxToolIterations);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerFileSinkRoot, planner.FileSinkRoot);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerHostPath, planner.PlannerHostPath);
+    }
+
+    private static void AppendExecutor(StringBuilder builder, RunProfile profile)
+    {
+        if (profile.Executor is null)
+        {
+            return;
+        }
+
+        ExecutorProfile executor = profile.Executor;
+        bool hasAnyValue =
+            !string.IsNullOrEmpty(executor.AspnetcoreUrls) ||
+            !string.IsNullOrEmpty(executor.GatewayBaseUrl) ||
+            !string.IsNullOrEmpty(executor.TokenEndpoint) ||
+            !string.IsNullOrEmpty(executor.ClientId) ||
+            !string.IsNullOrEmpty(executor.ClientSecret) ||
+            !string.IsNullOrEmpty(executor.OAuthAuthority) ||
+            !string.IsNullOrEmpty(executor.OAuthScope) ||
+            !string.IsNullOrEmpty(executor.ConcurrencyCap) ||
+            !string.IsNullOrEmpty(executor.WatchTimeoutSeconds) ||
+            !string.IsNullOrEmpty(executor.ExecutorHostPath);
+
+        if (!hasAnyValue)
+        {
+            return;
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("# Executor");
+        AppendIfSet(builder, RunProfileConventions.Env.ExecutorAspnetcoreUrls, executor.AspnetcoreUrls);
+        AppendIfSet(builder, RunProfileConventions.Env.ExecutorGatewayBaseUrl, executor.GatewayBaseUrl);
+        AppendIfSet(builder, RunProfileConventions.Env.ExecutorTokenEndpoint, executor.TokenEndpoint);
+        AppendIfSet(builder, RunProfileConventions.Env.ExecutorClientId, executor.ClientId);
+        AppendIfSet(builder, RunProfileConventions.Env.ExecutorClientSecret, executor.ClientSecret);
+        AppendIfSet(builder, RunProfileConventions.Env.ExecutorOAuthAuthority, executor.OAuthAuthority);
+        AppendIfSet(builder, RunProfileConventions.Env.ExecutorOAuthScope, executor.OAuthScope);
+        AppendIfSet(builder, RunProfileConventions.Env.ExecutorConcurrencyCap, executor.ConcurrencyCap);
+        AppendIfSet(builder, RunProfileConventions.Env.ExecutorWatchTimeoutSeconds, executor.WatchTimeoutSeconds);
+        AppendIfSet(builder, RunProfileConventions.Env.ExecutorHostPath, executor.ExecutorHostPath);
     }
 
     private static void AppendObserver(StringBuilder builder, RunProfile profile)

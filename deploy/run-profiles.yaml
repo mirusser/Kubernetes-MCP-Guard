@@ -69,6 +69,28 @@ profiles:
       maxToolIterations: "8"
       fileSinkRoot: /data/observer/findings
       observerHostPath: ../.mcp-observer/findings
+    planner:
+      aspnetcoreUrls: http://0.0.0.0:3004
+      gatewayBaseUrl: http://gateway:3001/mcp
+      executorHandoffUrl: http://executor:3005/handoff/proposals
+      tokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
+      clientId: infra-gate-planner
+      clientSecret: planner-secret
+      oauthAuthority: http://keycloak:8080/realms/infra-gate
+      scope: mcp:tools.propose mcp:tools.readonly
+      llmProvider: anthropic
+      llmModel: claude-sonnet-4-6
+      maxToolIterations: "4"
+      fileSinkRoot: /data/planner/proposals
+      plannerHostPath: ../.mcp-remediation/proposals
+    executor:
+      aspnetcoreUrls: http://0.0.0.0:3005
+      gatewayBaseUrl: http://gateway:3001/mcp
+      tokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
+      clientId: infra-gate-executor
+      clientSecret: executor-secret
+      oauthAuthority: http://keycloak:8080/realms/infra-gate
+      scope: mcp:tools.execute
 
   local-source-gateway:
     kind: dotnet
@@ -105,6 +127,27 @@ profiles:
       cycleWallClockCapSeconds: "20"
       maxToolIterations: "8"
       fileSinkRoot: .mcp-observer/findings
+    planner:
+      aspnetcoreUrls: http://0.0.0.0:3004
+      gatewayBaseUrl: http://127.0.0.1:3001/mcp
+      executorHandoffUrl: http://127.0.0.1:3005/handoff/proposals
+      tokenEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token
+      clientId: infra-gate-planner
+      clientSecret: planner-secret
+      oauthAuthority: http://127.0.0.1:3010/realms/infra-gate
+      scope: mcp:tools.propose mcp:tools.readonly
+      llmProvider: anthropic
+      llmModel: claude-sonnet-4-6
+      maxToolIterations: "4"
+      fileSinkRoot: .mcp-planner/proposals
+    executor:
+      aspnetcoreUrls: http://0.0.0.0:3005
+      gatewayBaseUrl: http://127.0.0.1:3001/mcp
+      tokenEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token
+      clientId: infra-gate-executor
+      clientSecret: executor-secret
+      oauthAuthority: http://127.0.0.1:3010/realms/infra-gate
+      scope: mcp:tools.execute
 
   local-stdio:
     kind: mcp-stdio

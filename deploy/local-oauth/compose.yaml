@@ -157,6 +157,68 @@ services:
     networks:
       - default
 
+  planner:
+    image: ${INFRA_GATE_PLANNER_IMAGE:-infragate-planner}
+    build:
+      context: ../..
+      dockerfile: src/InfraGate.Planner/Dockerfile
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      mcp-gateway:
+        condition: service_started
+      mailpit:
+        condition: service_started
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      ASPNETCORE_URLS: ${INFRA_GATE_PLANNER_ASPNETCORE_URLS:-http://0.0.0.0:3004}
+      INFRA_GATE_PLANNER_GATEWAY_BASE_URL: ${INFRA_GATE_PLANNER_GATEWAY_BASE_URL:-http://gateway:3001/mcp}
+      INFRA_GATE_PLANNER_EXECUTOR_HANDOFF_URL: ${INFRA_GATE_PLANNER_EXECUTOR_HANDOFF_URL:-http://executor:3005/handoff/proposals}
+      INFRA_GATE_PLANNER_TOKEN_ENDPOINT: ${INFRA_GATE_PLANNER_TOKEN_ENDPOINT:-http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token}
+      INFRA_GATE_PLANNER_CLIENT_ID: ${INFRA_GATE_PLANNER_CLIENT_ID:-infra-gate-planner}
+      INFRA_GATE_PLANNER_CLIENT_SECRET: ${INFRA_GATE_PLANNER_CLIENT_SECRET:-planner-secret}
+      INFRA_GATE_PLANNER_OAUTH_AUTHORITY: ${INFRA_GATE_PLANNER_OAUTH_AUTHORITY:-http://keycloak:8080/realms/infra-gate}
+      INFRA_GATE_PLANNER_OAUTH_SCOPE: ${INFRA_GATE_PLANNER_OAUTH_SCOPE:-mcp:tools.propose mcp:tools.readonly}
+      INFRA_GATE_PLANNER_LLM_PROVIDER: ${INFRA_GATE_PLANNER_LLM_PROVIDER}
+      INFRA_GATE_PLANNER_LLM_MODEL: ${INFRA_GATE_PLANNER_LLM_MODEL}
+      INFRA_GATE_PLANNER_LLM_API_KEY: ${INFRA_GATE_PLANNER_LLM_API_KEY}
+      INFRA_GATE_PLANNER_ANOMALY_WALL_CLOCK_CAP_SECONDS: ${INFRA_GATE_PLANNER_ANOMALY_WALL_CLOCK_CAP_SECONDS:-30}
+      INFRA_GATE_PLANNER_BATCH_WALL_CLOCK_CAP_SECONDS: ${INFRA_GATE_PLANNER_BATCH_WALL_CLOCK_CAP_SECONDS:-300}
+      INFRA_GATE_PLANNER_MAX_TOOL_ITERATIONS: ${INFRA_GATE_PLANNER_MAX_TOOL_ITERATIONS:-4}
+      INFRA_GATE_PLANNER_FILE_SINK_ROOT: ${INFRA_GATE_PLANNER_FILE_SINK_ROOT:-/data/planner/proposals}
+    volumes:
+      - ${INFRA_GATE_PLANNER_HOST_PATH:-./.mcp-remediation/proposals}:/data/planner/proposals
+    ports:
+      - "${INFRA_GATE_PLANNER_BIND_ADDRESS:-127.0.0.1}:${INFRA_GATE_PLANNER_BIND_PORT:-3004}:3004"
+    networks:
+      - default
+
+  executor:
+    image: ${INFRA_GATE_EXECUTOR_IMAGE:-infragate-executor}
+    build:
+      context: ../..
+      dockerfile: src/InfraGate.Executor/Dockerfile
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      planner:
+        condition: service_started
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      ASPNETCORE_URLS: ${INFRA_GATE_EXECUTOR_ASPNETCORE_URLS:-http://0.0.0.0:3005}
+      INFRA_GATE_EXECUTOR_GATEWAY_BASE_URL: ${INFRA_GATE_EXECUTOR_GATEWAY_BASE_URL:-http://gateway:3001/mcp}
+      INFRA_GATE_EXECUTOR_TOKEN_ENDPOINT: ${INFRA_GATE_EXECUTOR_TOKEN_ENDPOINT:-http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token}
+      INFRA_GATE_EXECUTOR_CLIENT_ID: ${INFRA_GATE_EXECUTOR_CLIENT_ID:-infra-gate-executor}
+      INFRA_GATE_EXECUTOR_CLIENT_SECRET: ${INFRA_GATE_EXECUTOR_CLIENT_SECRET:-executor-secret}
+      INFRA_GATE_EXECUTOR_OAUTH_AUTHORITY: ${INFRA_GATE_EXECUTOR_OAUTH_AUTHORITY:-http://keycloak:8080/realms/infra-gate}
+      INFRA_GATE_EXECUTOR_OAUTH_SCOPE: ${INFRA_GATE_EXECUTOR_OAUTH_SCOPE:-mcp:tools.execute}
+      INFRA_GATE_EXECUTOR_CONCURRENCY_CAP: ${INFRA_GATE_EXECUTOR_CONCURRENCY_CAP:-64}
+      INFRA_GATE_EXECUTOR_WATCH_TIMEOUT_SECONDS: ${INFRA_GATE_EXECUTOR_WATCH_TIMEOUT_SECONDS:-900}
+    ports:
+      - "${INFRA_GATE_EXECUTOR_BIND_ADDRESS:-127.0.0.1}:${INFRA_GATE_EXECUTOR_BIND_PORT:-3005}:3005"
+    networks:
+      - default
+
 volumes:
   pgdata:
 
