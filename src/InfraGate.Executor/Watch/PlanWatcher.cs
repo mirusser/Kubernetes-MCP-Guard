@@ -2,6 +2,7 @@ using System.Diagnostics.Metrics;
 using InfraGate.Executor.Diagnostics;
 using InfraGate.Executor.Mcp;
 using InfraGate.Executor.Queue;
+using Serilog.Context;
 
 namespace InfraGate.Executor.Watch;
 
@@ -16,6 +17,7 @@ internal sealed class PlanWatcher : BackgroundService
     private readonly Counter<long>? watchFailedCounter;
     private readonly Counter<long>? executeSucceededCounter;
     private readonly Counter<long>? executeFailedCounter;
+    private readonly Counter<long>? executeBlockedCounter;
 
     public PlanWatcher(
         ProposalQueue queue,
@@ -34,6 +36,7 @@ internal sealed class PlanWatcher : BackgroundService
         watchFailedCounter = ExecutorMetrics.CreateWatchFailedCounter(meter);
         executeSucceededCounter = ExecutorMetrics.CreateExecuteSucceededCounter(meter);
         executeFailedCounter = ExecutorMetrics.CreateExecuteFailedCounter(meter);
+        executeBlockedCounter = ExecutorMetrics.CreateExecuteBlockedCounter(meter);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -50,6 +53,7 @@ internal sealed class PlanWatcher : BackgroundService
     internal async Task WatchPlanAsync(RemediationProposal proposal, CancellationToken stoppingToken)
     {
         var planId = proposal.PlanId;
+        using var planScope = LogContext.PushProperty("PlanId", planId);
 
         if (!dedupeStore.TryTrack(planId))
         {
@@ -169,11 +173,8 @@ internal sealed class PlanWatcher : BackgroundService
 
         if (IsErrorResponse(response))
         {
-            executeFailedCounter?.Add(1);
-            ExecutorLogEvents.LogExecuteFailed(
-                logger,
-                planId,
-                new InvalidOperationException(ExtractErrorText(response)));
+            executeBlockedCounter?.Add(1);
+            ExecutorLogEvents.LogExecuteBlocked(logger, planId);
             return;
         }
 

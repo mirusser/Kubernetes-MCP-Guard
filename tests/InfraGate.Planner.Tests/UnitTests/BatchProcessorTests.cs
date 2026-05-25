@@ -5,6 +5,7 @@ using InfraGate.Planner.Diagnostics;
 using InfraGate.Planner.Mcp;
 using InfraGate.Remediation.Contracts;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -807,7 +808,8 @@ public sealed class BatchProcessorTests
         IPlannerMcpClient mcpClient,
         IRemediationProposalSink sink,
         PlannerOptions? options = null,
-        Meter? meter = null)
+        Meter? meter = null,
+        ILogger<BatchProcessor>? logger = null)
     {
         var optionsMonitor = Substitute.For<IOptionsMonitor<PlannerOptions>>();
         optionsMonitor.CurrentValue.Returns(options ?? new PlannerOptions
@@ -825,7 +827,7 @@ public sealed class BatchProcessorTests
             chatClient,
             mcpClient,
             sink,
-            NullLogger<BatchProcessor>.Instance,
+            logger ?? NullLogger<BatchProcessor>.Instance,
             meter: meter);
     }
 
@@ -862,6 +864,124 @@ public sealed class BatchProcessorTests
         {
             listener.Dispose();
         }
+    }
+
+    [Fact]
+    public async Task ProcessBatchAsync_ResolvedAnomaly_LogsFilterDroppedResolved()
+    {
+        var activeReport = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable, "Deployment", "nginx-demo");
+        var resolvedReport = activeReport with { Status = AnomalyStatus.Resolved };
+        var logger = new CapturingLogger<BatchProcessor>();
+        var processor = CreateProcessor(
+            new FixtureChatClient(""),
+            Substitute.For<IPlannerMcpClient>(),
+            new CapturingRemediationProposalSink(),
+            logger: logger);
+
+        await processor.ProcessBatchAsync(CreateBatch(resolvedReport), CancellationToken.None);
+
+        Assert.Contains(logger.Entries, e =>
+            e.Properties.TryGetValue("Reason", out var r) &&
+            PlannerConventions.FilterDropReasons.Resolved.Equals(r) &&
+            e.Properties.TryGetValue("AnomalyId", out var id) &&
+            resolvedReport.AnomalyId.Equals(id));
+    }
+
+    [Fact]
+    public async Task ProcessBatchAsync_UnsupportedAnomalyKind_LogsFilterDroppedUnsupportedKind()
+    {
+        var unsupportedReport = CreateAnomaly(AnomalyStatus.Active, (AnomalyKind)999, "Deployment", "nginx-demo");
+        var logger = new CapturingLogger<BatchProcessor>();
+        var processor = CreateProcessor(
+            new FixtureChatClient(""),
+            Substitute.For<IPlannerMcpClient>(),
+            new CapturingRemediationProposalSink(),
+            logger: logger);
+
+        await processor.ProcessBatchAsync(CreateBatch(unsupportedReport), CancellationToken.None);
+
+        Assert.Contains(logger.Entries, e =>
+            e.Properties.TryGetValue("Reason", out var r) &&
+            PlannerConventions.FilterDropReasons.UnsupportedKind.Equals(r));
+    }
+
+    [Fact]
+    public async Task ProcessBatchAsync_ValidDecision_LogsDecisionCompleted()
+    {
+        var batch = CreateBatch(CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable, "Deployment", "nginx-demo"));
+        var chatClient = new FixtureChatClient("""
+        {
+          "operationType": "restart_deployment",
+          "arguments": { "name": "nginx-demo", "namespace": "mcp-nginx-demo" }
+        }
+        """);
+        var mcpClient = Substitute.For<IPlannerMcpClient>();
+        mcpClient.CallToolAsync(
+                PlannerConventions.ToolNames.ProposePlan,
+                Arg.Any<IReadOnlyDictionary<string, object?>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns("""{"planId":"plan-123"}""");
+        var logger = new CapturingLogger<BatchProcessor>();
+        var processor = CreateProcessor(chatClient, mcpClient, new CapturingRemediationProposalSink(), logger: logger);
+
+        await processor.ProcessBatchAsync(batch, CancellationToken.None);
+
+        Assert.Contains(logger.Entries, e =>
+            e.Properties.TryGetValue("OperationType", out var op) &&
+            PlannerConventions.OperationTypes.RestartDeployment.Equals(op) &&
+            e.Properties.ContainsKey("AnomalyId"));
+    }
+
+    [Fact]
+    public async Task ProcessBatchAsync_SuccessfulPropose_LogsProposePlanSucceeded()
+    {
+        var batch = CreateBatch(CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable, "Deployment", "nginx-demo"));
+        var chatClient = new FixtureChatClient("""
+        {
+          "operationType": "restart_deployment",
+          "arguments": { "name": "nginx-demo", "namespace": "mcp-nginx-demo" }
+        }
+        """);
+        var mcpClient = Substitute.For<IPlannerMcpClient>();
+        mcpClient.CallToolAsync(
+                PlannerConventions.ToolNames.ProposePlan,
+                Arg.Any<IReadOnlyDictionary<string, object?>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns("""{"planId":"plan-999"}""");
+        var logger = new CapturingLogger<BatchProcessor>();
+        var processor = CreateProcessor(chatClient, mcpClient, new CapturingRemediationProposalSink(), logger: logger);
+
+        await processor.ProcessBatchAsync(batch, CancellationToken.None);
+
+        Assert.Contains(logger.Entries, e =>
+            e.Properties.TryGetValue("PlanId", out var pid) && "plan-999".Equals(pid) &&
+            e.Properties.ContainsKey("AnomalyId"));
+    }
+
+    [Fact]
+    public async Task ProcessBatchAsync_ValidProposal_LogsHandoffPublished()
+    {
+        var batch = CreateBatch(CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable, "Deployment", "nginx-demo"));
+        var chatClient = new FixtureChatClient("""
+        {
+          "operationType": "restart_deployment",
+          "arguments": { "name": "nginx-demo", "namespace": "mcp-nginx-demo" }
+        }
+        """);
+        var mcpClient = Substitute.For<IPlannerMcpClient>();
+        mcpClient.CallToolAsync(
+                PlannerConventions.ToolNames.ProposePlan,
+                Arg.Any<IReadOnlyDictionary<string, object?>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns("""{"planId":"plan-pub"}""");
+        var logger = new CapturingLogger<BatchProcessor>();
+        var processor = CreateProcessor(chatClient, mcpClient, new CapturingRemediationProposalSink(), logger: logger);
+
+        await processor.ProcessBatchAsync(batch, CancellationToken.None);
+
+        Assert.Contains(logger.Entries, e =>
+            e.Properties.TryGetValue("CycleId", out var c) && batch.CycleId.Equals(c) &&
+            e.Properties.TryGetValue("ProposalCount", out var n) && 1.Equals(n));
     }
 
     private static bool MatchesProposeArguments(IReadOnlyDictionary<string, object?>? args)

@@ -155,6 +155,13 @@ internal static class PlannerConventions
         public const string ObserverSender = "ObserverSender";
     }
 
+    public static class FilterDropReasons
+    {
+        public const string Resolved = "resolved";
+        public const string UnsupportedKind = "unsupported_kind";
+        public const string DedupeActivePlan = "dedupe:active_plan";
+    }
+
     public static class HttpClients
     {
         public const string ExecutorHandoff = "ExecutorHandoff";

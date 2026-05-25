@@ -8,6 +8,7 @@ using InfraGate.Planner.Mcp;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Serilog.Context;
 
 namespace InfraGate.Planner.Cycle;
 
@@ -66,6 +67,8 @@ internal sealed class BatchProcessor : BackgroundService
             {
                 batchCts.Token.ThrowIfCancellationRequested();
 
+                using var anomalyScope = LogContext.PushProperty("AnomalyId", report.AnomalyId);
+
                 if (!ShouldProcess(report))
                 {
                     continue;
@@ -73,6 +76,7 @@ internal sealed class BatchProcessor : BackgroundService
 
                 if (dedupeStore.HasActivePlan(report.AnomalyId))
                 {
+                    PlannerLogEvents.LogFilterDropped(logger, report.AnomalyId, PlannerConventions.FilterDropReasons.DedupeActivePlan);
                     continue;
                 }
 
@@ -82,11 +86,15 @@ internal sealed class BatchProcessor : BackgroundService
                     continue;
                 }
 
+                PlannerLogEvents.LogDecisionCompleted(logger, report.AnomalyId, decision.OperationType);
+
                 var planId = await ProposePlanAsync(report, decision, batchCts.Token).ConfigureAwait(false);
                 if (planId is null)
                 {
                     continue;
                 }
+
+                PlannerLogEvents.LogProposePlanSucceeded(logger, report.AnomalyId, planId);
 
                 var proposedAt = DateTimeOffset.UtcNow;
                 dedupeStore.TrackActivePlan(report.AnomalyId, planId, proposedAt);
@@ -113,6 +121,8 @@ internal sealed class BatchProcessor : BackgroundService
                     Proposals = proposals,
                 },
                 shutdownToken).ConfigureAwait(false);
+
+            PlannerLogEvents.LogHandoffPublished(logger, batch.CycleId, proposals.Count);
         }
     }
 
@@ -143,13 +153,21 @@ internal sealed class BatchProcessor : BackgroundService
         if (report.Status == AnomalyStatus.Resolved)
         {
             dedupeStore.Remove(report.AnomalyId);
+            PlannerLogEvents.LogFilterDropped(logger, report.AnomalyId, PlannerConventions.FilterDropReasons.Resolved);
             return false;
         }
 
-        return report.Kind is AnomalyKind.PodUnhealthy
+        bool isAllowedKind = report.Kind is AnomalyKind.PodUnhealthy
             or AnomalyKind.DeploymentUnavailable
             or AnomalyKind.ServiceNoEndpoints
             or AnomalyKind.WarningEvent;
+
+        if (!isAllowedKind)
+        {
+            PlannerLogEvents.LogFilterDropped(logger, report.AnomalyId, PlannerConventions.FilterDropReasons.UnsupportedKind);
+        }
+
+        return isAllowedKind;
     }
 
     private async Task<RemediationDecision?> DecideAsync(
