@@ -17,6 +17,7 @@
     <Project Path="src/InfraGate.McpServer/InfraGate.McpServer.csproj" />
     <Project Path="src/InfraGate.Observer/InfraGate.Observer.csproj" />
     <Project Path="src/InfraGate.Planner/InfraGate.Planner.csproj" />
+    <Project Path="src/InfraGate.Executor/InfraGate.Executor.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/InfraGate.ClientCredentials.Tests/InfraGate.ClientCredentials.Tests.csproj" />
@@ -34,6 +35,7 @@
     <Project Path="tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj" />
     <Project Path="tests/InfraGate.Observer.Tests/InfraGate.Observer.Tests.csproj" />
     <Project Path="tests/InfraGate.Planner.Tests/InfraGate.Planner.Tests.csproj" />
+    <Project Path="tests/InfraGate.Executor.Tests/InfraGate.Executor.Tests.csproj" />
     <Project Path="tests/InfraGate.Observer.IntegrationTests/InfraGate.Observer.IntegrationTests.csproj" />
     <Project Path="tests/InfraGate.Observer.E2E.Tests/InfraGate.Observer.E2E.Tests.csproj" />
   </Folder>
