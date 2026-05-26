@@ -70,7 +70,8 @@ public sealed record class McpGatewayOptions(
             Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpPort),
             Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpFrom),
             Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpUser),
-            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpPassword));
+            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpPassword),
+            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpEnableSsl));
 
         return new McpGatewayOptions(
             auth,
@@ -134,7 +135,8 @@ public sealed record class McpGatewayOptions(
             approvalSettings?.Smtp?.Port,
             approvalSettings?.Smtp?.From,
             approvalSettings?.Smtp?.User,
-            approvalSettings?.Smtp?.Password);
+            approvalSettings?.Smtp?.Password,
+            approvalSettings?.Smtp?.EnableSsl);
 
         return new McpGatewayOptions(
             auth,
@@ -224,7 +226,8 @@ public sealed record class McpGatewayOptions(
         string? port,
         string? from,
         string? user,
-        string? password)
+        string? password,
+        string? enableSsl)
     {
         if (string.IsNullOrWhiteSpace(host) &&
             string.IsNullOrWhiteSpace(from))
@@ -235,13 +238,17 @@ public sealed record class McpGatewayOptions(
         int parsedPort = string.IsNullOrWhiteSpace(port)
             ? SmtpApprovalEmailOptions.DefaultPort
             : int.Parse(port, CultureInfo.InvariantCulture);
+        bool parsedEnableSsl = string.IsNullOrWhiteSpace(enableSsl)
+            ? SmtpApprovalEmailOptions.DefaultEnableSsl
+            : bool.Parse(enableSsl);
 
         return new SmtpApprovalEmailOptions(
             host ?? string.Empty,
             parsedPort,
             from ?? string.Empty,
             user,
-            password);
+            password,
+            parsedEnableSsl);
     }
 
 }

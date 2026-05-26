@@ -23,7 +23,6 @@ public sealed class PlannerMcpClientTests
         return new PlannerMcpClient(
             options,
             tokenProvider,
-            NullLogger<PlannerMcpClient>.Instance,
             NullLoggerFactory.Instance);
     }
 

@@ -22,6 +22,7 @@ internal static class McpGatewayConventions
         mappings.Map(EnvironmentVariables.SmtpFrom, ConfigurationKeys.SmtpFrom);
         mappings.Map(EnvironmentVariables.SmtpUser, ConfigurationKeys.SmtpUser);
         mappings.Map(EnvironmentVariables.SmtpPassword, ConfigurationKeys.SmtpPassword);
+        mappings.Map(EnvironmentVariables.SmtpEnableSsl, ConfigurationKeys.SmtpEnableSsl);
         RegisterDownstreamAuthMappings(mappings);
     }
 
@@ -67,6 +68,7 @@ internal static class McpGatewayConventions
         public const string SmtpFrom = "InfraGate:Approval:Smtp:From";
         public const string SmtpUser = "InfraGate:Approval:Smtp:User";
         public const string SmtpPassword = "InfraGate:Approval:Smtp:Password";
+        public const string SmtpEnableSsl = "InfraGate:Approval:Smtp:EnableSsl";
         public const string Urls = "urls";
     }
 
@@ -85,6 +87,7 @@ internal static class McpGatewayConventions
         public const string SmtpFrom = "INFRA_GATE_GATEWAY_SMTP_FROM";
         public const string SmtpUser = "INFRA_GATE_GATEWAY_SMTP_USER";
         public const string SmtpPassword = "INFRA_GATE_GATEWAY_SMTP_PASSWORD";
+        public const string SmtpEnableSsl = "INFRA_GATE_GATEWAY_SMTP_ENABLE_SSL";
     }
 
     public static class Paths

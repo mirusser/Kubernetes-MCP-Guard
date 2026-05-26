@@ -62,7 +62,7 @@ public sealed class PostgresApprovalAccessCodeStore(NpgsqlDataSource dataSource,
                            PostgresErrorCodes.UniqueViolation,
                            StringComparison.Ordinal))
                 {
-                    continue;
+                    // Random access-code collision; retry with a new generated code.
                 }
             }
         }

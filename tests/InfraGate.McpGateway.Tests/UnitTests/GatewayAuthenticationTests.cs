@@ -85,6 +85,7 @@ public sealed class GatewayAuthenticationTests
         var response = await client.GetAsync(McpGatewayConventions.McpPath);
 
         response.EnsureSuccessStatusCode();
+        Assert.Equal("ok", await response.Content.ReadAsStringAsync());
     }
 
     [Theory]

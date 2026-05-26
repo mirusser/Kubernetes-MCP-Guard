@@ -10,11 +10,11 @@ public sealed record class ApprovalAccessCodeConsumeResult(
         new(true, challengeId, "Approval access code accepted.", string.Empty);
 
     public static ApprovalAccessCodeConsumeResult Invalid() =>
-        new(false, null, "Approval code is invalid.", ApprovalConventions.AccessCodes.ResultReasonCodes.Invalid);
+        new(false, null, "Approval code is invalid.", ApprovalConventions.AccessCodes.ConsumeResultReasonCodes.Invalid);
 
     public static ApprovalAccessCodeConsumeResult Expired() =>
-        new(false, null, "Approval code has expired.", ApprovalConventions.AccessCodes.ResultReasonCodes.Expired);
+        new(false, null, "Approval code has expired.", ApprovalConventions.AccessCodes.ConsumeResultReasonCodes.Expired);
 
     public static ApprovalAccessCodeConsumeResult Consumed() =>
-        new(false, null, "Approval code has already been used.", ApprovalConventions.AccessCodes.ResultReasonCodes.Consumed);
+        new(false, null, "Approval code has already been used.", ApprovalConventions.AccessCodes.ConsumeResultReasonCodes.Consumed);
 }

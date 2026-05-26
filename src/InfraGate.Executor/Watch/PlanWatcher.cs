@@ -200,55 +200,82 @@ internal sealed class PlanWatcher : BackgroundService
 
     private static bool TryFindWaitResult(JsonElement element, ref string status, ref bool timedOut)
     {
-        if (element.ValueKind == JsonValueKind.Object)
+        return element.ValueKind switch
         {
-            if (element.TryGetProperty("status", out var statusEl) && statusEl.ValueKind == JsonValueKind.String)
-            {
-                status = statusEl.GetString()!;
-                if (element.TryGetProperty("timedOut", out var timedOutEl) &&
-                    timedOutEl.ValueKind == JsonValueKind.True)
-                {
-                    timedOut = true;
-                }
+            JsonValueKind.Object => TryFindWaitResultInObject(element, ref status, ref timedOut),
+            JsonValueKind.Array => TryFindWaitResultInArray(element, ref status, ref timedOut),
+            _ => false
+        };
+    }
 
+    private static bool TryFindWaitResultInObject(JsonElement element, ref string status, ref bool timedOut)
+    {
+        if (TryReadWaitStatus(element, ref status, ref timedOut))
+        {
+            return true;
+        }
+
+        foreach (var value in element.EnumerateObject().Select(static prop => prop.Value))
+        {
+            if (TryFindWaitResultInValue(value, ref status, ref timedOut))
+            {
                 return true;
             }
-
-            foreach (var prop in element.EnumerateObject())
-            {
-                if (prop.Value.ValueKind == JsonValueKind.String)
-                {
-                    var text = prop.Value.GetString();
-                    if (!string.IsNullOrWhiteSpace(text) && text.Contains('"', StringComparison.Ordinal))
-                    {
-                        try
-                        {
-                            using var inner = JsonDocument.Parse(text);
-                            if (TryFindWaitResult(inner.RootElement, ref status, ref timedOut))
-                            {
-                                return true;
-                            }
-                        }
-                        catch (JsonException) { }
-                    }
-                }
-                else if (prop.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
-                {
-                    if (TryFindWaitResult(prop.Value, ref status, ref timedOut))
-                    {
-                        return true;
-                    }
-                }
-            }
         }
-        else if (element.ValueKind == JsonValueKind.Array)
+
+        return false;
+    }
+
+    private static bool TryReadWaitStatus(JsonElement element, ref string status, ref bool timedOut)
+    {
+        if (!element.TryGetProperty("status", out var statusEl) ||
+            statusEl.ValueKind != JsonValueKind.String)
         {
-            foreach (var item in element.EnumerateArray())
+            return false;
+        }
+
+        status = statusEl.GetString()!;
+        timedOut = element.TryGetProperty("timedOut", out var timedOutEl) &&
+            timedOutEl.ValueKind == JsonValueKind.True;
+        return true;
+    }
+
+    private static bool TryFindWaitResultInValue(JsonElement value, ref string status, ref bool timedOut)
+    {
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            return TryFindWaitResultInJsonString(value.GetString(), ref status, ref timedOut);
+        }
+
+        return value.ValueKind is JsonValueKind.Object or JsonValueKind.Array &&
+            TryFindWaitResult(value, ref status, ref timedOut);
+    }
+
+    private static bool TryFindWaitResultInJsonString(string? text, ref string status, ref bool timedOut)
+    {
+        if (string.IsNullOrWhiteSpace(text) || !text.Contains('"', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var inner = JsonDocument.Parse(text);
+            return TryFindWaitResult(inner.RootElement, ref status, ref timedOut);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryFindWaitResultInArray(JsonElement element, ref string status, ref bool timedOut)
+    {
+        foreach (var item in element.EnumerateArray())
+        {
+            if (TryFindWaitResult(item, ref status, ref timedOut))
             {
-                if (TryFindWaitResult(item, ref status, ref timedOut))
-                {
-                    return true;
-                }
+                return true;
             }
         }
 
@@ -268,29 +295,5 @@ internal sealed class PlanWatcher : BackgroundService
         {
             return false;
         }
-    }
-
-    private static string ExtractErrorText(string response)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(response);
-            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
-                doc.RootElement.TryGetProperty("content", out var contentEl) &&
-                contentEl.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in contentEl.EnumerateArray())
-                {
-                    if (item.TryGetProperty("text", out var textEl) &&
-                        textEl.ValueKind == JsonValueKind.String)
-                    {
-                        return textEl.GetString() ?? string.Empty;
-                    }
-                }
-            }
-        }
-        catch (JsonException) { }
-
-        return string.Empty;
     }
 }

@@ -9,7 +9,10 @@ internal sealed class SmtpClientFactory : ISmtpClientFactory
     {
         options.Validate();
 
-        var client = new SmtpClient(options.Host, options.Port);
+        var client = new SmtpClient(options.Host, options.Port)
+        {
+            EnableSsl = options.EnableSsl
+        };
         if (!string.IsNullOrWhiteSpace(options.Username))
         {
             client.Credentials = new NetworkCredential(options.Username, options.Password);
@@ -20,6 +23,8 @@ internal sealed class SmtpClientFactory : ISmtpClientFactory
 
     private sealed class SmtpClientAdapter(SmtpClient client) : ISmtpClient
     {
+        public bool EnableSsl => client.EnableSsl;
+
         public Task SendMailAsync(MailMessage message, CancellationToken cancellationToken) =>
             client.SendMailAsync(message, cancellationToken);
 

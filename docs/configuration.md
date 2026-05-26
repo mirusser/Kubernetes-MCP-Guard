@@ -119,6 +119,7 @@ The Remediation Executor listens on port `3005` by default, accepts `POST /hando
 | `INFRA_GATE_GATEWAY_SMTP_FROM` | `InfraGate.McpGateway` | Required for approval email delivery | Unset; local Compose default `infragate@example.local` | `infragate@example.com` | Sender address for Approval Access Code notifications. | Use a verified sender domain; monitor bounces. |
 | `INFRA_GATE_GATEWAY_SMTP_USER` | `InfraGate.McpGateway` | No | Unset | `smtp-user` | Optional SMTP username. | Use secret storage and least-privilege SMTP credentials. |
 | `INFRA_GATE_GATEWAY_SMTP_PASSWORD` | `InfraGate.McpGateway` | No | Unset | (secret) | Optional SMTP password. | Use secret storage; never commit generated env files containing this value. |
+| `INFRA_GATE_GATEWAY_SMTP_ENABLE_SSL` | `InfraGate.McpGateway` | No | `true` when SMTP is configured; local Compose default `false` for Mailpit | `true` | Enables SMTP TLS/STARTTLS on the approval email client. | Keep enabled for production SMTP relays; disable only for local Mailpit or trusted development-only relays. |
 
 ## McpGateway.Auth
 

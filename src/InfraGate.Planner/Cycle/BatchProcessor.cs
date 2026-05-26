@@ -422,42 +422,67 @@ internal sealed class BatchProcessor : BackgroundService
     {
         planId = string.Empty;
 
-        if (element.ValueKind == JsonValueKind.Object &&
-            element.TryGetProperty(PlannerConventions.ProposePlanResponseFields.PlanId, out var planIdElement) &&
-            planIdElement.ValueKind == JsonValueKind.String &&
-            !string.IsNullOrWhiteSpace(planIdElement.GetString()))
+        return TryExtractPlanIdProperty(element, out planId) ||
+            TryExtractPlanIdFromText(element, PlannerConventions.ProposePlanResponseFields.TextLower, out planId) ||
+            TryExtractPlanIdFromText(element, PlannerConventions.ProposePlanResponseFields.TextUpper, out planId) ||
+            TryExtractPlanIdFromContent(element, out planId) ||
+            TryExtractPlanIdFromArray(element, out planId);
+    }
+
+    private static bool TryExtractPlanIdProperty(JsonElement element, out string planId)
+    {
+        planId = string.Empty;
+
+        if (element.ValueKind != JsonValueKind.Object ||
+            !element.TryGetProperty(PlannerConventions.ProposePlanResponseFields.PlanId, out var planIdElement) ||
+            planIdElement.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(planIdElement.GetString()))
         {
-            planId = planIdElement.GetString()!;
-            return true;
+            return false;
         }
 
-        if (TryExtractPlanIdFromText(element, PlannerConventions.ProposePlanResponseFields.TextLower, out planId) ||
-            TryExtractPlanIdFromText(element, PlannerConventions.ProposePlanResponseFields.TextUpper, out planId))
+        planId = planIdElement.GetString()!;
+        return true;
+    }
+
+    private static bool TryExtractPlanIdFromContent(JsonElement element, out string planId)
+    {
+        planId = string.Empty;
+
+        if (element.ValueKind != JsonValueKind.Object)
         {
-            return true;
+            return false;
         }
 
-        if (element.ValueKind == JsonValueKind.Object)
+        foreach (var property in element.EnumerateObject())
         {
-            foreach (var property in element.EnumerateObject())
+            if (IsContentProperty(property) && TryExtractPlanId(property.Value, out planId))
             {
-                if ((property.NameEquals(PlannerConventions.ProposePlanResponseFields.ContentLower) ||
-                    property.NameEquals(PlannerConventions.ProposePlanResponseFields.ContentUpper)) &&
-                    TryExtractPlanId(property.Value, out planId))
-                {
-                    return true;
-                }
+                return true;
             }
         }
 
-        if (element.ValueKind == JsonValueKind.Array)
+        return false;
+    }
+
+    private static bool IsContentProperty(JsonProperty property) =>
+        property.NameEquals(PlannerConventions.ProposePlanResponseFields.ContentLower) ||
+        property.NameEquals(PlannerConventions.ProposePlanResponseFields.ContentUpper);
+
+    private static bool TryExtractPlanIdFromArray(JsonElement element, out string planId)
+    {
+        planId = string.Empty;
+
+        if (element.ValueKind != JsonValueKind.Array)
         {
-            foreach (var item in element.EnumerateArray())
+            return false;
+        }
+
+        foreach (var item in element.EnumerateArray())
+        {
+            if (TryExtractPlanId(item, out planId))
             {
-                if (TryExtractPlanId(item, out planId))
-                {
-                    return true;
-                }
+                return true;
             }
         }
 

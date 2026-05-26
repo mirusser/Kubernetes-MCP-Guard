@@ -1,4 +1,3 @@
-using InfraGate.Planner.Diagnostics;
 using ModelContextProtocol.Client;
 
 namespace InfraGate.Planner.Mcp;
@@ -6,16 +5,13 @@ namespace InfraGate.Planner.Mcp;
 internal sealed class PlannerMcpClient : IPlannerMcpClient, IAsyncDisposable
 {
     private McpClient? mcpClient;
-    private readonly ILogger<PlannerMcpClient> logger;
     private readonly ILoggerFactory loggerFactory;
 
     public PlannerMcpClient(
         IOptions<PlannerOptions> options,
         IClientCredentialsTokenProvider tokenProvider,
-        ILogger<PlannerMcpClient> logger,
         ILoggerFactory loggerFactory)
     {
-        this.logger = logger;
         this.loggerFactory = loggerFactory;
         GatewayBaseUrl = options.Value.GatewayBaseUrl;
         TokenProvider = tokenProvider;

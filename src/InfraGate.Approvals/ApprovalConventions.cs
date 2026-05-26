@@ -25,7 +25,7 @@ public static class ApprovalConventions
         public const int CodeLength = 8;
         public const string Alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
-        public static class ResultReasonCodes
+        public static class ConsumeResultReasonCodes
         {
             public const string Consumed = "approval.code.consumed";
             public const string Expired = "approval.code.expired";

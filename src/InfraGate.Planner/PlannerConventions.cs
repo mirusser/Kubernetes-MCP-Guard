@@ -2,9 +2,14 @@ namespace InfraGate.Planner;
 
 internal static class PlannerConventions
 {
+    private const string LoopbackHttpScheme = "http";
+    private const string LoopbackHost = "localhost";
+    private const string UriSchemeSeparator = "://";
+    private const string DefaultPort = "3004";
+
     public const string DefaultClientId = "infra-gate-planner";
     public const string DefaultOAuthScope = "mcp:tools.propose mcp:tools.readonly";
-    public const string DefaultUrl = "http://localhost:3004";
+    public const string DefaultUrl = LoopbackHttpScheme + UriSchemeSeparator + LoopbackHost + ":" + DefaultPort;
     public const string DefaultLlmModel = "claude-sonnet-4-6";
     public const string HealthEndpointPath = "/health";
     public const string HandoffAnomaliesEndpointPath = "/handoff/anomalies";

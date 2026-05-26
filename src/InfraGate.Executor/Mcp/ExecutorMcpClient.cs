@@ -1,4 +1,3 @@
-using InfraGate.Executor.Diagnostics;
 using ModelContextProtocol.Client;
 
 namespace InfraGate.Executor.Mcp;
@@ -6,16 +5,13 @@ namespace InfraGate.Executor.Mcp;
 internal sealed class ExecutorMcpClient : IExecutorMcpClient, IAsyncDisposable
 {
     private McpClient? mcpClient;
-    private readonly ILogger<ExecutorMcpClient> logger;
     private readonly ILoggerFactory loggerFactory;
 
     public ExecutorMcpClient(
         IOptions<ExecutorOptions> options,
         IClientCredentialsTokenProvider tokenProvider,
-        ILogger<ExecutorMcpClient> logger,
         ILoggerFactory loggerFactory)
     {
-        this.logger = logger;
         this.loggerFactory = loggerFactory;
         GatewayBaseUrl = options.Value.GatewayBaseUrl;
         TokenProvider = tokenProvider;

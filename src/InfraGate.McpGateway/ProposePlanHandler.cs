@@ -9,7 +9,7 @@ using ModelContextProtocol.Protocol;
 
 namespace InfraGate.McpGateway;
 
-internal sealed class ProposePlanHandler(
+internal sealed class ProposePlanHandler( // NOSONAR:S107 - Handler composes explicit gateway, approval, notification, and request-context seams.
     IDomainAdapter domainAdapter,
     IApprovalPlanWorkflow approvalPlans,
     IGatewayApprovalService approvals,

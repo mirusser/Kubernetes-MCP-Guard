@@ -17,4 +17,5 @@ internal sealed record class InfraGateApprovalSmtpSettings
     public string? From { get; init; }
     public string? User { get; init; }
     public string? Password { get; init; }
+    public string? EnableSsl { get; init; }
 }

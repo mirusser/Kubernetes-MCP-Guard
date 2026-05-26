@@ -1,18 +1,22 @@
+using System.Text.Json.Nodes;
+
 namespace InfraGate.McpGateway.KeycloakTests.UnitTests;
 
 public sealed class KeycloakRealmFileTests
 {
     [Fact]
-    public async Task RealmFiles_DeployAndTestData_AreIdentical()
+    public async Task RealmFiles_DeployAndTestData_AreEquivalentJson()
     {
         var repoRoot = FindRepoRoot();
         var deployRealmPath = Path.Combine(repoRoot, "deploy", "keycloak", "infra-gate-realm.json");
         var testRealmPath = Path.Combine(repoRoot, "tests", "TestData", "keycloak", "infra-gate-realm.json");
 
-        var deployRealm = await File.ReadAllTextAsync(deployRealmPath);
-        var testRealm = await File.ReadAllTextAsync(testRealmPath);
+        JsonNode? deployRealm = JsonNode.Parse(await File.ReadAllTextAsync(deployRealmPath));
+        JsonNode? testRealm = JsonNode.Parse(await File.ReadAllTextAsync(testRealmPath));
 
-        Assert.Equal(deployRealm, testRealm);
+        Assert.True(
+            JsonNode.DeepEquals(deployRealm, testRealm),
+            "Deploy and test Keycloak realm JSON must remain semantically equivalent.");
     }
 
     private static string FindRepoRoot()

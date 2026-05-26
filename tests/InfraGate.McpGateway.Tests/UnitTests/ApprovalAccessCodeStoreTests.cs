@@ -31,7 +31,7 @@ public sealed class ApprovalAccessCodeStoreTests
         Assert.True(first.Succeeded);
         Assert.Equal(ChallengeId, first.ChallengeId);
         Assert.False(second.Succeeded);
-        Assert.Equal(ApprovalConventions.AccessCodes.ResultReasonCodes.Consumed, second.ReasonCode);
+        Assert.Equal(ApprovalConventions.AccessCodes.ConsumeResultReasonCodes.Consumed, second.ReasonCode);
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public sealed class ApprovalAccessCodeStoreTests
         var result = await store.ConsumeAsync(code.Code, CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Equal(ApprovalConventions.AccessCodes.ResultReasonCodes.Expired, result.ReasonCode);
+        Assert.Equal(ApprovalConventions.AccessCodes.ConsumeResultReasonCodes.Expired, result.ReasonCode);
         Assert.Null(result.ChallengeId);
     }
 

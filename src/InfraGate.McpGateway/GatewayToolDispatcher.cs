@@ -14,6 +14,9 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
     private const int WaitForPlanApprovalDefaultTimeoutSeconds = 55;
     private const int WaitForPlanApprovalMinimumTimeoutSeconds = 1;
     private const int WaitForPlanApprovalMaximumTimeoutSeconds = 300;
+    private const string JsonSchemaIntegerType = "integer";
+    private const string JsonSchemaObjectType = "object";
+    private const string JsonSchemaStringType = "string";
 
     private static readonly TimeSpan WaitForPlanApprovalPollInterval = TimeSpan.FromMilliseconds(250);
 
@@ -575,10 +578,10 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
                           "Repeat until Approved, then call this tool again to apply the plan.",
             InputSchema = JsonSerializer.SerializeToElement(new
             {
-                type = "object",
+                type = JsonSchemaObjectType,
                 properties = new
                 {
-                    planId = new { type = "string", description = "PlanId returned by one of the request_* tools." }
+                    planId = new { type = JsonSchemaStringType, description = "PlanId returned by one of the request_* tools." }
                 },
                 required = ApplyApprovedPlanRequiredArgs
             })
@@ -607,10 +610,10 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
                           " to create a new approval challenge.",
             InputSchema = JsonSerializer.SerializeToElement(new
             {
-                type = "object",
+                type = JsonSchemaObjectType,
                 properties = new
                 {
-                    planId = new { type = "string", description = "PlanId returned by one of the request_* tools." }
+                    planId = new { type = JsonSchemaStringType, description = "PlanId returned by one of the request_* tools." }
                 },
                 required = GetPlanStatusRequiredArgs
             })
@@ -625,13 +628,13 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             Description = "Waits briefly for an approval plan to become approved, applied, expired, or missing without applying the plan.",
             InputSchema = JsonSerializer.SerializeToElement(new
             {
-                type = "object",
+                type = JsonSchemaObjectType,
                 properties = new
                 {
-                    planId = new { type = "string", description = "PlanId returned by one of the request_* tools." },
+                    planId = new { type = JsonSchemaStringType, description = "PlanId returned by one of the request_* tools." },
                     timeoutSeconds = new
                     {
-                        type = "integer",
+                        type = JsonSchemaIntegerType,
                         description = "How long to wait before returning ApprovalRequired with timedOut=true.",
                         minimum = 1,
                         maximum = 300,
@@ -651,17 +654,17 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             Description = "Creates an operator-approved remediation plan and sends an approval access code.",
             InputSchema = JsonSerializer.SerializeToElement(new
             {
-                type = "object",
+                type = JsonSchemaObjectType,
                 properties = new
                 {
                     operationType = new
                     {
-                        type = "string",
+                        type = JsonSchemaStringType,
                         description = "Allowed values: restart_deployment, scale_deployment."
                     },
                     arguments = new
                     {
-                        type = "object",
+                        type = JsonSchemaObjectType,
                         description = "Operation-specific arguments for the selected remediation operation."
                     }
                 },

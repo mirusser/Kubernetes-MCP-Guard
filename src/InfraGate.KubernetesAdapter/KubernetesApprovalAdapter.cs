@@ -14,7 +14,7 @@ internal static class KubernetesApprovalAdapter
         WriteIndented = true
     };
 
-    public static PlanEnvelope<KubernetesPlanPayload> CreateEnvelope(
+    public static PlanEnvelope<KubernetesPlanPayload> CreateEnvelope( // NOSONAR:S107 - Generic envelope creation has eight approval-domain fields; grouping them would hide the digest-binding contract.
         string planId,
         string operation,
         DateTimeOffset createdAtUtc,

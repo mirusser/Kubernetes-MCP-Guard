@@ -163,7 +163,7 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
         Assert.True(first.Succeeded);
         Assert.Equal(challenge.Id, first.ChallengeId);
         Assert.False(second.Succeeded);
-        Assert.Equal(ApprovalConventions.AccessCodes.ResultReasonCodes.Consumed, second.ReasonCode);
+        Assert.Equal(ApprovalConventions.AccessCodes.ConsumeResultReasonCodes.Consumed, second.ReasonCode);
     }
 
     [Fact]
