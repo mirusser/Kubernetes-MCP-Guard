@@ -138,6 +138,7 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             AspnetcoreUrls = profile.AspnetcoreUrls ?? defaults.AspnetcoreUrls,
             GatewayBaseUrl = profile.GatewayBaseUrl ?? defaults.GatewayBaseUrl,
             TokenEndpoint = profile.TokenEndpoint ?? defaults.TokenEndpoint,
+            OAuthAuthority = profile.OAuthAuthority ?? defaults.OAuthAuthority,
             ClientId = profile.ClientId ?? defaults.ClientId,
             ClientSecret = profile.ClientSecret ?? defaults.ClientSecret,
             Scope = profile.Scope ?? defaults.Scope,
@@ -148,6 +149,7 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             CycleWallClockCapSeconds = profile.CycleWallClockCapSeconds ?? defaults.CycleWallClockCapSeconds,
             MaxToolIterations = profile.MaxToolIterations ?? defaults.MaxToolIterations,
             FileSinkRoot = profile.FileSinkRoot ?? defaults.FileSinkRoot,
+            PlannerHandoffUrl = profile.PlannerHandoffUrl ?? defaults.PlannerHandoffUrl,
             ObserverHostPath = profile.ObserverHostPath ?? defaults.ObserverHostPath
         };
     }

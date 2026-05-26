@@ -327,6 +327,7 @@ internal static class EnvFileRenderer
             !string.IsNullOrEmpty(observer.AspnetcoreUrls) ||
             !string.IsNullOrEmpty(observer.GatewayBaseUrl) ||
             !string.IsNullOrEmpty(observer.TokenEndpoint) ||
+            !string.IsNullOrEmpty(observer.OAuthAuthority) ||
             !string.IsNullOrEmpty(observer.ClientId) ||
             !string.IsNullOrEmpty(observer.ClientSecret) ||
             !string.IsNullOrEmpty(observer.Scope) ||
@@ -337,6 +338,7 @@ internal static class EnvFileRenderer
             !string.IsNullOrEmpty(observer.CycleWallClockCapSeconds) ||
             !string.IsNullOrEmpty(observer.MaxToolIterations) ||
             !string.IsNullOrEmpty(observer.FileSinkRoot) ||
+            !string.IsNullOrEmpty(observer.PlannerHandoffUrl) ||
             !string.IsNullOrEmpty(observer.ObserverHostPath);
 
         if (!hasAnyValue)
@@ -349,6 +351,7 @@ internal static class EnvFileRenderer
         AppendIfSet(builder, RunProfileConventions.Env.ObserverAspnetcoreUrls, observer.AspnetcoreUrls);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverGatewayBaseUrl, observer.GatewayBaseUrl);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverTokenEndpoint, observer.TokenEndpoint);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverOAuthAuthority, observer.OAuthAuthority);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverClientId, observer.ClientId);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverClientSecret, observer.ClientSecret);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverScope, observer.Scope);
@@ -359,6 +362,7 @@ internal static class EnvFileRenderer
         AppendIfSet(builder, RunProfileConventions.Env.ObserverCycleWallClockCapSeconds, observer.CycleWallClockCapSeconds);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverMaxToolIterations, observer.MaxToolIterations);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverFileSinkRoot, observer.FileSinkRoot);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverPlannerHandoffUrl, observer.PlannerHandoffUrl);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverHostPath, observer.ObserverHostPath);
     }
 }

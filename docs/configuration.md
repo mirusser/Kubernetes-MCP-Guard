@@ -24,11 +24,11 @@ Defaults below come from the current source code and workflows. Paths shown as `
 
 ## InfraGate.Observer
 
-The Anomaly Observer listens on port `3003` by default and polls the MCP gateway on a configurable cadence. All variables use the `INFRA_GATE_OBSERVER_*` prefix.
+The Anomaly Observer listens on port `3003` by default and polls the MCP gateway on a configurable cadence. Observer-specific variables use the `INFRA_GATE_OBSERVER_*` prefix.
 
 | Variable | Component | Required | Default | Example | Description | Production guidance |
 | --- | --- | :---: | --- | --- | --- | --- |
-| `ASPNETCORE_URLS` | `InfraGate.Observer` | No | `http://127.0.0.1:3003` | `http://0.0.0.0:3003` | ASP.NET Core bind URL for the Observer HTTP server (`/health` endpoint). | Bind intentionally; put behind TLS if exposing outside loopback. |
+| `ASPNETCORE_URLS` / `INFRA_GATE_OBSERVER_ASPNETCORE_URLS` | `InfraGate.Observer`, Compose interpolation | No | Runtime default `http://127.0.0.1:3003`; Compose default `http://0.0.0.0:3003` | `http://0.0.0.0:3003` | ASP.NET Core bind URL for the Observer HTTP server (`/health`, `/observe-now`). The prefixed variable is generated for Compose and mapped to `ASPNETCORE_URLS` inside the container. | Bind intentionally; put behind TLS if exposing outside loopback. |
 | `INFRA_GATE_OBSERVER_CYCLE_INTERVAL_SECONDS` | `InfraGate.Observer` | No | `60` | `60` | Observation cycle cadence in seconds. Bounds: 10–3600. | Below 10s hammers gateway + LLM; above 1h is not observation. |
 | `INFRA_GATE_OBSERVER_WALL_CLOCK_CAP_SECONDS` | `InfraGate.Observer` | No | `20` | `20` | Per-cycle wall-clock cap. Truncated cycles emit no reports. | Keep below cadence so cycles never overlap; below `/observe-now` HTTP timeout (30s). |
 | `INFRA_GATE_OBSERVER_MAX_TOOL_ITERATIONS` | `InfraGate.Observer` | No | `8` | `8` | Maximum LLM tool-call iterations per cycle. | Bounds agentic loops independent of clock time. |
@@ -36,15 +36,19 @@ The Anomaly Observer listens on port `3003` by default and polls the MCP gateway
 | `INFRA_GATE_OBSERVER_ALLOWED_NAMESPACES` | `InfraGate.Observer` | No | Unset | `mcp-nginx-demo` | Comma-separated namespace allow-list for snapshot fetching. | Align with gateway namespace allowlist. |
 | `INFRA_GATE_OBSERVER_LLM_PROVIDER` | `InfraGate.Observer` | No | `anthropic` | `anthropic` | LLM provider for anomaly detection. Supported: `anthropic`. Others (`openai`, `google`, `azure`, `ollama`) are reserved for future implementation. | Use a provider supported by `Microsoft.Extensions.AI`. |
 | `INFRA_GATE_OBSERVER_LLM_MODEL` | `InfraGate.Observer` | No | `claude-sonnet-4-6` | `claude-sonnet-4-6` | LLM model name. Applies when `INFRA_GATE_OBSERVER_LLM_PROVIDER` is set. | Model selection affects token cost and detection quality. |
-| `INFRA_GATE_OBSERVER_LLM_API_KEY` | `InfraGate.Observer` | No | Unset | (secret) | LLM provider API key. Never logged. Required when a provider is configured. | Use a secret manager in production; env var is development-only. |
+| `INFRA_GATE_OBSERVER_LLM_API_KEY` | `InfraGate.Observer` | Yes for Anthropic | None | (secret) | LLM provider API key. Never logged. Required when the Anthropic provider is active. | Use a secret manager in production; env var is development-only. Never commit generated files containing this value. |
 | `INFRA_GATE_OBSERVER_CLIENT_ID` | `InfraGate.Observer` | No | `infra-gate-observer` | `infra-gate-observer` | OAuth client ID for the Observer service account. | Register this client with the IdP and grant `mcp:tools.readonly` scope. |
 | `INFRA_GATE_OBSERVER_CLIENT_SECRET` | `InfraGate.Observer` | Yes | None | (secret) | OAuth client secret for client_credentials flow. | Use a secret manager in production; env var is development-only. |
-| `INFRA_GATE_OBSERVER_OAUTH_AUTHORITY` | `InfraGate.Observer` | Yes | None | `http://keycloak:8080/realms/infra-gate` | OAuth token endpoint authority. | Match the gateway's issuer. |
+| `INFRA_GATE_OBSERVER_OAUTH_AUTHORITY` | `InfraGate.Observer` | Yes | None | `http://keycloak:8080/realms/infra-gate` | OAuth/OIDC authority used for client_credentials token discovery. | Match the gateway's issuer. |
 | `INFRA_GATE_OBSERVER_OAUTH_SCOPE` | `InfraGate.Observer` | No | `mcp:tools.readonly` | `mcp:tools.readonly` | OAuth scope requested by the Observer. | Must include `mcp:tools.readonly` for gateway access. |
 | `INFRA_GATE_OBSERVER_DEDUPE_SUPPRESSION_WINDOW` | `InfraGate.Observer` | No | `5` | `5` | Number of cycles within which repeated detection of the same anomaly is suppressed (deduplication window). Bounds: 1–30. | Lower values increase report noise; higher values delay re-emission of persistent anomalies. |
 | `INFRA_GATE_OBSERVER_DEDUPE_RESOLUTION_THRESHOLD` | `InfraGate.Observer` | No | `2` | `2` | Number of consecutive cycles an anomaly must be absent before emitting a `Resolved` report. Bounds: 1–10. | Lower values clear anomalies faster; higher values prevent transient flapping. |
 | `INFRA_GATE_OBSERVER_FILE_SINK_ROOT` | `InfraGate.Observer` | No | Unset | `/data/observer/findings` | Directory for the opt-in JSON file handoff sink. When set and non-empty, each cycle writes a `{cycleId}.json` file atomically. | Use a durable bind-mount; operator owns cleanup and rotation. |
 | `INFRA_GATE_OBSERVER_PLANNER_HANDOFF_URL` | `InfraGate.Observer` | No | Unset | `http://planner:3004/handoff/anomalies` | Optional HTTP handoff target for publishing `AnomalyHandoffBatch` payloads to the Remediation Planner. When unset, Observer output is limited to logging and the optional JSON file sink. | Required for the autonomous remediation loop. Use a service-local HTTPS route or trusted private network path outside local development. |
+| `INFRA_GATE_OBSERVER_IMAGE` | Compose | No | `infragate-observer` | `ghcr.io/example/infragate-observer` | Observer container image used by local Compose. | Pin release tags for shared environments. |
+| `INFRA_GATE_OBSERVER_BIND_ADDRESS` | Compose | No | `127.0.0.1` | `127.0.0.1` | Host bind address for the Observer container port. | Keep loopback unless a reverse proxy or private network boundary is configured. |
+| `INFRA_GATE_OBSERVER_BIND_PORT` | Compose | No | `3003` | `3003` | Host port mapped to the Observer container. | Avoid exposing publicly; this is an operational control endpoint. |
+| `INFRA_GATE_OBSERVER_HOST_PATH` | Compose / Run Profiles | No | Repo-root `.mcp-observer/findings` when generated by `scripts/generate-env.sh` | `./.mcp-observer/findings` | Host path mounted to the Observer JSON finding sink directory. | Use protected durable storage when enabled; otherwise leave the file sink unset. |
 
 ### On-Demand Observation Trigger
 
@@ -79,7 +83,7 @@ The Remediation Planner listens on port `3004` by default, accepts `POST /handof
 | `INFRA_GATE_PLANNER_IMAGE` | Compose | No | `infragate-planner` | `ghcr.io/example/infragate-planner` | Planner container image used by local Compose. | Pin release tags for shared environments. |
 | `INFRA_GATE_PLANNER_BIND_ADDRESS` | Compose | No | `127.0.0.1` | `127.0.0.1` | Host bind address for the Planner container port. | Keep loopback unless a reverse proxy or private network boundary is configured. |
 | `INFRA_GATE_PLANNER_BIND_PORT` | Compose | No | `3004` | `3004` | Host port mapped to the Planner container. | Avoid exposing publicly; this is an internal handoff endpoint. |
-| `INFRA_GATE_PLANNER_HOST_PATH` | Compose / Run Profiles | No | `./.mcp-remediation/proposals` in local Compose | `./.mcp-remediation/proposals` | Host path mounted to the Planner JSON proposal sink directory. | Use protected durable storage when enabled; otherwise leave the file sink unset. |
+| `INFRA_GATE_PLANNER_HOST_PATH` | Compose / Run Profiles | No | Repo-root `.mcp-remediation/proposals` when generated by `scripts/generate-env.sh` | `./.mcp-remediation/proposals` | Host path mounted to the Planner JSON proposal sink directory. | Use protected durable storage when enabled; otherwise leave the file sink unset. |
 
 ## InfraGate.Executor
 
@@ -145,9 +149,11 @@ The local OAuth Compose path (`deploy/local-oauth`) and the development compose 
 | `mcp-smoke-client` | Public direct-grant client used by CI/smoke tests to acquire non-browser tokens. |
 | `mcp-client-limited` | Public direct-grant client with valid audience but no `mcp:tools`, used for 403 insufficient-scope coverage. |
 | `infra-gate-approval-ui` | Public authorization-code + PKCE S256 client for browser approvals. |
+| `infra-gate-observer` | Confidential client_credentials client for the Anomaly Observer. |
 | `infra-gate-planner` | Confidential client_credentials client for the Remediation Planner. |
 | `infra-gate-executor` | Confidential client_credentials client for the Remediation Executor. |
 | `mcp:tools` | Client scope with the audience mapper for `http://127.0.0.1:3001/mcp` and a subject mapper suitable for local tests. |
+| `mcp:tools.readonly` | Observer scope mapped to gateway read-only inspection tools. |
 | `mcp:tools.propose` | Planner scope mapped to the `propose_plan` gateway tool. |
 | `mcp:tools.execute` | Executor scope mapped to `wait_for_plan_approval` and `execute_approved_plan`. |
 | `kubernetes-operators` | Demo operator group used by Operator Approval Policy checks. |

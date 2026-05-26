@@ -70,6 +70,8 @@ dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- generate "$PROF
   --set "host.guardAuditHostPath=${REPO_ROOT}/.mcp-guardrails" \
   --set "host.dataProtectionHostPath=${REPO_ROOT}/.mcp-dataprotection-keys" \
   --set "host.configHostPath=${APPSETTINGS_HOST_PATH}" \
+  --set "observer.observerHostPath=${REPO_ROOT}/.mcp-observer/findings" \
+  --set "planner.plannerHostPath=${REPO_ROOT}/.mcp-remediation/proposals" \
   ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
   --output "$OUTPUT"
 

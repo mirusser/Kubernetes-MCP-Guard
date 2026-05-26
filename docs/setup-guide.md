@@ -8,15 +8,30 @@ graph LR
     Gateway["InfraGate.McpGateway<br/>HTTP :3001/mcp"]
     Auth["McpGateway.Auth<br/>bearer / OAuth JWT"]
     Server["InfraGate.McpServer<br/>private stdio subprocess"]
+    Observer["InfraGate.Observer<br/>HTTP :3003"]
+    Planner["InfraGate.Planner<br/>HTTP :3004"]
+    Executor["InfraGate.Executor<br/>HTTP :3005"]
     Keycloak["Keycloak<br/>local OAuth :3010"]
+    Postgres["PostgreSQL<br/>approval store :5432"]
+    Mailpit["Mailpit<br/>approval email :8025"]
     K8s["Kubernetes API<br/>(minikube)"]
 
     Client -- "HTTP MCP + token" --> Gateway
     Gateway --> Auth
     Gateway -- "stdio subprocess" --> Server
+    Gateway --> Postgres
+    Gateway --> Mailpit
     Server -- ".NET KubernetesClient" --> K8s
+    Observer -- "read-only MCP + token" --> Gateway
+    Observer -- "anomaly handoff" --> Planner
+    Planner -- "propose_plan + read-only MCP" --> Gateway
+    Planner -- "proposal handoff" --> Executor
+    Executor -- "wait/execute approved plan" --> Gateway
     Client -. "OAuth discovery/login + DCR" .-> Keycloak
     Keycloak -. "JWKS / issuer metadata" .-> Gateway
+    Keycloak -. "client_credentials" .-> Observer
+    Keycloak -. "client_credentials" .-> Planner
+    Keycloak -. "client_credentials" .-> Executor
 ```
 
 **Source projects and runtime processes:**
@@ -30,9 +45,15 @@ graph LR
 | `InfraGate.KubernetesAdapter` | Kubernetes approval payload, evidence, intent canonicalization | Shared library |
 | `InfraGate.RuntimeSafety` | Runtime mode resolution, production safety validation | Shared library |
 | `InfraGate.DownstreamAuth` | Client-credentials token provider for downstream MCP server auth | Shared library |
+| `InfraGate.AgentLlm` | Shared Anthropic chat-client wrapper for agent projects | Shared library |
+| `InfraGate.Observer` | LLM-driven anomaly observer using read-only gateway tools | HTTP server `:3003` |
+| `InfraGate.Planner` | LLM-driven remediation planner that calls `propose_plan` | HTTP server `:3004` |
+| `InfraGate.Executor` | Deterministic approved-plan watcher and executor | HTTP server `:3005` |
 | Keycloak realm | Local OAuth/OIDC issuer | Container `:3010` |
+| PostgreSQL | Approval persistence store | Container `:5432` |
+| Mailpit | Local approval email sink | Container `:8025` |
 
-In the supported containerized OAuth path, Keycloak and the gateway run as separate containers. The gateway launches the server as a private stdio subprocess, so there is no separate network-facing MCP server process.
+In the supported containerized OAuth path, Keycloak, PostgreSQL, Mailpit, the gateway, the Observer, the Planner, and the Executor run as separate containers. The gateway launches the server as a private stdio subprocess, so there is no separate network-facing MCP server process.
 
 ---
 
@@ -75,7 +96,18 @@ The containerized OAuth path uses Docker Compose:
 docker compose version
 ```
 
-### 4. Verify tools
+### 4. Anthropic API key for local agents
+
+The local Compose stack starts the Observer and Planner by default. Both use the Anthropic provider unless you override the LLM configuration, so provide API keys through shell environment variables before `docker compose up`:
+
+```bash
+export INFRA_GATE_OBSERVER_LLM_API_KEY="<anthropic-api-key>"
+export INFRA_GATE_PLANNER_LLM_API_KEY="<anthropic-api-key>"
+```
+
+These secrets are not written by `scripts/generate-env.sh`.
+
+### 5. Verify tools
 
 ```bash
 dotnet --version          # → 10.x.x
@@ -196,15 +228,17 @@ codex mcp add infra-gate \
 Use this when you want the supported local OAuth setup with persistent user accounts and a real PKCE login flow. The realm is auto-imported from `deploy/keycloak/infra-gate-realm.json` on first start.
 
 ```bash
+export INFRA_GATE_OBSERVER_LLM_API_KEY="<anthropic-api-key>"
+export INFRA_GATE_PLANNER_LLM_API_KEY="<anthropic-api-key>"
 ./scripts/create-demo-kubeconfig.sh --compose
 ./scripts/generate-env.sh local-compose
 docker compose --env-file deploy/generated/local-compose.env \
   -f deploy/local-oauth/compose.yaml up --build
 ```
 
-`generate-env.sh` writes `deploy/generated/local-compose.env` and `deploy/generated/local-compose.appsettings.json` from `deploy/run-profiles.yaml` (profile `local-compose`) and supplies absolute host paths via `--set` so the command is independent of the current working directory. The generated files are gitignored; `deploy/local-oauth/release.env.example` and `deploy/local-oauth/release.appsettings.json` are the committed no-SDK references for the released profile.
+`generate-env.sh` writes `deploy/generated/local-compose.env` and `deploy/generated/local-compose.appsettings.json` from `deploy/run-profiles.yaml` (profile `local-compose`) and supplies absolute host paths via `--set` so the command is independent of the current working directory. The generated env file includes the gateway, downstream auth, Observer, Planner, and Executor local OAuth settings; LLM API keys still come from your shell environment so secrets are not committed or generated. The generated files are gitignored; `deploy/local-oauth/release.env.example` and `deploy/local-oauth/release.appsettings.json` are the committed no-SDK references for the released profile.
 
-Keycloak starts first and takes ~30s to pass its health check before the gateway comes up. No manual step is needed — the `depends_on: condition: service_healthy` gate handles the ordering.
+Keycloak and PostgreSQL start first; Keycloak takes ~30s to pass its health check before the gateway and agents come up. No manual step is needed — the `depends_on` gates handle the ordering.
 
 #### Network topology
 
@@ -215,12 +249,14 @@ The Keycloak local OAuth path intentionally keeps Keycloak and minikube on **sep
 │  compose-internal (local-oauth_default)      │   │  minikube (external) │
 │                                              │   │                      │
 │  keycloak ──────────────────────────────────►│   │                      │
+│  postgres/mailpit/observer/planner/executor │   │                      │
 │                                  mcp-gateway ├───►  K8s API :8443       │
 └──────────────────────────────────────────────┘   └──────────────────────┘
 ```
 
 - **`keycloak`** is attached to the compose-internal network only — it has no route to the cluster.
 - **`mcp-gateway`** bridges both networks: it reaches Keycloak via Docker service-name DNS (`http://keycloak:8080`) and the Kubernetes API via the `minikube` bridge (`https://192.168.49.2:8443`).
+- **`observer`**, **`planner`**, and **`executor`** stay on the compose-internal network and talk to the gateway with their own Keycloak client-credentials identities.
 
 The `minikube` Docker network is created automatically by `minikube start --driver=docker`. Verify it exists before starting the stack:
 
@@ -235,6 +271,10 @@ If the network is missing (e.g. minikube was started with a different driver), a
 
 - Gateway: `http://127.0.0.1:3001/mcp`
 - Keycloak: `http://127.0.0.1:3010` (admin UI at `/admin`, realm at `/realms/infra-gate`)
+- Mailpit: `http://127.0.0.1:8025`
+- Observer health: `http://127.0.0.1:3003/health`
+- Planner health: `http://127.0.0.1:3004/health`
+- Executor health: `http://127.0.0.1:3005/health`
 
 **Pre-seeded demo accounts** (from the imported realm):
 
@@ -251,7 +291,13 @@ If the network is missing (e.g. minikube was started with a different driver), a
 | `mcp-smoke-client` | Local/test direct-grant client for non-browser token acquisition and smoke checks |
 | `mcp-client-limited` | Valid-audience client without `mcp:tools`, used to verify 403 insufficient-scope behavior |
 | `infra-gate-approval-ui` | Public PKCE client for browser approval sessions |
+| `infra-gate-observer` | Confidential service client for Observer read-only gateway calls |
+| `infra-gate-planner` | Confidential service client for Planner read-only and `propose_plan` calls |
+| `infra-gate-executor` | Confidential service client for Executor approval wait and execution calls |
 | `mcp:tools` | Client scope with the audience mapper for `http://127.0.0.1:3001/mcp` |
+| `mcp:tools.readonly` | Read-only gateway scope for the Observer and Planner |
+| `mcp:tools.propose` | Planner scope for `propose_plan` |
+| `mcp:tools.execute` | Executor scope for `wait_for_plan_approval` and `execute_approved_plan` |
 
 Anonymous OIDC Dynamic Client Registration is enabled for this local/demo realm and constrained to trusted loopback hosts (`localhost`, `127.0.0.1`, and `host.docker.internal`) plus the local scopes above. Do not copy anonymous DCR into production without replacing it with controlled registration or admin-managed clients.
 
@@ -296,6 +342,8 @@ TAG=vX.Y.Z docker compose --env-file deploy/local-oauth/release.env.example \
 
 Keycloak is pulled from `quay.io/keycloak/keycloak:26.6.1`; the gateway image is pulled from GHCR. Replace `vX.Y.Z` with the release tag from <https://github.com/mirusser/Kubernetes-MCP-Guard/releases>. The committed release env template and appsettings file are generated from the `smoke-release` Run Profile and are the no-SDK path for published images.
 
+The published-image Compose path currently covers Keycloak plus the gateway. Use the local-build Compose path above when you want the Observer, Planner, and Executor containers.
+
 After release, the published-image path is verified by `scripts/smoke-test-release.sh` (see [Verification](#verification)).
 
 **Docker Hub alternate for the gateway image** (substitute into `compose.release.yaml` if preferred):
@@ -314,7 +362,7 @@ ghcr.io/mirusser/kubernetes-mcp-guard-gateway:${TAG} → mirusser/kubernetes-mcp
 
 ## Available MCP Tools
 
-Once running, the server exposes these tools:
+Once running through the gateway, InfraGate exposes these user-facing tools:
 
 | Tool | Purpose |
 |---|---|
@@ -332,6 +380,9 @@ Once running, the server exposes these tools:
 | `request_restart_deployment(namespace, name)` | Create a plan to restart a deployment |
 | `request_set_deployment_image(namespace, name, container, image)` | Create a plan to update a Deployment container image |
 | `execute_approved_plan(planId)` | Apply a previously approved plan |
+| `get_plan_status(planId)` | Read current approval status for a plan |
+| `wait_for_plan_approval(planId, timeoutSeconds?)` | Poll briefly for browser approval without applying the plan |
+| `propose_plan(operationType, arguments)` | Planner-only tool for creating operator-approval remediation plans |
 
 Logs and Events are untrusted Kubernetes workload/cluster output. Prefer the HTTP gateway for model-visible diagnostics because it sanitizes suspicious output before returning it; direct stdio use bypasses that gateway guardrail layer.
 
@@ -366,7 +417,11 @@ dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.Keyclo
 INFRA_GATE_RUN_SAFETY_E2E=1 dotnet test tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj --no-build
 
 # Compose config validation
-docker compose -f deploy/local-oauth/compose.yaml config
+./scripts/generate-env.sh local-compose
+INFRA_GATE_OBSERVER_LLM_API_KEY=dummy \
+INFRA_GATE_PLANNER_LLM_API_KEY=dummy \
+  docker compose --env-file deploy/generated/local-compose.env \
+    -f deploy/local-oauth/compose.yaml config
 
 # Check cluster state after integration tests
 kubectl --kubeconfig .kube/mcp-nginx-demo.config \
@@ -395,6 +450,10 @@ The canonical environment variable, CI/CD, and release configuration reference i
 │   ├── InfraGate.DownstreamAuth/         # Client-credentials token provider
 │   ├── InfraGate.Observability/          # Shared Serilog structured logging config
 │   ├── InfraGate.RunProfiles/            # CLI for compiling run profiles into .env and appsettings
+│   ├── InfraGate.AgentLlm/                # Shared agent LLM client support
+│   ├── InfraGate.Observer/                # Anomaly Observer agent
+│   ├── InfraGate.Planner/                 # Remediation Planner agent
+│   ├── InfraGate.Executor/                # Remediation Executor agent
 │   ├── InfraGate.McpServer/              # Stdio MCP server (Kubernetes tools)
 │   ├── InfraGate.McpGateway/             # HTTP gateway (guardrails, downstream client)
 │   └── InfraGate.McpGateway.Auth/        # Auth library (OAuth JWT + browser approval cookie)
@@ -405,6 +464,10 @@ The canonical environment variable, CI/CD, and release configuration reference i
 │   ├── InfraGate.Safety.E2E.Tests/
 │   ├── InfraGate.RuntimeSafety.Tests/
 │   ├── InfraGate.Observability.Tests/
+│   ├── InfraGate.Observer.Tests/
+│   ├── InfraGate.Planner.Tests/
+│   ├── InfraGate.Executor.Tests/
+│   ├── InfraGate.Remediation.E2E.Tests/
 │   ├── InfraGate.RunProfiles.Tests/
 │   └── InfraGate.DownstreamAuth.Tests/
 ├── deploy/
@@ -412,7 +475,7 @@ The canonical environment variable, CI/CD, and release configuration reference i
 │   ├── docker/                           # Runtime Dockerfiles
 │   ├── keycloak/                         # Keycloak realm config (infra-gate-realm.json)
 │   ├── minikube/rbac.yaml                # Namespace + ServiceAccount + Role + RoleBinding
-│   ├── local-oauth/compose.yaml          # Keycloak + Gateway (local build)
+│   ├── local-oauth/compose.yaml          # Keycloak + Gateway + agent stack (local build)
 │   └── local-oauth/compose.release.yaml  # Keycloak + Gateway (published images)
 ├── scripts/
 │   ├── create-demo-kubeconfig.sh         # Bootstrap RBAC & generate kubeconfig
@@ -422,6 +485,8 @@ The canonical environment variable, CI/CD, and release configuration reference i
 │   └── coverage.sh                       # Code coverage report generator
 ├── .kube/                                # Generated kubeconfigs (gitignored)
 ├── .mcp-approvals/                       # Data Protection keys (approval state is PostgreSQL-backed)
+├── .mcp-observer/                        # Observer JSON finding output (gitignored)
+├── .mcp-remediation/                     # Planner JSON proposal output (gitignored)
 └── .mcp-guardrails/                      # Gateway audit log output (gitignored)
 ```
 
@@ -437,6 +502,8 @@ The canonical environment variable, CI/CD, and release configuration reference i
 | Kubernetes API returns `Unauthorized` during integration tests | Stale or expired demo kubeconfig token | Re-run `./scripts/create-demo-kubeconfig.sh` for source tests, or `./scripts/create-demo-kubeconfig.sh --compose` for Compose flows |
 | Gateway returns `401 Unauthorized` | No `Authorization` header, invalid JWT, or no auth env vars set | Set OAuth vars and re-run MCP login |
 | `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA` error | Trying to reach HTTP issuer with HTTPS check | Set to `false` only for local development issuers such as the Keycloak demo |
+| Observer or Planner exits with `LLM API key not configured` | The local Compose stack starts both LLM-backed agents and no API key was passed into the container | Export `INFRA_GATE_OBSERVER_LLM_API_KEY` and `INFRA_GATE_PLANNER_LLM_API_KEY`, then restart the stack |
+| Observer exits with `Client credentials require Authority to be configured` | Generated env or Compose wiring is stale and did not provide `INFRA_GATE_OBSERVER_OAUTH_AUTHORITY` | Re-run `./scripts/generate-env.sh local-compose` after pulling the latest profile changes, then restart the stack |
 | `execute_approved_plan` refuses with hash mismatch | Plan changed after approval | Re-request the plan and re-approve |
 | Every MCP tool call returns `An error occurred invoking '<toolName>'` while gateway logs show `IsError = False` | The downstream MCP server failed during DI — usually because the gateway container (chiseled, UID 1654) cannot read the host-owned kubeconfig or write to the Data Protection keys volume (`.mcp-approvals/`) / `.mcp-guardrails/` | Re-run `./scripts/create-demo-kubeconfig.sh --compose`. The script grants the container UID an ACL on the kubeconfig file and on the persistence dirs (falling back to chmod 0644 only when `setfacl` is unavailable) |
 | `chmod: changing permissions of '.mcp-approvals/dataprotection-keys': Operation not permitted` on second run, and gateway logs show `UnauthorizedAccessException: Access to the path '/data/dataprotection-keys' is denied` | On first run the container (UID 1654) creates Data Protection key files with ownership 1654:1654 mode 770; on re-run `chmod -R` fails on those files before `setfacl` can execute, so the data-protection volume loses its ACL | Re-run `./scripts/create-demo-kubeconfig.sh --compose` after pulling the latest script — the fixed version pre-creates the Data Protection keys directory host-owned and uses `find -user` instead of `chmod -R` so container-created files are skipped |

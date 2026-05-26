@@ -75,6 +75,7 @@ internal static class RunProfileConventions
         public const string ObserverLlmModel = "LlmModel";
         public const string ObserverLlmProvider = "LlmProvider";
         public const string ObserverMaxToolIterations = "MaxToolIterations";
+        public const string ObserverPlannerHandoffUrl = "PlannerHandoffUrl";
         public const string ObserverTokenEndpoint = "TokenEndpoint";
         public const string ObserverClientId = "ClientId";
         public const string ObserverClientSecret = "ClientSecret";
@@ -142,6 +143,7 @@ internal static class RunProfileConventions
         public const string Planner = "planner";
         public const string Executor = "executor";
         public const string ExecutorHandoffUrl = "executorHandoffUrl";
+        public const string PlannerHandoffUrl = "plannerHandoffUrl";
         public const string AnomalyWallClockCapSeconds = "anomalyWallClockCapSeconds";
         public const string BatchWallClockCapSeconds = "batchWallClockCapSeconds";
         public const string ConcurrencyCap = "concurrencyCap";
@@ -220,7 +222,9 @@ internal static class RunProfileConventions
         public const string ObserverLlmModel = "INFRA_GATE_OBSERVER_LLM_MODEL";
         public const string ObserverLlmProvider = "INFRA_GATE_OBSERVER_LLM_PROVIDER";
         public const string ObserverMaxToolIterations = "INFRA_GATE_OBSERVER_MAX_TOOL_ITERATIONS";
-        public const string ObserverScope = "INFRA_GATE_OBSERVER_SCOPE";
+        public const string ObserverOAuthAuthority = "INFRA_GATE_OBSERVER_OAUTH_AUTHORITY";
+        public const string ObserverPlannerHandoffUrl = "INFRA_GATE_OBSERVER_PLANNER_HANDOFF_URL";
+        public const string ObserverScope = "INFRA_GATE_OBSERVER_OAUTH_SCOPE";
         public const string ObserverTokenEndpoint = "INFRA_GATE_OBSERVER_TOKEN_ENDPOINT";
         public const string PlannerAspnetcoreUrls = "INFRA_GATE_PLANNER_ASPNETCORE_URLS";
         public const string PlannerGatewayBaseUrl = "INFRA_GATE_PLANNER_GATEWAY_BASE_URL";

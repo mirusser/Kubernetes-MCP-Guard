@@ -730,16 +730,17 @@ public sealed class RunProfileCliTests
             "INFRA_GATE_DATA_PROTECTION_HOST_PATH",
             "INFRA_GATE_OBSERVER_ASPNETCORE_URLS",
             "INFRA_GATE_OBSERVER_GATEWAY_BASE_URL",
-            "INFRA_GATE_OBSERVER_TOKEN_ENDPOINT",
+            "INFRA_GATE_OBSERVER_OAUTH_AUTHORITY",
             "INFRA_GATE_OBSERVER_CLIENT_ID",
             "INFRA_GATE_OBSERVER_CLIENT_SECRET",
-            "INFRA_GATE_OBSERVER_SCOPE",
+            "INFRA_GATE_OBSERVER_OAUTH_SCOPE",
             "INFRA_GATE_OBSERVER_LLM_PROVIDER",
             "INFRA_GATE_OBSERVER_LLM_MODEL",
             "INFRA_GATE_OBSERVER_CYCLE_INTERVAL_SECONDS",
             "INFRA_GATE_OBSERVER_WALL_CLOCK_CAP_SECONDS",
             "INFRA_GATE_OBSERVER_MAX_TOOL_ITERATIONS",
             "INFRA_GATE_OBSERVER_FILE_SINK_ROOT",
+            "INFRA_GATE_OBSERVER_PLANNER_HANDOFF_URL",
             "INFRA_GATE_OBSERVER_HOST_PATH",
             "INFRA_GATE_PLANNER_ASPNETCORE_URLS",
             "INFRA_GATE_PLANNER_GATEWAY_BASE_URL",
@@ -785,16 +786,17 @@ public sealed class RunProfileCliTests
             "K8S_MCP_ALLOWED_NAMESPACES",
             "INFRA_GATE_OBSERVER_ASPNETCORE_URLS",
             "INFRA_GATE_OBSERVER_GATEWAY_BASE_URL",
-            "INFRA_GATE_OBSERVER_TOKEN_ENDPOINT",
+            "INFRA_GATE_OBSERVER_OAUTH_AUTHORITY",
             "INFRA_GATE_OBSERVER_CLIENT_ID",
             "INFRA_GATE_OBSERVER_CLIENT_SECRET",
-            "INFRA_GATE_OBSERVER_SCOPE",
+            "INFRA_GATE_OBSERVER_OAUTH_SCOPE",
             "INFRA_GATE_OBSERVER_LLM_PROVIDER",
             "INFRA_GATE_OBSERVER_LLM_MODEL",
             "INFRA_GATE_OBSERVER_CYCLE_INTERVAL_SECONDS",
             "INFRA_GATE_OBSERVER_WALL_CLOCK_CAP_SECONDS",
             "INFRA_GATE_OBSERVER_MAX_TOOL_ITERATIONS",
             "INFRA_GATE_OBSERVER_FILE_SINK_ROOT",
+            "INFRA_GATE_OBSERVER_PLANNER_HANDOFF_URL",
             "INFRA_GATE_PLANNER_ASPNETCORE_URLS",
             "INFRA_GATE_PLANNER_GATEWAY_BASE_URL",
             "INFRA_GATE_PLANNER_EXECUTOR_HANDOFF_URL",
@@ -979,6 +981,48 @@ public sealed class RunProfileCliTests
         string content = await File.ReadAllTextAsync(outputPath);
         Assert.Contains("INFRA_GATE_BIND_ADDRESS=10.0.0.1", content, StringComparison.Ordinal);
         Assert.DoesNotContain("INFRA_GATE_BIND_ADDRESS=127.0.0.1", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetAgentHostPaths_OverridesValues()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                observer:
+                  observerHostPath: .observer/original
+                planner:
+                  plannerHostPath: .planner/original
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--output", outputPath,
+             "--set", "observer.observerHostPath=/tmp/observer/findings",
+             "--set", "planner.plannerHostPath=/tmp/planner/proposals"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        Assert.Contains("INFRA_GATE_OBSERVER_HOST_PATH=/tmp/observer/findings", content, StringComparison.Ordinal);
+        Assert.Contains("INFRA_GATE_PLANNER_HOST_PATH=/tmp/planner/proposals", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("INFRA_GATE_OBSERVER_HOST_PATH=.observer/original", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("INFRA_GATE_PLANNER_HOST_PATH=.planner/original", content, StringComparison.Ordinal);
     }
 
     [Fact]

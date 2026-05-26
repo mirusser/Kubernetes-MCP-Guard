@@ -111,7 +111,7 @@ profiles:
     observer:
       aspnetcoreUrls: <url>
       gatewayBaseUrl: <url>
-      tokenEndpoint: <url>
+      oauthAuthority: <url>
       clientId: <id>
       clientSecret: <secret>
       scope: <scope>
@@ -122,6 +122,7 @@ profiles:
       cycleWallClockCapSeconds: "<seconds>"
       maxToolIterations: "<count>"
       fileSinkRoot: <path>
+      plannerHandoffUrl: <url>
       observerHostPath: <host-path>
 
     planner:
@@ -180,7 +181,7 @@ profiles:
 | `genericApprovalCore` | `postgresConnectionString` |
 | `genericApprovalCore` | `runMigrationsOnStartup` |
 | `host` | `bindAddress`, `bindPort`, `gatewayImage`, `configHostPath`, `kubeconfigHostPath`, `approvalHostPath`, `guardAuditHostPath`, `dataProtectionHostPath` |
-| `observer` | `gatewayBaseUrl`, `clientId`, `clientSecret`, `scope`, `llmModel`, `fileSinkRoot`, `observerHostPath` |
+| `observer` | `gatewayBaseUrl`, `oauthAuthority`, `clientId`, `clientSecret`, `scope`, `llmModel`, `fileSinkRoot`, `plannerHandoffUrl`, `observerHostPath` |
 | `planner` | `gatewayBaseUrl`, `executorHandoffUrl`, `clientId`, `clientSecret`, `oauthAuthority`, `scope`, `llmModel`, `fileSinkRoot`, `plannerHostPath` |
 | `executor` | `gatewayBaseUrl`, `clientId`, `clientSecret`, `oauthAuthority`, `scope`, `concurrencyCap`, `watchTimeoutSeconds`, `executorHostPath` |
 

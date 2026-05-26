@@ -286,7 +286,8 @@ internal static class AppSettingsRenderer
             !string.IsNullOrEmpty(observer.CycleCadenceSeconds) ||
             !string.IsNullOrEmpty(observer.CycleWallClockCapSeconds) ||
             !string.IsNullOrEmpty(observer.MaxToolIterations) ||
-            !string.IsNullOrEmpty(observer.FileSinkRoot);
+            !string.IsNullOrEmpty(observer.FileSinkRoot) ||
+            !string.IsNullOrEmpty(observer.PlannerHandoffUrl);
 
         if (!hasAnyValue)
         {
@@ -307,6 +308,7 @@ internal static class AppSettingsRenderer
         WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverCycleWallClockCapSeconds, observer.CycleWallClockCapSeconds);
         WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverMaxToolIterations, observer.MaxToolIterations);
         WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverFileSinkRoot, observer.FileSinkRoot);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverPlannerHandoffUrl, observer.PlannerHandoffUrl);
         writer.WriteEndObject();
     }
 

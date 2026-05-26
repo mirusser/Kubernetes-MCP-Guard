@@ -387,7 +387,17 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.Observer => profile with
             {
                 Observer = ApplyObserverOverride(
-                    profile.Observer ?? new ObserverProfile(null, null, null, null, null, null, null, null, null, null, null, null, null, null), field, value, path)
+                    profile.Observer ?? new ObserverProfile(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null), field, value, path)
+            },
+            RunProfileConventions.YamlKeys.Planner => profile with
+            {
+                Planner = ApplyPlannerOverride(
+                    profile.Planner ?? new PlannerProfile(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null), field, value, path)
+            },
+            RunProfileConventions.YamlKeys.Executor => profile with
+            {
+                Executor = ApplyExecutorOverride(
+                    profile.Executor ?? new ExecutorProfile(null, null, null, null, null, null, null, null, null, null), field, value, path)
             },
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };
@@ -475,6 +485,7 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.AspnetcoreUrls => profile with { AspnetcoreUrls = value },
             RunProfileConventions.YamlKeys.GatewayBaseUrl => profile with { GatewayBaseUrl = value },
             RunProfileConventions.YamlKeys.TokenEndpoint => profile with { TokenEndpoint = value },
+            RunProfileConventions.YamlKeys.OAuthAuthority => profile with { OAuthAuthority = value },
             RunProfileConventions.YamlKeys.ClientId => profile with { ClientId = value },
             RunProfileConventions.YamlKeys.ClientSecret => profile with { ClientSecret = value },
             RunProfileConventions.YamlKeys.Scope => profile with { Scope = value },
@@ -485,7 +496,48 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.CycleWallClockCapSeconds => profile with { CycleWallClockCapSeconds = value },
             RunProfileConventions.YamlKeys.MaxToolIterations => profile with { MaxToolIterations = value },
             RunProfileConventions.YamlKeys.FileSinkRoot => profile with { FileSinkRoot = value },
+            RunProfileConventions.YamlKeys.PlannerHandoffUrl => profile with { PlannerHandoffUrl = value },
             RunProfileConventions.YamlKeys.ObserverHostPath => profile with { ObserverHostPath = value },
+            _ => throw new InvalidOperationException($"Unknown --set path: {path}")
+        };
+
+    private static PlannerProfile ApplyPlannerOverride(
+        PlannerProfile profile, string field, string value, string path) =>
+        field switch
+        {
+            RunProfileConventions.YamlKeys.AspnetcoreUrls => profile with { AspnetcoreUrls = value },
+            RunProfileConventions.YamlKeys.GatewayBaseUrl => profile with { GatewayBaseUrl = value },
+            RunProfileConventions.YamlKeys.ExecutorHandoffUrl => profile with { ExecutorHandoffUrl = value },
+            RunProfileConventions.YamlKeys.TokenEndpoint => profile with { TokenEndpoint = value },
+            RunProfileConventions.YamlKeys.ClientId => profile with { ClientId = value },
+            RunProfileConventions.YamlKeys.ClientSecret => profile with { ClientSecret = value },
+            RunProfileConventions.YamlKeys.OAuthAuthority => profile with { OAuthAuthority = value },
+            RunProfileConventions.YamlKeys.Scope => profile with { OAuthScope = value },
+            RunProfileConventions.YamlKeys.LlmProvider => profile with { LlmProvider = value },
+            RunProfileConventions.YamlKeys.LlmModel => profile with { LlmModel = value },
+            RunProfileConventions.YamlKeys.LlmApiKey => profile with { LlmApiKey = value },
+            RunProfileConventions.YamlKeys.AnomalyWallClockCapSeconds => profile with { AnomalyWallClockCapSeconds = value },
+            RunProfileConventions.YamlKeys.BatchWallClockCapSeconds => profile with { BatchWallClockCapSeconds = value },
+            RunProfileConventions.YamlKeys.MaxToolIterations => profile with { MaxToolIterations = value },
+            RunProfileConventions.YamlKeys.FileSinkRoot => profile with { FileSinkRoot = value },
+            RunProfileConventions.YamlKeys.PlannerHostPath => profile with { PlannerHostPath = value },
+            _ => throw new InvalidOperationException($"Unknown --set path: {path}")
+        };
+
+    private static ExecutorProfile ApplyExecutorOverride(
+        ExecutorProfile profile, string field, string value, string path) =>
+        field switch
+        {
+            RunProfileConventions.YamlKeys.AspnetcoreUrls => profile with { AspnetcoreUrls = value },
+            RunProfileConventions.YamlKeys.GatewayBaseUrl => profile with { GatewayBaseUrl = value },
+            RunProfileConventions.YamlKeys.TokenEndpoint => profile with { TokenEndpoint = value },
+            RunProfileConventions.YamlKeys.ClientId => profile with { ClientId = value },
+            RunProfileConventions.YamlKeys.ClientSecret => profile with { ClientSecret = value },
+            RunProfileConventions.YamlKeys.OAuthAuthority => profile with { OAuthAuthority = value },
+            RunProfileConventions.YamlKeys.Scope => profile with { OAuthScope = value },
+            RunProfileConventions.YamlKeys.ConcurrencyCap => profile with { ConcurrencyCap = value },
+            RunProfileConventions.YamlKeys.WatchTimeoutSeconds => profile with { WatchTimeoutSeconds = value },
+            RunProfileConventions.YamlKeys.ExecutorHostPath => profile with { ExecutorHostPath = value },
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };
 }
