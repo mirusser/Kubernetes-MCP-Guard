@@ -387,7 +387,7 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.Observer => profile with
             {
                 Observer = ApplyObserverOverride(
-                    profile.Observer ?? new ObserverProfile(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null), field, value, path)
+                    profile.Observer ?? new ObserverProfile(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null), field, value, path)
             },
             RunProfileConventions.YamlKeys.Planner => profile with
             {

@@ -14,6 +14,8 @@ internal static class OperationArgumentValidator
                 TryNormalizeRestartDeployment(decision.Arguments, out normalizedArguments),
             PlannerConventions.OperationTypes.ScaleDeployment =>
                 TryNormalizeScaleDeployment(decision.Arguments, out normalizedArguments),
+            PlannerConventions.OperationTypes.SetDeploymentImage =>
+                TryNormalizeSetDeploymentImage(decision.Arguments, out normalizedArguments),
             _ => false,
         };
     }
@@ -56,6 +58,30 @@ internal static class OperationArgumentValidator
             [PlannerConventions.ToolArguments.Name] = name,
             [PlannerConventions.ToolArguments.Namespace] = namespaceName,
             [PlannerConventions.ToolArguments.Replicas] = replicas,
+        };
+        return true;
+    }
+
+    private static bool TryNormalizeSetDeploymentImage(
+        IReadOnlyDictionary<string, object?> arguments,
+        out IReadOnlyDictionary<string, object?> normalizedArguments)
+    {
+        normalizedArguments = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        if (!TryGetRequiredString(arguments, PlannerConventions.ToolArguments.Name, out var name) ||
+            !TryGetRequiredString(arguments, PlannerConventions.ToolArguments.Namespace, out var namespaceName) ||
+            !TryGetRequiredString(arguments, PlannerConventions.ToolArguments.Container, out var container) ||
+            !TryGetRequiredString(arguments, PlannerConventions.ToolArguments.Image, out var image))
+        {
+            return false;
+        }
+
+        normalizedArguments = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [PlannerConventions.ToolArguments.Name] = name,
+            [PlannerConventions.ToolArguments.Namespace] = namespaceName,
+            [PlannerConventions.ToolArguments.Container] = container,
+            [PlannerConventions.ToolArguments.Image] = image,
         };
         return true;
     }

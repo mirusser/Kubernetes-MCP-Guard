@@ -10,7 +10,7 @@ public sealed class JsonFileAnomalyHandoffSinkTests
 
         try
         {
-            var sink = new JsonFileAnomalyHandoffSink(tempDir);
+            var sink = new JsonFileAnomalyHandoffSink(tempDir, Substitute.For<ILogger<JsonFileAnomalyHandoffSink>>());
 
             var batch = new AnomalyHandoffBatch
             {
@@ -67,7 +67,7 @@ public sealed class JsonFileAnomalyHandoffSinkTests
 
         try
         {
-            var sink = new JsonFileAnomalyHandoffSink(tempDir);
+            var sink = new JsonFileAnomalyHandoffSink(tempDir, Substitute.For<ILogger<JsonFileAnomalyHandoffSink>>());
             var batch = new AnomalyHandoffBatch
             {
                 CycleId = "cycle-001",
@@ -111,7 +111,7 @@ public sealed class JsonFileAnomalyHandoffSinkTests
 
         try
         {
-            var sink = new JsonFileAnomalyHandoffSink(tempDir);
+            var sink = new JsonFileAnomalyHandoffSink(tempDir, Substitute.For<ILogger<JsonFileAnomalyHandoffSink>>());
             var batch = new AnomalyHandoffBatch
             {
                 CycleId = "cycle-001",

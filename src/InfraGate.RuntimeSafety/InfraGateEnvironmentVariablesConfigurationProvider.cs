@@ -13,7 +13,20 @@ internal sealed class InfraGateEnvironmentVariablesConfigurationProvider(
         foreach (var (envVar, configKey) in GetAllMappedPairs())
         {
             string? value = Environment.GetEnvironmentVariable(envVar);
-            if (!string.IsNullOrWhiteSpace(value))
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            if (mappings.IsList(envVar))
+            {
+                var items = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                for (int i = 0; i < items.Length; i++)
+                {
+                    Data[$"{configKey}:{i}"] = items[i];
+                }
+            }
+            else
             {
                 Data[configKey] = value;
             }

@@ -65,11 +65,13 @@ profiles:
       llmProvider: anthropic
       llmModel: claude-sonnet-4-6
       cycleCadenceSeconds: "60"
-      cycleWallClockCapSeconds: "20"
+      cycleWallClockCapSeconds: "120"
       maxToolIterations: "8"
       fileSinkRoot: /data/observer/findings
       plannerHandoffUrl: http://planner:3004/handoff/anomalies
       observerHostPath: ../../.mcp-observer/findings
+      allowedNamespaces:
+        - mcp-nginx-demo
     planner:
       aspnetcoreUrls: http://0.0.0.0:3004
       gatewayBaseUrl: http://gateway:3001/mcp
@@ -125,10 +127,12 @@ profiles:
       llmProvider: anthropic
       llmModel: claude-sonnet-4-6
       cycleCadenceSeconds: "60"
-      cycleWallClockCapSeconds: "20"
+      cycleWallClockCapSeconds: "120"
       maxToolIterations: "8"
       fileSinkRoot: .mcp-observer/findings
       plannerHandoffUrl: http://127.0.0.1:3004/handoff/anomalies
+      allowedNamespaces:
+        - mcp-nginx-demo
     planner:
       aspnetcoreUrls: http://0.0.0.0:3004
       gatewayBaseUrl: http://127.0.0.1:3001/mcp

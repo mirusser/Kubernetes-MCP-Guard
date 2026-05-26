@@ -136,6 +136,7 @@ internal static class RunProfileDocumentReader
     private static readonly IReadOnlySet<string> KnownObserverKeys =
         new HashSet<string>(
             [
+                RunProfileConventions.YamlKeys.AllowedNamespaces,
                 RunProfileConventions.YamlKeys.AspnetcoreUrls,
                 RunProfileConventions.YamlKeys.ClientId,
                 RunProfileConventions.YamlKeys.ClientSecret,
@@ -481,7 +482,8 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.MaxToolIterations),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.FileSinkRoot),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.PlannerHandoffUrl),
-            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ObserverHostPath));
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ObserverHostPath),
+            GetOptionalScalarSequence(mapping, RunProfileConventions.YamlKeys.AllowedNamespaces));
     }
 
     private static PlannerProfile? ReadPlanner(YamlMappingNode node)
@@ -659,6 +661,27 @@ internal static class RunProfileDocumentReader
         if (!node.Children.TryGetValue(new YamlScalarNode(key), out YamlNode? value))
         {
             throw new InvalidOperationException($"Missing required YAML key: {key}");
+        }
+
+        if (value is not YamlSequenceNode sequence)
+        {
+            throw new InvalidOperationException($"YAML key '{key}' must be a sequence.");
+        }
+
+        var values = new List<string>();
+        foreach (YamlNode item in sequence.Children)
+        {
+            values.Add(ScalarValue(item, key));
+        }
+
+        return values;
+    }
+
+    private static IReadOnlyList<string>? GetOptionalScalarSequence(YamlMappingNode node, string key)
+    {
+        if (!node.Children.TryGetValue(new YamlScalarNode(key), out YamlNode? value))
+        {
+            return null;
         }
 
         if (value is not YamlSequenceNode sequence)

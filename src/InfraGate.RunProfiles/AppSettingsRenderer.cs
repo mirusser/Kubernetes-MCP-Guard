@@ -287,7 +287,8 @@ internal static class AppSettingsRenderer
             !string.IsNullOrEmpty(observer.CycleWallClockCapSeconds) ||
             !string.IsNullOrEmpty(observer.MaxToolIterations) ||
             !string.IsNullOrEmpty(observer.FileSinkRoot) ||
-            !string.IsNullOrEmpty(observer.PlannerHandoffUrl);
+            !string.IsNullOrEmpty(observer.PlannerHandoffUrl) ||
+            observer.AllowedNamespaces?.Count > 0;
 
         if (!hasAnyValue)
         {
@@ -309,6 +310,18 @@ internal static class AppSettingsRenderer
         WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverMaxToolIterations, observer.MaxToolIterations);
         WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverFileSinkRoot, observer.FileSinkRoot);
         WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverPlannerHandoffUrl, observer.PlannerHandoffUrl);
+
+        if (observer.AllowedNamespaces?.Count > 0)
+        {
+            writer.WritePropertyName(RunProfileConventions.AppSettings.AllowedNamespaces);
+            writer.WriteStartArray();
+            foreach (string ns in observer.AllowedNamespaces)
+            {
+                writer.WriteStringValue(ns);
+            }
+            writer.WriteEndArray();
+        }
+
         writer.WriteEndObject();
     }
 

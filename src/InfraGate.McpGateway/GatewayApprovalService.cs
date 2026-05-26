@@ -2,7 +2,6 @@ using InfraGate.Approvals;
 using InfraGate.Approvals.AuditPayloads;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Notifications;
-using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpGateway;
 
@@ -147,10 +146,16 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
             return ApprovalGateResult.Refused($"Refused: {pendingRefusal.Message}", pendingRefusal.ReasonCode);
         }
 
+        // Use the plan's stored requester subject — not re-resolved from the HTTP context — so the
+        // challenge's RequesterSubject always matches decoded.Envelope.Requester.Subject at approval time.
+        // GatewayAuditIdentityResolver (used when writing the plan) and GatewayApprovalIdentityResolver
+        // (used for the current HTTP context) format service-account subjects differently.
+        var planRequesterSubject = pendingPlan.Envelope.Requester.Subject;
+
         var existingChallenge = await approvalChallenges.FindPendingChallengeAsync(
             planId,
             pending.Hash,
-            requester.Subject,
+            planRequesterSubject,
             pending.Envelope.IntentDigest,
             pending.Envelope.ReviewDigest,
             cancellationToken).ConfigureAwait(false);
@@ -189,7 +194,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         var challenge = await approvalChallenges.CreateChallengeAsync(
             planId,
             pending.Hash,
-            requester.Subject,
+            planRequesterSubject,
             requester.AuthenticationType,
             effectiveTtl,
             pending.Envelope.IntentDigest,
@@ -815,6 +820,8 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 groups.Add(group.TrimStart('/'));
             }
         }
+
+        logger.LogInformation("Actor groups resolved from token: [{Groups}]", string.Join(", ", groups));
 
         return groups;
     }

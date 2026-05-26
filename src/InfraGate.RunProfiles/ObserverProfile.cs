@@ -16,4 +16,5 @@ internal sealed record class ObserverProfile(
     string? MaxToolIterations,
     string? FileSinkRoot,
     string? PlannerHandoffUrl,
-    string? ObserverHostPath);
+    string? ObserverHostPath,
+    IReadOnlyList<string>? AllowedNamespaces);

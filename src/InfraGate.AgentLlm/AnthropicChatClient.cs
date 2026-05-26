@@ -1,4 +1,5 @@
 using System.Diagnostics.Metrics;
+using System.Text.Json.Serialization;
 using InfraGate.AgentLlm.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -63,6 +64,13 @@ public sealed class AnthropicChatClient : IChatClient
         var responseText = textBlocks is { Count: > 0 }
             ? string.Concat(textBlocks)
             : string.Empty;
+
+        if (string.Equals(anthropicResponse.StopReason, "max_tokens", StringComparison.Ordinal))
+        {
+            logger.LogWarning(
+                "LLM response was truncated at max_tokens limit ({MaxTokens}). Consider increasing MaxOutputTokens.",
+                options?.MaxOutputTokens ?? 16384);
+        }
 
         AgentLogEvents.LogLlmTokenUsage(logger,
             anthropicResponse.Usage?.InputTokens ?? 0,
@@ -129,7 +137,7 @@ public sealed class AnthropicChatClient : IChatClient
             }
         }
 
-        int maxTokens = options?.MaxOutputTokens ?? 4096;
+        int maxTokens = options?.MaxOutputTokens ?? 16384;
 
         return new AnthropicRequestBody
         {
@@ -145,6 +153,7 @@ public sealed class AnthropicChatClient : IChatClient
     private sealed record class AnthropicRequestBody
     {
         public string? Model { get; set; }
+        [JsonPropertyName("max_tokens")]
         public int MaxTokens { get; set; }
         public string? System { get; set; }
         public List<AnthropicApiMessage>? Messages { get; set; }
@@ -162,6 +171,8 @@ public sealed class AnthropicChatClient : IChatClient
         public string? Model { get; set; }
         public List<AnthropicContentBlock>? Content { get; set; }
         public AnthropicUsageInfo? Usage { get; set; }
+        [JsonPropertyName("stop_reason")]
+        public string? StopReason { get; set; }
     }
 
     private sealed record class AnthropicContentBlock
@@ -172,7 +183,9 @@ public sealed class AnthropicChatClient : IChatClient
 
     private sealed record class AnthropicUsageInfo
     {
+        [JsonPropertyName("input_tokens")]
         public int InputTokens { get; set; }
+        [JsonPropertyName("output_tokens")]
         public int OutputTokens { get; set; }
     }
 #pragma warning restore S1144, S3459, CA1812

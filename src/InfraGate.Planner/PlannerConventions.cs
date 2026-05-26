@@ -81,11 +81,13 @@ internal static class PlannerConventions
     {
         public const string RestartDeployment = "restart_deployment";
         public const string ScaleDeployment = "scale_deployment";
+        public const string SetDeploymentImage = "set_deployment_image";
 
         public static readonly IReadOnlySet<string> AllowedOperationTypes = new HashSet<string>(StringComparer.Ordinal)
         {
             RestartDeployment,
             ScaleDeployment,
+            SetDeploymentImage,
         };
     }
 
@@ -96,6 +98,8 @@ internal static class PlannerConventions
         public const string Name = "name";
         public const string Namespace = "namespace";
         public const string Replicas = "replicas";
+        public const string Container = "container";
+        public const string Image = "image";
     }
 
     public static class ProposePlanResponseFields

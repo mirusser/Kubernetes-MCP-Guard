@@ -24,7 +24,7 @@ builder.Configuration.AddInfraGateEnvironmentVariables(mappings =>
     mappings.Map(ObserverConventions.EnvironmentVariables.CycleIntervalSeconds, ObserverConventions.ConfigurationKeys.CycleIntervalSeconds);
     mappings.Map(ObserverConventions.EnvironmentVariables.WallClockCapSeconds, ObserverConventions.ConfigurationKeys.WallClockCapSeconds);
     mappings.Map(ObserverConventions.EnvironmentVariables.MaxToolIterations, ObserverConventions.ConfigurationKeys.MaxToolIterations);
-    mappings.Map(ObserverConventions.EnvironmentVariables.AllowedNamespaces, ObserverConventions.ConfigurationKeys.AllowedNamespaces);
+    mappings.MapList(ObserverConventions.EnvironmentVariables.AllowedNamespaces, ObserverConventions.ConfigurationKeys.AllowedNamespaces);
     mappings.Map(ObserverConventions.EnvironmentVariables.LlmProvider, ObserverConventions.ConfigurationKeys.LlmProvider);
     mappings.Map(ObserverConventions.EnvironmentVariables.LlmModel, ObserverConventions.ConfigurationKeys.LlmModel);
     mappings.Map(ObserverConventions.EnvironmentVariables.LlmApiKey, ObserverConventions.ConfigurationKeys.LlmApiKey);
@@ -124,7 +124,9 @@ builder.Services.AddSingleton<IAnomalyHandoffSink>(sp =>
 
     if (!string.IsNullOrEmpty(options.FileSinkRoot))
     {
-        sinks.Add(new JsonFileAnomalyHandoffSink(options.FileSinkRoot));
+        sinks.Add(new JsonFileAnomalyHandoffSink(
+            options.FileSinkRoot,
+            sp.GetRequiredService<ILogger<JsonFileAnomalyHandoffSink>>()));
     }
 
     if (!string.IsNullOrEmpty(options.PlannerHandoffUrl))

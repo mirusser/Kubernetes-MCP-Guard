@@ -27,7 +27,8 @@ internal sealed class ProposePlanHandler( // NOSONAR:S107 - Handler composes exp
         new HashSet<string>(StringComparer.Ordinal)
         {
             KubernetesAdapterConventions.MutationTools.RestartDeployment,
-            KubernetesAdapterConventions.MutationTools.ScaleDeployment
+            KubernetesAdapterConventions.MutationTools.ScaleDeployment,
+            KubernetesAdapterConventions.MutationTools.SetDeploymentImage,
         };
 
     public async Task<CallToolResult> ProposeAsync(

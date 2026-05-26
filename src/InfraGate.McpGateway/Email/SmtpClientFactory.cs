@@ -1,5 +1,5 @@
-using System.Net;
 using System.Net.Mail;
+using MimeKit;
 
 namespace InfraGate.McpGateway.Email;
 
@@ -8,29 +8,37 @@ internal sealed class SmtpClientFactory : ISmtpClientFactory
     public ISmtpClient Create(SmtpApprovalEmailOptions options)
     {
         options.Validate();
-
-        var client = new SmtpClient(options.Host, options.Port)
-        {
-            EnableSsl = options.EnableSsl
-        };
-        if (!string.IsNullOrWhiteSpace(options.Username))
-        {
-            client.Credentials = new NetworkCredential(options.Username, options.Password);
-        }
-
-        return new SmtpClientAdapter(client);
+        return new MailKitSmtpAdapter(options);
     }
 
-    private sealed class SmtpClientAdapter(SmtpClient client) : ISmtpClient
+    private sealed class MailKitSmtpAdapter(SmtpApprovalEmailOptions options) : ISmtpClient
     {
-        public bool EnableSsl => client.EnableSsl;
+        public bool EnableSsl => options.EnableSsl;
 
-        public Task SendMailAsync(MailMessage message, CancellationToken cancellationToken) =>
-            client.SendMailAsync(message, cancellationToken);
-
-        public void Dispose()
+        public async Task SendMailAsync(MailMessage message, CancellationToken cancellationToken)
         {
-            client.Dispose();
+            var mime = new MimeMessage();
+            mime.From.Add(new MailboxAddress(string.Empty, message.From?.Address ?? options.FromAddress));
+            foreach (MailAddress addr in message.To)
+                mime.To.Add(new MailboxAddress(string.Empty, addr.Address));
+            mime.Subject = message.Subject ?? string.Empty;
+            mime.Body = new TextPart(MimeKit.Text.TextFormat.Plain) { Text = message.Body ?? string.Empty };
+
+            using var client = new MailKit.Net.Smtp.SmtpClient();
+            var secureOptions = options.EnableSsl
+                ? MailKit.Security.SecureSocketOptions.StartTls
+                : MailKit.Security.SecureSocketOptions.None;
+            await client.ConnectAsync(options.Host, options.Port, secureOptions, cancellationToken)
+                .ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(options.Username))
+            {
+                await client.AuthenticateAsync(options.Username, options.Password ?? string.Empty, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            await client.SendAsync(mime, cancellationToken).ConfigureAwait(false);
+            await client.DisconnectAsync(true, cancellationToken).ConfigureAwait(false);
         }
+
+        public void Dispose() { }
     }
 }

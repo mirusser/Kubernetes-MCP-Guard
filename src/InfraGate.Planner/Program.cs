@@ -92,7 +92,9 @@ builder.Services.AddSingleton<IRemediationProposalSink>(sp =>
 
     if (!string.IsNullOrEmpty(options.FileSinkRoot))
     {
-        sinks.Add(new JsonFileRemediationProposalSink(options.FileSinkRoot));
+        sinks.Add(new JsonFileRemediationProposalSink(
+            options.FileSinkRoot,
+            sp.GetRequiredService<ILogger<JsonFileRemediationProposalSink>>()));
     }
 
     if (!string.IsNullOrEmpty(options.ExecutorHandoffUrl))

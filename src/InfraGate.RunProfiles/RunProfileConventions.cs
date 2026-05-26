@@ -225,6 +225,7 @@ internal static class RunProfileConventions
         public const string ObserverOAuthAuthority = "INFRA_GATE_OBSERVER_OAUTH_AUTHORITY";
         public const string ObserverPlannerHandoffUrl = "INFRA_GATE_OBSERVER_PLANNER_HANDOFF_URL";
         public const string ObserverScope = "INFRA_GATE_OBSERVER_OAUTH_SCOPE";
+        public const string ObserverAllowedNamespaces = "INFRA_GATE_OBSERVER_ALLOWED_NAMESPACES";
         public const string ObserverTokenEndpoint = "INFRA_GATE_OBSERVER_TOKEN_ENDPOINT";
         public const string PlannerAspnetcoreUrls = "INFRA_GATE_PLANNER_ASPNETCORE_URLS";
         public const string PlannerGatewayBaseUrl = "INFRA_GATE_PLANNER_GATEWAY_BASE_URL";

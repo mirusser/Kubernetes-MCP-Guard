@@ -275,6 +275,7 @@ public sealed class AppSettingsRendererTests
                 null,
                 null,
                 null,
+                null,
                 null)
         };
 

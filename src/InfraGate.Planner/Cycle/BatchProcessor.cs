@@ -6,8 +6,6 @@ using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
 using InfraGate.Planner.Mcp;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Serilog.Context;
 
 namespace InfraGate.Planner.Cycle;
@@ -238,6 +236,16 @@ internal sealed class BatchProcessor : BackgroundService
             messages.Add(new ChatMessage(ChatRole.User, toolResult));
         }
 
+        // If we hit the tool-call limit, the last responseText is still a tool call (not a decision).
+        // The tool result was added to messages but the LLM never saw it — make one final call.
+        if (toolCallsUsed >= maxToolIterations && TryParseToolCall(responseText ?? string.Empty) is not null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var finalResponse = await chatClient.GetResponseAsync(messages, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+            responseText = finalResponse.Text ?? string.Empty;
+        }
+
         if (string.IsNullOrWhiteSpace(responseText))
         {
             return null;
@@ -248,6 +256,8 @@ internal sealed class BatchProcessor : BackgroundService
 
     private RemediationDecision? ParseDecision(string responseText, string anomalyId)
     {
+        logger.LogDebug("LLM raw response for anomaly {AnomalyId}: {ResponseText}", anomalyId, responseText);
+
         var json = ExtractJsonObject(responseText);
         if (json is null)
         {
@@ -261,8 +271,9 @@ internal sealed class BatchProcessor : BackgroundService
         {
             output = JsonSerializer.Deserialize<LlmDecisionOutput>(json, PlannerLlmSerializerOptions.Instance);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            logger.LogDebug("LLM JSON parse failed for anomaly {AnomalyId}: {Json} — {Error}", anomalyId, json, ex.Message);
             invalidArgumentsCounter?.Add(1);
             PlannerLogEvents.LogDecisionInvalidArguments(logger, anomalyId, string.Empty);
             return null;
@@ -289,6 +300,8 @@ internal sealed class BatchProcessor : BackgroundService
 
         if (!OperationArgumentValidator.TryNormalize(decision, out var normalizedArguments))
         {
+            logger.LogDebug("TryNormalize failed for anomaly {AnomalyId}: operationType={OperationType} arguments={Arguments}",
+                anomalyId, decision.OperationType, string.Join(", ", decision.Arguments.Select(kv => $"{kv.Key}={kv.Value}")));
             invalidArgumentsCounter?.Add(1);
             PlannerLogEvents.LogDecisionInvalidArguments(logger, anomalyId, decision.OperationType);
             return null;
