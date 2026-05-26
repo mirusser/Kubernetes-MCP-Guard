@@ -8,28 +8,32 @@ internal sealed class PlannerDedupeStore
 
     public bool HasActivePlan(string anomalyId)
     {
-        if (activePlans.TryGetValue(anomalyId, out var state))
+        if (!activePlans.TryGetValue(anomalyId, out var state))
         {
-            state.LastAccessedAt = DateTimeOffset.UtcNow;
-            return true;
+            return false;
         }
 
-        return false;
+        if (state.IsExpired)
+        {
+            activePlans.TryRemove(anomalyId, out _);
+            return false;
+        }
+
+        state.LastAccessedAt = DateTimeOffset.UtcNow;
+        return true;
     }
 
-    public void TrackActivePlan(string anomalyId, string planId, DateTimeOffset proposedAt)
+    public void TrackActivePlan(string anomalyId, string planId, DateTimeOffset proposedAt, DateTimeOffset expiresAt)
     {
-        activePlans[anomalyId] = new ActivePlanState(anomalyId, planId, proposedAt);
+        activePlans[anomalyId] = new ActivePlanState(anomalyId, planId, proposedAt, expiresAt);
 
-        if (activePlans.Count < Capacity)
+        if (activePlans.Count >= Capacity)
         {
-            return;
-        }
-
-        var leastRecentlyUsed = activePlans.Values.MinBy(static plan => plan.LastAccessedAt);
-        if (leastRecentlyUsed is not null)
-        {
-            activePlans.TryRemove(leastRecentlyUsed.AnomalyId, out _);
+            var leastRecentlyUsed = activePlans.Values.MinBy(static p => p.LastAccessedAt);
+            if (leastRecentlyUsed is not null)
+            {
+                activePlans.TryRemove(leastRecentlyUsed.AnomalyId, out _);
+            }
         }
     }
 

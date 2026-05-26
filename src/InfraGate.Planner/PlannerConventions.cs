@@ -169,6 +169,16 @@ internal static class PlannerConventions
         public const string Resolved = "resolved";
         public const string UnsupportedKind = "unsupported_kind";
         public const string DedupeActivePlan = "dedupe:active_plan";
+        public const string DedupeOperationInBatch = "dedupe:operation_in_batch";
+    }
+
+    public static class Dedupe
+    {
+        /// <summary>TTL for a successfully proposed plan — matches plan validity window.</summary>
+        public static readonly TimeSpan ActivePlanTtl = TimeSpan.FromHours(1);
+
+        /// <summary>Backoff TTL when propose_plan fails — prevents hammering the gateway.</summary>
+        public static readonly TimeSpan FailedProposalBackoff = TimeSpan.FromMinutes(5);
     }
 
     public static class HttpClients

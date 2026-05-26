@@ -49,7 +49,7 @@ The repository also separates the generic approval lifecycle from the Kubernetes
 
 ## 🎬 Demo
 
-https://github.com/user-attachments/assets/7f43c34f-6516-4141-ad26-e488112d8afd
+https://github.com/user-attachments/assets/4e06b4ee-db80-4d74-96cc-38dfbb413042
 
 The walkthrough in [docs/demo-failing-deployment.md](docs/demo-failing-deployment.md) shows the full flow against a deliberately broken Deployment: diagnose, request a plan, approve in the browser, execute, verify, and inspect audit logs.
 

@@ -58,6 +58,9 @@ internal sealed class BatchProcessor : BackgroundService
         batchCts.CancelAfter(TimeSpan.FromSeconds(opts.BatchWallClockCapSeconds));
 
         var proposals = new List<RemediationProposal>();
+        // Tracks (operationType:namespace/name) pairs already proposed in this batch to avoid
+        // duplicate operations when multiple anomaly types fire for the same resource.
+        var batchOperationKeys = new HashSet<string>(StringComparer.Ordinal);
 
         try
         {
@@ -84,18 +87,31 @@ internal sealed class BatchProcessor : BackgroundService
                     continue;
                 }
 
+                var operationKey = BuildOperationKey(decision);
+                if (!batchOperationKeys.Add(operationKey))
+                {
+                    PlannerLogEvents.LogFilterDropped(logger, report.AnomalyId, PlannerConventions.FilterDropReasons.DedupeOperationInBatch);
+                    dedupeStore.TrackActivePlan(report.AnomalyId, string.Empty, DateTimeOffset.UtcNow,
+                        DateTimeOffset.UtcNow + PlannerConventions.Dedupe.ActivePlanTtl);
+                    continue;
+                }
+
                 PlannerLogEvents.LogDecisionCompleted(logger, report.AnomalyId, decision.OperationType);
 
+                var proposedAt = DateTimeOffset.UtcNow;
                 var planId = await ProposePlanAsync(report, decision, batchCts.Token).ConfigureAwait(false);
                 if (planId is null)
                 {
+                    // Track with short backoff so the same anomaly isn't retried on the next cycle.
+                    dedupeStore.TrackActivePlan(report.AnomalyId, string.Empty, proposedAt,
+                        proposedAt + PlannerConventions.Dedupe.FailedProposalBackoff);
                     continue;
                 }
 
                 PlannerLogEvents.LogProposePlanSucceeded(logger, report.AnomalyId, planId);
 
-                var proposedAt = DateTimeOffset.UtcNow;
-                dedupeStore.TrackActivePlan(report.AnomalyId, planId, proposedAt);
+                dedupeStore.TrackActivePlan(report.AnomalyId, planId, proposedAt,
+                    proposedAt + PlannerConventions.Dedupe.ActivePlanTtl);
                 proposals.Add(new RemediationProposal
                 {
                     PlanId = planId,
@@ -166,6 +182,17 @@ internal sealed class BatchProcessor : BackgroundService
         }
 
         return isAllowedKind;
+    }
+
+    private static string BuildOperationKey(RemediationDecision decision)
+    {
+        var ns = decision.Arguments.TryGetValue(PlannerConventions.ToolArguments.Namespace, out var nsVal)
+            ? nsVal as string ?? string.Empty
+            : string.Empty;
+        var name = decision.Arguments.TryGetValue(PlannerConventions.ToolArguments.Name, out var nameVal)
+            ? nameVal as string ?? string.Empty
+            : string.Empty;
+        return $"{decision.OperationType}:{ns}/{name}";
     }
 
     private async Task<RemediationDecision?> DecideAsync(

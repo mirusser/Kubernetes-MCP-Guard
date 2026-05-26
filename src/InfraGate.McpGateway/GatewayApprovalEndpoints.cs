@@ -14,6 +14,7 @@ internal static class GatewayApprovalEndpoints
     public static IEndpointRouteBuilder MapGatewayApprovalEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet(McpGatewayConventions.Approvals.LoginPath, Login);
+        endpoints.MapGet(McpGatewayConventions.Approvals.LogoutPath, Logout);
         endpoints.MapGet(
             McpGatewayConventions.Approvals.CodeRoute,
             async (
@@ -161,6 +162,11 @@ internal static class GatewayApprovalEndpoints
             new AuthenticationProperties { RedirectUri = returnUrl },
             [GatewayAuthConventions.Schemes.ApprovalOAuth]);
     }
+
+    private static IResult Logout() =>
+        Results.SignOut(
+            new AuthenticationProperties { RedirectUri = McpGatewayConventions.Approvals.CodeRoute },
+            [GatewayAuthConventions.Schemes.ApprovalCookie]);
 
     private static async Task<IResult?> ValidateAntiforgeryAsync(HttpContext context, IAntiforgery antiforgery)
     {
