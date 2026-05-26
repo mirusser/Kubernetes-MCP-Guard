@@ -1028,6 +1028,176 @@ public sealed class RunProfileCliTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_GenerateWithSetAgentFields_OverridesValues()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                observer: {}
+                planner: {}
+                executor: {}
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            [
+                "generate", "local-compose", "--config", configPath, "--output", outputPath,
+                "--set", "observer.aspnetcoreUrls=http://127.0.0.1:3102",
+                "--set", "observer.gatewayBaseUrl=http://gateway/mcp",
+                "--set", "observer.tokenEndpoint=http://keycloak/token",
+                "--set", "observer.oauthAuthority=http://keycloak/realms/infra-gate",
+                "--set", "observer.clientId=observer-client",
+                "--set", "observer.clientSecret=observer-secret",
+                "--set", "observer.scope=mcp:tools.readonly",
+                "--set", "observer.llmProvider=openai",
+                "--set", "observer.llmModel=gpt-test",
+                "--set", "observer.llmApiKey=observer-key",
+                "--set", "observer.cycleCadenceSeconds=30",
+                "--set", "observer.cycleWallClockCapSeconds=20",
+                "--set", "observer.maxToolIterations=5",
+                "--set", "observer.fileSinkRoot=/observer/out",
+                "--set", "observer.plannerHandoffUrl=http://planner/handoff",
+                "--set", "observer.observerHostPath=/observer/state",
+                "--set", "planner.aspnetcoreUrls=http://127.0.0.1:3103",
+                "--set", "planner.gatewayBaseUrl=http://gateway/mcp",
+                "--set", "planner.executorHandoffUrl=http://executor/handoff",
+                "--set", "planner.tokenEndpoint=http://keycloak/token",
+                "--set", "planner.clientId=planner-client",
+                "--set", "planner.clientSecret=planner-secret",
+                "--set", "planner.oauthAuthority=http://keycloak/realms/infra-gate",
+                "--set", "planner.scope=mcp:tools.propose",
+                "--set", "planner.llmProvider=openai",
+                "--set", "planner.llmModel=gpt-planner",
+                "--set", "planner.llmApiKey=planner-key",
+                "--set", "planner.anomalyWallClockCapSeconds=15",
+                "--set", "planner.batchWallClockCapSeconds=45",
+                "--set", "planner.maxToolIterations=8",
+                "--set", "planner.fileSinkRoot=/planner/out",
+                "--set", "planner.plannerHostPath=/planner/state",
+                "--set", "executor.aspnetcoreUrls=http://127.0.0.1:3104",
+                "--set", "executor.gatewayBaseUrl=http://gateway/mcp",
+                "--set", "executor.tokenEndpoint=http://keycloak/token",
+                "--set", "executor.clientId=executor-client",
+                "--set", "executor.clientSecret=executor-secret",
+                "--set", "executor.oauthAuthority=http://keycloak/realms/infra-gate",
+                "--set", "executor.scope=mcp:tools.execute",
+                "--set", "executor.concurrencyCap=2",
+                "--set", "executor.watchTimeoutSeconds=120",
+                "--set", "executor.executorHostPath=/executor/state"
+            ],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        Dictionary<string, string> expectedAssignments = new(StringComparer.Ordinal)
+        {
+            [RunProfileConventions.Env.ObserverAspnetcoreUrls] = "http://127.0.0.1:3102",
+            [RunProfileConventions.Env.ObserverGatewayBaseUrl] = "http://gateway/mcp",
+            [RunProfileConventions.Env.ObserverTokenEndpoint] = "http://keycloak/token",
+            [RunProfileConventions.Env.ObserverOAuthAuthority] = "http://keycloak/realms/infra-gate",
+            [RunProfileConventions.Env.ObserverClientId] = "observer-client",
+            [RunProfileConventions.Env.ObserverClientSecret] = "observer-secret",
+            [RunProfileConventions.Env.ObserverScope] = "mcp:tools.readonly",
+            [RunProfileConventions.Env.ObserverLlmProvider] = "openai",
+            [RunProfileConventions.Env.ObserverLlmModel] = "gpt-test",
+            [RunProfileConventions.Env.ObserverLlmApiKey] = "observer-key",
+            [RunProfileConventions.Env.ObserverCycleIntervalSeconds] = "30",
+            [RunProfileConventions.Env.ObserverCycleWallClockCapSeconds] = "20",
+            [RunProfileConventions.Env.ObserverMaxToolIterations] = "5",
+            [RunProfileConventions.Env.ObserverFileSinkRoot] = "/observer/out",
+            [RunProfileConventions.Env.ObserverPlannerHandoffUrl] = "http://planner/handoff",
+            [RunProfileConventions.Env.ObserverHostPath] = "/observer/state",
+            [RunProfileConventions.Env.PlannerAspnetcoreUrls] = "http://127.0.0.1:3103",
+            [RunProfileConventions.Env.PlannerGatewayBaseUrl] = "http://gateway/mcp",
+            [RunProfileConventions.Env.PlannerExecutorHandoffUrl] = "http://executor/handoff",
+            [RunProfileConventions.Env.PlannerTokenEndpoint] = "http://keycloak/token",
+            [RunProfileConventions.Env.PlannerClientId] = "planner-client",
+            [RunProfileConventions.Env.PlannerClientSecret] = "planner-secret",
+            [RunProfileConventions.Env.PlannerOAuthAuthority] = "http://keycloak/realms/infra-gate",
+            [RunProfileConventions.Env.PlannerOAuthScope] = "mcp:tools.propose",
+            [RunProfileConventions.Env.PlannerLlmProvider] = "openai",
+            [RunProfileConventions.Env.PlannerLlmModel] = "gpt-planner",
+            [RunProfileConventions.Env.PlannerLlmApiKey] = "planner-key",
+            [RunProfileConventions.Env.PlannerAnomalyWallClockCapSeconds] = "15",
+            [RunProfileConventions.Env.PlannerBatchWallClockCapSeconds] = "45",
+            [RunProfileConventions.Env.PlannerMaxToolIterations] = "8",
+            [RunProfileConventions.Env.PlannerFileSinkRoot] = "/planner/out",
+            [RunProfileConventions.Env.PlannerHostPath] = "/planner/state",
+            [RunProfileConventions.Env.ExecutorAspnetcoreUrls] = "http://127.0.0.1:3104",
+            [RunProfileConventions.Env.ExecutorGatewayBaseUrl] = "http://gateway/mcp",
+            [RunProfileConventions.Env.ExecutorTokenEndpoint] = "http://keycloak/token",
+            [RunProfileConventions.Env.ExecutorClientId] = "executor-client",
+            [RunProfileConventions.Env.ExecutorClientSecret] = "executor-secret",
+            [RunProfileConventions.Env.ExecutorOAuthAuthority] = "http://keycloak/realms/infra-gate",
+            [RunProfileConventions.Env.ExecutorOAuthScope] = "mcp:tools.execute",
+            [RunProfileConventions.Env.ExecutorConcurrencyCap] = "2",
+            [RunProfileConventions.Env.ExecutorWatchTimeoutSeconds] = "120",
+            [RunProfileConventions.Env.ExecutorHostPath] = "/executor/state"
+        };
+
+        foreach (KeyValuePair<string, string> expectedAssignment in expectedAssignments)
+        {
+            Assert.Contains(
+                $"{expectedAssignment.Key}={expectedAssignment.Value}",
+                content,
+                StringComparison.Ordinal);
+        }
+    }
+
+    [Theory]
+    [InlineData("observer.unknownField=value")]
+    [InlineData("planner.unknownField=value")]
+    [InlineData("executor.unknownField=value")]
+    public async Task ExecuteAsync_GenerateWithSetUnknownAgentField_ReturnsError(string overrideArgument)
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                observer: {}
+                planner: {}
+                executor: {}
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--output", outputPath, "--set", overrideArgument],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        string overridePath = overrideArgument[..overrideArgument.IndexOf('=', StringComparison.Ordinal)];
+        Assert.Contains(overridePath, error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_GenerateWithMultipleSet_AllOverridesApplied()
     {
         string configPath = await WriteConfigAsync(
