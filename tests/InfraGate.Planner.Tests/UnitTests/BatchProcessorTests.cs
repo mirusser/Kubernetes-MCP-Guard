@@ -462,15 +462,21 @@ public sealed class BatchProcessorTests
             Target = anomaly1.Target with { Name = "other-deployment" },
         };
         var batch = CreateBatch(anomaly1, anomaly2);
-        var chatClient = new FixtureChatClient("""
+        int callIndex = 0;
+        var chatClient = new FixtureChatClient(messages =>
         {
-          "operationType": "restart_deployment",
-          "arguments": {
-            "name": "nginx-demo",
-            "namespace": "mcp-nginx-demo"
-          }
-        }
-        """);
+            int index = Interlocked.Increment(ref callIndex);
+            string name = index == 1 ? "nginx-demo" : "other-deployment";
+            return new ChatResponse(new ChatMessage(ChatRole.Assistant, $$"""
+            {
+              "operationType": "restart_deployment",
+              "arguments": {
+                "name": "{{name}}",
+                "namespace": "mcp-nginx-demo"
+              }
+            }
+            """));
+        });
         var mcpClient = Substitute.For<IPlannerMcpClient>();
         mcpClient.CallToolAsync(
                 PlannerConventions.ToolNames.ProposePlan,

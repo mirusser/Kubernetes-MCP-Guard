@@ -1679,7 +1679,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             {
                 await listenTask.WaitAsync(TimeSpan.FromSeconds(5));
             }
-            catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or TimeoutException)
+            catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or InvalidOperationException or TimeoutException)
             {
             }
         }
@@ -1693,7 +1693,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 {
                     context = await listener.GetContextAsync();
                 }
-                catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException)
+                catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or InvalidOperationException)
                 {
                     break;
                 }
@@ -1789,7 +1789,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             {
                 await listenTask.WaitAsync(TimeSpan.FromSeconds(5));
             }
-            catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or TimeoutException)
+            catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or InvalidOperationException or TimeoutException)
             {
             }
         }
@@ -1803,7 +1803,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 {
                     context = await listener.GetContextAsync();
                 }
-                catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException)
+                catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or InvalidOperationException)
                 {
                     break;
                 }

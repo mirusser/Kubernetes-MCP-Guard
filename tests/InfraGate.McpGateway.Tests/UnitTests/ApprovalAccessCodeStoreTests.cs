@@ -64,6 +64,82 @@ public sealed class ApprovalAccessCodeStoreTests
         Assert.Equal(63, results.Count(result => !result.Succeeded));
     }
 
+    [Fact]
+    public async Task GenerateAsync_EmptyChallengeId_ThrowsArgumentException()
+    {
+        var store = new InMemoryApprovalAccessCodeStore();
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            store.GenerateAsync(string.Empty, TimeSpan.FromMinutes(5), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ZeroTtl_ThrowsArgumentOutOfRangeException()
+    {
+        var store = new InMemoryApprovalAccessCodeStore();
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            store.GenerateAsync(ChallengeId, TimeSpan.Zero, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_NegativeTtl_ThrowsArgumentOutOfRangeException()
+    {
+        var store = new InMemoryApprovalAccessCodeStore();
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            store.GenerateAsync(ChallengeId, TimeSpan.FromSeconds(-1), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ConsumeAsync_UnknownCode_ReturnsInvalid()
+    {
+        var store = new InMemoryApprovalAccessCodeStore();
+
+        var result = await store.ConsumeAsync("ABCDEFGH", CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ApprovalConventions.AccessCodes.ConsumeResultReasonCodes.Invalid, result.ReasonCode);
+    }
+
+    [Theory]
+    [InlineData("not-valid!")]
+    [InlineData("")]
+    [InlineData("ABC")]
+    [InlineData("ABCDEFGHI")]
+    public async Task ConsumeAsync_InvalidCodeFormat_ReturnsInvalid(string code)
+    {
+        var store = new InMemoryApprovalAccessCodeStore();
+
+        var result = await store.ConsumeAsync(code, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(ApprovalConventions.AccessCodes.ConsumeResultReasonCodes.Invalid, result.ReasonCode);
+    }
+
+    [Fact]
+    public async Task ConsumeAsync_ValidCodeSucceeds_ReturnsCorrectChallengeId()
+    {
+        var store = new InMemoryApprovalAccessCodeStore();
+        var code = await store.GenerateAsync(ChallengeId, TimeSpan.FromMinutes(5), CancellationToken.None);
+
+        var result = await store.ConsumeAsync(code.Code, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(ChallengeId, result.ChallengeId);
+    }
+
+    [Fact]
+    public async Task ConsumeAsync_CodeWithLeadingTrailingWhitespace_NormalizesAndSucceeds()
+    {
+        var store = new InMemoryApprovalAccessCodeStore();
+        var code = await store.GenerateAsync(ChallengeId, TimeSpan.FromMinutes(5), CancellationToken.None);
+
+        var result = await store.ConsumeAsync($"  {code.Code}  ", CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+    }
+
     private sealed class TestTimeProvider(DateTimeOffset now) : TimeProvider
     {
         private DateTimeOffset current = now;

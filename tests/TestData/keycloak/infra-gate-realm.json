@@ -361,6 +361,19 @@
             "access.token.claim": "true",
             "userinfo.token.claim": "false"
           }
+        },
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "true",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "claim.name": "groups",
+            "userinfo.token.claim": "false"
+          }
         }
       ]
     },
@@ -657,6 +670,9 @@
       ],
       "realmRoles": [
         "default-roles-infra-gate"
+      ],
+      "groups": [
+        "/kubernetes-operators"
       ]
     },
     {
@@ -675,6 +691,9 @@
       ],
       "realmRoles": [
         "default-roles-infra-gate"
+      ],
+      "groups": [
+        "/kubernetes-operators"
       ]
     },
     {

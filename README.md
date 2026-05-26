@@ -31,6 +31,11 @@ Agents can inspect a narrow cluster surface and propose changes, but writes are 
 
 <sub><em>Kubernetes MCP Guard is internally named **InfraGate**. </em></sub>
 
+## 🎬 Demo
+
+https://github.com/user-attachments/assets/4e06b4ee-db80-4d74-96cc-38dfbb413042
+
+The walkthrough in [docs/demo-failing-deployment.md](docs/demo-failing-deployment.md) shows the full flow against a deliberately broken Deployment: diagnose, request a plan, approve in the browser, execute, verify, and inspect audit logs.
 
 ## 🧠 Core Ideas
 
@@ -46,12 +51,6 @@ Kubernetes MCP Guard explores a practical safety pattern for AI-assisted operati
 The repository also separates the generic approval lifecycle from the Kubernetes adapter, so the core language is not tied to one infrastructure domain. 
 
 <sub><em>See [CONTEXT.md](CONTEXT.md), [docs/mutation-approval-profile.md](docs/mutation-approval-profile.md), [docs/mutation-approval-flow.md](docs/mutation-approval-flow.md).</em></sub>
-
-## 🎬 Demo
-
-https://github.com/user-attachments/assets/4e06b4ee-db80-4d74-96cc-38dfbb413042
-
-The walkthrough in [docs/demo-failing-deployment.md](docs/demo-failing-deployment.md) shows the full flow against a deliberately broken Deployment: diagnose, request a plan, approve in the browser, execute, verify, and inspect audit logs.
 
 ## 🗺️ Architecture
 
@@ -320,9 +319,9 @@ Use specific release tags for stable demos. The `:dev` tag tracks the developmen
 - [src/InfraGate.Approvals/README.md](src/InfraGate.Approvals/README.md): generic approval storage, challenges, grants, gates, and audit payloads.
 - [src/InfraGate.KubernetesAdapter/README.md](src/InfraGate.KubernetesAdapter/README.md): Kubernetes mutation intent, evidence, policy, freshness checks, and execution.
 - [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md): private Kubernetes MCP server and typed tool surface.
-- [src/InfraGate.Observer/README.md](src/InfraGate.Observer/README.md): LLM-driven anomaly observer — periodic cluster inspection and Anomaly Report emission.
-- [src/InfraGate.Planner/README.md](src/InfraGate.Planner/README.md): LLM-driven remediation planner — Anomaly Report consumption and approval-pending plan proposal.
-- [src/InfraGate.Executor/README.md](src/InfraGate.Executor/README.md): deterministic remediation executor — approval wait and approved-plan execution.
+- [src/InfraGate.Observer/README.md](src/InfraGate.Observer/README.md): LLM-driven anomaly observer.
+- [src/InfraGate.Planner/README.md](src/InfraGate.Planner/README.md): LLM-driven remediation planner.
+- [src/InfraGate.Executor/README.md](src/InfraGate.Executor/README.md): deterministic remediation executor.
 
 ## ⚖️ Boundaries And Non-Goals
 

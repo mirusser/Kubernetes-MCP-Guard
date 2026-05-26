@@ -23,9 +23,9 @@ public sealed class AnomalyObserverConventionsTests
     }
 
     [Fact]
-    public void WallClockCapSeconds_Is20()
+    public void WallClockCapSeconds_Is120()
     {
-        Assert.Equal(20, AnomalyObserverConventions.WallClockCapSeconds);
+        Assert.Equal(120, AnomalyObserverConventions.WallClockCapSeconds);
     }
 
     [Fact]
@@ -35,15 +35,15 @@ public sealed class AnomalyObserverConventionsTests
     }
 
     [Fact]
-    public void MinWallClockCapSeconds_Is1()
+    public void MinWallClockCapSeconds_Is10()
     {
-        Assert.Equal(1, AnomalyObserverConventions.MinWallClockCapSeconds);
+        Assert.Equal(10, AnomalyObserverConventions.MinWallClockCapSeconds);
     }
 
     [Fact]
-    public void MaxWallClockCapSeconds_Is30()
+    public void MaxWallClockCapSeconds_Is300()
     {
-        Assert.Equal(30, AnomalyObserverConventions.MaxWallClockCapSeconds);
+        Assert.Equal(300, AnomalyObserverConventions.MaxWallClockCapSeconds);
     }
 
     [Fact]
