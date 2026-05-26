@@ -70,6 +70,8 @@ dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- generate "$PROF
   --set "host.guardAuditHostPath=${REPO_ROOT}/.mcp-guardrails" \
   --set "host.dataProtectionHostPath=${REPO_ROOT}/.mcp-dataprotection-keys" \
   --set "host.configHostPath=${APPSETTINGS_HOST_PATH}" \
+  --set "observer.observerHostPath=${REPO_ROOT}/.mcp-observer/findings" \
+  --set "planner.plannerHostPath=${REPO_ROOT}/.mcp-remediation/proposals" \
   ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
   --output "$OUTPUT"
 
@@ -77,3 +79,14 @@ dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- generate "$PROF
   --format appsettings \
   ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
   --output "$APPSETTINGS_OUTPUT"
+
+# Pre-create agent data directories owned by the current user so that containers
+# running as a non-root APP_UID can write to them. If Docker creates these
+# directories first (on volume mount) they land as root:root 755 and become
+# unwritable by the container user.
+OBSERVER_FINDINGS="${REPO_ROOT}/.mcp-observer/findings"
+PLANNER_PROPOSALS="${REPO_ROOT}/.mcp-remediation/proposals"
+mkdir -p "$OBSERVER_FINDINGS" "$PLANNER_PROPOSALS"
+chmod 777 "$OBSERVER_FINDINGS" "$PLANNER_PROPOSALS" 2>/dev/null || \
+  echo "Warning: could not chmod agent data directories (already owned by root?)." \
+       "Run: sudo chmod 777 ${OBSERVER_FINDINGS} ${PLANNER_PROPOSALS}" >&2

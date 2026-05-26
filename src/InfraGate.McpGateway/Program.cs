@@ -7,6 +7,7 @@ using Npgsql;
 using InfraGate.McpGateway.Auth;
 using InfraGate.ClientCredentials;
 using InfraGate.McpGateway.DownstreamAuth;
+using InfraGate.McpGateway.Email;
 using InfraGate.McpGateway.Notifications;
 using InfraGate.Observability;
 using InfraGate.RuntimeSafety;
@@ -50,11 +51,18 @@ builder.Services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
 builder.Services.AddSingleton<GuardedToolRunner>();
 builder.Services.AddPostgresApprovalPersistence(
     builder.Configuration[McpGatewayConventions.ConfigurationKeys.ApprovalPostgresConnectionString]);
-builder.Services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
+builder.Services.AddSingleton<IAuthorizationCheck, ApprovalPolicyAuthorizationCheck>();
 builder.Services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
 builder.Services.AddSingleton<IApprovalPageRenderer>(sp =>
     new ApprovalPageRenderer(sp.GetRequiredService<IServiceProvider>(), sp.GetRequiredService<ILoggerFactory>()));
 builder.Services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
+builder.Services.AddSingleton(options.Smtp ?? new SmtpApprovalEmailOptions(
+    string.Empty,
+    SmtpApprovalEmailOptions.DefaultPort,
+    string.Empty));
+builder.Services.AddSingleton<ISmtpClientFactory, SmtpClientFactory>();
+builder.Services.AddSingleton<IApprovalEmailSender, SmtpApprovalEmailSender>();
+builder.Services.AddSingleton<IProposePlanHandler, ProposePlanHandler>();
 builder.Services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
 builder.Services.AddKubernetesAdapter();
 builder.Services.AddSingleton<DownstreamToolRegistry>();

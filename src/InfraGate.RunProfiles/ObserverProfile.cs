@@ -4,6 +4,7 @@ internal sealed record class ObserverProfile(
     string? AspnetcoreUrls,
     string? GatewayBaseUrl,
     string? TokenEndpoint,
+    string? OAuthAuthority,
     string? ClientId,
     string? ClientSecret,
     string? Scope,
@@ -14,4 +15,6 @@ internal sealed record class ObserverProfile(
     string? CycleWallClockCapSeconds,
     string? MaxToolIterations,
     string? FileSinkRoot,
-    string? ObserverHostPath);
+    string? PlannerHandoffUrl,
+    string? ObserverHostPath,
+    IReadOnlyList<string>? AllowedNamespaces);

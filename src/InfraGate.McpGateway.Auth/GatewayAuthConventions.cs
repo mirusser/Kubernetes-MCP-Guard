@@ -21,6 +21,8 @@ public static class GatewayAuthConventions
     public const string DefaultOAuthResource = "http://127.0.0.1:3001/mcp";
     public const string DefaultOAuthScope = "mcp:tools";
     public const string DefaultReadOnlyOAuthScope = "mcp:tools.readonly";
+    public const string DefaultProposeOAuthScope = "mcp:tools.propose";
+    public const string DefaultExecuteOAuthScope = "mcp:tools.execute";
     public const string DefaultApprovalOAuthClientId = "infra-gate-approval-ui";
     public const string AuthorizationScheme = "Bearer";
 
@@ -86,6 +88,7 @@ public static class GatewayAuthConventions
         public const string Subject = "sub";
         public const string ClientId = "client_id";
         public const string AuthorizedParty = "azp";
+        public const string Groups = "groups";
     }
 
     public static class Audit
@@ -98,6 +101,8 @@ public static class GatewayAuthConventions
     public static class ServiceClients
     {
         public const string ObserverClientId = "infra-gate-observer";
+        public const string PlannerClientId = "infra-gate-planner";
+        public const string ExecutorClientId = "infra-gate-executor";
     }
 
     public static class Approvals

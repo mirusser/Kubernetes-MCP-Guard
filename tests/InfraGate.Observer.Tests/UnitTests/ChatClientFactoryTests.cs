@@ -1,5 +1,5 @@
+using InfraGate.AgentLlm;
 using InfraGate.Observer.Llm;
-using Microsoft.Extensions.AI;
 
 namespace InfraGate.Observer.Tests.UnitTests;
 

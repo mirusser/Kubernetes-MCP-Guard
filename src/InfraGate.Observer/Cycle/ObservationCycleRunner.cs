@@ -380,14 +380,49 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
     private static string? ExtractJsonArray(string text)
     {
         var startIndex = text.IndexOf('[', StringComparison.Ordinal);
-        var endIndex = text.LastIndexOf(']');
-
-        if (startIndex < 0 || endIndex < 0 || endIndex <= startIndex)
+        if (startIndex < 0)
         {
             return null;
         }
 
-        return text[startIndex..(endIndex + 1)];
+        var depth = 0;
+        var inString = false;
+        var escape = false;
+
+        for (var i = startIndex; i < text.Length; i++)
+        {
+            var c = text[i];
+
+            if (escape)
+            {
+                escape = false;
+                continue;
+            }
+
+            if (c == '\\' && inString)
+            {
+                escape = true;
+                continue;
+            }
+
+            if (c == '"')
+            {
+                inString = !inString;
+                continue;
+            }
+
+            if (inString) continue;
+
+            if (c == '[' || c == '{') depth++;
+            else if (c == ']' || c == '}') depth--;
+
+            if (depth == 0)
+            {
+                return text[startIndex..(i + 1)];
+            }
+        }
+
+        return null;
     }
 
     private const string ToolCallPrefix = "TOOL_CALL:";

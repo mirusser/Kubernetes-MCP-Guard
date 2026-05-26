@@ -2,9 +2,11 @@
   <Folder Name="/src/">
     <Project Path="src/InfraGate.Approvals/InfraGate.Approvals.csproj" />
     <Project Path="src/InfraGate.Approvals.Postgres/InfraGate.Approvals.Postgres.csproj" />
+    <Project Path="src/InfraGate.AgentLlm/InfraGate.AgentLlm.csproj" />
     <Project Path="src/InfraGate.ClientCredentials/InfraGate.ClientCredentials.csproj" />
     <Project Path="src/InfraGate.DownstreamAuth/InfraGate.DownstreamAuth.csproj" />
     <Project Path="src/InfraGate.Observer.Contracts/InfraGate.Observer.Contracts.csproj" />
+    <Project Path="src/InfraGate.Remediation.Contracts/InfraGate.Remediation.Contracts.csproj" />
     <Project Path="src/InfraGate.KubernetesAdapter/InfraGate.KubernetesAdapter.csproj" />
     <Project Path="src/InfraGate.RuntimeSafety/InfraGate.RuntimeSafety.csproj" />
     <Project Path="src/InfraGate.Observability/InfraGate.Observability.csproj" />
@@ -14,11 +16,14 @@
     <Project Path="src/InfraGate.McpGateway/InfraGate.McpGateway.csproj" />
     <Project Path="src/InfraGate.McpServer/InfraGate.McpServer.csproj" />
     <Project Path="src/InfraGate.Observer/InfraGate.Observer.csproj" />
+    <Project Path="src/InfraGate.Planner/InfraGate.Planner.csproj" />
+    <Project Path="src/InfraGate.Executor/InfraGate.Executor.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/InfraGate.ClientCredentials.Tests/InfraGate.ClientCredentials.Tests.csproj" />
     <Project Path="tests/InfraGate.DownstreamAuth.Tests/InfraGate.DownstreamAuth.Tests.csproj" />
     <Project Path="tests/InfraGate.Observer.Contracts.Tests/InfraGate.Observer.Contracts.Tests.csproj" />
+    <Project Path="tests/InfraGate.Remediation.Contracts.Tests/InfraGate.Remediation.Contracts.Tests.csproj" />
     <Project Path="tests/InfraGate.Approvals.Postgres.Tests/InfraGate.Approvals.Postgres.Tests.csproj" />
     <Project Path="tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj" />
     <Project Path="tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj" />
@@ -29,8 +34,13 @@
     <Project Path="tests/InfraGate.ApprovalUi.Tests/InfraGate.ApprovalUi.Tests.csproj" />
     <Project Path="tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj" />
     <Project Path="tests/InfraGate.Observer.Tests/InfraGate.Observer.Tests.csproj" />
+    <Project Path="tests/InfraGate.Planner.Tests/InfraGate.Planner.Tests.csproj" />
+    <Project Path="tests/InfraGate.Executor.Tests/InfraGate.Executor.Tests.csproj" />
     <Project Path="tests/InfraGate.Observer.IntegrationTests/InfraGate.Observer.IntegrationTests.csproj" />
     <Project Path="tests/InfraGate.Observer.E2E.Tests/InfraGate.Observer.E2E.Tests.csproj" />
+    <Project Path="tests/InfraGate.Planner.IntegrationTests/InfraGate.Planner.IntegrationTests.csproj" />
+    <Project Path="tests/InfraGate.Executor.IntegrationTests/InfraGate.Executor.IntegrationTests.csproj" />
+    <Project Path="tests/InfraGate.Remediation.E2E.Tests/InfraGate.Remediation.E2E.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/approval-postgres-migrations/ApplyApprovalPostgresMigrations.csproj" />

@@ -23,6 +23,8 @@ internal static class AppSettingsRenderer
             WriteApproval(writer, profile);
             WriteKubernetes(writer, profile);
             WriteObserver(writer, profile);
+            WritePlanner(writer, profile);
+            WriteExecutor(writer, profile);
             writer.WriteEndObject();
             writer.WriteEndObject();
         }
@@ -188,6 +190,82 @@ internal static class AppSettingsRenderer
         }
     }
 
+    private static void WritePlanner(Utf8JsonWriter writer, RunProfile profile)
+    {
+        if (profile.Planner is null)
+        {
+            return;
+        }
+
+        PlannerProfile planner = profile.Planner;
+        bool hasAnyValue =
+            !string.IsNullOrEmpty(planner.GatewayBaseUrl) ||
+            !string.IsNullOrEmpty(planner.ExecutorHandoffUrl) ||
+            !string.IsNullOrEmpty(planner.TokenEndpoint) ||
+            !string.IsNullOrEmpty(planner.ClientId) ||
+            !string.IsNullOrEmpty(planner.ClientSecret) ||
+            !string.IsNullOrEmpty(planner.LlmProvider) ||
+            !string.IsNullOrEmpty(planner.LlmModel) ||
+            !string.IsNullOrEmpty(planner.LlmApiKey) ||
+            !string.IsNullOrEmpty(planner.AnomalyWallClockCapSeconds) ||
+            !string.IsNullOrEmpty(planner.BatchWallClockCapSeconds) ||
+            !string.IsNullOrEmpty(planner.MaxToolIterations) ||
+            !string.IsNullOrEmpty(planner.FileSinkRoot);
+
+        if (!hasAnyValue)
+        {
+            return;
+        }
+
+        writer.WritePropertyName(RunProfileConventions.AppSettings.Planner);
+        writer.WriteStartObject();
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.PlannerGatewayBaseUrl, planner.GatewayBaseUrl);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.PlannerExecutorHandoffUrl, planner.ExecutorHandoffUrl);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.PlannerTokenEndpoint, planner.TokenEndpoint);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.PlannerClientId, planner.ClientId);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.PlannerClientSecret, planner.ClientSecret);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.PlannerLlmProvider, planner.LlmProvider);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.PlannerLlmModel, planner.LlmModel);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.PlannerLlmApiKey, planner.LlmApiKey);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.PlannerAnomalyWallClockCapSeconds, planner.AnomalyWallClockCapSeconds);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.PlannerBatchWallClockCapSeconds, planner.BatchWallClockCapSeconds);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.PlannerMaxToolIterations, planner.MaxToolIterations);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.PlannerFileSinkRoot, planner.FileSinkRoot);
+        writer.WriteEndObject();
+    }
+
+    private static void WriteExecutor(Utf8JsonWriter writer, RunProfile profile)
+    {
+        if (profile.Executor is null)
+        {
+            return;
+        }
+
+        ExecutorProfile executor = profile.Executor;
+        bool hasAnyValue =
+            !string.IsNullOrEmpty(executor.GatewayBaseUrl) ||
+            !string.IsNullOrEmpty(executor.TokenEndpoint) ||
+            !string.IsNullOrEmpty(executor.ClientId) ||
+            !string.IsNullOrEmpty(executor.ClientSecret) ||
+            !string.IsNullOrEmpty(executor.ConcurrencyCap) ||
+            !string.IsNullOrEmpty(executor.WatchTimeoutSeconds);
+
+        if (!hasAnyValue)
+        {
+            return;
+        }
+
+        writer.WritePropertyName(RunProfileConventions.AppSettings.Executor);
+        writer.WriteStartObject();
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ExecutorGatewayBaseUrl, executor.GatewayBaseUrl);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ExecutorTokenEndpoint, executor.TokenEndpoint);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ExecutorClientId, executor.ClientId);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ExecutorClientSecret, executor.ClientSecret);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ExecutorConcurrencyCap, executor.ConcurrencyCap);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ExecutorWatchTimeoutSeconds, executor.WatchTimeoutSeconds);
+        writer.WriteEndObject();
+    }
+
     private static void WriteObserver(Utf8JsonWriter writer, RunProfile profile)
     {
         if (profile.Observer is null)
@@ -208,7 +286,9 @@ internal static class AppSettingsRenderer
             !string.IsNullOrEmpty(observer.CycleCadenceSeconds) ||
             !string.IsNullOrEmpty(observer.CycleWallClockCapSeconds) ||
             !string.IsNullOrEmpty(observer.MaxToolIterations) ||
-            !string.IsNullOrEmpty(observer.FileSinkRoot);
+            !string.IsNullOrEmpty(observer.FileSinkRoot) ||
+            !string.IsNullOrEmpty(observer.PlannerHandoffUrl) ||
+            observer.AllowedNamespaces?.Count > 0;
 
         if (!hasAnyValue)
         {
@@ -229,6 +309,19 @@ internal static class AppSettingsRenderer
         WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverCycleWallClockCapSeconds, observer.CycleWallClockCapSeconds);
         WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverMaxToolIterations, observer.MaxToolIterations);
         WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverFileSinkRoot, observer.FileSinkRoot);
+        WriteStringIfSet(writer, RunProfileConventions.AppSettings.ObserverPlannerHandoffUrl, observer.PlannerHandoffUrl);
+
+        if (observer.AllowedNamespaces?.Count > 0)
+        {
+            writer.WritePropertyName(RunProfileConventions.AppSettings.AllowedNamespaces);
+            writer.WriteStartArray();
+            foreach (string ns in observer.AllowedNamespaces)
+            {
+                writer.WriteStringValue(ns);
+            }
+            writer.WriteEndArray();
+        }
+
         writer.WriteEndObject();
     }
 

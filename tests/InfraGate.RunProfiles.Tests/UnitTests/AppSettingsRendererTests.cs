@@ -92,6 +92,8 @@ public sealed class AppSettingsRendererTests
             [],
             null,
             null,
+            null,
+            null,
             null);
 
         string result = AppSettingsRenderer.Render("config.yaml", profile);
@@ -113,6 +115,8 @@ public sealed class AppSettingsRendererTests
             null,
             null,
             [new DomainAdapterProfile("k8s", "kubernetes", null)],
+            null,
+            null,
             null,
             null,
             null);
@@ -265,7 +269,10 @@ public sealed class AppSettingsRendererTests
                 null,
                 null,
                 null,
+                null,
                 "60",
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -280,7 +287,86 @@ public sealed class AppSettingsRendererTests
         Assert.False(observer.TryGetProperty("CycleCadenceSeconds", out _));
     }
 
+    [Fact]
+    public void Render_PlannerGatewayBaseUrlPresent_WritesPlannerSection()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            Planner = new PlannerProfile(
+                null,
+                "http://gateway:3001/mcp",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null)
+        };
+
+        string result = AppSettingsRenderer.Render("config.yaml", profile);
+
+        using var doc = JsonDocument.Parse(result);
+        JsonElement planner = doc.RootElement.GetProperty("InfraGate").GetProperty("Planner");
+        Assert.Equal("http://gateway:3001/mcp", planner.GetProperty("GatewayBaseUrl").GetString());
+    }
+
+    [Fact]
+    public void Render_ExecutorConcurrencyCapPresent_WritesExecutorSection()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            Executor = new ExecutorProfile(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "64",
+                null,
+                null)
+        };
+
+        string result = AppSettingsRenderer.Render("config.yaml", profile);
+
+        using var doc = JsonDocument.Parse(result);
+        JsonElement executor = doc.RootElement.GetProperty("InfraGate").GetProperty("Executor");
+        Assert.Equal("64", executor.GetProperty("ConcurrencyCap").GetString());
+    }
+
+    [Fact]
+    public void Render_NullPlanner_OmitsPlannerSection()
+    {
+        var profile = CreateMinimalProfile();
+
+        string result = AppSettingsRenderer.Render("config.yaml", profile);
+
+        using var doc = JsonDocument.Parse(result);
+        Assert.False(doc.RootElement.GetProperty("InfraGate").TryGetProperty("Planner", out _));
+    }
+
+    [Fact]
+    public void Render_NullExecutor_OmitsExecutorSection()
+    {
+        var profile = CreateMinimalProfile();
+
+        string result = AppSettingsRenderer.Render("config.yaml", profile);
+
+        using var doc = JsonDocument.Parse(result);
+        Assert.False(doc.RootElement.GetProperty("InfraGate").TryGetProperty("Executor", out _));
+    }
+
     private static RunProfile CreateMinimalProfile() =>
+
         new(
             "test",
             "mcp-stdio",
@@ -291,6 +377,8 @@ public sealed class AppSettingsRendererTests
             null,
             [new DomainAdapterProfile("k8s", "kubernetes",
                 new KubernetesAdapterProfile("/run/kube/config", ["default"]))],
+            null,
+            null,
             null,
             null,
             null);

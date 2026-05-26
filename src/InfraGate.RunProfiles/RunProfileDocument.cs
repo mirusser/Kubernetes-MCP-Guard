@@ -27,7 +27,9 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             GenericApprovalCore = MergeGenericApprovalCore(profile.GenericApprovalCore, defaults.GenericApprovalCore),
             Host = MergeHost(profile.Host, defaults.Host),
             DownstreamAuth = MergeDownstreamAuth(profile.DownstreamAuth, defaults.DownstreamAuth),
-            Observer = MergeObserver(profile.Observer, defaults.Observer)
+            Observer = MergeObserver(profile.Observer, defaults.Observer),
+            Planner = MergePlanner(profile.Planner, defaults.Planner),
+            Executor = MergeExecutor(profile.Executor, defaults.Executor)
         };
     }
 
@@ -136,6 +138,7 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             AspnetcoreUrls = profile.AspnetcoreUrls ?? defaults.AspnetcoreUrls,
             GatewayBaseUrl = profile.GatewayBaseUrl ?? defaults.GatewayBaseUrl,
             TokenEndpoint = profile.TokenEndpoint ?? defaults.TokenEndpoint,
+            OAuthAuthority = profile.OAuthAuthority ?? defaults.OAuthAuthority,
             ClientId = profile.ClientId ?? defaults.ClientId,
             ClientSecret = profile.ClientSecret ?? defaults.ClientSecret,
             Scope = profile.Scope ?? defaults.Scope,
@@ -146,7 +149,52 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             CycleWallClockCapSeconds = profile.CycleWallClockCapSeconds ?? defaults.CycleWallClockCapSeconds,
             MaxToolIterations = profile.MaxToolIterations ?? defaults.MaxToolIterations,
             FileSinkRoot = profile.FileSinkRoot ?? defaults.FileSinkRoot,
+            PlannerHandoffUrl = profile.PlannerHandoffUrl ?? defaults.PlannerHandoffUrl,
             ObserverHostPath = profile.ObserverHostPath ?? defaults.ObserverHostPath
+        };
+    }
+
+    private static PlannerProfile? MergePlanner(PlannerProfile? profile, PlannerProfile? defaults)
+    {
+        if (profile is null) return null;
+        if (defaults is null) return profile;
+        return profile with
+        {
+            AspnetcoreUrls = profile.AspnetcoreUrls ?? defaults.AspnetcoreUrls,
+            GatewayBaseUrl = profile.GatewayBaseUrl ?? defaults.GatewayBaseUrl,
+            ExecutorHandoffUrl = profile.ExecutorHandoffUrl ?? defaults.ExecutorHandoffUrl,
+            TokenEndpoint = profile.TokenEndpoint ?? defaults.TokenEndpoint,
+            ClientId = profile.ClientId ?? defaults.ClientId,
+            ClientSecret = profile.ClientSecret ?? defaults.ClientSecret,
+            OAuthAuthority = profile.OAuthAuthority ?? defaults.OAuthAuthority,
+            OAuthScope = profile.OAuthScope ?? defaults.OAuthScope,
+            LlmProvider = profile.LlmProvider ?? defaults.LlmProvider,
+            LlmModel = profile.LlmModel ?? defaults.LlmModel,
+            LlmApiKey = profile.LlmApiKey ?? defaults.LlmApiKey,
+            AnomalyWallClockCapSeconds = profile.AnomalyWallClockCapSeconds ?? defaults.AnomalyWallClockCapSeconds,
+            BatchWallClockCapSeconds = profile.BatchWallClockCapSeconds ?? defaults.BatchWallClockCapSeconds,
+            MaxToolIterations = profile.MaxToolIterations ?? defaults.MaxToolIterations,
+            FileSinkRoot = profile.FileSinkRoot ?? defaults.FileSinkRoot,
+            PlannerHostPath = profile.PlannerHostPath ?? defaults.PlannerHostPath
+        };
+    }
+
+    private static ExecutorProfile? MergeExecutor(ExecutorProfile? profile, ExecutorProfile? defaults)
+    {
+        if (profile is null) return null;
+        if (defaults is null) return profile;
+        return profile with
+        {
+            AspnetcoreUrls = profile.AspnetcoreUrls ?? defaults.AspnetcoreUrls,
+            GatewayBaseUrl = profile.GatewayBaseUrl ?? defaults.GatewayBaseUrl,
+            TokenEndpoint = profile.TokenEndpoint ?? defaults.TokenEndpoint,
+            ClientId = profile.ClientId ?? defaults.ClientId,
+            ClientSecret = profile.ClientSecret ?? defaults.ClientSecret,
+            OAuthAuthority = profile.OAuthAuthority ?? defaults.OAuthAuthority,
+            OAuthScope = profile.OAuthScope ?? defaults.OAuthScope,
+            ConcurrencyCap = profile.ConcurrencyCap ?? defaults.ConcurrencyCap,
+            WatchTimeoutSeconds = profile.WatchTimeoutSeconds ?? defaults.WatchTimeoutSeconds,
+            ExecutorHostPath = profile.ExecutorHostPath ?? defaults.ExecutorHostPath
         };
     }
 }

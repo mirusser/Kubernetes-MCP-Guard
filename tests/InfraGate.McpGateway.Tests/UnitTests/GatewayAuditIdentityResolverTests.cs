@@ -100,6 +100,24 @@ public sealed class GatewayAuditIdentityResolverTests
         Assert.Equal(GatewayAuthConventions.Audit.ServiceIdentityKind, result.IdentityKind);
     }
 
+    [Theory]
+    [InlineData("infra-gate-planner", "service:planner")]
+    [InlineData("infra-gate-executor", "service:executor")]
+    public void Resolve_RemediationServiceClientWithAzpClaim_UsesConfiguredServiceSubject(
+        string clientId,
+        string expectedSubject)
+    {
+        var principal = AuthenticatedPrincipal(
+            new Claim(GatewayAuthConventions.Claims.AuthorizedParty, clientId),
+            new Claim(GatewayAuthConventions.Claims.Subject, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+            new Claim(GatewayAuthConventions.Claims.ClientId, clientId));
+
+        var result = GatewayAuditIdentityResolver.Resolve(principal);
+
+        Assert.Equal(expectedSubject, result.Subject);
+        Assert.Equal(GatewayAuthConventions.Audit.ServiceIdentityKind, result.IdentityKind);
+    }
+
     [Fact]
     public void Resolve_HumanTokenWithoutAzp_IdentifiesAsHuman()
     {

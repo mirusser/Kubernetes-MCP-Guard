@@ -1,5 +1,6 @@
 using System.Text;
 using InfraGate.ApprovalUi;
+using InfraGate.Approvals;
 using InfraGate.McpGateway.Auth;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -13,6 +14,50 @@ internal static class GatewayApprovalEndpoints
     public static IEndpointRouteBuilder MapGatewayApprovalEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet(McpGatewayConventions.Approvals.LoginPath, Login);
+        endpoints.MapGet(McpGatewayConventions.Approvals.LogoutPath, Logout);
+        endpoints.MapGet(
+            McpGatewayConventions.Approvals.CodeRoute,
+            async (
+                [FromServices] IApprovalPageRenderer renderer,
+                HttpContext context,
+                IAntiforgery antiforgery) =>
+            {
+                var tokens = antiforgery.GetAndStoreTokens(context);
+                var html = await renderer.RenderCodePageAsync(BuildCodePageData(tokens.RequestToken, null, null))
+                    .ConfigureAwait(false);
+
+                return Results.Content(html, TextHtmlContentType, Encoding.UTF8);
+            });
+        endpoints.MapPost(
+            McpGatewayConventions.Approvals.CodeRoute,
+            async (
+                IApprovalAccessCodeStore accessCodes,
+                [FromServices] IApprovalPageRenderer renderer,
+                HttpContext context,
+                IAntiforgery antiforgery,
+                CancellationToken cancellationToken) =>
+            {
+                var validation = await ValidateAntiforgeryAsync(context, antiforgery).ConfigureAwait(false);
+                if (validation is not null)
+                {
+                    return validation;
+                }
+
+                var form = await context.Request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+                string submittedCode = form[McpGatewayConventions.Approvals.CodeFormField].ToString();
+                var result = await accessCodes.ConsumeAsync(submittedCode, cancellationToken).ConfigureAwait(false);
+                if (result.Succeeded && result.ChallengeId is not null)
+                {
+                    return Results.Redirect($"{McpGatewayConventions.Approvals.PathPrefix}/{result.ChallengeId}");
+                }
+
+                var tokens = antiforgery.GetAndStoreTokens(context);
+                var html = await renderer.RenderCodePageAsync(
+                        BuildCodePageData(tokens.RequestToken, submittedCode, result.Message))
+                    .ConfigureAwait(false);
+
+                return Results.Content(html, TextHtmlContentType, Encoding.UTF8);
+            });
         endpoints.MapGet(
                 McpGatewayConventions.Approvals.ChallengeRoute,
                 async (
@@ -118,6 +163,11 @@ internal static class GatewayApprovalEndpoints
             [GatewayAuthConventions.Schemes.ApprovalOAuth]);
     }
 
+    private static IResult Logout() =>
+        Results.SignOut(
+            new AuthenticationProperties { RedirectUri = McpGatewayConventions.Approvals.CodeRoute },
+            [GatewayAuthConventions.Schemes.ApprovalCookie]);
+
     private static async Task<IResult?> ValidateAntiforgeryAsync(HttpContext context, IAntiforgery antiforgery)
     {
         try
@@ -159,4 +209,16 @@ internal static class GatewayApprovalEndpoints
 
     internal static DecisionPageData BuildDecisionPageData(ApprovalDecisionResult result) =>
         new(result.Succeeded, result.Message);
+
+    internal static ApprovalCodePageData BuildCodePageData(
+        string? requestToken,
+        string? submittedCode,
+        string? error) =>
+        new(
+            McpGatewayConventions.Approvals.CodeRoute,
+            McpGatewayConventions.Approvals.CodeFormField,
+            McpGatewayConventions.Approvals.RequestVerificationToken,
+            requestToken,
+            submittedCode,
+            error);
 }

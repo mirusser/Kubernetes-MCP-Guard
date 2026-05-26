@@ -32,8 +32,8 @@ if [[ ! -f "${merged_cobertura}" ]]; then
   exit 1
 fi
 
-line_rate="$(sed -n 's/.*line-rate="\([^"]*\)".*/\1/p' "${merged_cobertura}" | head -n 1)"
-branch_rate="$(sed -n 's/.*branch-rate="\([^"]*\)".*/\1/p' "${merged_cobertura}" | head -n 1)"
+line_rate="$(awk 'match($0, /line-rate="[^"]+"/) { value = substr($0, RSTART + 11, RLENGTH - 12); print value; exit }' "${merged_cobertura}")"
+branch_rate="$(awk 'match($0, /branch-rate="[^"]+"/) { value = substr($0, RSTART + 13, RLENGTH - 14); print value; exit }' "${merged_cobertura}")"
 
 if [[ -z "${line_rate}" || -z "${branch_rate}" ]]; then
   echo "Could not read coverage rates from ${merged_cobertura}" >&2

@@ -13,6 +13,7 @@ using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
+using InfraGate.McpGateway.Email;
 using InfraGate.McpGateway.Notifications;
 using InfraGate.McpGateway.Tests.UnitTests;
 using InfraGate.RuntimeSafety;
@@ -877,6 +878,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<PlanStatusResourceHandler>();
                 services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
                 services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
+                services.AddSingleton<IApprovalAccessCodeStore, InMemoryApprovalAccessCodeStore>();
+                services.AddSingleton<IApprovalEmailSender, NullApprovalEmailSender>();
+                services.AddSingleton<IProposePlanHandler, ProposePlanHandler>();
                 services.AddSingleton<IApprovalPageRenderer>(sp =>
                     new ApprovalPageRenderer(sp.GetRequiredService<IServiceProvider>(), sp.GetRequiredService<ILoggerFactory>()));
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
@@ -1675,7 +1679,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             {
                 await listenTask.WaitAsync(TimeSpan.FromSeconds(5));
             }
-            catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or TimeoutException)
+            catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or InvalidOperationException or TimeoutException)
             {
             }
         }
@@ -1689,7 +1693,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 {
                     context = await listener.GetContextAsync();
                 }
-                catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException)
+                catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or InvalidOperationException)
                 {
                     break;
                 }
@@ -1785,7 +1789,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             {
                 await listenTask.WaitAsync(TimeSpan.FromSeconds(5));
             }
-            catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or TimeoutException)
+            catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or InvalidOperationException or TimeoutException)
             {
             }
         }
@@ -1799,7 +1803,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 {
                     context = await listener.GetContextAsync();
                 }
-                catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException)
+                catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or InvalidOperationException)
                 {
                     break;
                 }
@@ -1857,6 +1861,12 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
         public Task<string> RefreshServiceTokenAsync(CancellationToken cancellationToken) =>
             Task.FromResult(string.Empty);
+    }
+
+    private sealed class NullApprovalEmailSender : IApprovalEmailSender
+    {
+        public Task SendAsync(ApprovalEmailContent content, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 
     private sealed class LocalJwtTokenProvider : IDownstreamServiceTokenProvider

@@ -15,6 +15,14 @@ internal static class McpGatewayConventions
         mappings.Map(EnvironmentVariables.GuardAuditRoot, ConfigurationKeys.GuardAuditRoot);
         mappings.Map(EnvironmentVariables.ApprovalBaseUrl, ConfigurationKeys.ApprovalBaseUrl);
         mappings.Map(EnvironmentVariables.ApprovalChallengeTtlSeconds, ConfigurationKeys.ApprovalChallengeTtlSeconds);
+        mappings.Map(EnvironmentVariables.OperatorGroup, ConfigurationKeys.OperatorGroup);
+        mappings.Map(EnvironmentVariables.OperatorEmail, ConfigurationKeys.OperatorEmail);
+        mappings.Map(EnvironmentVariables.SmtpHost, ConfigurationKeys.SmtpHost);
+        mappings.Map(EnvironmentVariables.SmtpPort, ConfigurationKeys.SmtpPort);
+        mappings.Map(EnvironmentVariables.SmtpFrom, ConfigurationKeys.SmtpFrom);
+        mappings.Map(EnvironmentVariables.SmtpUser, ConfigurationKeys.SmtpUser);
+        mappings.Map(EnvironmentVariables.SmtpPassword, ConfigurationKeys.SmtpPassword);
+        mappings.Map(EnvironmentVariables.SmtpEnableSsl, ConfigurationKeys.SmtpEnableSsl);
         RegisterDownstreamAuthMappings(mappings);
     }
 
@@ -36,6 +44,7 @@ internal static class McpGatewayConventions
     private const string DefaultPort = "3001";
 
     public const string DefaultUrl = LoopbackHttpScheme + UriSchemeSeparator + LoopbackHost + ":" + DefaultPort;
+    public const string DefaultOperatorGroup = "kubernetes-operators";
     public const string McpPath = "/mcp";
     public const int DefaultEventLimit = 50;
     public const int DefaultLogTailLines = 200;
@@ -52,6 +61,14 @@ internal static class McpGatewayConventions
         public const string DownstreamAssembly = "InfraGate:Gateway:DownstreamAssembly";
         public const string DownstreamProject = "InfraGate:Gateway:DownstreamProject";
         public const string GuardAuditRoot = "InfraGate:Gateway:GuardAuditRoot";
+        public const string OperatorEmail = "InfraGate:Approval:OperatorEmail";
+        public const string OperatorGroup = "InfraGate:Approval:OperatorGroup";
+        public const string SmtpHost = "InfraGate:Approval:Smtp:Host";
+        public const string SmtpPort = "InfraGate:Approval:Smtp:Port";
+        public const string SmtpFrom = "InfraGate:Approval:Smtp:From";
+        public const string SmtpUser = "InfraGate:Approval:Smtp:User";
+        public const string SmtpPassword = "InfraGate:Approval:Smtp:Password";
+        public const string SmtpEnableSsl = "InfraGate:Approval:Smtp:EnableSsl";
         public const string Urls = "urls";
     }
 
@@ -63,6 +80,14 @@ internal static class McpGatewayConventions
         public const string GuardAuditRoot = "INFRA_GATE_GUARD_AUDIT_ROOT";
         public const string ApprovalBaseUrl = "INFRA_GATE_APPROVAL_BASE_URL";
         public const string ApprovalChallengeTtlSeconds = "INFRA_GATE_APPROVAL_CHALLENGE_TTL_SECONDS";
+        public const string OperatorEmail = "INFRA_GATE_OPERATOR_EMAIL";
+        public const string OperatorGroup = "INFRA_GATE_OPERATOR_GROUP";
+        public const string SmtpHost = "INFRA_GATE_GATEWAY_SMTP_HOST";
+        public const string SmtpPort = "INFRA_GATE_GATEWAY_SMTP_PORT";
+        public const string SmtpFrom = "INFRA_GATE_GATEWAY_SMTP_FROM";
+        public const string SmtpUser = "INFRA_GATE_GATEWAY_SMTP_USER";
+        public const string SmtpPassword = "INFRA_GATE_GATEWAY_SMTP_PASSWORD";
+        public const string SmtpEnableSsl = "INFRA_GATE_GATEWAY_SMTP_ENABLE_SSL";
     }
 
     public static class Paths
@@ -129,10 +154,13 @@ internal static class McpGatewayConventions
     {
         public const string PathPrefix = "/approvals";
         public const string ChallengeRoute = "/approvals/{challengeId}";
+        public const string CodeRoute = "/approvals/code";
         public const string ApproveRoute = "/approvals/{challengeId}/approve";
         public const string DenyRoute = "/approvals/{challengeId}/deny";
         public const string CancelRoute = "/approvals/{challengeId}/cancel";
         public const string LoginPath = "/approvals/login";
+        public const string LogoutPath = "/approvals/logout";
+        public const string CodeFormField = "code";
         public const string RequestVerificationToken = "__RequestVerificationToken";
     }
 
@@ -141,6 +169,7 @@ internal static class McpGatewayConventions
         public const string AdapterDecodeFailed = "gateway.approval.adapter_decode_failed";
         public const string ApprovalRequired = "gateway.approval.required";
         public const string AuthenticatedSubjectRequired = "gateway.approval.authenticated_subject_required";
+        public const string OperatorGroupRequired = "gateway.approval.operator_group_required";
         public const string PlanExpired = "gateway.approval.plan_expired";
         public const string PlanNotStarted = "gateway.approval.plan_not_started";
         public const string SameSubjectRequired = "gateway.approval.same_subject_required";
@@ -151,6 +180,7 @@ internal static class McpGatewayConventions
         public const string RequestToolPrefix = "request_";
         public const string ApplyApprovedPlan = "execute_approved_plan";
         public const string GetPlanStatus = "get_plan_status";
+        public const string ProposePlan = "propose_plan";
         public const string WaitForPlanApproval = "wait_for_plan_approval";
     }
 
@@ -158,11 +188,15 @@ internal static class McpGatewayConventions
     {
         public const string MutationScope = "mcp:tools";
         public const string ReadOnlyScope = "mcp:tools.readonly";
+        public const string ProposeScope = "mcp:tools.propose";
+        public const string ExecuteScope = "mcp:tools.execute";
     }
 
     public static class ToolArguments
     {
         public const string PlanId = "planId";
+        public const string OperationType = "operationType";
+        public const string OperationArguments = "arguments";
         public const string TimeoutSeconds = "timeoutSeconds";
     }
 

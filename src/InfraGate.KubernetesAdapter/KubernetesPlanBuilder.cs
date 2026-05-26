@@ -24,18 +24,26 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         IReadOnlyDictionary<string, object?> arguments,
         PlanRequester requester,
         CancellationToken ct) =>
+        BuildAsync(mutationToolName, arguments, requester, ApprovalPolicy.SameSubject(), ct);
+
+    public Task<PlanBuildResult> BuildAsync(
+        string mutationToolName,
+        IReadOnlyDictionary<string, object?> arguments,
+        PlanRequester requester,
+        ApprovalPolicy approvalPolicy,
+        CancellationToken ct) =>
         mutationToolName switch
         {
             KubernetesAdapterConventions.MutationTools.ApplyManifest =>
-                BuildApplyManifestAsync(arguments, requester, ct),
+                BuildApplyManifestAsync(arguments, requester, approvalPolicy, ct),
             KubernetesAdapterConventions.MutationTools.DeleteManifest =>
-                BuildDeleteManifestAsync(arguments, requester, ct),
+                BuildDeleteManifestAsync(arguments, requester, approvalPolicy, ct),
             KubernetesAdapterConventions.MutationTools.ScaleDeployment =>
-                BuildScaleDeploymentAsync(arguments, requester, ct),
+                BuildScaleDeploymentAsync(arguments, requester, approvalPolicy, ct),
             KubernetesAdapterConventions.MutationTools.RestartDeployment =>
-                BuildRestartDeploymentAsync(arguments, requester, ct),
+                BuildRestartDeploymentAsync(arguments, requester, approvalPolicy, ct),
             KubernetesAdapterConventions.MutationTools.SetDeploymentImage =>
-                BuildSetDeploymentImageAsync(arguments, requester, ct),
+                BuildSetDeploymentImageAsync(arguments, requester, approvalPolicy, ct),
             _ => Task.FromResult(PlanBuildResult.Failed(
                 $"Unsupported mutation tool '{mutationToolName}'.",
                 KubernetesAdapterConventions.ResultReasonCodes.UnsupportedMutationTool))
@@ -44,6 +52,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
     private async Task<PlanBuildResult> BuildApplyManifestAsync(
         IReadOnlyDictionary<string, object?> arguments,
         PlanRequester requester,
+        ApprovalPolicy approvalPolicy,
         CancellationToken ct)
     {
         if (!TryGetString(arguments, KubernetesAdapterConventions.EvidenceArguments.Namespace, out var namespaceName) ||
@@ -96,6 +105,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             KubernetesAdapterConventions.PlanOperations.Apply,
             payload,
             requester,
+            approvalPolicy,
             new FreshnessPolicy(ManifestFreshnessChecks));
     }
 
@@ -190,6 +200,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
     private async Task<PlanBuildResult> BuildDeleteManifestAsync(
         IReadOnlyDictionary<string, object?> arguments,
         PlanRequester requester,
+        ApprovalPolicy approvalPolicy,
         CancellationToken ct)
     {
         if (!TryGetString(arguments, KubernetesAdapterConventions.EvidenceArguments.Namespace, out var namespaceName) ||
@@ -276,12 +287,14 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             KubernetesAdapterConventions.PlanOperations.Delete,
             payload,
             requester,
+            approvalPolicy,
             new FreshnessPolicy(ManifestFreshnessChecks));
     }
 
     private async Task<PlanBuildResult> BuildScaleDeploymentAsync(
         IReadOnlyDictionary<string, object?> arguments,
         PlanRequester requester,
+        ApprovalPolicy approvalPolicy,
         CancellationToken ct)
     {
         if (!TryGetString(arguments, KubernetesAdapterConventions.EvidenceArguments.Namespace, out var namespaceName) ||
@@ -356,12 +369,14 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             KubernetesAdapterConventions.PlanOperations.Scale,
             payload,
             requester,
+            approvalPolicy,
             new FreshnessPolicy(DeploymentFreshnessChecks));
     }
 
     private async Task<PlanBuildResult> BuildRestartDeploymentAsync(
         IReadOnlyDictionary<string, object?> arguments,
         PlanRequester requester,
+        ApprovalPolicy approvalPolicy,
         CancellationToken ct)
     {
         if (!TryGetString(arguments, KubernetesAdapterConventions.EvidenceArguments.Namespace, out var namespaceName) ||
@@ -434,12 +449,14 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             KubernetesAdapterConventions.PlanOperations.Restart,
             payload,
             requester,
+            approvalPolicy,
             new FreshnessPolicy(DeploymentFreshnessChecks));
     }
 
     private async Task<PlanBuildResult> BuildSetDeploymentImageAsync(
         IReadOnlyDictionary<string, object?> arguments,
         PlanRequester requester,
+        ApprovalPolicy approvalPolicy,
         CancellationToken ct)
     {
         if (!TryGetString(arguments, KubernetesAdapterConventions.EvidenceArguments.Namespace, out var namespaceName) ||
@@ -531,6 +548,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             KubernetesAdapterConventions.PlanOperations.SetImage,
             payload,
             requester,
+            approvalPolicy,
             new FreshnessPolicy(DeploymentFreshnessChecks));
     }
 
@@ -538,6 +556,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         string operation,
         KubernetesPlanPayload payload,
         PlanRequester requester,
+        ApprovalPolicy approvalPolicy,
         FreshnessPolicy freshnessPolicy)
     {
         var planId = ApprovalIds.NewPlanId();
@@ -548,7 +567,8 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                 DateTimeOffset.UtcNow,
                 requester,
                 payload,
-                freshnessPolicy: freshnessPolicy));
+                freshnessPolicy: freshnessPolicy,
+                approvalPolicy: approvalPolicy));
 
         return PlanBuildResult.Success(envelope, planId, payload.Namespace);
     }

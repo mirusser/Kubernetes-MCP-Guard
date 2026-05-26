@@ -12,14 +12,15 @@ public static class PlanEnvelopeFactory
         ReviewSurfaceContext reviewSurfaceContext,
         TPayload payload,
         FreshnessPolicy? freshnessPolicy = null,
-        IReadOnlyList<EvidenceArtifactSummary>? evidenceArtifacts = null)
+        IReadOnlyList<EvidenceArtifactSummary>? evidenceArtifacts = null,
+        ApprovalPolicy? approvalPolicy = null)
     {
         var resolvedFreshnessPolicy = freshnessPolicy ?? FreshnessPolicy.Empty;
         var resolvedEvidenceArtifacts = evidenceArtifacts?.ToArray() ?? [];
         var validityWindow = new PlanValidityWindow(
             createdAtUtc,
             createdAtUtc.Add(ApprovalConventions.PlanValidity.DefaultWindow));
-        var approvalPolicy = ApprovalPolicy.SameSubject();
+        var resolvedApprovalPolicy = approvalPolicy ?? ApprovalPolicy.SameSubject();
         var executionReusePolicy = ExecutionReusePolicy.SingleExecution();
         var reviewDigest = ComputeReviewDigest(
             id,
@@ -29,7 +30,7 @@ public static class PlanEnvelopeFactory
             createdAtUtc,
             validityWindow,
             requester,
-            approvalPolicy,
+            resolvedApprovalPolicy,
             executionReusePolicy,
             resolvedFreshnessPolicy,
             reviewSurfaceContext,
@@ -45,7 +46,7 @@ public static class PlanEnvelopeFactory
             validityWindow.ValidFromUtc,
             validityWindow.ValidUntilUtc,
             requester,
-            approvalPolicy,
+            resolvedApprovalPolicy,
             executionReusePolicy,
             reviewSurfaceContext,
             resolvedEvidenceArtifacts,

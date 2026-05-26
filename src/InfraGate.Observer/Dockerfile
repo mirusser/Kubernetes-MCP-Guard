@@ -3,6 +3,7 @@ WORKDIR /src
 
 COPY Directory.Build.props .
 COPY .editorconfig .
+COPY src/InfraGate.AgentLlm/InfraGate.AgentLlm.csproj src/InfraGate.AgentLlm/
 COPY src/InfraGate.Observer.Contracts/InfraGate.Observer.Contracts.csproj src/InfraGate.Observer.Contracts/
 COPY src/InfraGate.ClientCredentials/InfraGate.ClientCredentials.csproj src/InfraGate.ClientCredentials/
 COPY src/InfraGate.Observability/InfraGate.Observability.csproj src/InfraGate.Observability/
@@ -10,6 +11,7 @@ COPY src/InfraGate.RuntimeSafety/InfraGate.RuntimeSafety.csproj src/InfraGate.Ru
 COPY src/InfraGate.Observer/InfraGate.Observer.csproj src/InfraGate.Observer/
 RUN dotnet restore src/InfraGate.Observer/InfraGate.Observer.csproj
 
+COPY src/InfraGate.AgentLlm/ src/InfraGate.AgentLlm/
 COPY src/InfraGate.Observer.Contracts/ src/InfraGate.Observer.Contracts/
 COPY src/InfraGate.ClientCredentials/ src/InfraGate.ClientCredentials/
 COPY src/InfraGate.Observability/ src/InfraGate.Observability/

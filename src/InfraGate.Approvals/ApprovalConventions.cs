@@ -20,6 +20,19 @@ public static class ApprovalConventions
         public const string Sha256Extension = ".sha256";
     }
 
+    public static class AccessCodes
+    {
+        public const int CodeLength = 8;
+        public const string Alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+        public static class ConsumeResultReasonCodes
+        {
+            public const string Consumed = "approval.code.consumed";
+            public const string Expired = "approval.code.expired";
+            public const string Invalid = "approval.code.invalid";
+        }
+    }
+
     public static class Application
     {
         public const string Name = "InfraGate";
@@ -49,6 +62,12 @@ public static class ApprovalConventions
     public static class ApprovalPolicyTypes
     {
         public const string SameSubject = "same-subject";
+        public const string OperatorApproval = "operator-approval";
+    }
+
+    public static class ApprovalPolicyParameters
+    {
+        public const string OperatorGroup = "operatorGroup";
     }
 
     public static class ExecutionReusePolicyTypes

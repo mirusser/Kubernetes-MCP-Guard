@@ -114,6 +114,30 @@ public sealed class ApprovalPageRendererTests
     }
 
     [Fact]
+    public async Task RenderCodePageAsync_WithError_ShowsFormAndError()
+    {
+        await using var renderer = CreateRenderer();
+
+        var html = await renderer.RenderCodePageAsync(new ApprovalCodePageData(
+            "/approvals/code",
+            "code",
+            "__RequestVerificationToken",
+            "tok-123",
+            "BADCODE",
+            "Approval code is invalid."));
+
+        Assert.Contains("data-section=\"approval-code\"", html);
+        Assert.Contains("method=\"post\"", html);
+        Assert.Contains("action=\"/approvals/code\"", html);
+        Assert.Contains("name=\"code\"", html);
+        Assert.Contains("value=\"BADCODE\"", html);
+        Assert.Contains("name=\"__RequestVerificationToken\"", html);
+        Assert.Contains("tok-123", html);
+        Assert.Contains("data-field=\"code-error\"", html);
+        Assert.Contains("Approval code is invalid.", html);
+    }
+
+    [Fact]
     public async Task RenderApprovalPageAsync_CanDecideWithNullChallenge_DoesNotCrash()
     {
         await using var renderer = CreateRenderer();

@@ -13,6 +13,7 @@ public sealed class PostgresApprovalMigrationRunnerTests : IAsyncLifetime
     private static readonly string[] ExpectedTables =
     [
         "applied_plans",
+        "approval_access_codes",
         "approval_challenges",
         "approval_grants",
         "audit_events",
@@ -76,7 +77,49 @@ public sealed class PostgresApprovalMigrationRunnerTests : IAsyncLifetime
         int migrationCount = await connection.ExecuteScalarAsync<int>(
             "select count(*) from approvals.schema_migrations");
 
-        Assert.Equal(1, migrationCount);
+        Assert.Equal(3, migrationCount);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_EmptyDatabase_AddsPlanPolicyColumns()
+    {
+        await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
+
+        await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
+
+        await using var connection = await dataSource.OpenConnectionAsync(CancellationToken.None);
+        var columns = (await connection.QueryAsync<string>(
+                """
+                select column_name
+                from information_schema.columns
+                where table_schema = 'approvals'
+                  and table_name = 'plan_envelopes'
+                  and column_name in ('policy_kind', 'operator_group')
+                order by column_name
+                """))
+            .ToArray();
+
+        Assert.Equal(["operator_group", "policy_kind"], columns);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_EmptyDatabase_AddsApprovalAccessCodeTable()
+    {
+        await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
+
+        await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
+
+        await using var connection = await dataSource.OpenConnectionAsync(CancellationToken.None);
+        bool exists = await connection.ExecuteScalarAsync<bool>(
+            """
+            select exists (
+                select 1
+                from information_schema.tables
+                where table_schema = 'approvals'
+                  and table_name = 'approval_access_codes')
+            """);
+
+        Assert.True(exists);
     }
 
     [Fact]

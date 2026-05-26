@@ -45,6 +45,8 @@ internal static class RunProfileConventions
         public const string Approval = "Approval";
         public const string Kubernetes = "Kubernetes";
         public const string Observer = "Observer";
+        public const string Planner = "Planner";
+        public const string Executor = "Executor";
         public const string AllowedNamespaces = "AllowedNamespaces";
         public const string ApprovalOAuthAuthorizationEndpoint = "ApprovalOAuthAuthorizationEndpoint";
         public const string ApprovalOAuthCallbackPath = "ApprovalOAuthCallbackPath";
@@ -73,10 +75,29 @@ internal static class RunProfileConventions
         public const string ObserverLlmModel = "LlmModel";
         public const string ObserverLlmProvider = "LlmProvider";
         public const string ObserverMaxToolIterations = "MaxToolIterations";
+        public const string ObserverPlannerHandoffUrl = "PlannerHandoffUrl";
         public const string ObserverTokenEndpoint = "TokenEndpoint";
         public const string ObserverClientId = "ClientId";
         public const string ObserverClientSecret = "ClientSecret";
         public const string ObserverScope = "Scope";
+        public const string PlannerGatewayBaseUrl = "GatewayBaseUrl";
+        public const string PlannerExecutorHandoffUrl = "ExecutorHandoffUrl";
+        public const string PlannerTokenEndpoint = "TokenEndpoint";
+        public const string PlannerClientId = "ClientId";
+        public const string PlannerClientSecret = "ClientSecret";
+        public const string PlannerLlmProvider = "LlmProvider";
+        public const string PlannerLlmModel = "LlmModel";
+        public const string PlannerLlmApiKey = "LlmApiKey";
+        public const string PlannerAnomalyWallClockCapSeconds = "AnomalyWallClockCapSeconds";
+        public const string PlannerBatchWallClockCapSeconds = "BatchWallClockCapSeconds";
+        public const string PlannerMaxToolIterations = "MaxToolIterations";
+        public const string PlannerFileSinkRoot = "FileSinkRoot";
+        public const string ExecutorGatewayBaseUrl = "GatewayBaseUrl";
+        public const string ExecutorTokenEndpoint = "TokenEndpoint";
+        public const string ExecutorClientId = "ClientId";
+        public const string ExecutorClientSecret = "ClientSecret";
+        public const string ExecutorConcurrencyCap = "ConcurrencyCap";
+        public const string ExecutorWatchTimeoutSeconds = "WatchTimeoutSeconds";
     }
 
     public static class YamlKeys
@@ -119,6 +140,17 @@ internal static class RunProfileConventions
         public const string OauthClientId = "oauthClientId";
         public const string OauthTokenEndpoint = "oauthTokenEndpoint";
         public const string Observer = "observer";
+        public const string Planner = "planner";
+        public const string Executor = "executor";
+        public const string ExecutorHandoffUrl = "executorHandoffUrl";
+        public const string PlannerHandoffUrl = "plannerHandoffUrl";
+        public const string AnomalyWallClockCapSeconds = "anomalyWallClockCapSeconds";
+        public const string BatchWallClockCapSeconds = "batchWallClockCapSeconds";
+        public const string ConcurrencyCap = "concurrencyCap";
+        public const string WatchTimeoutSeconds = "watchTimeoutSeconds";
+        public const string PlannerHostPath = "plannerHostPath";
+        public const string ExecutorHostPath = "executorHostPath";
+        public const string OAuthAuthority = "oauthAuthority";
         public const string Profiles = "profiles";
         public const string RealmImport = "realmImport";
         public const string Required = "required";
@@ -190,8 +222,37 @@ internal static class RunProfileConventions
         public const string ObserverLlmModel = "INFRA_GATE_OBSERVER_LLM_MODEL";
         public const string ObserverLlmProvider = "INFRA_GATE_OBSERVER_LLM_PROVIDER";
         public const string ObserverMaxToolIterations = "INFRA_GATE_OBSERVER_MAX_TOOL_ITERATIONS";
-        public const string ObserverScope = "INFRA_GATE_OBSERVER_SCOPE";
+        public const string ObserverOAuthAuthority = "INFRA_GATE_OBSERVER_OAUTH_AUTHORITY";
+        public const string ObserverPlannerHandoffUrl = "INFRA_GATE_OBSERVER_PLANNER_HANDOFF_URL";
+        public const string ObserverScope = "INFRA_GATE_OBSERVER_OAUTH_SCOPE";
+        public const string ObserverAllowedNamespaces = "INFRA_GATE_OBSERVER_ALLOWED_NAMESPACES";
         public const string ObserverTokenEndpoint = "INFRA_GATE_OBSERVER_TOKEN_ENDPOINT";
+        public const string PlannerAspnetcoreUrls = "INFRA_GATE_PLANNER_ASPNETCORE_URLS";
+        public const string PlannerGatewayBaseUrl = "INFRA_GATE_PLANNER_GATEWAY_BASE_URL";
+        public const string PlannerExecutorHandoffUrl = "INFRA_GATE_PLANNER_EXECUTOR_HANDOFF_URL";
+        public const string PlannerTokenEndpoint = "INFRA_GATE_PLANNER_TOKEN_ENDPOINT";
+        public const string PlannerClientId = "INFRA_GATE_PLANNER_CLIENT_ID";
+        public const string PlannerClientSecret = "INFRA_GATE_PLANNER_CLIENT_SECRET";
+        public const string PlannerOAuthAuthority = "INFRA_GATE_PLANNER_OAUTH_AUTHORITY";
+        public const string PlannerOAuthScope = "INFRA_GATE_PLANNER_OAUTH_SCOPE";
+        public const string PlannerLlmProvider = "INFRA_GATE_PLANNER_LLM_PROVIDER";
+        public const string PlannerLlmModel = "INFRA_GATE_PLANNER_LLM_MODEL";
+        public const string PlannerLlmApiKey = "INFRA_GATE_PLANNER_LLM_API_KEY";
+        public const string PlannerAnomalyWallClockCapSeconds = "INFRA_GATE_PLANNER_ANOMALY_WALL_CLOCK_CAP_SECONDS";
+        public const string PlannerBatchWallClockCapSeconds = "INFRA_GATE_PLANNER_BATCH_WALL_CLOCK_CAP_SECONDS";
+        public const string PlannerMaxToolIterations = "INFRA_GATE_PLANNER_MAX_TOOL_ITERATIONS";
+        public const string PlannerFileSinkRoot = "INFRA_GATE_PLANNER_FILE_SINK_ROOT";
+        public const string PlannerHostPath = "INFRA_GATE_PLANNER_HOST_PATH";
+        public const string ExecutorAspnetcoreUrls = "INFRA_GATE_EXECUTOR_ASPNETCORE_URLS";
+        public const string ExecutorGatewayBaseUrl = "INFRA_GATE_EXECUTOR_GATEWAY_BASE_URL";
+        public const string ExecutorTokenEndpoint = "INFRA_GATE_EXECUTOR_TOKEN_ENDPOINT";
+        public const string ExecutorClientId = "INFRA_GATE_EXECUTOR_CLIENT_ID";
+        public const string ExecutorClientSecret = "INFRA_GATE_EXECUTOR_CLIENT_SECRET";
+        public const string ExecutorOAuthAuthority = "INFRA_GATE_EXECUTOR_OAUTH_AUTHORITY";
+        public const string ExecutorOAuthScope = "INFRA_GATE_EXECUTOR_OAUTH_SCOPE";
+        public const string ExecutorConcurrencyCap = "INFRA_GATE_EXECUTOR_CONCURRENCY_CAP";
+        public const string ExecutorWatchTimeoutSeconds = "INFRA_GATE_EXECUTOR_WATCH_TIMEOUT_SECONDS";
+        public const string ExecutorHostPath = "INFRA_GATE_EXECUTOR_HOST_PATH";
     }
 
     public static class DomainAdapterTypes

@@ -14,14 +14,15 @@ internal static class KubernetesApprovalAdapter
         WriteIndented = true
     };
 
-    public static PlanEnvelope<KubernetesPlanPayload> CreateEnvelope(
+    public static PlanEnvelope<KubernetesPlanPayload> CreateEnvelope( // NOSONAR:S107 - Generic envelope creation has eight approval-domain fields; grouping them would hide the digest-binding contract.
         string planId,
         string operation,
         DateTimeOffset createdAtUtc,
         PlanRequester requester,
         KubernetesPlanPayload payload,
         ReviewSurfaceContext? reviewSurfaceContext = null,
-        FreshnessPolicy? freshnessPolicy = null)
+        FreshnessPolicy? freshnessPolicy = null,
+        ApprovalPolicy? approvalPolicy = null)
     {
         var intentDigest = ComputeIntentDigest(operation, payload);
 
@@ -35,7 +36,8 @@ internal static class KubernetesApprovalAdapter
             reviewSurfaceContext ?? DefaultReviewSurfaceContext,
             payload,
             freshnessPolicy,
-            BuildEvidenceArtifacts(payload));
+            BuildEvidenceArtifacts(payload),
+            approvalPolicy);
     }
 
     public static PlanEnvelope<KubernetesPlanPayload> WithPayload(
@@ -49,7 +51,8 @@ internal static class KubernetesApprovalAdapter
             envelope.Requester,
             payload,
             envelope.ReviewSurfaceContext,
-            envelope.FreshnessPolicy);
+            envelope.FreshnessPolicy,
+            envelope.ApprovalPolicy);
     }
 
     public static KubernetesPlan Materialize(PlanEnvelope<KubernetesPlanPayload> envelope) =>
