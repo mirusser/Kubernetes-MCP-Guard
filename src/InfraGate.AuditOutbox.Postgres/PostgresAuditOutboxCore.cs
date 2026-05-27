@@ -23,6 +23,8 @@ internal sealed class PostgresAuditOutboxCore : IAuditOutboxCore
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(transaction);
 
+        ValidateSchemaName(streamSchema);
+
         int streamKey = AuditOutboxConventions.StreamLockKey(streamSchema);
 
         await connection.ExecuteAsync(new CommandDefinition(
@@ -39,7 +41,7 @@ internal sealed class PostgresAuditOutboxCore : IAuditOutboxCore
         var canonicalInputObject = AuditOutboxConventions.BuildCanonicalInputObject(row);
         string canonicalText = ApprovalCanonicalJson.Serialize(canonicalInputObject);
         string hashInput = (previousHash ?? string.Empty) + canonicalText;
-        string eventHash = AuditOutboxConventions.ComputeSha256Hex(hashInput);
+        string eventHash = ApprovalCanonicalJson.ComputeSha256Hex(hashInput);
 
         var parameters = BuildInsertParameters(row, previousHash, eventHash);
         string sql = BuildInsertSql(streamSchema, row.CorrelationColumns.Keys);
@@ -92,5 +94,23 @@ internal sealed class PostgresAuditOutboxCore : IAuditOutboxCore
                 @Outcome, @Reason, @PreviousEventHash, @EventHash, @PayloadJsonText{corrParams}
             ) RETURNING audit_sequence
             """;
+    }
+
+    private static void ValidateSchemaName(string schema)
+    {
+        if (schema.Length == 0 || !char.IsLetter(schema[0]) && schema[0] != '_')
+        {
+            throw new ArgumentException(
+                $"Schema name '{schema}' is not a valid PostgreSQL identifier.", nameof(schema));
+        }
+
+        for (int i = 1; i < schema.Length; i++)
+        {
+            if (!char.IsLetterOrDigit(schema[i]) && schema[i] != '_')
+            {
+                throw new ArgumentException(
+                    $"Schema name '{schema}' is not a valid PostgreSQL identifier.", nameof(schema));
+            }
+        }
     }
 }

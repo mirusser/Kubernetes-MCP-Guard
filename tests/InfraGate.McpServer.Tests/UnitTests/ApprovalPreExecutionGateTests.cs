@@ -16,8 +16,8 @@ public sealed class ApprovalPreExecutionGateTests
         var envelope = CreatePlanEnvelope();
         var created = await store.CreatePlanAsync(envelope, "demo", CancellationToken.None);
         var grant = await store.CreateGrantAsync(created.Envelope, "requester", "challenge-1", CancellationToken.None);
-        var publisher = new RecordingApprovalAuditPublisher();
-        var gate = new ApprovalPreExecutionGate(store, publisher);
+        var outbox = new RecordingApprovalAuditOutbox();
+        var gate = new ApprovalPreExecutionGate(store, outbox);
 
         var result = await gate.EvaluateAsync(
             envelope.Id,
@@ -25,7 +25,7 @@ public sealed class ApprovalPreExecutionGateTests
             CancellationToken.None);
 
         Assert.True(result.IsPassed);
-        var audit = Assert.Single(publisher.Events);
+        var audit = Assert.Single(outbox.Events);
         Assert.Equal(ApprovalConventions.AuditEvents.PreExecutionGrantValidated, audit.EventName);
         var payload = Assert.IsType<PreExecutionGrantValidatedPayload>(audit.Payload);
         Assert.Equal(created.Envelope.Id, payload.PlanId);
@@ -38,7 +38,7 @@ public sealed class ApprovalPreExecutionGateTests
     public async Task EvaluateAsync_MissingPendingPlan_ReturnsReasonCode()
     {
         var store = CreateStore();
-        var gate = new ApprovalPreExecutionGate(store);
+        var gate = new ApprovalPreExecutionGate(store, new RecordingApprovalAuditOutbox());
 
         var result = await gate.EvaluateAsync(
             ApprovalIds.NewPlanId(),
@@ -86,14 +86,14 @@ public sealed class ApprovalPreExecutionGateTests
             Task.FromResult(DomainPlanExecutionResult.Success("Executed.", "demo"));
     }
 
-    private sealed class RecordingApprovalAuditPublisher : IApprovalAuditPublisher
+    private sealed class RecordingApprovalAuditOutbox : IApprovalAuditOutbox
     {
-        public List<PlanAudit> Events { get; } = [];
+        public List<ApprovalAuditEntry> Events { get; } = [];
 
-        public Task PublishAsync(PlanAudit audit, CancellationToken cancellationToken)
+        public Task<long> AppendAsync(ApprovalAuditEntry entry, CancellationToken cancellationToken)
         {
-            Events.Add(audit);
-            return Task.CompletedTask;
+            Events.Add(entry);
+            return Task.FromResult(0L);
         }
     }
 }

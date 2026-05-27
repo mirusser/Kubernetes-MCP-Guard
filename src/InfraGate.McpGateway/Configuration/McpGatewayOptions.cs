@@ -1,6 +1,5 @@
 using System.Globalization;
 using InfraGate.Approvals;
-using InfraGate.Approvals.Plan;
 using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Email;
@@ -238,9 +237,7 @@ public sealed record class McpGatewayOptions(
         int parsedPort = string.IsNullOrWhiteSpace(port)
             ? SmtpApprovalEmailOptions.DefaultPort
             : int.Parse(port, CultureInfo.InvariantCulture);
-        bool parsedEnableSsl = string.IsNullOrWhiteSpace(enableSsl)
-            ? SmtpApprovalEmailOptions.DefaultEnableSsl
-            : bool.Parse(enableSsl);
+        bool parsedEnableSsl = string.IsNullOrWhiteSpace(enableSsl) || bool.Parse(enableSsl);
 
         return new SmtpApprovalEmailOptions(
             host ?? string.Empty,

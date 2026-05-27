@@ -78,19 +78,19 @@ public sealed class CanonicalizationTests
     }
 
     [Fact]
-    public void ComputeSha256Hex_SameInput_ProducesSameHash()
+    public void ApprovalCanonicalJson_ComputeSha256Hex_SameInput_ProducesSameHash()
     {
-        string hash1 = AuditOutboxConventions.ComputeSha256Hex("deterministic-input");
-        string hash2 = AuditOutboxConventions.ComputeSha256Hex("deterministic-input");
+        string hash1 = ApprovalCanonicalJson.ComputeSha256Hex("deterministic-input");
+        string hash2 = ApprovalCanonicalJson.ComputeSha256Hex("deterministic-input");
 
         Assert.Equal(hash1, hash2);
     }
 
     [Fact]
-    public void ComputeSha256Hex_DifferentInputs_ProduceDifferentHashes()
+    public void ApprovalCanonicalJson_ComputeSha256Hex_DifferentInputs_ProduceDifferentHashes()
     {
-        string hash1 = AuditOutboxConventions.ComputeSha256Hex("input-a");
-        string hash2 = AuditOutboxConventions.ComputeSha256Hex("input-b");
+        string hash1 = ApprovalCanonicalJson.ComputeSha256Hex("input-a");
+        string hash2 = ApprovalCanonicalJson.ComputeSha256Hex("input-b");
 
         Assert.NotEqual(hash1, hash2);
     }
@@ -114,5 +114,21 @@ public sealed class CanonicalizationTests
         Assert.NotEqual(keyApprovals, keyObserver);
         Assert.NotEqual(keyApprovals, keyPlanner);
         Assert.NotEqual(keyObserver, keyPlanner);
+    }
+
+    [Fact]
+    public void Streams_Constants_AreNotEmpty()
+    {
+        Assert.NotEmpty(AuditOutboxConventions.Streams.Approvals);
+        Assert.NotEmpty(AuditOutboxConventions.Streams.Observer);
+        Assert.NotEmpty(AuditOutboxConventions.Streams.Planner);
+    }
+
+    [Fact]
+    public void Streams_Constants_MatchExpectedSchemaNames()
+    {
+        Assert.Equal("approvals", AuditOutboxConventions.Streams.Approvals);
+        Assert.Equal("observer", AuditOutboxConventions.Streams.Observer);
+        Assert.Equal("planner", AuditOutboxConventions.Streams.Planner);
     }
 }

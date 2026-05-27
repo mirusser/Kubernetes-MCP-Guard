@@ -179,21 +179,21 @@ public sealed class KubernetesPlanExecutorTests
         var envelope = BuildScaleEnvelope();
         var toolCaller = new FakeToolCaller()
             .With(KubernetesAdapterConventions.MutationTools.ScaleDeployment, "Scaled to 3 replicas.");
-        var publisher = new RecordingApprovalAuditPublisher(() => toolCaller.CalledTools.ToArray());
+        var outbox = new RecordingApprovalAuditOutbox(() => toolCaller.CalledTools.ToArray());
 
-        var executor = new KubernetesPlanExecutor(toolCaller, publisher);
+        var executor = new KubernetesPlanExecutor(toolCaller, outbox);
         var result = await executor.ExecuteAsync(envelope, CancellationToken.None);
 
         Assert.True(result.IsSuccessful);
         Assert.Contains(KubernetesAdapterConventions.MutationTools.ScaleDeployment, toolCaller.CalledTools);
-        var audit = Assert.Single(publisher.Events);
+        var audit = Assert.Single(outbox.Events);
         Assert.Equal(ApprovalConventions.AuditEvents.ExecutionStarted, audit.EventName);
         var payload = Assert.IsType<ExecutionStartedPayload>(audit.Payload);
         Assert.Equal(envelope.Id, payload.PlanId);
         Assert.Equal(KubernetesAdapterConventions.PlanOperations.Scale, payload.Operation);
         Assert.Equal(KubernetesAdapterConventions.AdapterId, payload.AdapterId);
         Assert.Equal("demo", payload.AdapterPayload.GetProperty("namespaceName").GetString());
-        Assert.DoesNotContain(KubernetesAdapterConventions.MutationTools.ScaleDeployment, publisher.CalledToolsAtPublish);
+        Assert.DoesNotContain(KubernetesAdapterConventions.MutationTools.ScaleDeployment, outbox.CalledToolsAtPublish);
     }
 
     [Fact]
@@ -299,16 +299,16 @@ public sealed class KubernetesPlanExecutorTests
     {
         var dryRun = MakeDryRun("demo", "nginx");
         var envelope = BuildScaleEnvelope();
-        var publisher = new RecordingApprovalAuditPublisher();
+        var outbox = new RecordingApprovalAuditOutbox();
 
         var toolCaller = new FakeToolCaller()
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunScaleDeployment, DryRunJson(dryRun));
 
-        var executor = new KubernetesPlanExecutor(toolCaller, publisher);
+        var executor = new KubernetesPlanExecutor(toolCaller, outbox);
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.True(result.IsSuccessful);
-        var audit = Assert.Single(publisher.Events);
+        var audit = Assert.Single(outbox.Events);
         Assert.Equal(ApprovalConventions.AuditEvents.PreExecutionChecked, audit.EventName);
         var payload = Assert.IsType<PreExecutionCheckedPayload>(audit.Payload);
         Assert.Equal(envelope.Id, payload.PlanId);
@@ -349,17 +349,17 @@ public sealed class KubernetesPlanExecutorTests
         }
     }
 
-    private sealed class RecordingApprovalAuditPublisher(Func<string[]>? captureCalledTools = null) : IApprovalAuditPublisher
+    private sealed class RecordingApprovalAuditOutbox(Func<string[]>? captureCalledTools = null) : IApprovalAuditOutbox
     {
-        public List<PlanAudit> Events { get; } = [];
+        public List<ApprovalAuditEntry> Events { get; } = [];
 
         public string[] CalledToolsAtPublish { get; private set; } = [];
 
-        public Task PublishAsync(PlanAudit audit, CancellationToken cancellationToken)
+        public Task<long> AppendAsync(ApprovalAuditEntry entry, CancellationToken cancellationToken)
         {
             CalledToolsAtPublish = captureCalledTools?.Invoke() ?? [];
-            Events.Add(audit);
-            return Task.CompletedTask;
+            Events.Add(entry);
+            return Task.FromResult((long)Events.Count);
         }
     }
 }

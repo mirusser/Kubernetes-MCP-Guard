@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Dapper;
-using InfraGate.Approvals;
 using InfraGate.Approvals.Plan;
 using InfraGate.Approvals.Challenge;
 using InfraGate.Approvals.Grant;
@@ -12,7 +11,9 @@ using Npgsql;
 
 namespace InfraGate.Approvals.Postgres;
 
-public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : IApprovalPersistence
+internal sealed class PostgresApprovalPersistence(
+    NpgsqlDataSource dataSource,
+    ITransactionalApprovalAuditOutbox auditOutbox) : IApprovalPersistence
 {
     private static readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -108,17 +109,20 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
                         transaction,
                         cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-                    await InsertAuditAsync(
+                    await auditOutbox.AppendAsync(
+                        new ApprovalAuditEntry(
+                            ApprovalConventions.AuditEvents.PlanRequested,
+                            new PlanRequestedPayload(
+                                envelope.Id,
+                                envelope.Operation,
+                                targetNamespace,
+                                canonicalHash,
+                                envelope.IntentDigest,
+                                envelope.ReviewDigest),
+                            PlanId: envelope.Id,
+                            ActorSubject: envelope.Requester.Subject),
                         connection,
                         transaction,
-                        ApprovalConventions.AuditEvents.PlanRequested,
-                        new PlanRequestedPayload(
-                            envelope.Id,
-                            envelope.Operation,
-                            targetNamespace,
-                            canonicalHash,
-                            envelope.IntentDigest,
-                            envelope.ReviewDigest),
                         cancellationToken).ConfigureAwait(false);
 
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -350,17 +354,21 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
                         transaction,
                         cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-                    await InsertAuditAsync(
+                    await auditOutbox.AppendAsync(
+                        new ApprovalAuditEntry(
+                            ApprovalConventions.AuditEvents.ApprovalChallengeCreated,
+                            new ApprovalChallengeCreatedPayload(
+                                challenge.Id,
+                                challenge.PlanId,
+                                challenge.PendingPlanHash,
+                                challenge.RequesterSubject,
+                                challenge.RequesterAuthenticationType,
+                                challenge.ExpiresAtUtc),
+                            PlanId: challenge.PlanId,
+                            ChallengeId: challenge.Id,
+                            ActorSubject: challenge.RequesterSubject),
                         connection,
                         transaction,
-                        ApprovalConventions.AuditEvents.ApprovalChallengeCreated,
-                        new ApprovalChallengeCreatedPayload(
-                            challenge.Id,
-                            challenge.PlanId,
-                            challenge.PendingPlanHash,
-                            challenge.RequesterSubject,
-                            challenge.RequesterAuthenticationType,
-                            challenge.ExpiresAtUtc),
                         cancellationToken).ConfigureAwait(false);
 
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -496,12 +504,12 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
     public async Task<ApprovalChallenge> RecordChallengeOutcomeAsync(
         ApprovalChallenge challenge,
         ChallengeOutcome outcome,
-        PlanAudit audit,
+        ApprovalAuditEntry entry,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(challenge);
         ArgumentNullException.ThrowIfNull(outcome);
-        ArgumentNullException.ThrowIfNull(audit);
+        ArgumentNullException.ThrowIfNull(entry);
 
         var storedOutcome = string.IsNullOrWhiteSpace(outcome.ChallengeId)
             ? outcome with { ChallengeId = challenge.Id }
@@ -517,12 +525,8 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
                 {
                     await InsertChallengeOutcomeAsync(connection, transaction, challenge.PlanId, storedOutcome, cancellationToken)
                         .ConfigureAwait(false);
-                    await InsertAuditAsync(
-                        connection,
-                        transaction,
-                        audit.EventName,
-                        audit.Payload,
-                        cancellationToken).ConfigureAwait(false);
+                    await auditOutbox.AppendAsync(entry, connection, transaction, cancellationToken)
+                        .ConfigureAwait(false);
 
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
                 }
@@ -541,35 +545,6 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
             DecidedAtUtc = storedOutcome.DecidedAtUtc,
             Outcome = storedOutcome
         };
-    }
-
-    public async Task PublishAsync(PlanAudit audit, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(audit);
-
-        var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await using (connection.ConfigureAwait(false))
-        {
-            var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-            await using (transaction.ConfigureAwait(false))
-            {
-                try
-                {
-                    await InsertAuditAsync(
-                        connection,
-                        transaction,
-                        audit.EventName,
-                        audit.Payload,
-                        cancellationToken).ConfigureAwait(false);
-                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception)
-                {
-                    await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                    throw;
-                }
-            }
-        }
     }
 
     public async Task<ApprovalGrant> ApproveChallengeAsync(
@@ -618,31 +593,41 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
                     await InsertGrantAsync(connection, transaction, grant, outcome.Id, cancellationToken)
                         .ConfigureAwait(false);
 
-                    await InsertAuditAsync(
+                    await auditOutbox.AppendAsync(
+                        new ApprovalAuditEntry(
+                            ApprovalConventions.AuditEvents.ApprovalChallengeApproved,
+                            new ApprovalChallengeApprovedPayload(
+                                challenge.Id,
+                                challenge.PlanId,
+                                challenge.PendingPlanHash,
+                                challenge.RequesterSubject,
+                                approverSubject,
+                                decidedAtUtc),
+                            PlanId: challenge.PlanId,
+                            ChallengeId: challenge.Id,
+                            ActorSubject: approverSubject,
+                            Outcome: ApprovalConventions.ChallengeOutcomeStatuses.Approved),
                         connection,
                         transaction,
-                        ApprovalConventions.AuditEvents.ApprovalChallengeApproved,
-                        new ApprovalChallengeApprovedPayload(
-                            challenge.Id,
-                            challenge.PlanId,
-                            challenge.PendingPlanHash,
-                            challenge.RequesterSubject,
-                            approverSubject,
-                            decidedAtUtc),
                         cancellationToken).ConfigureAwait(false);
-                    await InsertAuditAsync(
+                    await auditOutbox.AppendAsync(
+                        new ApprovalAuditEntry(
+                            ApprovalConventions.AuditEvents.GrantIssued,
+                            new ApprovalGrantIssuedPayload(
+                                grant.PlanId,
+                                grant.Id,
+                                grant.SourceChallengeId,
+                                grant.RequesterSubject,
+                                grant.ApproverSubject,
+                                grant.IntentDigest,
+                                grant.ReviewDigest,
+                                grant.ExpiresAtUtc),
+                            PlanId: grant.PlanId,
+                            ChallengeId: grant.SourceChallengeId,
+                            GrantId: grant.Id,
+                            ActorSubject: grant.ApproverSubject),
                         connection,
                         transaction,
-                        ApprovalConventions.AuditEvents.GrantIssued,
-                        new ApprovalGrantIssuedPayload(
-                            grant.PlanId,
-                            grant.Id,
-                            grant.SourceChallengeId,
-                            grant.RequesterSubject,
-                            grant.ApproverSubject,
-                            grant.IntentDigest,
-                            grant.ReviewDigest,
-                            grant.ExpiresAtUtc),
                         cancellationToken).ConfigureAwait(false);
 
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -770,14 +755,14 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
         ExecutionAttempt attempt,
         string message,
         string? reasonCode,
-        PlanAudit audit,
+        ApprovalAuditEntry entry,
         CancellationToken cancellationToken) =>
         RecordExecutionOutcomeAsync(
             attempt,
             ApprovalConventions.ExecutionOutcomeStatuses.Blocked,
             message,
             reasonCode,
-            audit,
+            entry,
             targetNamespace: null,
             cancellationToken);
 
@@ -785,14 +770,14 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
         ExecutionAttempt attempt,
         string message,
         string? reasonCode,
-        PlanAudit audit,
+        ApprovalAuditEntry entry,
         CancellationToken cancellationToken) =>
         RecordExecutionOutcomeAsync(
             attempt,
             ApprovalConventions.ExecutionOutcomeStatuses.Failed,
             message,
             reasonCode,
-            audit,
+            entry,
             targetNamespace: null,
             cancellationToken);
 
@@ -801,14 +786,14 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
         ApprovalGrant grant,
         string targetNamespace,
         string message,
-        PlanAudit audit,
+        ApprovalAuditEntry entry,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(attempt);
         ArgumentNullException.ThrowIfNull(grant);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetNamespace);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
-        ArgumentNullException.ThrowIfNull(audit);
+        ArgumentNullException.ThrowIfNull(entry);
 
         var outcome = new ExecutionOutcome(
             ApprovalIds.NewExecutionOutcomeId(),
@@ -858,12 +843,8 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
                         },
                         transaction,
                         cancellationToken: cancellationToken)).ConfigureAwait(false);
-                    await InsertAuditAsync(
-                        connection,
-                        transaction,
-                        audit.EventName,
-                        audit.Payload,
-                        cancellationToken).ConfigureAwait(false);
+                    await auditOutbox.AppendAsync(entry, connection, transaction, cancellationToken)
+                        .ConfigureAwait(false);
                     await ReleaseExecutionClaimAsync(connection, transaction, attempt.PlanId, cancellationToken)
                         .ConfigureAwait(false);
 
@@ -883,14 +864,14 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
         string status,
         string message,
         string? reasonCode,
-        PlanAudit audit,
+        ApprovalAuditEntry entry,
         string? targetNamespace,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(attempt);
         ArgumentException.ThrowIfNullOrWhiteSpace(status);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
-        ArgumentNullException.ThrowIfNull(audit);
+        ArgumentNullException.ThrowIfNull(entry);
 
         var outcome = new ExecutionOutcome(
             ApprovalIds.NewExecutionOutcomeId(),
@@ -912,12 +893,8 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
                 {
                     await InsertExecutionOutcomeAsync(connection, transaction, outcome, cancellationToken)
                         .ConfigureAwait(false);
-                    await InsertAuditAsync(
-                        connection,
-                        transaction,
-                        audit.EventName,
-                        audit.Payload,
-                        cancellationToken).ConfigureAwait(false);
+                    await auditOutbox.AppendAsync(entry, connection, transaction, cancellationToken)
+                        .ConfigureAwait(false);
                     await ReleaseExecutionClaimAsync(connection, transaction, attempt.PlanId, cancellationToken)
                         .ConfigureAwait(false);
 
@@ -1088,47 +1065,6 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
                 outcome.DecidedAtUtc,
                 outcome.Reason,
                 outcome.GrantId
-            },
-            transaction,
-            cancellationToken: cancellationToken)).ConfigureAwait(false);
-    }
-
-    private static async Task InsertAuditAsync(
-        NpgsqlConnection connection,
-        NpgsqlTransaction transaction,
-        string eventName,
-        object payload,
-        CancellationToken cancellationToken)
-    {
-        var correlation = AuditCorrelation.FromPayload(payload);
-        await connection.ExecuteAsync(new CommandDefinition(
-            """
-            insert into approvals.audit_events (
-                event_name,
-                plan_id,
-                challenge_id,
-                grant_id,
-                execution_attempt_id,
-                occurred_at_utc,
-                payload_json_text)
-            values (
-                @EventName,
-                @PlanId,
-                @ChallengeId,
-                @GrantId,
-                @ExecutionAttemptId,
-                @OccurredAtUtc,
-                @PayloadJsonText)
-            """,
-            new
-            {
-                EventName = eventName,
-                correlation.PlanId,
-                correlation.ChallengeId,
-                correlation.GrantId,
-                correlation.ExecutionAttemptId,
-                OccurredAtUtc = DateTimeOffset.UtcNow,
-                PayloadJsonText = JsonSerializer.Serialize(payload, jsonOptions)
             },
             transaction,
             cancellationToken: cancellationToken)).ConfigureAwait(false);
@@ -1378,34 +1314,6 @@ public sealed class PostgresApprovalPersistence(NpgsqlDataSource dataSource) : I
         }
 
         return challengeId.All(c => c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9'));
-    }
-
-    private sealed record class AuditCorrelation(
-        string? PlanId,
-        string? ChallengeId,
-        string? GrantId,
-        string? ExecutionAttemptId)
-    {
-        public static AuditCorrelation FromPayload(object payload) =>
-            payload switch
-            {
-                IChallengeAuditPayload challenge => new(
-                    challenge.PlanId,
-                    challenge.Id,
-                    GrantId: null,
-                    ExecutionAttemptId: null),
-                ApprovalGrantIssuedPayload grant => new(
-                    grant.PlanId,
-                    ChallengeId: grant.SourceChallengeId,
-                    GrantId: grant.GrantId,
-                    ExecutionAttemptId: null),
-                IPlanAuditPayload plan => new(
-                    plan.PlanId,
-                    ChallengeId: null,
-                    GrantId: null,
-                    ExecutionAttemptId: null),
-                _ => new(null, null, null, null)
-            };
     }
 
     private sealed record class PlanRow(string CanonicalJsonText, string CanonicalSha256);

@@ -2,10 +2,13 @@ namespace InfraGate.RuntimeSafety;
 
 public static class RuntimeSafetyConventions
 {
-    public static void RegisterInfraGateEnvVarMappings(InfraGateEnvVarMappings mappings)
+    extension(InfraGateEnvVarMappings mappings)
     {
-        ArgumentNullException.ThrowIfNull(mappings);
-        mappings.Map(EnvironmentVariables.InfraGateEnvironment, ConfigurationKeys.InfraGateRuntimeEnvironment);
+        public void RegisterInfraGateEnvVarMappings()
+        {
+            ArgumentNullException.ThrowIfNull(mappings);
+            mappings.Map(EnvironmentVariables.InfraGateEnvironment, ConfigurationKeys.InfraGateRuntimeEnvironment);
+        }
     }
 
     public static class EnvironmentVariables

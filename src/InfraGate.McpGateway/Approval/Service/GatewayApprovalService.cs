@@ -13,7 +13,7 @@ namespace InfraGate.McpGateway;
 internal sealed class GatewayApprovalService(
     IApprovalPlanWorkflow approvalPlans,
     IApprovalChallengeWorkflow approvalChallenges,
-    IApprovalAuditPublisher auditPublisher,
+    IApprovalAuditOutbox auditOutbox,
     IPlanReviewAdapter planReviewAdapter,
     IAuthorizationCheck authorizationCheck,
     McpGatewayOptions options,
@@ -313,7 +313,7 @@ internal sealed class GatewayApprovalService(
                 decidedAt,
                 reason: null,
                 grantId: null),
-            new PlanAudit(
+            new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ApprovalChallengeDenied,
                 new ApprovalChallengeDeniedPayload(
                     challenge.Id,
@@ -321,7 +321,11 @@ internal sealed class GatewayApprovalService(
                     challenge.PendingPlanHash,
                     challenge.RequesterSubject,
                     approver.Subject,
-                    decidedAt)),
+                    decidedAt),
+                PlanId: challenge.PlanId,
+                ChallengeId: challenge.Id,
+                ActorSubject: approver.Subject,
+                Outcome: ApprovalConventions.ChallengeOutcomeStatuses.Denied),
             cancellationToken).ConfigureAwait(false);
 
         return new ApprovalDecisionResult(true, McpGatewayMessages.Approval.PlanDenied(denied.PlanId));
@@ -392,7 +396,7 @@ internal sealed class GatewayApprovalService(
                 decidedAt,
                 reason: null,
                 grantId: null),
-            new PlanAudit(
+            new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ApprovalChallengeCanceled,
                 new ApprovalChallengeCanceledPayload(
                     challenge.Id,
@@ -400,7 +404,11 @@ internal sealed class GatewayApprovalService(
                     challenge.PendingPlanHash,
                     challenge.RequesterSubject,
                     actor.Subject,
-                    decidedAt)),
+                    decidedAt),
+                PlanId: challenge.PlanId,
+                ChallengeId: challenge.Id,
+                ActorSubject: actor.Subject,
+                Outcome: ApprovalConventions.ChallengeOutcomeStatuses.Canceled),
             cancellationToken).ConfigureAwait(false);
 
         return new ApprovalDecisionResult(true, McpGatewayMessages.Approval.PlanCanceled(canceled.PlanId));
@@ -661,7 +669,7 @@ internal sealed class GatewayApprovalService(
         await approvalChallenges.RecordChallengeOutcomeAsync(
             challenge,
             rejected.Outcome,
-            new PlanAudit(
+            new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ApprovalChallengeRejected,
                 new ApprovalChallengeRejectedPayload(
                     challenge.Id,
@@ -669,7 +677,11 @@ internal sealed class GatewayApprovalService(
                     challenge.PendingPlanHash,
                     challenge.RequesterSubject,
                     approverSubject,
-                    reason)),
+                    reason),
+                PlanId: challenge.PlanId,
+                ChallengeId: challenge.Id,
+                ActorSubject: approverSubject,
+                Outcome: ApprovalConventions.ChallengeOutcomeStatuses.Rejected),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -694,14 +706,16 @@ internal sealed class GatewayApprovalService(
         return await approvalChallenges.RecordChallengeOutcomeAsync(
             challenge,
             expired.Outcome,
-            new PlanAudit(
+            new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ApprovalChallengeExpired,
                 new ApprovalChallengeExpiredPayload(
                     expired.Id,
                     expired.PlanId,
                     expired.PendingPlanHash,
                     expired.RequesterSubject,
-                    expired.ExpiresAtUtc)),
+                    expired.ExpiresAtUtc),
+                PlanId: expired.PlanId,
+                ChallengeId: expired.Id),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -712,10 +726,11 @@ internal sealed class GatewayApprovalService(
     {
         try
         {
-            await auditPublisher.PublishAsync(
-                new PlanAudit(
+            await auditOutbox.AppendAsync(
+                new ApprovalAuditEntry(
                     ApprovalConventions.AuditEvents.ApplyDenied,
-                    new ApplyDeniedPayload(planId, message)),
+                    new ApplyDeniedPayload(planId, message),
+                    PlanId: planId),
                 cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)

@@ -2,7 +2,7 @@ using Npgsql;
 
 namespace InfraGate.AuditOutbox;
 
-public interface IAuditOutboxCore
+internal interface IAuditOutboxCore
 {
     Task<long> AppendAsync(
         string streamSchema,

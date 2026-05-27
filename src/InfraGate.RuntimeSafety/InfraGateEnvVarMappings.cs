@@ -24,7 +24,7 @@ public sealed class InfraGateEnvVarMappings
     }
 
     public string? GetConfigurationKey(string environmentVariable) =>
-        mappings.TryGetValue(environmentVariable, out string? configKey) ? configKey : null;
+        mappings.GetValueOrDefault(environmentVariable);
 
     internal bool IsList(string environmentVariable) => listMappings.Contains(environmentVariable);
 

@@ -520,7 +520,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                 services.AddSingleton<GuardedToolRunner>();
                 services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
                 services.AddSingleton<ApprovalStore>();
-                services.AddSingleton<IApprovalAuditPublisher>(sp => sp.GetRequiredService<ApprovalStore>());
+                services.AddSingleton<IApprovalAuditOutbox>(sp => sp.GetRequiredService<ApprovalStore>());
                 services.AddSingleton<IApprovalPlanWorkflow>(sp => sp.GetRequiredService<ApprovalStore>());
                 services.AddSingleton(challengeStore!);
                 services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<InMemoryApprovalChallengeWorkflow>());

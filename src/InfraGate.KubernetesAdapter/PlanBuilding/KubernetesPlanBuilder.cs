@@ -602,7 +602,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         }
     }
 
-    private static PlanAudit DryRunAudit(string operation, string namespaceName, string message) =>
+    private static ApprovalAuditEntry DryRunAudit(string operation, string namespaceName, string message) =>
         new(
             ApprovalConventions.AuditEvents.DryRunFailed,
             new InfraGate.Approvals.AuditPayloads.DryRunFailedPayload(
@@ -613,7 +613,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                 Array.Empty<string>(),
                 message));
 
-    private static PlanAudit DiffAudit(
+    private static ApprovalAuditEntry DiffAudit(
         string operation,
         string namespaceName,
         string[] objects,

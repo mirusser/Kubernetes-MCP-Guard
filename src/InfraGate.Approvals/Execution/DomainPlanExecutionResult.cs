@@ -7,7 +7,7 @@ public sealed record class DomainPlanExecutionResult(
     string? TargetNamespace,
     string? ReasonCode = null)
 {
-    public PlanAudit? Audit { get; init; }
+    public ApprovalAuditEntry? Audit { get; init; }
 
     public static DomainPlanExecutionResult Success(string message, string? targetNamespace) =>
         new(true, message, targetNamespace);
@@ -15,6 +15,6 @@ public sealed record class DomainPlanExecutionResult(
     public static DomainPlanExecutionResult Blocked(string message, string? reasonCode = null) =>
         new(false, message, TargetNamespace: null, reasonCode);
 
-    public static DomainPlanExecutionResult Blocked(string message, PlanAudit audit, string? reasonCode = null) =>
+    public static DomainPlanExecutionResult Blocked(string message, ApprovalAuditEntry audit, string? reasonCode = null) =>
         new(false, message, TargetNamespace: null, reasonCode) { Audit = audit };
 }

@@ -11,4 +11,10 @@
     <PackageReference Include="Npgsql" Version="10.0.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="InfraGate.AuditOutbox.Postgres" />
+    <InternalsVisibleTo Include="InfraGate.AuditOutbox.Tests" />
+    <InternalsVisibleTo Include="InfraGate.Approvals.Postgres" />
+  </ItemGroup>
+
 </Project>

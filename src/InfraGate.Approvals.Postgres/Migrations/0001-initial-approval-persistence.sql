@@ -121,17 +121,32 @@ create table approvals.applied_plans
     applied_at_utc timestamptz not null
 );
 
-create table approvals.audit_events
+-- audit_outbox replaces audit_events (ADR-0020: in-place migration edit, pre-production only).
+-- Drop the schema and re-apply all migrations if upgrading an existing database.
+create table approvals.audit_outbox
 (
-    audit_sequence bigint generated always as identity primary key,
-    event_name text not null,
-    plan_id text,
-    challenge_id text,
-    grant_id text,
-    execution_attempt_id text,
-    occurred_at_utc timestamptz not null,
-    payload_json_text text not null
+    audit_sequence        bigserial   primary key,
+    event_name            text        not null,
+    occurred_at_utc       timestamptz not null,
+    actor_subject         text,
+    actor_client_id       text,
+    outcome               text,
+    reason                text,
+    previous_event_hash   text,
+    event_hash            text        not null,
+    payload_json_text     text        not null,
+    published_at_utc      timestamptz,
+    publish_attempts      int         not null default 0,
+    last_publish_error    text,
+    plan_id               text,
+    challenge_id          text,
+    grant_id              text,
+    execution_attempt_id  text
 );
 
-create index ix_audit_events_plan_sequence
-    on approvals.audit_events (plan_id, audit_sequence);
+create index ix_audit_outbox_plan_sequence
+    on approvals.audit_outbox (plan_id, audit_sequence);
+
+create index ix_audit_outbox_unpublished
+    on approvals.audit_outbox (published_at_utc)
+    where published_at_utc is null;

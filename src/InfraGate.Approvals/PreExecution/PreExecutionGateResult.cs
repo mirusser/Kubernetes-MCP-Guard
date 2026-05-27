@@ -1,6 +1,4 @@
 using InfraGate.Approvals.AuditPayloads;
-
-using InfraGate.Approvals;
 using InfraGate.Approvals.Plan;
 using InfraGate.Approvals.Grant;
 using InfraGate.Approvals.Audit;
@@ -14,7 +12,7 @@ public sealed record class PreExecutionGateResult(
     ApprovalGrant? Grant,
     string? ReasonCode = null)
 {
-    public PlanAudit? Audit { get; init; }
+    public ApprovalAuditEntry? Audit { get; init; }
 
     public static PreExecutionGateResult Passed(PlanEnvelope envelope, ApprovalGrant grant) =>
         new(true, "Pre-execution gates passed.", envelope, grant);
@@ -22,16 +20,18 @@ public sealed record class PreExecutionGateResult(
     public static PreExecutionGateResult Blocked(string planId, string message, string? reasonCode = null) =>
         new(false, message, Envelope: null, Grant: null, reasonCode)
         {
-            Audit = new PlanAudit(
+            Audit = new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ApplyDenied,
-                new ApplyDeniedPayload(planId, message))
+                new ApplyDeniedPayload(planId, message),
+                PlanId: planId)
         };
 
     public static PreExecutionGateResult Blocked(DomainPlanExecutionResult domainResult, string planId) =>
         new(false, domainResult.Message, Envelope: null, Grant: null, domainResult.ReasonCode)
         {
-            Audit = domainResult.Audit ?? new PlanAudit(
+            Audit = domainResult.Audit ?? new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ApplyDenied,
-                new ApplyDeniedPayload(planId, domainResult.Message))
+                new ApplyDeniedPayload(planId, domainResult.Message),
+                PlanId: planId)
         };
 }

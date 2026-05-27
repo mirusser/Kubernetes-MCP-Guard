@@ -7,7 +7,7 @@ public static class AuditOutboxConventions
 {
     // Unique sentinel for the two-argument pg_advisory_xact_lock category.
     // Chosen to avoid collision with other advisory lock callers in the same database.
-    public const int LockCategory = 0x40D17011;
+    public const int LockCategory = unchecked((int)0xA0D17011);
 
     public static int StreamLockKey(string schemaName)
     {
@@ -15,13 +15,6 @@ public static class AuditOutboxConventions
 
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(schemaName));
         return BitConverter.ToInt32(hash, 0);
-    }
-
-    public static string ComputeSha256Hex(string hashInput)
-    {
-        ArgumentNullException.ThrowIfNull(hashInput);
-
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(hashInput))).ToUpperInvariant();
     }
 
     // Builds the canonical input object for hash computation.
@@ -48,6 +41,13 @@ public static class AuditOutboxConventions
         }
 
         return dict;
+    }
+
+    public static class Streams
+    {
+        public const string Approvals = "approvals";
+        public const string Observer = "observer";
+        public const string Planner = "planner";
     }
 
     public static class ColumnNames

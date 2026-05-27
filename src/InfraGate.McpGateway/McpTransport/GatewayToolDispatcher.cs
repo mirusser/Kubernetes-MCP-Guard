@@ -18,7 +18,7 @@ internal sealed class GatewayToolDispatcher(
     IGatewayApprovalService approvals,
     IApprovalPlanWorkflow approvalPlans,
     IApprovalExecutionWorkflow approvalExecution,
-    IApprovalAuditPublisher auditPublisher,
+    IApprovalAuditOutbox auditOutbox,
     IApprovalPreExecutionGate preExecutionGate,
     IProposePlanHandler proposePlanHandler,
     ISubscriptionRegistry subscriptionRegistry,
@@ -268,7 +268,7 @@ internal sealed class GatewayToolDispatcher(
 
         if (planResult.Audit is { } audit)
         {
-            await WritePlanAuditAsync(audit, mutationToolName, ct).ConfigureAwait(false);
+            await WriteAuditEntryAsync(audit, mutationToolName, ct).ConfigureAwait(false);
         }
 
         var sanitized = await guardedRunner.SanitizeAndAuditResponseAsync(toolName, args, planResult.Message, ct)
@@ -314,9 +314,10 @@ internal sealed class GatewayToolDispatcher(
         var preExecution = await preExecutionGate.EvaluateAsync(planId, domainAdapter, ct).ConfigureAwait(false);
         if (!preExecution.IsPassed || preExecution.Envelope is null || preExecution.Grant is null)
         {
-            var audit = preExecution.Audit ?? new PlanAudit(
+            var audit = preExecution.Audit ?? new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ApplyDenied,
-                new ApplyDeniedPayload(planId, preExecution.Message));
+                new ApplyDeniedPayload(planId, preExecution.Message),
+                PlanId: planId);
             await approvalExecution.RecordExecutionBlockedAsync(
                 beginExecution.Attempt,
                 preExecution.Message,
@@ -460,12 +461,13 @@ internal sealed class GatewayToolDispatcher(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             var message = McpGatewayMessages.Approval.PlanExecutionFailed(planId, ex.Message);
-            var audit = new PlanAudit(
+            var audit = new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ApplyFailed,
                 new ApplyFailedPayload(
                     planId,
                     envelope.Operation,
-                    message));
+                    message),
+                PlanId: planId);
             await approvalExecution.RecordExecutionFailedAsync(
                 attempt,
                 message,
@@ -480,9 +482,10 @@ internal sealed class GatewayToolDispatcher(
 
         if (!executeResult.IsSuccessful)
         {
-            var audit = executeResult.Audit ?? new PlanAudit(
+            var audit = executeResult.Audit ?? new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ApplyFailed,
-                new ApplyFailedPayload(planId, envelope.Operation, executeResult.Message));
+                new ApplyFailedPayload(planId, envelope.Operation, executeResult.Message),
+                PlanId: planId);
             await approvalExecution.RecordExecutionFailedAsync(
                 attempt,
                 executeResult.Message,
@@ -499,9 +502,11 @@ internal sealed class GatewayToolDispatcher(
             grant,
             targetNamespace,
             executeResult.Message,
-            new PlanAudit(
+            new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.PlanApplied,
-                new PlanAppliedPayload(envelope.Id, envelope.Operation, targetNamespace, grant.ReviewDigest.Value)),
+                new PlanAppliedPayload(envelope.Id, envelope.Operation, targetNamespace, grant.ReviewDigest.Value),
+                PlanId: envelope.Id,
+                GrantId: grant.Id),
             ct).ConfigureAwait(false);
 
         return new CallToolResult
@@ -513,17 +518,17 @@ internal sealed class GatewayToolDispatcher(
     private static bool IsTerminalWaitStatus(PlanStatus status) =>
         status is PlanStatus.NotFound or PlanStatus.Approved or PlanStatus.Applied or PlanStatus.Expired;
 
-    private async Task WritePlanAuditAsync(PlanAudit audit, string context, CancellationToken ct)
+    private async Task WriteAuditEntryAsync(ApprovalAuditEntry entry, string context, CancellationToken ct)
     {
         try
         {
-            await auditPublisher.PublishAsync(audit, ct).ConfigureAwait(false);
+            await auditOutbox.AppendAsync(entry, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex,
                 "Failed to write audit event {EventName} for {Context}.",
-                audit.EventName,
+                entry.EventName,
                 context);
         }
     }

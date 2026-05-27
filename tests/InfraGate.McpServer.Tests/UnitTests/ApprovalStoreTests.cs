@@ -6,6 +6,7 @@ using InfraGate.Approvals.Audit;
 using InfraGate.Approvals.AuditPayloads;
 using InfraGate.McpServer;
 
+
 namespace InfraGate.McpServer.Tests.UnitTests;
 
 public sealed class ApprovalStoreTests
@@ -34,12 +35,12 @@ public sealed class ApprovalStoreTests
     }
 
     [Fact]
-    public async Task PublishAsync_PlanAudit_WritesAuditEvent()
+    public async Task AppendAsync_ApprovalAuditEntry_WritesAuditEvent()
     {
         var store = CreateStore();
 
-        await store.PublishAsync(
-            new PlanAudit(
+        await store.AppendAsync(
+            new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.PreExecutionChecked,
                 new PreExecutionCheckedPayload(
                     "plan-1",

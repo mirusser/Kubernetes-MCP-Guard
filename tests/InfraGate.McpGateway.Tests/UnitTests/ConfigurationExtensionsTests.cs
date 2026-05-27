@@ -3,7 +3,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace InfraGate.McpGateway.Tests.UnitTests;
 
-public sealed class GatewayConfigurationExtensionsTests
+public sealed class ConfigurationExtensionsTests
 {
     [Fact]
     public void AddInfraGateConfiguration_WhenConfigPathNotSet_AddsNoSources()
@@ -14,7 +14,7 @@ public sealed class GatewayConfigurationExtensionsTests
             Environment.SetEnvironmentVariable(RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null);
             var builder = new ConfigurationBuilder();
 
-            GatewayConfigurationExtensions.AddInfraGateConfiguration(builder, []);
+            ConfigurationExtensions.AddInfraGateConfiguration(builder, []);
 
             Assert.Empty(builder.Sources);
         }
@@ -33,7 +33,7 @@ public sealed class GatewayConfigurationExtensionsTests
             Environment.SetEnvironmentVariable(RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, "   ");
             var builder = new ConfigurationBuilder();
 
-            GatewayConfigurationExtensions.AddInfraGateConfiguration(builder, []);
+            ConfigurationExtensions.AddInfraGateConfiguration(builder, []);
 
             Assert.Empty(builder.Sources);
         }
