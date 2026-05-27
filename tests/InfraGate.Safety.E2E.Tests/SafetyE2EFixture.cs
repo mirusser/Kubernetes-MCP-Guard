@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
 using InfraGate.DownstreamAuth;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
@@ -535,6 +536,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                 services.AddKubernetesAdapter();
                 services.AddSingleton<DownstreamToolRegistry>();
                 services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
+                services.AddSingleton<IToolScopeGuard, ToolScopeGuard>();
                 services.AddHttpContextAccessor();
                 services.AddLogging();
                 services.AddSingleton<IApprovalAccessCodeStore, InMemoryApprovalAccessCodeStore>();

@@ -1,6 +1,14 @@
 using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
+using InfraGate.Approvals.AccessCodes;
+using InfraGate.Approvals.Audit;
+using InfraGate.Approvals.Challenge;
+using InfraGate.Approvals.Execution;
+using InfraGate.Approvals.Grant;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.PreExecution;
 using InfraGate.KubernetesAdapter;
+using InfraGate.KubernetesAdapter.Approval;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Email;
@@ -80,6 +88,7 @@ public sealed class GatewayDiWiringTests
         services.AddKubernetesAdapter();
         services.AddSingleton<DownstreamToolRegistry>();
         services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
+        services.AddSingleton<IToolScopeGuard, ToolScopeGuard>();
         services.AddHttpContextAccessor();
         services.AddDataProtection()
             .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetTempPath(), "di-wiring-dp", Guid.NewGuid().ToString("N"))))

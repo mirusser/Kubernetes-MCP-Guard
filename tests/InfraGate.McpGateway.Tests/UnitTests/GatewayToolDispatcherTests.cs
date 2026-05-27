@@ -1,7 +1,14 @@
 using System.Security.Claims;
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.Approvals.AccessCodes;
+using InfraGate.Approvals.Execution;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.PreExecution;
 using InfraGate.KubernetesAdapter;
+using InfraGate.KubernetesAdapter.Approval;
+using InfraGate.KubernetesAdapter.Evidence;
+using InfraGate.KubernetesAdapter.PlanBuilding;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Email;
@@ -60,7 +67,7 @@ public sealed class GatewayToolDispatcherTests
             CancellationToken.None);
 
         Assert.True(result.IsError);
-        Assert.Equal("Missing required argument: planId.", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+        Assert.Equal(McpGatewayMessages.ArgumentValidation.MissingPlanId, Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
     }
 
     [Fact]
@@ -76,7 +83,7 @@ public sealed class GatewayToolDispatcherTests
             CancellationToken.None);
 
         Assert.True(result.IsError);
-        Assert.Equal("Missing required argument: planId.", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+        Assert.Equal(McpGatewayMessages.ArgumentValidation.MissingPlanId, Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
     }
 
     [Fact]
@@ -181,7 +188,7 @@ public sealed class GatewayToolDispatcherTests
             [McpGatewayConventions.ToolArguments.TimeoutSeconds] = input
         };
 
-        bool ok = GatewayToolDispatcher.TryGetWaitTimeoutSeconds(args, out int timeout, out string? error);
+        bool ok = ToolArgumentConverter.TryGetWaitTimeoutSeconds(args, out int timeout, out string? error);
 
         Assert.True(ok);
         Assert.Equal(expected, timeout);
@@ -197,10 +204,10 @@ public sealed class GatewayToolDispatcherTests
             [McpGatewayConventions.ToolArguments.TimeoutSeconds] = input
         };
 
-        bool ok = GatewayToolDispatcher.TryGetWaitTimeoutSeconds(args, out _, out string? error);
+        bool ok = ToolArgumentConverter.TryGetWaitTimeoutSeconds(args, out _, out string? error);
 
         Assert.False(ok);
-        Assert.Equal("timeoutSeconds must be an integer between 1 and 300.", error);
+        Assert.Equal(McpGatewayMessages.ArgumentValidation.TimeoutMustBeInteger, error);
     }
 
     [Fact]
@@ -211,10 +218,10 @@ public sealed class GatewayToolDispatcherTests
             [McpGatewayConventions.ToolArguments.TimeoutSeconds] = -1.0d
         };
 
-        bool ok = GatewayToolDispatcher.TryGetWaitTimeoutSeconds(args, out _, out string? error);
+        bool ok = ToolArgumentConverter.TryGetWaitTimeoutSeconds(args, out _, out string? error);
 
         Assert.False(ok);
-        Assert.Equal("timeoutSeconds must be an integer between 1 and 300.", error);
+        Assert.Equal(McpGatewayMessages.ArgumentValidation.TimeoutMustBeInteger, error);
     }
 
     [Fact]
@@ -272,7 +279,7 @@ public sealed class GatewayToolDispatcherTests
             CancellationToken.None);
 
         Assert.True(result.IsError);
-        Assert.Contains("destructive", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+        Assert.Equal(McpGatewayMessages.ToolRouting.DestructiveToolRequiresRequest("apply_manifest"), Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
         Assert.Empty(context.Downstream.Calls);
     }
 
@@ -451,7 +458,7 @@ public sealed class GatewayToolDispatcherTests
         string audit = context.Workflow.GetAuditEventsJson();
 
         Assert.True(result.IsError);
-        Assert.Contains("execution failed", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+        Assert.Equal(McpGatewayMessages.Approval.PlanExecutionFailed(envelope.Id, "downstream mutation failed"), Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
         Assert.Contains($@"""eventName"": ""{ApprovalConventions.AuditEvents.ApplyFailed}""", audit);
         Assert.False(context.Workflow.IsApplied(envelope.Id));
     }
@@ -731,9 +738,9 @@ public sealed class GatewayToolDispatcherTests
                 workflow,
                 new ApprovalPreExecutionGate(workflow, workflow),
                 proposePlanHandler,
-                httpContextAccessor,
                 subscriptions,
-                guardrailAudit,
+                new ToolScopeGuard(httpContextAccessor, guardrailAudit, NullLogger<ToolScopeGuard>.Instance),
+                httpContextAccessor,
                 NullLogger<GatewayToolDispatcher>.Instance),
             workflow,
             downstream,

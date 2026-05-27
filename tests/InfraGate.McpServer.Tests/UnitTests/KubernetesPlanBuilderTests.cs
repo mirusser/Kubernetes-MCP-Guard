@@ -1,6 +1,10 @@
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Execution;
 using InfraGate.KubernetesAdapter;
+using InfraGate.KubernetesAdapter.Evidence;
+using InfraGate.KubernetesAdapter.PlanBuilding;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
 

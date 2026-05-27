@@ -1,5 +1,8 @@
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Grant;
+using InfraGate.Approvals.Audit;
 using InfraGate.Approvals.Postgres;
 using Npgsql;
 using Testcontainers.PostgreSql;

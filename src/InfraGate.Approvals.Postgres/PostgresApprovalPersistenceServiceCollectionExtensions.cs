@@ -1,4 +1,9 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Challenge;
+using InfraGate.Approvals.Execution;
+using InfraGate.Approvals.Audit;
+using InfraGate.Approvals.AccessCodes;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 

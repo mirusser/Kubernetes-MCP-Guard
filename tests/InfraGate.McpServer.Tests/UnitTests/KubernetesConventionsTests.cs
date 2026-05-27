@@ -1,4 +1,5 @@
 using InfraGate.KubernetesAdapter;
+using InfraGate.KubernetesAdapter.PlanBuilding;
 using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpServer.Tests.UnitTests;

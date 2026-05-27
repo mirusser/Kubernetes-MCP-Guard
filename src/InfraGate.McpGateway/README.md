@@ -4,15 +4,15 @@
 
 ## Runtime Flow
 
-- `Program.cs` configures the HTTP MCP server at `/mcp`, registers auth, approval endpoints, guardrails, the downstream client, and the Kubernetes adapter implementation of the generic plan seams.
-- `IGatewayToolDispatcher.cs` / `GatewayToolDispatcher.cs` dynamically forward downstream ReadOnly tools, hide downstream Destructive tools, expose `request_*` wrappers for human-driven plan creation, own `execute_approved_plan`, `get_plan_status`, and `wait_for_plan_approval`, route `propose_plan`, and call the generic pre-execution gate before adapter execution.
-- `ProposePlanHandler.cs` creates Operator Approval Policy plans for the autonomous Planner operation menu, generates Approval Access Codes, and attempts the configured operator email notification.
-- `Notifications/PlanStatusResourceHandler.cs` exposes the `plan://{planId}/status` MCP resource template, reads the same plan-status JSON contract as `get_plan_status`, and owns explicit `resources/subscribe` / `resources/unsubscribe` routing for approval notifications.
-- `IGatewayApprovalService.cs`, `GatewayApprovalService.cs`, and `GatewayApprovalEndpoints.cs` create or reuse short-lived approval URLs, expose the `/approvals/code` Approval Access Code route, and delegate HTML rendering to `InfraGate.ApprovalUi` Razor components; challenge workflows live in `InfraGate.Approvals` behind `IApprovalChallengeWorkflow`. `ApprovalGateResult` separates `Approved`, `ApprovalRequired`, and `Refused` states and carries stable reason codes while preserving the MCP text response.
-- `GuardedToolRunner.cs` scans inbound arguments, calls the downstream stdio server, sanitizes risky model-visible output, and writes audit events.
-- `DownstreamMcpClient.cs` starts and reuses the downstream `InfraGate.McpServer` process via the Model Context Protocol client.
-- `PromptInjectionGuard*.cs` contains argument scanning, response redaction, operational-line allow-listing, and regex patterns.
-- `GuardrailAuditStore.cs` appends JSONL audit entries under the configured guardrail audit root.
+- `Program.cs` bootstraps the pipeline, delegates service registration to `GatewayConfigurationExtensions`, configures the HTTP MCP server at `/mcp` with handler routing, and defines the request middleware chain.
+- `McpTransport/Dispatch/IGatewayToolDispatcher.cs` / `McpTransport/GatewayToolDispatcher.cs` dynamically forward downstream ReadOnly tools, hide downstream Destructive tools, expose `request_*` wrappers for human-driven plan creation, own `execute_approved_plan`, `get_plan_status`, and `wait_for_plan_approval`, route `propose_plan`, and call the generic pre-execution gate before adapter execution.
+- `Approval/ProposePlan/ProposePlanHandler.cs` creates Operator Approval Policy plans for the autonomous Planner operation menu, generates Approval Access Codes, and attempts the configured operator email notification.
+- `McpTransport/Notifications/PlanStatusResourceHandler.cs` exposes the `plan://{planId}/status` MCP resource template, reads the same plan-status JSON contract as `get_plan_status`, and owns explicit `resources/subscribe` / `resources/unsubscribe` routing for approval notifications.
+- `Approval/Service/IGatewayApprovalService.cs`, `Approval/Service/GatewayApprovalService.cs`, and `Approval/Service/GatewayApprovalEndpoints.cs` create or reuse short-lived approval URLs, expose the `/approvals/code` Approval Access Code route, and delegate HTML rendering to `InfraGate.ApprovalUi` Razor components; challenge workflows live in `InfraGate.Approvals` behind `IApprovalChallengeWorkflow`. `ApprovalGateResult` separates `Approved`, `ApprovalRequired`, and `Refused` states and carries stable reason codes while preserving the MCP text response.
+- `Guardrails/GuardedToolRunner.cs` scans inbound arguments, calls the downstream stdio server, sanitizes risky model-visible output, and writes audit events.
+- `McpTransport/Client/DownstreamMcpClient.cs` starts and reuses the downstream `InfraGate.McpServer` process via the Model Context Protocol client.
+- `Guardrails/Scanning/PromptInjectionGuard*.cs` contains argument scanning, response redaction, operational-line allow-listing, and regex patterns.
+- `Guardrails/Audit/GuardrailAuditStore.cs` appends JSONL audit entries under the configured guardrail audit root.
 - MCP transport and OAuth compliance details for this gateway path are summarized in [MCP-compliance.md](../../docs/MCP-compliance.md).
 
 ## Security Controls (Priority Order)

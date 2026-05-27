@@ -1,6 +1,13 @@
 using System.Security.Claims;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Challenge;
+using InfraGate.Approvals.PreExecution;
+using InfraGate.Approvals.Audit;
 using InfraGate.KubernetesAdapter;
+using InfraGate.KubernetesAdapter.Approval;
+using InfraGate.KubernetesAdapter.Evidence;
+using InfraGate.KubernetesAdapter.PlanBuilding;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Notifications;
@@ -78,7 +85,7 @@ public sealed class GatewayApprovalServiceTests
         Assert.False(result.IsApproved);
         Assert.Equal(ApprovalGateStatus.Refused, result.Status);
         Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.AuthenticatedSubjectRequired, result.ReasonCode);
-        Assert.Contains("authenticated OAuth subject", result.Message);
+        Assert.Equal(McpGatewayMessages.Authorization.RefusedAuthenticatedSubjectRequired(), result.Message);
         Assert.Equal(0, context.Workflow.ChallengeCount);
     }
 

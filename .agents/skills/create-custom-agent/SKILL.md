@@ -127,7 +127,7 @@ You are a security-focused code reviewer. Your job is to:
 
 ## Reference other files
 
-See [security guidelines](../security.md) for standards.
+See `SECURITY.md` for security guidelines.
 ```
 
 Tips for instructions:

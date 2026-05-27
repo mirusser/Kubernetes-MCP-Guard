@@ -1,6 +1,13 @@
 using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Challenge;
+using InfraGate.Approvals.PreExecution;
+using InfraGate.Approvals.Audit;
 using InfraGate.KubernetesAdapter;
+using InfraGate.KubernetesAdapter.Approval;
+using InfraGate.KubernetesAdapter.Evidence;
+using InfraGate.KubernetesAdapter.PlanBuilding;
 using InfraGate.McpGateway;
 
 namespace InfraGate.McpGateway.Tests.UnitTests;
@@ -42,7 +49,7 @@ public sealed class GatewayApprovalEndpointsTests
         Assert.Equal($"/approvals/{challenge.Id}/approve", result.Actions.ApproveUrl);
         Assert.Equal($"/approvals/{challenge.Id}/deny", result.Actions.DenyUrl);
         Assert.Equal($"/approvals/{challenge.Id}/cancel", result.Actions.CancelUrl);
-        Assert.Equal("__RequestVerificationToken", result.Actions.AntiforgeryFieldName);
+        Assert.Equal(McpGatewayConventions.Approvals.RequestVerificationToken, result.Actions.AntiforgeryFieldName);
         Assert.Equal("tok-123", result.Actions.AntiforgeryToken);
     }
 
@@ -99,9 +106,9 @@ public sealed class GatewayApprovalEndpointsTests
             submittedCode: "ABC12345",
             error: "Approval code is invalid.");
 
-        Assert.Equal("/approvals/code", result.ActionUrl);
-        Assert.Equal("code", result.CodeFieldName);
-        Assert.Equal("__RequestVerificationToken", result.AntiforgeryFieldName);
+        Assert.Equal(McpGatewayConventions.Approvals.CodeRoute, result.ActionUrl);
+        Assert.Equal(McpGatewayConventions.Approvals.CodeFormField, result.CodeFieldName);
+        Assert.Equal(McpGatewayConventions.Approvals.RequestVerificationToken, result.AntiforgeryFieldName);
         Assert.Equal("tok-123", result.AntiforgeryToken);
         Assert.Equal("ABC12345", result.SubmittedCode);
         Assert.Equal("Approval code is invalid.", result.Error);

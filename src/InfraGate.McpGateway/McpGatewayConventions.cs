@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
 using InfraGate.DownstreamAuth;
 using InfraGate.RuntimeSafety;
 
@@ -248,5 +249,4 @@ internal static class McpGatewayConventions
         public const string InspectPendingPlan = "[redacted: inspect the pending plan file before approval]";
         public const string SensitivePlanMetadata = "[redacted: sensitive plan metadata]";
     }
-
 }

@@ -79,6 +79,73 @@ In source mode, the gateway launches the server project as a private stdio subpr
 
 The Generic Approval Core (`InfraGate.Approvals`) owns plan envelopes, approval challenges, challenge outcomes, approval grants, the audit spine, and generic pre-execution gate orchestration independent of any target system. The Kubernetes Adapter (`InfraGate.KubernetesAdapter`) owns Kubernetes mutation intents, evidence artifacts (diffs, dry-run results, policy findings), intent-digest canonicalization, and adapter-owned freshness/domain policy checks. The gateway composes the adapter through generic seams, persists generic envelopes in the approval store, and calls the private stdio server only for Kubernetes evidence and raw mutation tools.
 
+
+```mermaid
+---
+title: Kubernetes MCP Guard Runtime
+---
+flowchart TB
+    Client["MCP client<br/>Codex / Claude Code"]
+    Browser["Human browser<br/>approval UI"]
+
+    subgraph Gateway["HTTP MCP Gateway"]
+        Auth["OAuth JWT validation<br/>scope checks"]
+        Guardrails["Prompt-injection scan<br/>response sanitization"]
+        ApprovalUI["Browser approval endpoints<br/>OAuth cookie + anti-forgery"]
+        Dispatcher["Gateway tool dispatcher"]
+        Auth --> Dispatcher
+        Dispatcher --> Guardrails
+        ApprovalUI --> Dispatcher
+    end
+
+    subgraph Core["Generic Approval Flow"]
+        direction LR
+        Envelope["Plan Envelope<br/>Intent + Review Digests"]
+        Challenge["Approval Challenge<br/>TTL + requester binding"]
+        Grant["Approval Grant<br/>single-execution default"]
+        Gates["pre-execution gates"]
+        Audit["approval audit<br/>(PostgreSQL)"]
+        Envelope --> Challenge
+        Challenge --> Grant
+        Grant --> Gates
+        Challenge --> Audit
+        Gates --> Audit
+    end
+
+    subgraph Adapter["Kubernetes Adapter"]
+        Intent["Mutation Intent"]
+        Evidence["dry-run / diff / policy evidence"]
+        Freshness["freshness + domain policy checks"]
+        Intent --> Evidence
+        Evidence --> Freshness
+    end
+
+    subgraph Server["Kubernetes MCP Server"]
+        Tools["typed MCP tools"]
+        Reads["bounded observability"]
+        Mutations["raw Kubernetes mutations<br/>called only after approval gates"]
+        Tools --> Reads
+        Tools --> Mutations
+    end
+
+    subgraph K8s["Kubernetes Boundary"]
+        RBAC["namespace-scoped RBAC"]
+        API["Kubernetes API"]
+        RBAC --> API
+    end
+
+    Client -->|"/mcp + OAuth JWT"| Auth
+    Dispatcher --> Adapter
+    Adapter --> Server
+    Dispatcher --> Envelope
+    ApprovalUI --> Challenge
+    Gates --> Freshness
+    Client -.->|"approval URL"| Browser
+    Browser -->|"/approvals/*"| ApprovalUI
+    Reads --> RBAC
+    Mutations --> RBAC
+```
+
 ## OAuth Login And MCP Authorization
 
 ```mermaid

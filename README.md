@@ -7,7 +7,7 @@
 > Observer detects anomalies.  
 > Planner proposes an evidence-backed plan.  
 > Human reviewer approves out-of-band.  
-> Executor runs only the approved digest.  
+> Executor runs only the approved digest-bound plan.  
 > Everything is auditable.
 
 </br>
@@ -23,19 +23,30 @@
 
 
 ### 📝 TL;DR
-**A security-first bridge between AI agents and Kubernetes, with out of band Human-in-the-Loop (HITL) plan based approval for every gateway-exposed mutation.**
+**A security-first bridge between AI agents and Kubernetes, with out-of-band, human-in-the-loop (HITL), plan-based approval for every gateway-exposed mutation.**
 
 Agents can inspect a narrow cluster surface and propose changes, but writes are staged as server-side dry-run plans and execute only after an OAuth-authenticated human approves the exact review snapshot in a separate browser session.
 
-<sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments rather than production-certified infrastructure.</em></sub>
+<sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments, not production-certified infrastructure.</em></sub>
 
-<sub><em>Kubernetes MCP Guard is internally named **InfraGate**. </em></sub>
+<sub><em>The codebase uses **InfraGate** as the internal project name.</em></sub>
 
 ## 🎬 Demo
 
 https://github.com/user-attachments/assets/4e06b4ee-db80-4d74-96cc-38dfbb413042
 
-The walkthrough in [docs/demo-failing-deployment.md](docs/demo-failing-deployment.md) shows the full flow against a deliberately broken Deployment: diagnose, request a plan, approve in the browser, execute, verify, and inspect audit logs.
+
+> Demo scenario:  
+>  
+> 1. A Deployment is intentionally broken.  
+> 2. The Observer detects the unhealthy workload.  
+> 3. The Planner proposes a bounded remediation.  
+> 4. An approval access code is sent to the configured operator by email.
+> 5. An authenticated human approves the exact plan in the browser.  
+> 6. The Executor applies the approved mutation.  
+>  
+
+The walkthrough in [docs/demo-failing-deployment.md](docs/demo-failing-deployment.md) shows the full flow against a deliberately broken Deployment.
 
 ## 🧠 Core Ideas
 
@@ -56,68 +67,66 @@ The repository also separates the generic approval lifecycle from the Kubernetes
 
 ```mermaid
 ---
-title: Kubernetes MCP Guard Runtime
+title: Autonomous Process Boundaries
 ---
 flowchart TB
-    Client["MCP client<br/>Codex / Claude Code"]
-    Browser["Human browser<br/>approval UI"]
-
-    subgraph Gateway["HTTP MCP Gateway"]
-        Auth["OAuth JWT validation<br/>scope checks"]
-        Guardrails["Prompt-injection scan<br/>response sanitization"]
-        ApprovalUI["Browser approval endpoints<br/>OAuth cookie + anti-forgery"]
-        Dispatcher["Gateway tool dispatcher"]
-        Auth --> Dispatcher
-        Dispatcher --> Guardrails
-        ApprovalUI --> Dispatcher
+    subgraph ObserverProc["Observer"]
+        direction TB
+        ORunner["ObservationCycleRunner + LLM analyze"]
+        OMcp["ObserverMcpClient<br/>read-only whitelist"]
+        OHandoff["AnomalyHandoffSink"]
+        ORunner --> OMcp
+        ORunner --> OHandoff
     end
 
-    subgraph Core["Generic Approval Flow"]
-        direction LR
-        Envelope["Plan Envelope<br/>Intent + Review Digests"]
-        Challenge["Approval Challenge<br/>TTL + requester binding"]
-        Grant["Approval Grant<br/>single-execution default"]
-        Gates["pre-execution gates"]
-        Audit["approval audit<br/>(PostgreSQL)"]
-        Envelope --> Challenge
-        Challenge --> Grant
-        Grant --> Gates
-        Challenge --> Audit
-        Gates --> Audit
+    subgraph PlannerProc["Planner"]
+        direction TB
+        PIn["/handoff/anomalies<br/>azp=infra-gate-observer"]
+        PBatch["BatchProcessor<br/>LLM + argument validation"]
+        PMcp["PlannerMcpClient<br/>readonly + propose_plan"]
+        POut["RemediationProposalSink"]
+        PIn --> PBatch --> PMcp
+        PBatch --> POut
     end
 
-    subgraph Adapter["Kubernetes Adapter"]
-        Intent["Mutation Intent"]
-        Evidence["dry-run / diff / policy evidence"]
-        Freshness["freshness + domain policy checks"]
-        Intent --> Evidence
-        Evidence --> Freshness
+    subgraph ExecutorProc["Executor"]
+        direction TB
+        EIn["/handoff/proposals<br/>azp=infra-gate-planner"]
+        Watch["PlanWatcher"]
+        EMcp["ExecutorMcpClient<br/>wait + execute only"]
+        EIn --> Watch --> EMcp
     end
 
-    subgraph Server["Kubernetes MCP Server"]
-        Tools["typed MCP tools"]
-        Reads["bounded observability"]
-        Mutations["raw Kubernetes mutations<br/>called only after approval gates"]
-        Tools --> Reads
-        Tools --> Mutations
+    subgraph GatewayProc["McpGateway"]
+        direction TB
+        Dispatch["GatewayToolDispatcher"]
+        Scope["ToolScopeGuard"]
+        ProposeHandler["ProposePlanHandler"]
+        Approval["Generic Approval Core"]
+        PreGate["ApprovalPreExecutionGate"]
+        AdapterBoundary["Kubernetes Adapter"]
+        DownstreamClient["DownstreamMcpClient"]
+        Dispatch --> Scope
+        Scope --> ProposeHandler --> Approval
+        Scope --> PreGate --> Approval
+        ProposeHandler --> AdapterBoundary
+        PreGate --> AdapterBoundary
+        AdapterBoundary --> DownstreamClient
     end
 
-    subgraph K8s["Kubernetes Boundary"]
-        RBAC["namespace-scoped RBAC"]
+    subgraph ServerProc["McpServer"]
+        direction TB
+        Tools["KubernetesTools<br/>read / evidence / destructive annotations"]
         API["Kubernetes API"]
-        RBAC --> API
+        Tools --> API
     end
 
-    Client -->|"/mcp + OAuth JWT"| Auth
-    Dispatcher --> Adapter
-    Adapter --> Server
-    Dispatcher --> Envelope
-    ApprovalUI --> Challenge
-    Gates --> Freshness
-    Client -.->|"approval URL"| Browser
-    Browser -->|"/approvals/*"| ApprovalUI
-    Reads --> RBAC
-    Mutations --> RBAC
+    OMcp --> Dispatch
+    OHandoff --> PIn
+    PMcp --> Dispatch
+    POut --> EIn
+    EMcp --> Dispatch
+    DownstreamClient --> Tools
 ```
 
 Full request-flow diagrams live in [docs/architecture.md](docs/architecture.md).
@@ -157,7 +166,7 @@ The [InfraGate.Planner](src/InfraGate.Planner/README.md) consumes Anomaly Report
 | Capability | Description |
 | --- | --- |
 | Anomaly intake | Receives `AnomalyHandoffBatch` payloads from the Observer over HTTP. |
-| Operation menu | Chooses only `restart_deployment` or `scale_deployment` in v1. |
+| Operation menu | Chooses only `restart_deployment`, `scale_deployment`, or `set_deployment_image` in v1. |
 | Plan proposal | Calls `propose_plan` to create a digest-bound Plan Envelope for operator approval. |
 | Approval notification | `propose_plan` creates an Approval Access Code and sends the configured operator email through the gateway SMTP sender when configured. |
 | Scope boundary | Planner can propose plans and use read-only inspection tools; it cannot execute plans. |

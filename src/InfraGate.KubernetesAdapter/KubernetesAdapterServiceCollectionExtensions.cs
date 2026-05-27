@@ -1,4 +1,9 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Execution;
+using InfraGate.KubernetesAdapter.PlanBuilding;
+using InfraGate.KubernetesAdapter.Execution;
+using InfraGate.KubernetesAdapter.Approval;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace InfraGate.KubernetesAdapter;

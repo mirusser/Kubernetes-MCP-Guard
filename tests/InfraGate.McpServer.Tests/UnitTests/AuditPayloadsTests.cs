@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
 using InfraGate.Approvals.AuditPayloads;
 using Xunit;
 

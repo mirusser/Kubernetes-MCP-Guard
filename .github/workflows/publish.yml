@@ -33,6 +33,7 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     permissions:
+      attestations: write
       contents: read
       packages: write
       security-events: write
@@ -103,7 +104,7 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           push: ${{ env.PUSH_IMAGES == 'true' }}
-          load: true
+          load: ${{ env.PUSH_IMAGES != 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
@@ -163,17 +164,13 @@ jobs:
       - name: Prepare deploy directory
         run: mkdir -p "$DEPLOY_PATH"
 
-      - name: Copy compose file
-        run: cp "$DEPLOY_COMPOSE_FILE" "$DEPLOY_PATH/compose.yaml"
-
       - name: Deploy development
         run: |
-          cd "$DEPLOY_PATH"
           test -f "$DEPLOY_ENV_FILE" || { echo "Runtime env file not found: $DEPLOY_ENV_FILE" >&2; exit 1; }
           test -f "$DEPLOY_CONFIG_FILE" || { echo "Runtime appsettings file not found: $DEPLOY_CONFIG_FILE" >&2; exit 1; }
 
-          INFRA_GATE_GATEWAY_ENV_FILE="$DEPLOY_ENV_FILE" TAG="$DEPLOY_IMAGE_TAG" docker compose --env-file "$DEPLOY_ENV_FILE" -f compose.yaml pull
-          INFRA_GATE_GATEWAY_ENV_FILE="$DEPLOY_ENV_FILE" TAG="$DEPLOY_IMAGE_TAG" docker compose --env-file "$DEPLOY_ENV_FILE" -f compose.yaml up -d --remove-orphans
+          INFRA_GATE_GATEWAY_ENV_FILE="$DEPLOY_ENV_FILE" TAG="$DEPLOY_IMAGE_TAG" docker compose --env-file "$DEPLOY_ENV_FILE" -f "$DEPLOY_COMPOSE_FILE" pull
+          INFRA_GATE_GATEWAY_ENV_FILE="$DEPLOY_ENV_FILE" TAG="$DEPLOY_IMAGE_TAG" docker compose --env-file "$DEPLOY_ENV_FILE" -f "$DEPLOY_COMPOSE_FILE" up -d --remove-orphans
 
           bind_port="$(sed -n 's/^INFRA_GATE_BIND_PORT=//p' "$DEPLOY_ENV_FILE" | tail -n 1)"
           bind_port="${bind_port:-3001}"
@@ -198,7 +195,7 @@ jobs:
             if [ "$elapsed" -ge 60 ]; then
               echo "Gateway did not return the expected OAuth 401 challenge." >&2
               echo "Last HTTP status: ${http_status:-none}" >&2
-              INFRA_GATE_GATEWAY_ENV_FILE="$DEPLOY_ENV_FILE" docker compose --env-file "$DEPLOY_ENV_FILE" -f compose.yaml logs --tail=50 >&2 || true
+              INFRA_GATE_GATEWAY_ENV_FILE="$DEPLOY_ENV_FILE" docker compose --env-file "$DEPLOY_ENV_FILE" -f "$DEPLOY_COMPOSE_FILE" logs --tail=50 >&2 || true
               exit 1
             fi
 

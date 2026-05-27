@@ -1,0 +1,20 @@
+namespace InfraGate.Approvals.AccessCodes;
+
+public sealed record class ApprovalAccessCodeConsumeResult(
+    bool Succeeded,
+    string? ChallengeId,
+    string Message,
+    string ReasonCode)
+{
+    public static ApprovalAccessCodeConsumeResult Success(string challengeId) =>
+        new(true, challengeId, "Approval access code accepted.", string.Empty);
+
+    public static ApprovalAccessCodeConsumeResult Invalid() =>
+        new(false, null, "Approval code is invalid.", ApprovalConventions.AccessCodes.ConsumeResultReasonCodes.Invalid);
+
+    public static ApprovalAccessCodeConsumeResult Expired() =>
+        new(false, null, "Approval code has expired.", ApprovalConventions.AccessCodes.ConsumeResultReasonCodes.Expired);
+
+    public static ApprovalAccessCodeConsumeResult Consumed() =>
+        new(false, null, "Approval code has already been used.", ApprovalConventions.AccessCodes.ConsumeResultReasonCodes.Consumed);
+}
