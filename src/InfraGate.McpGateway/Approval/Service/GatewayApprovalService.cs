@@ -810,8 +810,6 @@ internal sealed class GatewayApprovalService(
     private static bool SameDigest(ApprovalDigest? left, ApprovalDigest right) =>
         left is not null && left == right;
 
-    
-
     private sealed record class ChallengeValidation(
         string? Error,
         string? ReasonCode,

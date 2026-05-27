@@ -33,6 +33,7 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     permissions:
+      attestations: write
       contents: read
       packages: write
       security-events: write
