@@ -104,7 +104,6 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           push: ${{ env.PUSH_IMAGES == 'true' }}
-          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
