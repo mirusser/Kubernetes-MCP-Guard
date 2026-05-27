@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
 using InfraGate.KubernetesAdapter;
 using k8s;
 using k8s.Autorest;

@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
 using InfraGate.DownstreamAuth;
 using InfraGate.RuntimeSafety;
 using Microsoft.Extensions.Configuration;

@@ -1,5 +1,7 @@
 using System.Text;
 using InfraGate.Approvals;
+using InfraGate.Approvals.AccessCodes;
+using InfraGate.Approvals.Plan;
 using InfraGate.ApprovalUi;
 using InfraGate.McpGateway.Auth;
 using Microsoft.AspNetCore.Antiforgery;

@@ -1,5 +1,8 @@
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Execution;
+using InfraGate.Approvals.Audit;
 using InfraGate.Approvals.AuditPayloads;
 using InfraGate.KubernetesAdapter;
 

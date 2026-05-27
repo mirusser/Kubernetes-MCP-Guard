@@ -1,6 +1,7 @@
 using System.Diagnostics.Metrics;
 using Dapper;
 using InfraGate.Approvals;
+using InfraGate.Approvals.AccessCodes;
 using Npgsql;
 
 namespace InfraGate.Approvals.Postgres;

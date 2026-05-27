@@ -1,5 +1,6 @@
 using System.Globalization;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
 using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Email;

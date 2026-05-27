@@ -8,6 +8,8 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Execution;
 using InfraGate.DownstreamAuth;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;

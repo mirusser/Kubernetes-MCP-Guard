@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
 using InfraGate.DownstreamAuth;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;

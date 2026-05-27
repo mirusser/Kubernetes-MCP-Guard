@@ -1,5 +1,7 @@
 using System.Text.Json.Nodes;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Execution;
 using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;

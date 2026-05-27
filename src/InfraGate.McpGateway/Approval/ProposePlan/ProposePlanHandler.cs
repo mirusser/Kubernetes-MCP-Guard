@@ -1,6 +1,8 @@
 using System.Diagnostics.Metrics;
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.AccessCodes;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Email;

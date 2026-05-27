@@ -1,4 +1,6 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.PreExecution;
 
 namespace InfraGate.McpGateway.Tests.UnitTests;
 

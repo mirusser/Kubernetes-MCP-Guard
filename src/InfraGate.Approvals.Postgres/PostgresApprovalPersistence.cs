@@ -1,6 +1,12 @@
 using System.Text.Json;
 using Dapper;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Challenge;
+using InfraGate.Approvals.Grant;
+using InfraGate.Approvals.Execution;
+using InfraGate.Approvals.Audit;
+using InfraGate.Approvals.PreExecution;
 using InfraGate.Approvals.AuditPayloads;
 using Npgsql;
 

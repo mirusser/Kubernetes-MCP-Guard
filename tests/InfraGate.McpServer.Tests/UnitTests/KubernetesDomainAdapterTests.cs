@@ -1,4 +1,6 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Execution;
 using InfraGate.KubernetesAdapter;
 
 namespace InfraGate.McpServer.Tests.UnitTests;

@@ -1,4 +1,9 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Grant;
+using InfraGate.Approvals.Challenge;
+using InfraGate.Approvals.PreExecution;
+using InfraGate.Approvals.Audit;
 using InfraGate.Approvals.AuditPayloads;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Notifications;

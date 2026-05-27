@@ -1,4 +1,10 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Challenge;
+using InfraGate.Approvals.Grant;
+using InfraGate.Approvals.Execution;
+using InfraGate.Approvals.Audit;
+using InfraGate.Approvals.PreExecution;
 
 namespace InfraGate.Safety.E2E.Tests;
 

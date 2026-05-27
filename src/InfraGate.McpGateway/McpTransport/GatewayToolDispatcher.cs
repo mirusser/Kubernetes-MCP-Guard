@@ -1,5 +1,10 @@
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.Approvals.PreExecution;
+using InfraGate.Approvals.Execution;
+using InfraGate.Approvals.Audit;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Grant;
 using InfraGate.Approvals.AuditPayloads;
 using InfraGate.McpGateway.Notifications;
 using ModelContextProtocol.Protocol;

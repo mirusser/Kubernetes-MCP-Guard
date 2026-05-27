@@ -1,4 +1,8 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Execution;
+using InfraGate.Approvals.Audit;
+using InfraGate.Approvals.PreExecution;
 using InfraGate.Approvals.AuditPayloads;
 
 namespace InfraGate.McpServer.Tests.UnitTests;

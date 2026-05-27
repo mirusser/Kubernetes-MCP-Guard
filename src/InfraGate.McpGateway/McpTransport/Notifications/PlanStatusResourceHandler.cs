@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 
