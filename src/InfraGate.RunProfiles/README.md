@@ -2,6 +2,8 @@
 
 CLI tool that compiles named profiles from `deploy/run-profiles.yaml` into `.env` files for Docker Compose/deployment scripts and appsettings JSON for .NET runtime binding. It is the canonical source of truth for all runnable environment configuration.
 
+**Owns:** named profile compilation, `.env` generation, appsettings JSON generation, configuration source of truth
+
 ## Commands
 
 ```bash

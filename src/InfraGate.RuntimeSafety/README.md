@@ -2,6 +2,8 @@
 
 `InfraGate.RuntimeSafety` provides runtime mode resolution, production safety validation, and environment variable conventions shared across InfraGate projects.
 
+**Owns:** runtime mode resolution, production safety validation, environment variable conventions
+
 ## Contents
 
 - `RuntimeMode.cs` defines the `Development`, `Demo`, and `Production` runtime modes.

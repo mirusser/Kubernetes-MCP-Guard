@@ -2,6 +2,8 @@
 
 `InfraGate.Planner` is an LLM-driven remediation agent that receives **Anomaly Reports** from the Anomaly Observer, chooses a bounded v1 remediation operation, and calls the gateway's `propose_plan` tool to create an approval-pending **Plan Envelope**. It runs as an ASP.NET `WebApplication` on port 3004 by default and authenticates to the gateway with the Planner service identity.
 
+**Owns:** bounded remediation proposal
+
 ## Runtime Flow
 
 - `Program.cs` wires Serilog, `InfraGate.RuntimeSafety`, `InfraGate.ClientCredentials`, the Planner MCP client, and the `Microsoft.Extensions.AI` chat client.

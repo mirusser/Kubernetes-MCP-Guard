@@ -2,6 +2,8 @@
 
 `InfraGate.McpGateway.Auth` contains the authentication and authorization layer used by the HTTP MCP gateway. It supports OAuth JWT bearer tokens for MCP calls, browser cookie auth for approval pages, and MCP protected-resource metadata.
 
+**Owns:** OAuth JWT bearer auth, browser cookie auth, MCP protected-resource metadata, audit identity resolution
+
 ## Runtime Flow
 
 - `GatewayAuthOptions.cs` reads authentication settings from environment variables.

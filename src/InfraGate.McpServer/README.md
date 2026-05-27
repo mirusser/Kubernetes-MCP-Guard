@@ -2,6 +2,8 @@
 
 `InfraGate.McpServer` is the private stdio MCP server that owns direct Kubernetes reads, evidence collection, and raw execution tools. It validates requested namespaces and manifest kinds, runs Kubernetes dry-runs and diffs, and performs raw mutations through the Kubernetes .NET client when called by the gateway's Kubernetes domain adapter.
 
+**Owns:** private Kubernetes MCP tool surface / raw Kubernetes interaction only
+
 ## Runtime Flow
 
 - `Program.cs` wires the generic host, stdio MCP transport, `KubernetesMcpOptions`, `IKubernetes`, and `KubernetesManager`.
@@ -12,7 +14,7 @@
 
 ## Important Contracts
 
-- The server is plan-unaware. It exposes read-only evidence tools (`dry_run_*`, `diff_manifest`, `check_live_drift`) and raw Destructive execution tools (`apply_manifest`, `delete_manifest`, `scale_deployment`, `restart_deployment`, `set_deployment_image`).
+- The server is plan-unaware. It exposes read-only evidence tools (`dry_run_*`, `diff_manifest`, `diff_deployment`, `check_live_drift`) and raw Destructive execution tools (`apply_manifest`, `delete_manifest`, `scale_deployment`, `restart_deployment`, `set_deployment_image`).
 - Plan creation, digest binding, approval grants, pre-execution gates, and applied markers live in the gateway plus `InfraGate.Approvals` and `InfraGate.KubernetesAdapter`.
 - Observability tools are read-only and bounded. They expose Events, Pod logs, focused summaries, and diagnostics, but not Secret values, ConfigMap values, raw manifests, exec, attach, or port-forward.
 - Allowed namespaces come from `K8S_MCP_ALLOWED_NAMESPACES`; unsupported namespaces are rejected before Kubernetes API calls.
