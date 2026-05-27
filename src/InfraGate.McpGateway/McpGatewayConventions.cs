@@ -248,5 +248,4 @@ internal static class McpGatewayConventions
         public const string InspectPendingPlan = "[redacted: inspect the pending plan file before approval]";
         public const string SensitivePlanMetadata = "[redacted: sensitive plan metadata]";
     }
-
 }

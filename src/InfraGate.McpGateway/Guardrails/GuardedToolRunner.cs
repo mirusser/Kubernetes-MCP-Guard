@@ -4,15 +4,14 @@ using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpGateway;
 
-public sealed partial class GuardedToolRunner
+public sealed partial class GuardedToolRunner(
+    IDownstreamMcpClient downstream,
+    IGuardrailAuditStore auditStore,
+    IHttpContextAccessor? httpContextAccessor,
+    ILogger<GuardedToolRunner> logger)
 {
     internal const string Warning =
         "Guardrail warning: Potential prompt-injection content was detected. Model-visible high-risk text was redacted where applicable.";
-
-    private readonly IDownstreamMcpClient downstream;
-    private readonly IGuardrailAuditStore auditStore;
-    private readonly IHttpContextAccessor? httpContextAccessor;
-    private readonly ILogger<GuardedToolRunner> logger;
 
     public GuardedToolRunner(
         IDownstreamMcpClient downstream,
@@ -20,18 +19,6 @@ public sealed partial class GuardedToolRunner
         ILogger<GuardedToolRunner> logger)
         : this(downstream, auditStore, httpContextAccessor: null, logger)
     {
-    }
-
-    public GuardedToolRunner(
-        IDownstreamMcpClient downstream,
-        IGuardrailAuditStore auditStore,
-        IHttpContextAccessor? httpContextAccessor,
-        ILogger<GuardedToolRunner> logger)
-    {
-        this.downstream = downstream;
-        this.auditStore = auditStore;
-        this.httpContextAccessor = httpContextAccessor;
-        this.logger = logger;
     }
 
     public async Task<string> CallAsync(

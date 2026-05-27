@@ -78,7 +78,7 @@ public sealed class GatewayApprovalServiceTests
         Assert.False(result.IsApproved);
         Assert.Equal(ApprovalGateStatus.Refused, result.Status);
         Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.AuthenticatedSubjectRequired, result.ReasonCode);
-        Assert.Contains("authenticated OAuth subject", result.Message);
+        Assert.Equal(McpGatewayMessages.Authorization.RefusedAuthenticatedSubjectRequired(), result.Message);
         Assert.Equal(0, context.Workflow.ChallengeCount);
     }
 

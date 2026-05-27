@@ -3,14 +3,9 @@ using InfraGate.DownstreamAuth;
 
 namespace InfraGate.McpGateway.DownstreamAuth;
 
-internal sealed class ClientCredentialsDownstreamServiceTokenProvider : IDownstreamServiceTokenProvider
+internal sealed class ClientCredentialsDownstreamServiceTokenProvider(
+    IClientCredentialsTokenProvider inner) : IDownstreamServiceTokenProvider
 {
-    private readonly IClientCredentialsTokenProvider inner;
-
-    public ClientCredentialsDownstreamServiceTokenProvider(IClientCredentialsTokenProvider inner)
-    {
-        this.inner = inner;
-    }
 
     public async Task<string> GetServiceTokenAsync(CancellationToken cancellationToken)
     {

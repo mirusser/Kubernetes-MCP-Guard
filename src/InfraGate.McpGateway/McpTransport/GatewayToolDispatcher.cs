@@ -6,66 +6,31 @@ using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Notifications;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
+using ModelContextProtocol.Server;
 
 namespace InfraGate.McpGateway;
 
-internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
+internal sealed class GatewayToolDispatcher(
+    DownstreamToolRegistry registry,
+    GuardedToolRunner guardedRunner,
+    IDomainAdapter domainAdapter,
+    IGatewayApprovalService approvals,
+    IApprovalPlanWorkflow approvalPlans,
+    IApprovalExecutionWorkflow approvalExecution,
+    IApprovalAuditPublisher auditPublisher,
+    IApprovalPreExecutionGate preExecutionGate,
+    IProposePlanHandler proposePlanHandler,
+    ISubscriptionRegistry subscriptionRegistry,
+    IToolScopeGuard scopeGuard,
+    IHttpContextAccessor httpContextAccessor,
+    ILogger<GatewayToolDispatcher> logger) : IGatewayToolDispatcher
 {
-    private const int WaitForPlanApprovalDefaultTimeoutSeconds = 55;
-    private const int WaitForPlanApprovalMinimumTimeoutSeconds = 1;
-    private const int WaitForPlanApprovalMaximumTimeoutSeconds = 300;
-    private const string JsonSchemaIntegerType = "integer";
-    private const string JsonSchemaObjectType = "object";
-    private const string JsonSchemaStringType = "string";
-
     private static readonly TimeSpan WaitForPlanApprovalPollInterval = TimeSpan.FromMilliseconds(250);
 
-    private readonly DownstreamToolRegistry registry;
-    private readonly GuardedToolRunner guardedRunner;
-    private readonly IDomainAdapter domainAdapter;
-    private readonly IGatewayApprovalService approvals;
-    private readonly IApprovalPlanWorkflow approvalPlans;
-    private readonly IApprovalExecutionWorkflow approvalExecution;
-    private readonly IApprovalAuditPublisher auditPublisher;
-    private readonly IApprovalPreExecutionGate preExecutionGate;
-    private readonly IProposePlanHandler proposePlanHandler;
-    private readonly IHttpContextAccessor httpContextAccessor;
-    private readonly ISubscriptionRegistry subscriptionRegistry;
-    private readonly IGuardrailAuditStore auditStore;
-    private readonly ILogger<GatewayToolDispatcher> logger;
-
-    public GatewayToolDispatcher( // NOSONAR:S107 — 13-param DI constructor. Aggregates would add indirection; explicit DI surfaces failures immediately.
-        DownstreamToolRegistry registry,
-        GuardedToolRunner guardedRunner,
-        IDomainAdapter domainAdapter,
-        IGatewayApprovalService approvals,
-        IApprovalPlanWorkflow approvalPlans,
-        IApprovalExecutionWorkflow approvalExecution,
-        IApprovalAuditPublisher auditPublisher,
-        IApprovalPreExecutionGate preExecutionGate,
-        IProposePlanHandler proposePlanHandler,
-        IHttpContextAccessor httpContextAccessor,
-        ISubscriptionRegistry subscriptionRegistry,
-        IGuardrailAuditStore auditStore,
-        ILogger<GatewayToolDispatcher> logger)
-    {
-        this.registry = registry;
-        this.guardedRunner = guardedRunner;
-        this.domainAdapter = domainAdapter;
-        this.approvals = approvals;
-        this.approvalPlans = approvalPlans;
-        this.approvalExecution = approvalExecution;
-        this.auditPublisher = auditPublisher;
-        this.preExecutionGate = preExecutionGate;
-        this.proposePlanHandler = proposePlanHandler;
-        this.httpContextAccessor = httpContextAccessor;
-        this.subscriptionRegistry = subscriptionRegistry;
-        this.auditStore = auditStore;
-        this.logger = logger;
-    }
-
+#pragma warning disable MA0041
     private string? CurrentSessionId =>
         httpContextAccessor.HttpContext?.Items[NotificationsConventions.McpSessionIdItemKey] as string;
+#pragma warning restore MA0041
 
     public async Task<ListToolsResult> ListToolsAsync(
         ListToolsRequestParams request,
@@ -76,7 +41,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         var readOnly = await registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
         foreach (var dt in readOnly)
         {
-            tools.Add(CreateForwardedTool(dt));
+            tools.Add(ToolDefinitionFactory.CreateForwardedTool(dt));
         }
 
         var destructive = await registry.GetDestructiveAsync(ct).ConfigureAwait(false);
@@ -93,10 +58,10 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             });
         }
 
-        tools.Add(CreateApplyApprovedPlanTool());
-        tools.Add(CreateGetPlanStatusTool());
-        tools.Add(CreateProposePlanTool());
-        tools.Add(CreateWaitForPlanApprovalTool());
+        tools.Add(ToolDefinitionFactory.CreateApplyApprovedPlanTool());
+        tools.Add(ToolDefinitionFactory.CreateGetPlanStatusTool());
+        tools.Add(ToolDefinitionFactory.CreateProposePlanTool());
+        tools.Add(ToolDefinitionFactory.CreateWaitForPlanApprovalTool());
 
         return new ListToolsResult { Tools = tools };
     }
@@ -116,7 +81,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (toolName.Equals(McpGatewayConventions.ToolNames.ApplyApprovedPlan, StringComparison.Ordinal))
         {
-            var scopeResult = await RequireAnyScopeAsync(
+            var scopeResult = await scopeGuard.RequireAnyScopeAsync(
                 toolName,
                 McpGatewayConventions.ToolScopeRequirements.MutationScope,
                 McpGatewayConventions.ToolScopeRequirements.ExecuteScope).ConfigureAwait(false);
@@ -130,7 +95,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (toolName.Equals(McpGatewayConventions.ToolNames.GetPlanStatus, StringComparison.Ordinal))
         {
-            var scopeResult = await RequireMutationScopeAsync(toolName).ConfigureAwait(false);
+            var scopeResult = await scopeGuard.RequireMutationScopeAsync(toolName).ConfigureAwait(false);
             if (scopeResult is not null)
             {
                 return scopeResult;
@@ -141,7 +106,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (toolName.Equals(McpGatewayConventions.ToolNames.WaitForPlanApproval, StringComparison.Ordinal))
         {
-            var scopeResult = await RequireAnyScopeAsync(
+            var scopeResult = await scopeGuard.RequireAnyScopeAsync(
                 toolName,
                 McpGatewayConventions.ToolScopeRequirements.MutationScope,
                 McpGatewayConventions.ToolScopeRequirements.ExecuteScope).ConfigureAwait(false);
@@ -155,7 +120,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (toolName.Equals(McpGatewayConventions.ToolNames.ProposePlan, StringComparison.Ordinal))
         {
-            var scopeResult = await RequireAnyScopeAsync(
+            var scopeResult = await scopeGuard.RequireAnyScopeAsync(
                 toolName,
                 McpGatewayConventions.ToolScopeRequirements.MutationScope,
                 McpGatewayConventions.ToolScopeRequirements.ProposeScope).ConfigureAwait(false);
@@ -169,7 +134,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
 
         if (toolName.StartsWith(McpGatewayConventions.ToolNames.RequestToolPrefix, StringComparison.Ordinal))
         {
-            var scopeResult = await RequireMutationScopeAsync(toolName).ConfigureAwait(false);
+            var scopeResult = await scopeGuard.RequireMutationScopeAsync(toolName).ConfigureAwait(false);
             if (scopeResult is not null)
             {
                 return scopeResult;
@@ -192,12 +157,10 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         if (await IsDestructiveToolAsync(toolName, ct).ConfigureAwait(false))
         {
             return ErrorResult(
-                $"Refused: destructive tool '{toolName}' must be requested through " +
-                $"'{McpGatewayConventions.ToolNames.RequestToolPrefix}{toolName}' and executed with " +
-                $"{McpGatewayConventions.ToolNames.ApplyApprovedPlan}.");
+                McpGatewayMessages.ToolRouting.DestructiveToolRequiresRequest(toolName));
         }
 
-        return ErrorResult($"Unknown tool '{toolName}'.");
+        return ErrorResult(McpGatewayMessages.ToolRouting.UnknownTool(toolName));
     }
 
     private async Task<bool> IsReadOnlyToolAsync(string toolName, CancellationToken ct)
@@ -217,13 +180,13 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        var scopeResult = await RequireAnyToolScopeAsync(toolName).ConfigureAwait(false);
+        var scopeResult = await scopeGuard.RequireAnyToolScopeAsync(toolName).ConfigureAwait(false);
         if (scopeResult is not null)
         {
             return scopeResult;
         }
 
-        var arguments = ConvertArguments(request.Arguments);
+        var arguments = ToolArgumentConverter.ConvertArguments(request.Arguments);
         var result = await guardedRunner.CallAsync(toolName, arguments, ct).ConfigureAwait(false);
 
         return new CallToolResult
@@ -242,12 +205,12 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         var identity = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
         if (identity is null)
         {
-            return ErrorResult("Refused: mutation plan creation requires an authenticated OAuth subject.");
+            return ErrorResult(McpGatewayMessages.Authorization.MutationRequiresAuth);
         }
 
         var sessionId = CurrentSessionId;
 
-        var args = ConvertArguments(request.Arguments);
+        var args = ToolArgumentConverter.ConvertArguments(request.Arguments);
         bool requestHasFindings = await guardedRunner.AuditRequestAsync(toolName, args, ct).ConfigureAwait(false);
 
         var planResult = await domainAdapter.BuildAsync(
@@ -275,7 +238,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
             subscriptionRegistry.SubscribeToPlan(sessionId, planResult.PlanId);
         }
 
-        var message = $"Approval plan '{planResult.PlanId}' created. To execute, submit with execute_approved_plan(planId=\"{planResult.PlanId}\").";
+        var message = McpGatewayMessages.ToolRouting.PlanCreated(planResult.PlanId);
         if (requestHasFindings)
         {
             message = GuardedToolRunner.FormatWarningResponse(message);
@@ -320,12 +283,12 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        var args = ConvertArguments(request.Arguments);
+        var args = ToolArgumentConverter.ConvertArguments(request.Arguments);
         if (!args.TryGetValue(McpGatewayConventions.ToolArguments.PlanId, out var planIdObj) ||
             planIdObj is not string planId ||
             string.IsNullOrWhiteSpace(planId))
         {
-            return ErrorResult("Missing required argument: planId.");
+            return ErrorResult(McpGatewayMessages.ArgumentValidation.MissingPlanId);
         }
 
         var gate = await approvals.EnsureApprovedOrCreateChallengeAsync(planId, ct).ConfigureAwait(false);
@@ -375,12 +338,12 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        var args = ConvertArguments(request.Arguments);
+        var args = ToolArgumentConverter.ConvertArguments(request.Arguments);
         if (!args.TryGetValue(McpGatewayConventions.ToolArguments.PlanId, out var planIdObj) ||
             planIdObj is not string planId ||
             string.IsNullOrWhiteSpace(planId))
         {
-            return ErrorResult("Missing required argument: planId.");
+            return ErrorResult(McpGatewayMessages.ArgumentValidation.MissingPlanId);
         }
 
         var result = await approvalPlans.GetPlanStatusAsync(planId, ct).ConfigureAwait(false);
@@ -396,15 +359,15 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        var args = ConvertArguments(request.Arguments);
+        var args = ToolArgumentConverter.ConvertArguments(request.Arguments);
         if (!args.TryGetValue(McpGatewayConventions.ToolArguments.PlanId, out var planIdObj) ||
             planIdObj is not string planId ||
             string.IsNullOrWhiteSpace(planId))
         {
-            return ErrorResult("Missing required argument: planId.");
+            return ErrorResult(McpGatewayMessages.ArgumentValidation.MissingPlanId);
         }
 
-        if (!TryGetWaitTimeoutSeconds(args, out int timeoutSeconds, out var timeoutError))
+        if (!ToolArgumentConverter.TryGetWaitTimeoutSeconds(args, out int timeoutSeconds, out var timeoutError))
         {
             return ErrorResult(timeoutError);
         }
@@ -449,22 +412,22 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        var args = ConvertArguments(request.Arguments);
+        var args = ToolArgumentConverter.ConvertArguments(request.Arguments);
         if (!args.TryGetValue(McpGatewayConventions.ToolArguments.OperationType, out var operationTypeObj) ||
             operationTypeObj is not string operationType ||
             string.IsNullOrWhiteSpace(operationType))
         {
-            return ErrorResult("Missing required argument: operationType.");
+            return ErrorResult(McpGatewayMessages.ArgumentValidation.MissingOperationType);
         }
 
         if (!args.TryGetValue(McpGatewayConventions.ToolArguments.OperationArguments, out var argumentsObj) ||
             argumentsObj is not JsonElement argumentsElement ||
             argumentsElement.ValueKind != JsonValueKind.Object)
         {
-            return ErrorResult("Missing required argument: arguments.");
+            return ErrorResult(McpGatewayMessages.ArgumentValidation.MissingArguments);
         }
 
-        var operationArguments = ConvertObjectArguments(argumentsElement);
+        var operationArguments = ToolArgumentConverter.ConvertObjectArguments(argumentsElement);
         return await proposePlanHandler.ProposeAsync(operationType, operationArguments, ct).ConfigureAwait(false);
     }
 
@@ -495,7 +458,7 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            var message = $"Plan '{planId}' execution failed: {ex.Message}";
+            var message = McpGatewayMessages.Approval.PlanExecutionFailed(planId, ex.Message);
             var audit = new PlanAudit(
                 ApprovalConventions.AuditEvents.ApplyFailed,
                 new ApplyFailedPayload(
@@ -546,211 +509,6 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         };
     }
 
-    private static Tool CreateForwardedTool(DownstreamTool dt)
-    {
-        return new Tool
-        {
-            Name = dt.Name,
-            Description = dt.Description,
-            InputSchema = dt.InputSchema
-        };
-    }
-
-    private static readonly string[] ApplyApprovedPlanRequiredArgs = ["planId"];
-
-    private static readonly string[] GetPlanStatusRequiredArgs = [McpGatewayConventions.ToolArguments.PlanId];
-
-    private static readonly string[] WaitForPlanApprovalRequiredArgs = [McpGatewayConventions.ToolArguments.PlanId];
-
-    private static readonly string[] ProposePlanRequiredArgs =
-    [
-        McpGatewayConventions.ToolArguments.OperationType,
-        McpGatewayConventions.ToolArguments.OperationArguments
-    ];
-
-    private static Tool CreateApplyApprovedPlanTool()
-    {
-        return new Tool
-        {
-            Name = McpGatewayConventions.ToolNames.ApplyApprovedPlan,
-            Description = "Returns a browser approval URL for a pending plan, or applies it after approval. " +
-                          "When this returns ApprovalRequired, you MUST call wait_for_plan_approval(planId=...) to poll for approval — do NOT wait for user confirmation. " +
-                          "Repeat until Approved, then call this tool again to apply the plan.",
-            InputSchema = JsonSerializer.SerializeToElement(new
-            {
-                type = JsonSchemaObjectType,
-                properties = new
-                {
-                    planId = new { type = JsonSchemaStringType, description = "PlanId returned by one of the request_* tools." }
-                },
-                required = ApplyApprovedPlanRequiredArgs
-            })
-        };
-    }
-
-    private static Tool CreateGetPlanStatusTool()
-    {
-        return new Tool
-        {
-            Name = McpGatewayConventions.ToolNames.GetPlanStatus,
-            Description = "Returns the current status of a pending approval plan (" +
-                          ApprovalConventions.PlanStatusValues.NotFound + " | " +
-                          ApprovalConventions.PlanStatusValues.ApprovalRequired + " | " +
-                          ApprovalConventions.PlanStatusValues.Approved + " | " +
-                          ApprovalConventions.PlanStatusValues.Applied + " | " +
-                          ApprovalConventions.PlanStatusValues.Expired + "). " +
-                          "Call this in a polling loop after " +
-                          McpGatewayConventions.ToolNames.ApplyApprovedPlan +
-                          " returns ApprovalRequired. When status is " +
-                          ApprovalConventions.PlanStatusValues.Approved + ", call " +
-                          McpGatewayConventions.ToolNames.ApplyApprovedPlan +
-                          " to apply the plan. When status is " +
-                          ApprovalConventions.PlanStatusValues.Expired + ", call " +
-                          McpGatewayConventions.ToolNames.ApplyApprovedPlan +
-                          " to create a new approval challenge.",
-            InputSchema = JsonSerializer.SerializeToElement(new
-            {
-                type = JsonSchemaObjectType,
-                properties = new
-                {
-                    planId = new { type = JsonSchemaStringType, description = "PlanId returned by one of the request_* tools." }
-                },
-                required = GetPlanStatusRequiredArgs
-            })
-        };
-    }
-
-    private static Tool CreateWaitForPlanApprovalTool()
-    {
-        return new Tool
-        {
-            Name = McpGatewayConventions.ToolNames.WaitForPlanApproval,
-            Description = "Waits briefly for an approval plan to become approved, applied, expired, or missing without applying the plan.",
-            InputSchema = JsonSerializer.SerializeToElement(new
-            {
-                type = JsonSchemaObjectType,
-                properties = new
-                {
-                    planId = new { type = JsonSchemaStringType, description = "PlanId returned by one of the request_* tools." },
-                    timeoutSeconds = new
-                    {
-                        type = JsonSchemaIntegerType,
-                        description = "How long to wait before returning ApprovalRequired with timedOut=true.",
-                        minimum = 1,
-                        maximum = 300,
-                        @default = 55
-                    }
-                },
-                required = WaitForPlanApprovalRequiredArgs
-            })
-        };
-    }
-
-    private static Tool CreateProposePlanTool()
-    {
-        return new Tool
-        {
-            Name = McpGatewayConventions.ToolNames.ProposePlan,
-            Description = "Creates an operator-approved remediation plan and sends an approval access code.",
-            InputSchema = JsonSerializer.SerializeToElement(new
-            {
-                type = JsonSchemaObjectType,
-                properties = new
-                {
-                    operationType = new
-                    {
-                        type = JsonSchemaStringType,
-                        description = "Allowed values: restart_deployment, scale_deployment."
-                    },
-                    arguments = new
-                    {
-                        type = JsonSchemaObjectType,
-                        description = "Operation-specific arguments for the selected remediation operation."
-                    }
-                },
-                required = ProposePlanRequiredArgs
-            })
-        };
-    }
-
-    private static IReadOnlyDictionary<string, object?> ConvertArguments(IDictionary<string, JsonElement>? args)
-    {
-        if (args is null || args.Count == 0)
-        {
-            return new Dictionary<string, object?>(StringComparer.Ordinal);
-        }
-
-        var result = new Dictionary<string, object?>(args.Count, StringComparer.Ordinal);
-        foreach (var (key, element) in args)
-        {
-            result[key] = JsonElementToObject(element);
-        }
-
-        return result;
-    }
-
-    private static IReadOnlyDictionary<string, object?> ConvertObjectArguments(JsonElement element)
-    {
-        var result = new Dictionary<string, object?>(StringComparer.Ordinal);
-        foreach (var property in element.EnumerateObject())
-        {
-            result[property.Name] = JsonElementToObject(property.Value);
-        }
-
-        return result;
-    }
-
-    private static object? JsonElementToObject(JsonElement element) =>
-        element.ValueKind switch
-        {
-            JsonValueKind.String => element.GetString(),
-            JsonValueKind.Number => element.TryGetInt32(out int i) ? i : element.GetDouble(),
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            JsonValueKind.Null => null,
-            JsonValueKind.Array => element,
-            _ => element
-        };
-
-    internal static bool TryGetWaitTimeoutSeconds(
-        IReadOnlyDictionary<string, object?> args,
-        out int timeoutSeconds,
-        out string timeoutError)
-    {
-        timeoutSeconds = WaitForPlanApprovalDefaultTimeoutSeconds;
-        timeoutError = string.Empty;
-
-        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.TimeoutSeconds, out var timeoutObj))
-        {
-            return true;
-        }
-
-        if (timeoutObj is int timeout)
-        {
-            timeoutSeconds = timeout;
-        }
-        else if (timeoutObj is double doubleTimeout &&
-                 double.IsInteger(doubleTimeout) && // NOSONAR:S1244 — intended API, not an equality comparison
-                 doubleTimeout >= int.MinValue &&
-                 doubleTimeout <= int.MaxValue)
-        {
-            timeoutSeconds = (int)doubleTimeout;
-        }
-        else
-        {
-            timeoutError = "timeoutSeconds must be an integer between 1 and 300.";
-            return false;
-        }
-
-        if (timeoutSeconds is < WaitForPlanApprovalMinimumTimeoutSeconds or > WaitForPlanApprovalMaximumTimeoutSeconds)
-        {
-            timeoutError = "timeoutSeconds must be an integer between 1 and 300.";
-            return false;
-        }
-
-        return true;
-    }
-
     private static bool IsTerminalWaitStatus(PlanStatus status) =>
         status is PlanStatus.NotFound or PlanStatus.Approved or PlanStatus.Applied or PlanStatus.Expired;
 
@@ -779,85 +537,4 @@ internal sealed class GatewayToolDispatcher : IGatewayToolDispatcher
         IsError = true,
         Content = [new TextContentBlock { Text = text }]
     };
-
-    private async Task<CallToolResult?> RequireAnyToolScopeAsync(string toolName)
-    {
-        var user = httpContextAccessor.HttpContext?.User;
-        if (user is null)
-        {
-            return ErrorResult(
-                $"Refused: '{toolName}' requires an authenticated session.");
-        }
-
-        return await RequireAnyScopeAsync(
-            toolName,
-            McpGatewayConventions.ToolScopeRequirements.MutationScope,
-            McpGatewayConventions.ToolScopeRequirements.ReadOnlyScope).ConfigureAwait(false);
-    }
-
-    private async Task<CallToolResult?> RequireMutationScopeAsync(string toolName)
-    {
-        var user = httpContextAccessor.HttpContext?.User;
-        if (user is null)
-        {
-            return ErrorResult(
-                $"Refused: '{toolName}' requires an authenticated session with the '{McpGatewayConventions.ToolScopeRequirements.MutationScope}' scope.");
-        }
-
-        if (!GatewayAuthentication.HasRequiredScope(user, McpGatewayConventions.ToolScopeRequirements.MutationScope))
-        {
-            return await DenyAndAuditAsync(toolName, McpGatewayConventions.ToolScopeRequirements.MutationScope).ConfigureAwait(false);
-        }
-
-        return null;
-    }
-
-    private async Task<CallToolResult?> RequireAnyScopeAsync(string toolName, params string[] requiredScopes)
-    {
-        var user = httpContextAccessor.HttpContext?.User;
-        if (user is null)
-        {
-            return ErrorResult(
-                $"Refused: '{toolName}' requires an authenticated session with one of these scopes: {string.Join(", ", requiredScopes)}.");
-        }
-
-        if (!requiredScopes.Any(scope => GatewayAuthentication.HasRequiredScope(user, scope)))
-        {
-            return await DenyAndAuditAsync(toolName, string.Join(" or ", requiredScopes)).ConfigureAwait(false);
-        }
-
-        return null;
-    }
-
-    private async Task<CallToolResult?> DenyAndAuditAsync(string toolName, string requiredScope)
-    {
-        var user = httpContextAccessor.HttpContext?.User;
-        if (user is null)
-        {
-            return ErrorResult(
-                $"Refused: '{toolName}' requires an authenticated session with the '{requiredScope}' scope.");
-        }
-
-        var identity = GatewayAuditIdentityResolver.Resolve(user);
-
-        logger.LogWarning(
-            "Tool '{ToolName}' denied: caller lacks required scope '{RequiredScope}'.",
-            toolName,
-            requiredScope);
-
-        var auditEvent = new GuardrailAuditEvent(
-            toolName,
-            McpGatewayConventions.GuardrailAudit.RequestDirection,
-            McpGatewayConventions.GuardrailAudit.DenyAction,
-            [McpGatewayConventions.GuardrailCategories.ScopeDenied],
-            PlanId: null,
-            identity.Subject,
-            identity.AuthenticationType,
-            identity.IdentityKind);
-
-        await auditStore.WriteAsync(auditEvent, CancellationToken.None).ConfigureAwait(false);
-
-        return ErrorResult(
-            $"Refused: tool '{toolName}' requires the '{requiredScope}' scope.");
-    }
 }

@@ -887,6 +887,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddKubernetesAdapter();
                 services.AddSingleton<DownstreamToolRegistry>();
                 services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
+                services.AddSingleton<IToolScopeGuard, ToolScopeGuard>();
                 services.AddHttpContextAccessor();
                 services.AddLogging();
                 services.AddAntiforgery();

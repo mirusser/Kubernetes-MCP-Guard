@@ -1,8 +1,7 @@
 namespace InfraGate.McpGateway.DownstreamAuth;
 
-internal sealed class NullDownstreamServiceTokenProvider : IDownstreamServiceTokenProvider
+internal sealed class NullDownstreamServiceTokenProvider() : IDownstreamServiceTokenProvider
 {
-    public NullDownstreamServiceTokenProvider() { }
     public Task<string> GetServiceTokenAsync(CancellationToken cancellationToken) =>
         Task.FromResult(string.Empty);
 

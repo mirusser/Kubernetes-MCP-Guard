@@ -177,7 +177,7 @@ internal static class GatewayApprovalEndpoints
         }
         catch (AntiforgeryValidationException)
         {
-            return Results.BadRequest("Invalid approval form token.");
+            return Results.BadRequest(McpGatewayMessages.ArgumentValidation.InvalidApprovalFormToken);
         }
     }
 

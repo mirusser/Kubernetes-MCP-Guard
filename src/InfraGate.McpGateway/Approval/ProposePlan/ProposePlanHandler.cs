@@ -39,14 +39,14 @@ internal sealed class ProposePlanHandler( // NOSONAR:S107 - Handler composes exp
         if (!AllowedOperations.Contains(operationType))
         {
             return ErrorResult(
-                $"Refused: operationType must be one of: {string.Join(", ", AllowedOperations.OrderBy(static op => op, StringComparer.Ordinal))}.");
+                McpGatewayMessages.Authorization.InvalidOperationType(string.Join(", ", AllowedOperations.OrderBy(static op => op, StringComparer.Ordinal))));
         }
 
         var user = httpContextAccessor.HttpContext?.User;
         var identity = GatewayAuditIdentityResolver.Resolve(user);
         if (string.IsNullOrWhiteSpace(identity.Subject))
         {
-            return ErrorResult("Refused: propose_plan requires an authenticated OAuth subject.");
+            return ErrorResult(McpGatewayMessages.Authorization.ProposeRequiresAuth);
         }
 
         var planResult = await domainAdapter.BuildAsync(

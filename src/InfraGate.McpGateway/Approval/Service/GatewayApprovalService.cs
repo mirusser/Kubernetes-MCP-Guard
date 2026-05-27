@@ -5,39 +5,17 @@ using InfraGate.McpGateway.Notifications;
 
 namespace InfraGate.McpGateway;
 
-internal sealed class GatewayApprovalService : IGatewayApprovalService
+internal sealed class GatewayApprovalService(
+    IApprovalPlanWorkflow approvalPlans,
+    IApprovalChallengeWorkflow approvalChallenges,
+    IApprovalAuditPublisher auditPublisher,
+    IPlanReviewAdapter planReviewAdapter,
+    IAuthorizationCheck authorizationCheck,
+    McpGatewayOptions options,
+    IHttpContextAccessor httpContextAccessor,
+    IApprovalNotificationDispatcher notificationDispatcher,
+    ILogger<GatewayApprovalService> logger) : IGatewayApprovalService
 {
-    private readonly IApprovalPlanWorkflow approvalPlans;
-    private readonly IApprovalChallengeWorkflow approvalChallenges;
-    private readonly IApprovalAuditPublisher auditPublisher;
-    private readonly IPlanReviewAdapter planReviewAdapter;
-    private readonly IAuthorizationCheck authorizationCheck;
-    private readonly McpGatewayOptions options;
-    private readonly IHttpContextAccessor httpContextAccessor;
-    private readonly IApprovalNotificationDispatcher notificationDispatcher;
-    private readonly ILogger<GatewayApprovalService> logger;
-
-    public GatewayApprovalService( // NOSONAR:S107 — 9-param DI constructor. Mirrors GatewayToolDispatcher pattern for consistency.
-        IApprovalPlanWorkflow approvalPlans,
-        IApprovalChallengeWorkflow approvalChallenges,
-        IApprovalAuditPublisher auditPublisher,
-        IPlanReviewAdapter planReviewAdapter,
-        IAuthorizationCheck authorizationCheck,
-        McpGatewayOptions options,
-        IHttpContextAccessor httpContextAccessor,
-        IApprovalNotificationDispatcher notificationDispatcher,
-        ILogger<GatewayApprovalService> logger)
-    {
-        this.approvalPlans = approvalPlans;
-        this.approvalChallenges = approvalChallenges;
-        this.auditPublisher = auditPublisher;
-        this.planReviewAdapter = planReviewAdapter;
-        this.authorizationCheck = authorizationCheck;
-        this.options = options;
-        this.httpContextAccessor = httpContextAccessor;
-        this.notificationDispatcher = notificationDispatcher;
-        this.logger = logger;
-    }
 
     public async Task<ApprovalGateResult> EnsureApprovedOrCreateChallengeAsync(
         string planId,
@@ -47,7 +25,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         if (requester is null)
         {
             return ApprovalGateResult.Refused(
-                "Refused: apply approval requires an authenticated OAuth subject.",
+                McpGatewayMessages.Authorization.RefusedAuthenticatedSubjectRequired(),
                 McpGatewayConventions.ApprovalReasonCodes.AuthenticatedSubjectRequired);
         }
 
@@ -76,7 +54,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         var decoded = planReviewAdapter.TryDecodeForReview(envelope, out var decodeError);
         if (decoded is null)
         {
-            var message = decodeError ?? $"Plan '{planId}' could not be decoded by the approval adapter.";
+            var message = decodeError ?? McpGatewayMessages.Approval.AdapterDecodeFailedWithId(planId);
             await WriteApplyDeniedAuditAsync(planId, message, cancellationToken).ConfigureAwait(false);
 
             return ApprovalGateResult.Refused(
@@ -94,7 +72,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         if (!grantedAuthz.IsAuthorized)
         {
             return ApprovalGateResult.Refused(
-                "Refused: apply approval requires the same authenticated subject that requested the plan.",
+                McpGatewayMessages.Authorization.RefusedSameSubjectRequired(),
                 McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired);
         }
 
@@ -121,8 +99,9 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         var pendingPlan = planReviewAdapter.TryDecodeForReview(pending.Envelope, out var pendingError);
         if (pendingPlan is null)
         {
+            var adapterError = pendingError ?? McpGatewayMessages.Approval.AdapterDecodeFailedWithId(planId);
             return ApprovalGateResult.Refused(
-                $"Refused: {pendingError ?? $"Plan '{planId}' could not be decoded by the approval adapter."}",
+                $"Refused: {adapterError}",
                 McpGatewayConventions.ApprovalReasonCodes.AdapterDecodeFailed);
         }
 
@@ -136,7 +115,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         if (!pendingAuthz.IsAuthorized)
         {
             return ApprovalGateResult.Refused(
-                "Refused: apply approval requires the same authenticated subject that requested the plan.",
+                McpGatewayMessages.Authorization.RefusedSameSubjectRequired(),
                 McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired);
         }
 
@@ -177,14 +156,14 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         if (now < pending.Envelope.ValidFromUtc)
         {
             return ApprovalGateResult.Refused(
-                $"Refused: plan '{planId}' validity window has not started yet.",
+                McpGatewayMessages.Approval.RefusedPlanNotStarted(planId),
                 McpGatewayConventions.ApprovalReasonCodes.PlanNotStarted);
         }
 
         if (now >= pending.Envelope.ValidUntilUtc)
         {
             return ApprovalGateResult.Refused(
-                $"Refused: plan '{planId}' has expired.",
+                McpGatewayMessages.Approval.RefusedPlanExpired(planId),
                 McpGatewayConventions.ApprovalReasonCodes.PlanExpired);
         }
 
@@ -218,7 +197,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         if (!planReview.HasReviewEvidence)
         {
             return new ResultFailure(
-                MissingEvidenceMessage(planId),
+                McpGatewayMessages.Approval.MissingEvidence(planId),
                 ApprovalConventions.ResultReasonCodes.MissingReviewEvidence);
         }
 
@@ -247,7 +226,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         {
             return new ApprovalDecisionResult(
                 false,
-                validation.Error ?? "Approval challenge is invalid.",
+                validation.Error ?? McpGatewayMessages.Approval.ChallengeInvalid,
                 validation.ReasonCode ?? ApprovalConventions.ResultReasonCodes.ChallengeInvalid);
         }
 
@@ -276,7 +255,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
 
         return new ApprovalDecisionResult(
             true,
-            $"Plan '{updated.PlanId}' was approved with grant '{grant.Id}'. Return to your MCP client and call execute_approved_plan again.");
+            McpGatewayMessages.Approval.PlanApproved(updated.PlanId, grant.Id));
     }
 
     public async Task<ApprovalDecisionResult> DenyChallengeAsync(
@@ -288,7 +267,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         {
             return new ApprovalDecisionResult(
                 false,
-                "Approval challenge was not found.",
+                McpGatewayMessages.Approval.ChallengeNotFound,
                 ApprovalConventions.ResultReasonCodes.ChallengeNotFound);
         }
 
@@ -297,7 +276,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         {
             return new ApprovalDecisionResult(
                 false,
-                "Approval requires an authenticated OAuth subject.",
+                McpGatewayMessages.Authorization.AuthenticatedSubjectRequired,
                 McpGatewayConventions.ApprovalReasonCodes.AuthenticatedSubjectRequired);
         }
 
@@ -305,7 +284,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         {
             return new ApprovalDecisionResult(
                 false,
-                $"Approval challenge is already {challenge.Status}.",
+                McpGatewayMessages.Approval.ChallengeAlreadyTerminal(challenge.Status),
                 ApprovalConventions.ResultReasonCodes.ChallengeAlreadyTerminal);
         }
 
@@ -340,7 +319,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                     decidedAt)),
             cancellationToken).ConfigureAwait(false);
 
-        return new ApprovalDecisionResult(true, $"Plan '{denied.PlanId}' was denied.");
+        return new ApprovalDecisionResult(true, McpGatewayMessages.Approval.PlanDenied(denied.PlanId));
     }
 
     public async Task<ApprovalDecisionResult> CancelChallengeAsync(
@@ -352,7 +331,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         {
             return new ApprovalDecisionResult(
                 false,
-                "Approval challenge was not found.",
+                McpGatewayMessages.Approval.ChallengeNotFound,
                 ApprovalConventions.ResultReasonCodes.ChallengeNotFound);
         }
 
@@ -361,7 +340,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         {
             return new ApprovalDecisionResult(
                 false,
-                "Approval cancellation requires an authenticated OAuth subject.",
+                McpGatewayMessages.Authorization.CancelAuthenticatedSubjectRequired,
                 McpGatewayConventions.ApprovalReasonCodes.AuthenticatedSubjectRequired);
         }
 
@@ -369,7 +348,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         {
             return new ApprovalDecisionResult(
                 false,
-                $"Approval challenge is already {challenge.Status}.",
+                McpGatewayMessages.Approval.ChallengeAlreadyTerminal(challenge.Status),
                 ApprovalConventions.ResultReasonCodes.ChallengeAlreadyTerminal);
         }
 
@@ -379,7 +358,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
 
             return new ApprovalDecisionResult(
                 false,
-                $"Approval challenge is already {expired.Status}.",
+                McpGatewayMessages.Approval.ChallengeAlreadyTerminal(expired.Status),
                 ApprovalConventions.ResultReasonCodes.ChallengeExpired);
         }
 
@@ -388,12 +367,12 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
             await WriteChallengeRejectedAuditAsync(
                 challenge,
                 actor.Subject,
-                "Canceling subject did not match requester subject.",
+                McpGatewayMessages.Authorization.CancelSubjectMismatch,
                 cancellationToken).ConfigureAwait(false);
 
             return new ApprovalDecisionResult(
                 false,
-                "Approval must be canceled by the same authenticated subject that requested it.",
+                McpGatewayMessages.Authorization.CancelSameSubjectRequired,
                 McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired);
         }
 
@@ -419,7 +398,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                     decidedAt)),
             cancellationToken).ConfigureAwait(false);
 
-        return new ApprovalDecisionResult(true, $"Plan '{canceled.PlanId}' approval challenge was canceled.");
+        return new ApprovalDecisionResult(true, McpGatewayMessages.Approval.PlanCanceled(canceled.PlanId));
     }
 
     private async Task<ChallengeValidation> ValidatePendingChallengeAsync(
@@ -430,7 +409,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         if (challenge is null)
         {
             return ChallengeValidation.Invalid(
-                "Approval challenge was not found.",
+                McpGatewayMessages.Approval.ChallengeNotFound,
                 ApprovalConventions.ResultReasonCodes.ChallengeNotFound);
         }
 
@@ -477,7 +456,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         if (!IsPending(challenge))
         {
             return ChallengeValidation.Invalid(
-                $"Approval challenge is already {challenge.Status}.",
+                McpGatewayMessages.Approval.ChallengeAlreadyTerminal(challenge.Status),
                 ApprovalConventions.ResultReasonCodes.ChallengeAlreadyTerminal,
                 challenge);
         }
@@ -486,7 +465,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         {
             var expired = await ExpireChallengeAsync(challenge, ct).ConfigureAwait(false);
             return ChallengeValidation.Invalid(
-                "Approval challenge expired. Ask the MCP client to request a new approval URL.",
+                McpGatewayMessages.Approval.ChallengeExpired,
                 ApprovalConventions.ResultReasonCodes.ChallengeExpired,
                 expired);
         }
@@ -500,7 +479,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         if (approver is null)
         {
             return ChallengeValidation.Invalid(
-                "Approval requires an authenticated OAuth subject.",
+                McpGatewayMessages.Authorization.AuthenticatedSubjectRequired,
                 McpGatewayConventions.ApprovalReasonCodes.AuthenticatedSubjectRequired,
                 challenge);
         }
@@ -522,14 +501,14 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         string reason = envelope.ApprovalPolicy.Type switch
         {
             ApprovalConventions.ApprovalPolicyTypes.OperatorApproval =>
-                "Approver is not a member of the required operator group.",
-            _ => "Approver subject did not match requester subject."
+                McpGatewayMessages.Authorization.ApproverNotInOperatorGroup,
+            _ => McpGatewayMessages.Authorization.ApproverSubjectMismatch
         };
         string message = envelope.ApprovalPolicy.Type switch
         {
             ApprovalConventions.ApprovalPolicyTypes.OperatorApproval =>
-                "Approval requires membership in the configured operator group.",
-            _ => "Approval requires the same authenticated subject that requested the plan."
+                McpGatewayMessages.Authorization.RequiresOperatorGroup,
+            _ => McpGatewayMessages.Authorization.RequiresSameSubject
         };
         string reasonCode = envelope.ApprovalPolicy.Type switch
         {
@@ -565,14 +544,14 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         string reason = pending.Envelope.ApprovalPolicy.Type switch
         {
             ApprovalConventions.ApprovalPolicyTypes.OperatorApproval =>
-                "Approver is not a member of the required operator group.",
-            _ => "Approver subject did not match requester subject."
+                McpGatewayMessages.Authorization.ApproverNotInOperatorGroup,
+            _ => McpGatewayMessages.Authorization.ApproverSubjectMismatch
         };
         string message = pending.Envelope.ApprovalPolicy.Type switch
         {
             ApprovalConventions.ApprovalPolicyTypes.OperatorApproval =>
-                "Approval requires membership in the configured operator group.",
-            _ => "Approval must be denied by the same authenticated subject that requested it."
+                McpGatewayMessages.Authorization.RequiresOperatorGroup,
+            _ => McpGatewayMessages.Authorization.DenySameSubjectRequired
         };
         string reasonCode = pending.Envelope.ApprovalPolicy.Type switch
         {
@@ -603,20 +582,18 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         if (!SameDigest(challenge.IntentDigest, pending.Envelope.IntentDigest) ||
             !SameDigest(challenge.ReviewDigest, pending.Envelope.ReviewDigest))
         {
-            const string message = "The pending plan digest binding changed after this approval URL was created. Ask the MCP client to request a new approval URL.";
-            await WriteChallengeRejectedAuditAsync(challenge, approverSubject, message, ct).ConfigureAwait(false);
+            await WriteChallengeRejectedAuditAsync(challenge, approverSubject, McpGatewayMessages.Approval.DigestBindingChanged, ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
-                message, ApprovalConventions.ResultReasonCodes.DigestChanged, challenge);
+                McpGatewayMessages.Approval.DigestBindingChanged, ApprovalConventions.ResultReasonCodes.DigestChanged, challenge);
         }
 
         if (!FixedTimeStringComparer.Equals(challenge.PendingPlanHash, pending.Hash))
         {
-            const string message = "The pending plan changed after this approval URL was created. Ask the MCP client to request a new approval URL.";
-            await WriteChallengeRejectedAuditAsync(challenge, approverSubject, message, ct).ConfigureAwait(false);
+            await WriteChallengeRejectedAuditAsync(challenge, approverSubject, McpGatewayMessages.Approval.PendingPlanChanged, ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
-                message, ApprovalConventions.ResultReasonCodes.PendingPlanChanged, challenge);
+                McpGatewayMessages.Approval.PendingPlanChanged, ApprovalConventions.ResultReasonCodes.PendingPlanChanged, challenge);
         }
 
         return null;
@@ -628,7 +605,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
         var decoded = planReviewAdapter.TryDecodeForReview(pending.Envelope!, out var decodeError);
         if (decoded is null)
         {
-            var errorMessage = decodeError ?? "Plan could not be decoded by the approval adapter.";
+            var errorMessage = decodeError ?? McpGatewayMessages.Approval.AdapterDecodeFailed;
             await WriteChallengeRejectedAuditAsync(challenge, approverSubject, errorMessage, ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
@@ -637,7 +614,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
 
         if (!SameSubject(challenge.RequesterSubject, decoded.Envelope.Requester.Subject))
         {
-            const string message = "The pending plan requester changed after this approval URL was created. Ask the MCP client to request a new approval URL.";
+            const string message = McpGatewayMessages.Approval.RequesterChanged;
             await WriteChallengeRejectedAuditAsync(challenge, approverSubject, message, ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
@@ -646,11 +623,10 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
 
         if (!decoded.HasReviewEvidence)
         {
-            var message = MissingEvidenceMessage(challenge.PlanId);
-            await WriteChallengeRejectedAuditAsync(challenge, approverSubject, message, ct).ConfigureAwait(false);
+            await WriteChallengeRejectedAuditAsync(challenge, approverSubject, McpGatewayMessages.Approval.MissingEvidence(challenge.PlanId), ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
-                message, ApprovalConventions.ResultReasonCodes.MissingReviewEvidence, challenge, decoded);
+                McpGatewayMessages.Approval.MissingEvidence(challenge.PlanId), ApprovalConventions.ResultReasonCodes.MissingReviewEvidence, challenge, decoded);
         }
 
         return ChallengeValidation.Valid(challenge, decoded);
@@ -707,7 +683,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
                 ApprovalConventions.ChallengeOutcomeStatuses.Expired,
                 actorSubject: null,
                 decidedAt,
-                "Challenge TTL expired.",
+                McpGatewayMessages.Approval.ChallengeTtlExpired,
                 grantId: null)
         };
         return await approvalChallenges.RecordChallengeOutcomeAsync(
@@ -829,8 +805,7 @@ internal sealed class GatewayApprovalService : IGatewayApprovalService
     private static bool SameDigest(ApprovalDigest? left, ApprovalDigest right) =>
         left is not null && left == right;
 
-    private static string MissingEvidenceMessage(string planId) =>
-        $"Plan '{planId}' is missing recorded evidence data. Ask the MCP client to re-request the plan.";
+    
 
     private sealed record class ChallengeValidation(
         string? Error,

@@ -9,27 +9,15 @@ using System.Text.Json.Nodes;
 
 namespace InfraGate.McpGateway;
 
-internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, IAsyncDisposable
+internal sealed class DownstreamMcpClient(
+    McpGatewayOptions options,
+    IDownstreamServiceTokenProvider tokenProvider,
+    ILogger<DownstreamMcpClient> logger,
+    ILoggerFactory loggerFactory) : IDownstreamMcpClient, IToolCaller, IAsyncDisposable
 {
-    private readonly McpGatewayOptions options;
-    private readonly IDownstreamServiceTokenProvider tokenProvider;
-    private readonly ILogger<DownstreamMcpClient> logger;
-    private readonly ILoggerFactory loggerFactory;
     private readonly SemaphoreSlim clientLock = new(1, 1);
     private readonly SemaphoreSlim callLock = new(1, 1);
     private McpClient? client;
-
-    public DownstreamMcpClient(
-        McpGatewayOptions options,
-        IDownstreamServiceTokenProvider tokenProvider,
-        ILogger<DownstreamMcpClient> logger,
-        ILoggerFactory loggerFactory)
-    {
-        this.options = options;
-        this.tokenProvider = tokenProvider;
-        this.logger = logger;
-        this.loggerFactory = loggerFactory;
-    }
 
     public async Task<string> CallToolAsync(
         string toolName,
@@ -148,7 +136,7 @@ internal sealed class DownstreamMcpClient : IDownstreamMcpClient, IToolCaller, I
 
     internal static bool IsDownstreamAuthRejection(Exception ex)
         => ex is McpException mcpEx
-           && mcpEx.Message.Contains(DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired, StringComparison.Ordinal);
+            && mcpEx.Message.Contains(DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired, StringComparison.Ordinal);
 
     internal async Task<T> WithAuthRetryAsync<T>(
         Func<string, Task<T>> operation,

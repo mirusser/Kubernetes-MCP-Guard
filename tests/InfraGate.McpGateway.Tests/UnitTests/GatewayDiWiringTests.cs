@@ -80,6 +80,7 @@ public sealed class GatewayDiWiringTests
         services.AddKubernetesAdapter();
         services.AddSingleton<DownstreamToolRegistry>();
         services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
+        services.AddSingleton<IToolScopeGuard, ToolScopeGuard>();
         services.AddHttpContextAccessor();
         services.AddDataProtection()
             .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(Path.GetTempPath(), "di-wiring-dp", Guid.NewGuid().ToString("N"))))
