@@ -536,6 +536,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                 services.AddKubernetesAdapter();
                 services.AddSingleton<DownstreamToolRegistry>();
                 services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
+                services.AddSingleton<IToolScopeGuard, ToolScopeGuard>();
                 services.AddHttpContextAccessor();
                 services.AddLogging();
                 services.AddSingleton<IApprovalAccessCodeStore, InMemoryApprovalAccessCodeStore>();

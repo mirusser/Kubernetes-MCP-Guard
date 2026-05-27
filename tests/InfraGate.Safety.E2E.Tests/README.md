@@ -1,6 +1,6 @@
 # InfraGate.Safety.E2E.Tests
 
-End-to-end and focused live tests for the seven safety properties listed in [`.agents/Plans/minimum-for-demo.md`](../../.agents/Plans/minimum-for-demo.md) §6 ("Tests proving the safety model"). The suite exercises production components: real Keycloak JWTs for MCP calls, a real gateway HTTP host (`Microsoft.AspNetCore.TestHost`), the gateway's browser approval endpoints with antiforgery, a real `InfraGate.McpServer` subprocess spawned by `DownstreamMcpClient`, and a real Kubernetes API via the developer-provided kubeconfig.
+End-to-end and focused live tests for the seven safety properties listed in [`.agents/Plans/minimum-for-demo.md`](../../.agents/Plans/archive/2026-05-15-minimum-for-demo.md) §6 ("Tests proving the safety model"). The suite exercises production components: real Keycloak JWTs for MCP calls, a real gateway HTTP host (`Microsoft.AspNetCore.TestHost`), the gateway's browser approval endpoints with antiforgery, a real `InfraGate.McpServer` subprocess spawned by `DownstreamMcpClient`, and a real Kubernetes API via the developer-provided kubeconfig.
 
 Not every workflow is a full vertical browser flow. Some tests intentionally stay at the gateway-service or downstream-server layer to force clock/hash/principal edge cases without brittle setup. Browser approval identity is simulated at the OAuth callback/backchannel boundary; the tests do not scrape the real Keycloak login form. Real Keycloak approval-token backchannel coverage lives in `InfraGate.McpGateway.KeycloakTests`.
 
@@ -41,7 +41,7 @@ The `PromptInjectionGuard` now decodes strings that appear to be valid base64 (>
 
 The tests do **not** scrape the real Keycloak browser login form. For browser approval operations the fixture uses a `FakeApprovalOAuthBackchannel` that returns a test JWT for any configured subject, simulating the OAuth authorization-code → token exchange. The real Keycloak callback/cookie flow is exercised indirectly (the browser approval page renders real dry-run/diff evidence), but identity is injected at the OAuth backchannel boundary, not through manual HTML form interaction.
 
-This is an intentional test-boundary choice documented in the [implementation plan](../../.agents/Plans/strengthen-safety-e2e-security-flow-plan.md). Real Keycloak JWTs remain for MCP bearer-token coverage, and `InfraGate.McpGateway.KeycloakTests` now covers the gateway approval OAuth callback/cookie path with a real Keycloak-issued token supplied through a stable backchannel. A future Playwright-style browser test can scrape or automate Keycloak login if that fragility becomes worth the maintenance cost.
+This is an intentional test-boundary choice documented in the [implementation plan](../../.agents/Plans/archive/2026-05-11-strengthen-safety-e2e-security-flow-plan.md). Real Keycloak JWTs remain for MCP bearer-token coverage, and `InfraGate.McpGateway.KeycloakTests` now covers the gateway approval OAuth callback/cookie path with a real Keycloak-issued token supplied through a stable backchannel. A future Playwright-style browser test can scrape or automate Keycloak login if that fragility becomes worth the maintenance cost.
 
 ### Known limitations
 
