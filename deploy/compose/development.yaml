@@ -17,8 +17,31 @@
 name: infra-gate-development
 
 services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: infra-gate
+      POSTGRES_USER: infra-gate
+      POSTGRES_PASSWORD: infra-gate-dev-password
+      INFRA_GATE_RUN_APPROVAL_MIGRATIONS: "true"
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../../src/InfraGate.Approvals.Postgres/Migrations:/var/approval-migrations:ro
+      - ../../scripts/persistence/run-compose-migrations.sh:/docker-entrypoint-initdb.d/00-run-approval-migrations.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U infra-gate -d infra-gate"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   mcp-gateway:
     image: ${INFRA_GATE_GATEWAY_IMAGE:-ghcr.io/mirusser/kubernetes-mcp-guard-gateway}:${TAG:-dev}
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     env_file:
       - ${INFRA_GATE_GATEWAY_ENV_FILE:-../generated/development.env}
@@ -30,3 +53,6 @@ services:
       - ${INFRA_GATE_DATA_PROTECTION_HOST_PATH:-/var/lib/infra-gate/development/dataprotection-keys}:/data/dataprotection-keys
     ports:
       - "${INFRA_GATE_BIND_ADDRESS:-127.0.0.1}:${INFRA_GATE_BIND_PORT:-3001}:3001"
+
+volumes:
+  pgdata:

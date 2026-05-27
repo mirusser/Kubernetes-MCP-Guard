@@ -183,6 +183,8 @@ profiles:
       oauthTokenEndpoint: http://172.17.0.1:3010/realms/infra-gate/protocol/openid-connect/token
     genericApprovalCore:
       approvalRoot: /data/approvals
+      postgresConnectionString: "Host=postgres;Port=5432;Database=infra-gate;Username=infra-gate;Password=infra-gate-dev-password"
+      runMigrationsOnStartup: "true"
     host:
       bindAddress: 127.0.0.1
       bindPort: "3001"
