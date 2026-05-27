@@ -1,11 +1,10 @@
+using System.Text.Json.Nodes;
 using InfraGate.Approvals;
 using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway.DownstreamAuth;
-using Microsoft.Extensions.Logging;
 using ModelContextProtocol;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
-using System.Text.Json.Nodes;
 
 namespace InfraGate.McpGateway;
 

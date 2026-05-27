@@ -1,12 +1,8 @@
-using System.Security.Claims;
 using System.Text.Json;
 using InfraGate.Approvals;
 using InfraGate.Approvals.AuditPayloads;
-using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Notifications;
-using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
-using ModelContextProtocol.Server;
 
 namespace InfraGate.McpGateway;
 

@@ -4,7 +4,6 @@ using InfraGate.Approvals;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Email;
-using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
 
 namespace InfraGate.McpGateway;

@@ -1,6 +1,6 @@
-using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
 using InfraGate.Approvals.Postgres;
+using InfraGate.ApprovalUi;
 using InfraGate.ClientCredentials;
 using InfraGate.DownstreamAuth;
 using InfraGate.KubernetesAdapter;
@@ -11,7 +11,6 @@ using InfraGate.McpGateway.Notifications;
 using InfraGate.Observability;
 using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace InfraGate.McpGateway;

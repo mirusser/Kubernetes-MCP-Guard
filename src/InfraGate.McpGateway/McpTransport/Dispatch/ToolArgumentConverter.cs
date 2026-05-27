@@ -4,9 +4,9 @@ namespace InfraGate.McpGateway;
 
 internal static class ToolArgumentConverter
 {
-    internal const int WaitForPlanApprovalDefaultTimeoutSeconds = 55;
-    internal const int WaitForPlanApprovalMinimumTimeoutSeconds = 1;
-    internal const int WaitForPlanApprovalMaximumTimeoutSeconds = 300;
+    private const int WaitForPlanApprovalDefaultTimeoutSeconds = 55;
+    private const int WaitForPlanApprovalMinimumTimeoutSeconds = 1;
+    private const int WaitForPlanApprovalMaximumTimeoutSeconds = 300;
 
     internal static IReadOnlyDictionary<string, object?> ConvertArguments(IDictionary<string, JsonElement>? args)
     {
@@ -35,7 +35,7 @@ internal static class ToolArgumentConverter
         return result;
     }
 
-    internal static object? JsonElementToObject(JsonElement element) =>
+    private static object? JsonElementToObject(JsonElement element) =>
         element.ValueKind switch
         {
             JsonValueKind.String => element.GetString(),
@@ -60,29 +60,29 @@ internal static class ToolArgumentConverter
             return true;
         }
 
-        if (timeoutObj is int timeout)
+        switch (timeoutObj)
         {
-            timeoutSeconds = timeout;
-        }
-        else if (timeoutObj is double doubleTimeout &&
-                 double.IsInteger(doubleTimeout) && // NOSONAR:S1244 — intended API, not an equality comparison
-                 doubleTimeout >= int.MinValue &&
-                 doubleTimeout <= int.MaxValue)
-        {
-            timeoutSeconds = (int)doubleTimeout;
-        }
-        else
-        {
-            timeoutError = McpGatewayMessages.ArgumentValidation.TimeoutMustBeInteger;
-            return false;
+            case int timeout:
+                timeoutSeconds = timeout;
+                break;
+            case double doubleTimeout when
+                double.IsInteger(doubleTimeout) && // NOSONAR:S1244 — intended API, not an equality comparison
+                doubleTimeout is >= int.MinValue and <= int.MaxValue:
+                timeoutSeconds = (int)doubleTimeout;
+                break;
+            default:
+                timeoutError = McpGatewayMessages.ArgumentValidation.TimeoutMustBeInteger;
+                return false;
         }
 
-        if (timeoutSeconds is < WaitForPlanApprovalMinimumTimeoutSeconds or > WaitForPlanApprovalMaximumTimeoutSeconds)
+        if (timeoutSeconds is >= WaitForPlanApprovalMinimumTimeoutSeconds
+            and <= WaitForPlanApprovalMaximumTimeoutSeconds)
         {
-            timeoutError = McpGatewayMessages.ArgumentValidation.TimeoutMustBeInteger;
-            return false;
+            return true;
         }
+        timeoutError = McpGatewayMessages.ArgumentValidation.TimeoutMustBeInteger;
 
-        return true;
+        return false;
+
     }
 }

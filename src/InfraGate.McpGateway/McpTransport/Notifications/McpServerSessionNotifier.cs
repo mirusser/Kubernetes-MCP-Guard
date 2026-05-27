@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ModelContextProtocol.Server;
 
 namespace InfraGate.McpGateway.Notifications;
@@ -10,5 +11,5 @@ internal sealed class McpServerSessionNotifier(McpServer server) : ISessionNotif
 
     public Task SendNotificationAsync<TParams>(string method, TParams @params, CancellationToken ct)
         where TParams : notnull =>
-        server.SendNotificationAsync(method, @params, System.Text.Json.JsonSerializerOptions.Default, ct);
+        server.SendNotificationAsync(method, @params, JsonSerializerOptions.Default, ct);
 }

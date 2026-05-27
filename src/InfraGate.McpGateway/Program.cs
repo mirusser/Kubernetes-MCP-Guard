@@ -2,10 +2,7 @@ using InfraGate.Approvals.Postgres;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Notifications;
-using Microsoft.Extensions.Logging;
-using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Protocol;
-using ModelContextProtocol.Server;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -70,9 +67,9 @@ builder.Services
         };
 #pragma warning restore MCPEXP002
     })
-    .WithListToolsHandler((RequestContext<ListToolsRequestParams> request, CancellationToken ct) =>
+    .WithListToolsHandler((request, ct) =>
         new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().ListToolsAsync(request.Params, ct)))
-    .WithCallToolHandler((RequestContext<CallToolRequestParams> request, CancellationToken ct) =>
+    .WithCallToolHandler((request, ct) =>
     {
         if (request.Services!.GetService<IHttpContextAccessor>() is { HttpContext: { } httpCtx })
         {
@@ -80,13 +77,13 @@ builder.Services
         }
         return new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct));
     })
-    .WithListResourceTemplatesHandler((RequestContext<ListResourceTemplatesRequestParams> request, CancellationToken ct) =>
+    .WithListResourceTemplatesHandler((request, ct) =>
         new ValueTask<ListResourceTemplatesResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>().ListTemplates()))
-    .WithReadResourceHandler((RequestContext<ReadResourceRequestParams> request, CancellationToken ct) =>
+    .WithReadResourceHandler((request, ct) =>
         new ValueTask<ReadResourceResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>().ReadAsync(request.Params, ct)))
-    .WithSubscribeToResourcesHandler((RequestContext<SubscribeRequestParams> request, CancellationToken ct) =>
+    .WithSubscribeToResourcesHandler((request, ct) =>
         new ValueTask<EmptyResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>().Subscribe(request.Server.SessionId, request.Params)))
-    .WithUnsubscribeFromResourcesHandler((RequestContext<UnsubscribeRequestParams> request, CancellationToken ct) =>
+    .WithUnsubscribeFromResourcesHandler((request, ct) =>
         new ValueTask<EmptyResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>().Unsubscribe(request.Server.SessionId, request.Params)));
 
 var app = builder.Build();

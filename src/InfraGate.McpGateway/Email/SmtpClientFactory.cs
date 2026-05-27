@@ -1,5 +1,8 @@
 using System.Net.Mail;
+using MailKit.Security;
 using MimeKit;
+using MimeKit.Text;
+using SmtpClient = MailKit.Net.Smtp.SmtpClient;
 
 namespace InfraGate.McpGateway.Email;
 
@@ -22,12 +25,12 @@ internal sealed class SmtpClientFactory : ISmtpClientFactory
             foreach (MailAddress addr in message.To)
                 mime.To.Add(new MailboxAddress(string.Empty, addr.Address));
             mime.Subject = message.Subject ?? string.Empty;
-            mime.Body = new TextPart(MimeKit.Text.TextFormat.Plain) { Text = message.Body ?? string.Empty };
+            mime.Body = new TextPart(TextFormat.Plain) { Text = message.Body ?? string.Empty };
 
-            using var client = new MailKit.Net.Smtp.SmtpClient();
+            using var client = new SmtpClient();
             var secureOptions = options.EnableSsl
-                ? MailKit.Security.SecureSocketOptions.StartTls
-                : MailKit.Security.SecureSocketOptions.None;
+                ? SecureSocketOptions.StartTls
+                : SecureSocketOptions.None;
             await client.ConnectAsync(options.Host, options.Port, secureOptions, cancellationToken)
                 .ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(options.Username))

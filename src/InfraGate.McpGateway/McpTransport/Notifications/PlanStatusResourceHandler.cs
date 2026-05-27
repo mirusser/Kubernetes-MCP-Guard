@@ -90,7 +90,7 @@ internal sealed class PlanStatusResourceHandler(
     }
 
     private static bool IsSafePlanId(string planId) =>
-        planId.All(c => c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9') or '-');
+        planId.All(c => c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '-');
 
     private static McpException InvalidPlanStatusUri(string? uri) =>
         new($"Unsupported plan status resource URI '{uri}'. Expected {NotificationsConventions.Resources.PlanStatusUriTemplate}.");

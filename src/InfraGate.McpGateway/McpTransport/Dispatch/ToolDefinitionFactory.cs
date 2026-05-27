@@ -1,7 +1,6 @@
 using System.Text.Json;
 using InfraGate.Approvals;
 using ModelContextProtocol.Protocol;
-using ModelContextProtocol.Server;
 
 namespace InfraGate.McpGateway;
 

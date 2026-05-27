@@ -1,5 +1,4 @@
 using ModelContextProtocol.Protocol;
-using ModelContextProtocol.Server;
 
 namespace InfraGate.McpGateway;
 

@@ -4,7 +4,6 @@ using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Email;
 using InfraGate.RuntimeSafety;
-using Microsoft.Extensions.Configuration;
 
 namespace InfraGate.McpGateway;
 

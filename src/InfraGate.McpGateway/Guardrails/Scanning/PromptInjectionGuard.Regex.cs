@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -37,7 +36,7 @@ public static partial class PromptInjectionGuard
         var hasInvalidChar = false;
         foreach (char c in text)
         {
-            if (c is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or (>= '0' and <= '9') or '+' or '/' or '=')
+            if (c is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '+' or '/' or '=')
             {
                 continue;
             }

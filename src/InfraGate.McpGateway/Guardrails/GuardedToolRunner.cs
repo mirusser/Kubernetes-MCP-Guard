@@ -1,6 +1,5 @@
 using System.Text.RegularExpressions;
 using InfraGate.McpGateway.Auth;
-using Microsoft.Extensions.Logging;
 
 namespace InfraGate.McpGateway;
 
