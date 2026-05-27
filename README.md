@@ -7,7 +7,7 @@
 > Observer detects anomalies.  
 > Planner proposes an evidence-backed plan.  
 > Human reviewer approves out-of-band.  
-> Executor runs only the approved digest.  
+> Executor runs only the approved digest-bound plan.  
 > Everything is auditable.
 
 </br>
@@ -23,19 +23,30 @@
 
 
 ### 📝 TL;DR
-**A security-first bridge between AI agents and Kubernetes, with out of band Human-in-the-Loop (HITL) plan based approval for every gateway-exposed mutation.**
+**A security-first bridge between AI agents and Kubernetes, with out-of-band, human-in-the-loop (HITL), plan-based approval for every gateway-exposed mutation.**
 
 Agents can inspect a narrow cluster surface and propose changes, but writes are staged as server-side dry-run plans and execute only after an OAuth-authenticated human approves the exact review snapshot in a separate browser session.
 
-<sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments rather than production-certified infrastructure.</em></sub>
+<sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments, not production-certified infrastructure.</em></sub>
 
-<sub><em>Kubernetes MCP Guard is internally named **InfraGate**. </em></sub>
+<sub><em>The codebase uses **InfraGate** as the internal project name.</em></sub>
 
 ## 🎬 Demo
 
 https://github.com/user-attachments/assets/4e06b4ee-db80-4d74-96cc-38dfbb413042
 
-The walkthrough in [docs/demo-failing-deployment.md](docs/demo-failing-deployment.md) shows the full flow against a deliberately broken Deployment: diagnose, request a plan, approve in the browser, execute, verify, and inspect audit logs.
+
+> Demo scenario:  
+>  
+> 1. A Deployment is intentionally broken.  
+> 2. The Observer detects the unhealthy workload.  
+> 3. The Planner proposes a bounded remediation.  
+> 4. An approval access code is sent to the configured operator by email.
+> 5. An authenticated human approves the exact plan in the browser.  
+> 6. The Executor applies the approved mutation.  
+>  
+
+The walkthrough in [docs/demo-failing-deployment.md](docs/demo-failing-deployment.md) shows the full flow against a deliberately broken Deployment.
 
 ## 🧠 Core Ideas
 
