@@ -1,7 +1,7 @@
 using InfraGate.Approvals;
 using InfraGate.Approvals.Plan;
 
-namespace InfraGate.KubernetesAdapter;
+namespace InfraGate.KubernetesAdapter.Approval;
 
 public sealed class KubernetesPlanReviewAdapter : IPlanReviewAdapter
 {

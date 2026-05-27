@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using InfraGate.KubernetesAdapter.PlanBuilding;
 using InfraGate.McpServer;
 using k8s;
 using k8s.Autorest;
@@ -297,7 +298,7 @@ public sealed class KubernetesManagerHelpersTests
     [Fact]
     public void FormatObjectRef_ReturnsApiVersionKindNamespaceSlashName()
     {
-        var obj = new InfraGate.KubernetesAdapter.KubernetesObjectRef("apps/v1", "Deployment", "production", "web-api");
+        var obj = new KubernetesObjectRef("apps/v1", "Deployment", "production", "web-api");
 
         var result = KubernetesManagerHelpers.FormatObjectRef(obj);
 

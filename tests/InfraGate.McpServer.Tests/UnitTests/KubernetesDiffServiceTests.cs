@@ -2,6 +2,8 @@ using System.Net;
 using InfraGate.Approvals;
 using InfraGate.Approvals.Plan;
 using InfraGate.KubernetesAdapter;
+using InfraGate.KubernetesAdapter.Evidence;
+using InfraGate.KubernetesAdapter.PlanBuilding;
 using InfraGate.McpServer;
 using InfraGate.McpServer.Diff;
 using k8s;

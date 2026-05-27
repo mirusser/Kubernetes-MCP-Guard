@@ -1,4 +1,4 @@
-namespace InfraGate.KubernetesAdapter;
+namespace InfraGate.KubernetesAdapter.Execution;
 
 internal sealed record class KubernetesPreExecutionCheckedAdapterPayload(
     string NamespaceName,

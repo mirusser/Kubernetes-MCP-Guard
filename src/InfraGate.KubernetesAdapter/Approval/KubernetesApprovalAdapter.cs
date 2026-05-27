@@ -1,8 +1,10 @@
 using System.Text.Json;
 using InfraGate.Approvals;
 using InfraGate.Approvals.Plan;
+using InfraGate.KubernetesAdapter.PlanBuilding;
+using InfraGate.KubernetesAdapter.Evidence;
 
-namespace InfraGate.KubernetesAdapter;
+namespace InfraGate.KubernetesAdapter.Approval;
 
 internal static class KubernetesApprovalAdapter
 {

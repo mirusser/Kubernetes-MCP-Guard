@@ -8,6 +8,7 @@ using InfraGate.Approvals.Grant;
 using InfraGate.Approvals.Plan;
 using InfraGate.Approvals.PreExecution;
 using InfraGate.KubernetesAdapter;
+using InfraGate.KubernetesAdapter.Approval;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Email;

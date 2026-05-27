@@ -5,8 +5,11 @@ using InfraGate.Approvals.Execution;
 using InfraGate.Approvals.Audit;
 using InfraGate.Approvals.AuditPayloads;
 using InfraGate.KubernetesAdapter.Policy;
+using InfraGate.KubernetesAdapter.Approval;
+using InfraGate.KubernetesAdapter.Evidence;
+using InfraGate.KubernetesAdapter.PlanBuilding;
 
-namespace InfraGate.KubernetesAdapter;
+namespace InfraGate.KubernetesAdapter.Execution;
 
 public sealed class KubernetesPlanExecutor(
     IToolCaller toolCaller,

@@ -1,4 +1,4 @@
-namespace InfraGate.KubernetesAdapter;
+namespace InfraGate.KubernetesAdapter.Approval;
 
 public sealed record class KubernetesPlanDecodeResult(
     bool Succeeded,

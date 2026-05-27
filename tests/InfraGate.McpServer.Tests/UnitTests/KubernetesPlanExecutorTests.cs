@@ -5,6 +5,10 @@ using InfraGate.Approvals.Execution;
 using InfraGate.Approvals.Audit;
 using InfraGate.Approvals.AuditPayloads;
 using InfraGate.KubernetesAdapter;
+using InfraGate.KubernetesAdapter.Approval;
+using InfraGate.KubernetesAdapter.Evidence;
+using InfraGate.KubernetesAdapter.Execution;
+using InfraGate.KubernetesAdapter.PlanBuilding;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
 

@@ -4,8 +4,10 @@ using InfraGate.Approvals.Plan;
 using InfraGate.Approvals.Execution;
 using InfraGate.Approvals.Audit;
 using InfraGate.KubernetesAdapter.Policy;
+using InfraGate.KubernetesAdapter.Evidence;
+using InfraGate.KubernetesAdapter.Approval;
 
-namespace InfraGate.KubernetesAdapter;
+namespace InfraGate.KubernetesAdapter.PlanBuilding;
 
 public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanBuilder
 {

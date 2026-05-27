@@ -1,4 +1,6 @@
-namespace InfraGate.KubernetesAdapter;
+using InfraGate.KubernetesAdapter.Evidence;
+
+namespace InfraGate.KubernetesAdapter.PlanBuilding;
 
 public sealed record class KubernetesPlanPayload
 {

@@ -1,7 +1,9 @@
 using InfraGate.Approvals;
 using InfraGate.Approvals.Plan;
+using InfraGate.KubernetesAdapter.PlanBuilding;
+using InfraGate.KubernetesAdapter.Evidence;
 
-namespace InfraGate.KubernetesAdapter;
+namespace InfraGate.KubernetesAdapter.Approval;
 
 public sealed record class KubernetesPlan(PlanEnvelope Envelope, KubernetesPlanPayload Payload) : IPlanReview
 {

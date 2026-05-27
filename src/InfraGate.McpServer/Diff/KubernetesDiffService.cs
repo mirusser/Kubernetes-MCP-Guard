@@ -4,6 +4,8 @@ using System.Text.Json.Nodes;
 using InfraGate.Approvals;
 using InfraGate.Approvals.Plan;
 using InfraGate.KubernetesAdapter;
+using InfraGate.KubernetesAdapter.Evidence;
+using InfraGate.KubernetesAdapter.PlanBuilding;
 using k8s;
 using k8s.Autorest;
 

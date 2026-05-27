@@ -1,6 +1,7 @@
 using InfraGate.Approvals;
 using InfraGate.Approvals.Plan;
 using InfraGate.KubernetesAdapter;
+using InfraGate.KubernetesAdapter.PlanBuilding;
 using InfraGate.KubernetesAdapter.Policy;
 using k8s;
 using k8s.Models;
