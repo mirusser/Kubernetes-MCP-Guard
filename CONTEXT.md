@@ -186,6 +186,10 @@ _Avoid_: Adapter audit schema
 Domain-specific audit data attached to an **Audit Spine** event under an adapter-owned payload slot.
 _Avoid_: Generic audit fields
 
+**Audit Stream**:
+The per-component, append-only audit record for one runtime component (currently **Approval Authority**, **Anomaly Observer**, **Remediation Planner**), written transactionally with the state change it describes. Each **Audit Stream** carries its own tamper-evident hash chain over its own rows and outbox-shape state fields so rows can later be published to an external sink without schema rewrites. Streams are correlated across components by IDs (`plan_id`, `anomaly_id`, `challenge_id`, `grant_id`, `cycle_id`) — not by a shared hash chain. The **Generic Approval Core** owns the **Approval Authority** stream; **Anomaly Observer** and **Remediation Planner** each own their own stream.
+_Avoid_: **Audit Trail** (currently scoped to approval-lifecycle only), **Adapter Audit Payload** (the domain-specific JSON inside one event), unified ledger across components
+
 **Notification Registry**:
 The in-memory mapping from active MCP session identifiers to their notification targets and from plan URIs to subscribed session sets, used to route **Approval Notifications** back to the right AI agent sessions.
 _Avoid_: Session store, connection pool
@@ -316,6 +320,14 @@ _Avoid_: Planner Service Identity, Approver, Requester, Gateway Service Identity
 - An **Audit Spine** defines the generic lifecycle events in an **Audit Trail**
 - An **Adapter Audit Payload** may be attached to an **Audit Spine** event
 - Grant validation proof belongs to pre-execution gate audit events, not to `execution.started`
+- An **Audit Stream** is owned by exactly one runtime component
+- Three runtime components currently own an **Audit Stream**: the **Approval Authority**, the **Anomaly Observer**, and the **Remediation Planner**
+- An **Audit Stream** carries its own tamper-evident hash chain over its own rows
+- An **Audit Stream** is correlated to other **Audit Streams** by IDs, not by a shared hash chain
+- An **Audit Stream** is written transactionally with the state mutation it describes, when one exists
+- The **Approval Authority**'s **Audit Stream** is the persistent representation of the **Audit Trail**
+- The **Anomaly Observer**'s **Audit Stream** does not extend the **Audit Spine** and does not produce **Audit Spine** events
+- The **Remediation Planner**'s **Audit Stream** does not extend the **Audit Spine** and does not produce **Audit Spine** events
 - An **Authorization Check** is separate from an **Approval Policy**
 - An **Authorization Check** may gate creation of a **Plan Envelope** or creation of an **Execution Attempt**
 - A **Domain Policy Check** is separate from an **Approval Policy** and an **Authorization Check**
