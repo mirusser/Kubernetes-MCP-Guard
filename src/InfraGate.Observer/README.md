@@ -2,6 +2,8 @@
 
 `InfraGate.Observer` is an LLM-driven anomaly detection agent that periodically inspects Kubernetes through the MCP gateway's read-only tools and emits structured **Anomaly Reports**. It runs as an ASP.NET `WebApplication` alongside the gateway and authenticates via OAuth client_credentials with the `mcp:tools.readonly` scope.
 
+**Owns:** read-only anomaly detection
+
 ## Runtime Flow
 
 - `Program.cs` wires Serilog, `InfraGate.RuntimeSafety` mode detection, `InfraGate.ClientCredentials` OAuth token acquisition, and the `Microsoft.Extensions.AI` `IChatClient` for the chosen LLM provider.

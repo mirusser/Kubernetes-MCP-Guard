@@ -1,6 +1,8 @@
 # InfraGate.McpGateway
 
-`InfraGate.McpGateway` is the local HTTP MCP endpoint and generic approval core that fronts a private stdio domain server. It adds authentication, prompt-injection guardrails, response sanitization, out-of-band plan approval, and guardrail audit logging. Kubernetes-specific plan building and execution gates are delegated to `InfraGate.KubernetesAdapter`.
+`InfraGate.McpGateway` is the local HTTP MCP boundary, auth/transport/composition layer, tool dispatch, approval orchestration, guardrails, and adapter orchestration that fronts a private stdio domain server. It adds authentication, prompt-injection guardrails, response sanitization, out-of-band plan approval orchestration, and guardrail audit logging. The generic approval lifecycle (challenges, grants, persistence) lives in `InfraGate.Approvals`. Kubernetes-specific plan building and execution gates are delegated to `InfraGate.KubernetesAdapter`.
+
+**Owns:** public MCP boundary, auth, dispatch, approval HTTP endpoints, guardrails, composition
 
 ## Runtime Flow
 

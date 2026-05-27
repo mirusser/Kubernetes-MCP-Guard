@@ -2,6 +2,8 @@
 
 `InfraGate.Executor` is a deterministic remediation agent that receives **Remediation Proposals** from the Planner, waits for each carried plan to receive an **Approval Grant**, and calls the gateway's `execute_approved_plan` tool after approval. It runs as an ASP.NET `WebApplication` on port 3005 by default and authenticates to the gateway with the Executor service identity.
 
+**Owns:** waiting and calling approved execution only
+
 ## Runtime Flow
 
 - `Program.cs` wires Serilog, `InfraGate.RuntimeSafety`, `InfraGate.ClientCredentials`, the Executor MCP client, the proposal queue, and the plan watcher.

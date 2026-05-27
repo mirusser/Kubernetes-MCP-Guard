@@ -2,6 +2,8 @@
 
 `InfraGate.KubernetesAdapter` owns Kubernetes-specific plan building, review evidence, policy checks, freshness checks, and approval-bound execution for the generic approval flow.
 
+**Owns:** Kubernetes-specific intent, evidence, policy, freshness, execution
+
 ## Contents
 
 - `KubernetesPlanPayload.cs` models the Kubernetes mutation intent and review evidence stored inside a generic approval envelope.

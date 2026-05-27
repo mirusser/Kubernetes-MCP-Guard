@@ -2,6 +2,8 @@
 
 `InfraGate.Approvals` is the generic approval storage, challenge, grant, audit, and pre-execution gate layer. It defines the plan lifecycle (pending → approved → applied), generic plan envelopes with adapter payloads, digest-bound evidence artifact summaries, approval challenge records, durable approval grants, audit event conventions, and the strongly-typed audit payload schema. Runtime persistence is PostgreSQL-backed through `InfraGate.Approvals.Postgres`.
 
+**Owns:** generic plan/challenge/grant/pre-execution/audit contracts and workflows
+
 ## Runtime Flow
 
 - `ApprovalStore.cs` is the legacy file-backed plan store (no longer wired at runtime). PostgreSQL-backed persistence lives in `InfraGate.Approvals.Postgres` behind the `IApprovalPersistence` seam.
