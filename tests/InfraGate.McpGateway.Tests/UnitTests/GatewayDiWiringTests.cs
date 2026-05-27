@@ -1,7 +1,12 @@
 using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
-using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.AccessCodes;
+using InfraGate.Approvals.Audit;
+using InfraGate.Approvals.Challenge;
 using InfraGate.Approvals.Execution;
+using InfraGate.Approvals.Grant;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.PreExecution;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;

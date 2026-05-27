@@ -1,4 +1,10 @@
 global using InfraGate.Approvals;
-using InfraGate.Approvals.Plan;
+global using InfraGate.Approvals.Plan;
+global using InfraGate.Approvals.Challenge;
+global using InfraGate.Approvals.Grant;
+global using InfraGate.Approvals.Execution;
+global using InfraGate.Approvals.Audit;
+global using InfraGate.Approvals.PreExecution;
+global using InfraGate.Approvals.AccessCodes;
 global using InfraGate.KubernetesAdapter;
 global using Xunit;

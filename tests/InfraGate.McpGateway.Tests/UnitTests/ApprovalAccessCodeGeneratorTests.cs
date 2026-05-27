@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.AccessCodes;
 
 namespace InfraGate.McpGateway.Tests.UnitTests;
 
