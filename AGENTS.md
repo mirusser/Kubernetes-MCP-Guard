@@ -121,6 +121,9 @@ Start with [README.md](README.md) for intent and architecture. Use [devs-readme.
 
 Load only the project README you need:
 
+- Audit outbox:
+  - [InfraGate.AuditOutbox](src/InfraGate.AuditOutbox/README.md): generic audit-outbox engine — `AuditOutboxRow`, `AuditOutboxConventions`, stream names, lock-key derivation. No Postgres dependency.
+  - [InfraGate.AuditOutbox.Postgres](src/InfraGate.AuditOutbox.Postgres/README.md): Npgsql core (`PostgresAuditOutboxCore`), migration runner, `AuditCanonicalJson`, DI registration, chain-verification SQL recipe.
 - Runtime projects:
   - [InfraGate.McpServer](src/InfraGate.McpServer/README.md): stdio MCP server, Kubernetes validation, approval plans, and plan application.
   - [InfraGate.McpGateway](src/InfraGate.McpGateway/README.md): HTTP MCP gateway, downstream stdio client, guardrails, sanitization, and audit logging.

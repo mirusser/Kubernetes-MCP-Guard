@@ -35,6 +35,17 @@
     <Content Include="Fixtures\*.sql">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Fixtures\CrossStream\Approvals\*.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\src\InfraGate.Observer\Migrations\0001-initial-observer-audit.sql"
+             Link="Fixtures\CrossStream\Observer\0001-initial-observer-audit.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\src\InfraGate.Planner\Migrations\0001-initial-planner-audit.sql"
+             Link="Fixtures\CrossStream\Planner\0001-initial-planner-audit.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

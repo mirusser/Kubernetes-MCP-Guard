@@ -30,6 +30,26 @@
 
 Runtime environment variables, defaults, examples, and production guidance are documented in [docs/configuration.md](../../docs/configuration.md).
 
+## Audit Stream
+
+`ObserverAuditOutbox` writes a tamper-evident hash chain to `observer.audit_outbox` (ADR-0020). The Observer's Audit Stream is independent of the Approval Authority's Audit Spine — it does not produce Audit Spine events and does not reference `InfraGate.Approvals` (enforced by architecture tests in `tests/InfraGate.Observer.Tests/UnitTests/Architecture/`).
+
+Five audit-worthy events are defined in `ObserverAuditEvents`:
+
+| Event name | When emitted |
+|---|---|
+| `anomaly.detected` | Anomaly passes the suppression-window check and will be reported |
+| `anomaly.suppressed` | Anomaly is observed but suppressed by the Suppression Window |
+| `anomaly.resolved` | Anomaly is absent for the resolution threshold; `resolved` report emitted |
+| `handoff.published` | Successful POST to the Planner's `/handoff/anomalies` endpoint |
+| `handoff.failed` | Non-2xx or exception from the Planner handoff sink |
+
+All emit uses the `AppendAsync(entry, ct)` convenience overload — Observer audit writes are not part of a larger state-mutation transaction.
+
+The `observer` schema is created on startup by `PostgresAuditOutboxMigrationRunner` reading `Migrations/0001-initial-observer-audit.sql`. Connection string: `INFRA_GATE_OBSERVER_AUDIT_CONNECTION_STRING`.
+
+See [InfraGate.AuditOutbox.Postgres README](../InfraGate.AuditOutbox.Postgres/README.md) for the chain-verification SQL recipe and cross-stream forensic query.
+
 ## Verification
 
 - Unit tests: `dotnet test tests/InfraGate.Observer.Tests/InfraGate.Observer.Tests.csproj`

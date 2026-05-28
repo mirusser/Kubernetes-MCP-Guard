@@ -289,6 +289,19 @@ The MCP client never submits approval content. Approval challenges are bound to 
 
 Approval state and audit are persisted in PostgreSQL (`InfraGate.Approvals.Postgres`). Guardrail audit remains file-backed under the configured guardrail audit root.
 
+The Anomaly Observer and Remediation Planner each write a separate per-component Audit Stream (ADR-0020) to Postgres. The connection strings are:
+
+| Component | Environment variable |
+|---|---|
+| Anomaly Observer | `INFRA_GATE_OBSERVER_AUDIT_CONNECTION_STRING` |
+| Remediation Planner | `INFRA_GATE_PLANNER_AUDIT_CONNECTION_STRING` |
+
+Each component runs `PostgresAuditOutboxMigrationRunner` on startup to apply its schema migration. The `approvals` schema migration (`0001-initial-approval-persistence.sql`) was retrofitted in place (ADR-0020) — if you have a local `approvals` schema from before this change, drop it before next startup:
+
+```sql
+DROP SCHEMA approvals CASCADE;
+```
+
 ### Verification
 
 ```bash

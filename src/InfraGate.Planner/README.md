@@ -27,6 +27,25 @@ See [ADR-0017](../../docs/adr/0017-two-process-planner-executor-split.md), [ADR-
 
 Runtime environment variables, defaults, examples, and production guidance are documented in [docs/configuration.md](../../docs/configuration.md).
 
+## Audit Stream
+
+`PlannerAuditOutbox` writes a tamper-evident hash chain to `planner.audit_outbox` (ADR-0020). The Planner's Audit Stream is independent of the Approval Authority's Audit Spine — it does not produce Audit Spine events and does not reference `InfraGate.Approvals` (enforced by architecture tests in `tests/InfraGate.Planner.Tests/UnitTests/Architecture/`).
+
+Four audit-worthy events are defined in `PlannerAuditEvents`:
+
+| Event name | When emitted |
+|---|---|
+| `handoff.received` | After auth validation, before the channel write; one row per batch |
+| `proposal.skipped` | Anomaly is skipped (unsupported operation, dedupe hit, LLM declined, etc.) |
+| `propose_plan.succeeded` | Successful `propose_plan` gateway call; carries `anomaly_id`, `plan_id` |
+| `propose_plan.failed` | Gateway rejection or HTTP failure |
+
+All emit uses the `AppendAsync(entry, ct)` convenience overload — Planner audit writes are not part of a larger state-mutation transaction.
+
+The `planner` schema is created on startup by `PostgresAuditOutboxMigrationRunner` reading `Migrations/0001-initial-planner-audit.sql`. Connection string: `INFRA_GATE_PLANNER_AUDIT_CONNECTION_STRING`.
+
+Cross-stream joins: `propose_plan.succeeded` rows carry `plan_id` which matches `plan.created` rows in `approvals.audit_outbox`, enabling the full Observer→Planner→Approvals forensic timeline. See [InfraGate.AuditOutbox.Postgres README](../InfraGate.AuditOutbox.Postgres/README.md).
+
 ## Verification
 
 - Unit tests: `dotnet test tests/InfraGate.Planner.Tests/InfraGate.Planner.Tests.csproj`
