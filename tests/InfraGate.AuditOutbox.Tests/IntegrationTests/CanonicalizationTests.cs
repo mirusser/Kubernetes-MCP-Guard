@@ -1,6 +1,6 @@
 using InfraGate.AuditOutbox;
 using InfraGate.AuditOutbox.Postgres;
-using InfraGate.Approvals;
+
 
 namespace InfraGate.AuditOutbox.Tests.IntegrationTests;
 
@@ -22,8 +22,8 @@ public sealed class CanonicalizationTests
         var row1 = BaseRow;
         var row2 = BaseRow with { };
 
-        string json1 = ApprovalCanonicalJson.Serialize(AuditOutboxConventions.BuildCanonicalInputObject(row1));
-        string json2 = ApprovalCanonicalJson.Serialize(AuditOutboxConventions.BuildCanonicalInputObject(row2));
+        string json1 = CanonicalJson.Serialize(AuditOutboxConventions.BuildCanonicalInputObject(row1));
+        string json2 = CanonicalJson.Serialize(AuditOutboxConventions.BuildCanonicalInputObject(row2));
 
         Assert.Equal(json1, json2);
     }
@@ -34,8 +34,8 @@ public sealed class CanonicalizationTests
         var row1 = BaseRow;
         var row2 = BaseRow with { EventName = "different.event" };
 
-        string json1 = ApprovalCanonicalJson.Serialize(AuditOutboxConventions.BuildCanonicalInputObject(row1));
-        string json2 = ApprovalCanonicalJson.Serialize(AuditOutboxConventions.BuildCanonicalInputObject(row2));
+        string json1 = CanonicalJson.Serialize(AuditOutboxConventions.BuildCanonicalInputObject(row1));
+        string json2 = CanonicalJson.Serialize(AuditOutboxConventions.BuildCanonicalInputObject(row2));
 
         Assert.NotEqual(json1, json2);
     }
@@ -49,8 +49,8 @@ public sealed class CanonicalizationTests
             CorrelationColumns = new Dictionary<string, object?> { ["test_entity_id"] = "entity-2" }
         };
 
-        string json1 = ApprovalCanonicalJson.Serialize(AuditOutboxConventions.BuildCanonicalInputObject(row1));
-        string json2 = ApprovalCanonicalJson.Serialize(AuditOutboxConventions.BuildCanonicalInputObject(row2));
+        string json1 = CanonicalJson.Serialize(AuditOutboxConventions.BuildCanonicalInputObject(row1));
+        string json2 = CanonicalJson.Serialize(AuditOutboxConventions.BuildCanonicalInputObject(row2));
 
         Assert.NotEqual(json1, json2);
     }
@@ -79,19 +79,19 @@ public sealed class CanonicalizationTests
     }
 
     [Fact]
-    public void ApprovalCanonicalJson_ComputeSha256Hex_SameInput_ProducesSameHash()
+    public void CanonicalJson_ComputeSha256Hex_SameInput_ProducesSameHash()
     {
-        string hash1 = ApprovalCanonicalJson.ComputeSha256Hex("deterministic-input");
-        string hash2 = ApprovalCanonicalJson.ComputeSha256Hex("deterministic-input");
+        string hash1 = CanonicalJson.ComputeSha256Hex("deterministic-input");
+        string hash2 = CanonicalJson.ComputeSha256Hex("deterministic-input");
 
         Assert.Equal(hash1, hash2);
     }
 
     [Fact]
-    public void ApprovalCanonicalJson_ComputeSha256Hex_DifferentInputs_ProduceDifferentHashes()
+    public void CanonicalJson_ComputeSha256Hex_DifferentInputs_ProduceDifferentHashes()
     {
-        string hash1 = ApprovalCanonicalJson.ComputeSha256Hex("input-a");
-        string hash2 = ApprovalCanonicalJson.ComputeSha256Hex("input-b");
+        string hash1 = CanonicalJson.ComputeSha256Hex("input-a");
+        string hash2 = CanonicalJson.ComputeSha256Hex("input-b");
 
         Assert.NotEqual(hash1, hash2);
     }
@@ -123,26 +123,6 @@ public sealed class CanonicalizationTests
         Assert.NotEmpty(AuditOutboxConventions.Streams.Approvals);
         Assert.NotEmpty(AuditOutboxConventions.Streams.Observer);
         Assert.NotEmpty(AuditOutboxConventions.Streams.Planner);
-    }
-
-    [Fact]
-    public void AuditCanonicalJson_Serialize_DelegatesToApprovalCanonicalJson()
-    {
-        var input = new Dictionary<string, object?> { ["key"] = "value", ["num"] = 42 };
-
-        string viaApprovals = ApprovalCanonicalJson.Serialize(input);
-        string viaAudit = AuditCanonicalJson.Serialize(input);
-
-        Assert.Equal(viaApprovals, viaAudit);
-    }
-
-    [Fact]
-    public void AuditCanonicalJson_ComputeSha256Hex_SameInput_ProducesSameHash()
-    {
-        string viaApprovals = ApprovalCanonicalJson.ComputeSha256Hex("deterministic-input");
-        string viaAudit = AuditCanonicalJson.ComputeSha256Hex("deterministic-input");
-
-        Assert.Equal(viaApprovals, viaAudit);
     }
 
     [Fact]

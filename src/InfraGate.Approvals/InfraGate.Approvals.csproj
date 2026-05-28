@@ -7,4 +7,7 @@
     <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\CanonicalJson.cs" Link="CanonicalJson.cs" />
+  </ItemGroup>
 </Project>

@@ -1,10 +1,21 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
-namespace InfraGate.Approvals;
+namespace InfraGate;
 
 internal static class CanonicalJson
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    public static string Serialize(object? value) =>
+        Encoding.UTF8.GetString(SerializeToUtf8Bytes(value));
+
+    public static string ComputeSha256Hex(string canonicalText)
+    {
+        ArgumentNullException.ThrowIfNull(canonicalText);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalText))).ToUpperInvariant();
+    }
 
     public static byte[] SerializeToUtf8Bytes(object? value)
     {

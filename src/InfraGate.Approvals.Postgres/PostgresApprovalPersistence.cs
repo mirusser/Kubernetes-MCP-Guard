@@ -25,8 +25,8 @@ internal sealed class PostgresApprovalPersistence(
         ArgumentNullException.ThrowIfNull(envelope);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetNamespace);
 
-        string canonicalJson = ApprovalCanonicalJson.Serialize(envelope);
-        string canonicalHash = ApprovalCanonicalJson.ComputeSha256Hex(canonicalJson);
+        string canonicalJson = CanonicalJson.Serialize(envelope);
+        string canonicalHash = CanonicalJson.ComputeSha256Hex(canonicalJson);
 
         var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using (connection.ConfigureAwait(false))

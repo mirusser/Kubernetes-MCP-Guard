@@ -6,6 +6,8 @@ COPY .editorconfig .
 COPY src/InfraGate.ApprovalUi/InfraGate.ApprovalUi.csproj src/InfraGate.ApprovalUi/
 COPY src/InfraGate.Approvals/InfraGate.Approvals.csproj src/InfraGate.Approvals/
 COPY src/InfraGate.Approvals.Postgres/InfraGate.Approvals.Postgres.csproj src/InfraGate.Approvals.Postgres/
+COPY src/InfraGate.AuditOutbox/InfraGate.AuditOutbox.csproj src/InfraGate.AuditOutbox/
+COPY src/InfraGate.AuditOutbox.Postgres/InfraGate.AuditOutbox.Postgres.csproj src/InfraGate.AuditOutbox.Postgres/
 COPY src/InfraGate.ClientCredentials/InfraGate.ClientCredentials.csproj src/InfraGate.ClientCredentials/
 COPY src/InfraGate.DownstreamAuth/InfraGate.DownstreamAuth.csproj src/InfraGate.DownstreamAuth/
 COPY src/InfraGate.KubernetesAdapter/InfraGate.KubernetesAdapter.csproj src/InfraGate.KubernetesAdapter/
@@ -20,6 +22,8 @@ RUN dotnet restore src/InfraGate.McpServer/InfraGate.McpServer.csproj
 COPY src/InfraGate.ApprovalUi/ src/InfraGate.ApprovalUi/
 COPY src/InfraGate.Approvals/ src/InfraGate.Approvals/
 COPY src/InfraGate.Approvals.Postgres/ src/InfraGate.Approvals.Postgres/
+COPY src/InfraGate.AuditOutbox/ src/InfraGate.AuditOutbox/
+COPY src/InfraGate.AuditOutbox.Postgres/ src/InfraGate.AuditOutbox.Postgres/
 COPY src/InfraGate.ClientCredentials/ src/InfraGate.ClientCredentials/
 COPY src/InfraGate.DownstreamAuth/ src/InfraGate.DownstreamAuth/
 COPY src/InfraGate.KubernetesAdapter/ src/InfraGate.KubernetesAdapter/
@@ -28,10 +32,12 @@ COPY src/InfraGate.McpGateway.Auth/ src/InfraGate.McpGateway.Auth/
 COPY src/InfraGate.McpGateway/ src/InfraGate.McpGateway/
 COPY src/InfraGate.Observability/ src/InfraGate.Observability/
 COPY src/InfraGate.McpServer/ src/InfraGate.McpServer/
+COPY src/Shared/ src/Shared/
 RUN dotnet publish src/InfraGate.McpServer/InfraGate.McpServer.csproj \
     --configuration Release \
     --output /app/server \
     --no-restore
+COPY src/Shared/ src/Shared/
 RUN dotnet publish src/InfraGate.McpGateway/InfraGate.McpGateway.csproj \
     --configuration Release \
     --output /app/gateway \

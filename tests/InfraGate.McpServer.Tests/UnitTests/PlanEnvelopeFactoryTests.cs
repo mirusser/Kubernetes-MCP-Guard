@@ -1,4 +1,6 @@
 using InfraGate.Approvals;
+using InfraGate;
+
 using InfraGate.Approvals.Plan;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
@@ -184,7 +186,7 @@ public sealed class PlanEnvelopeFactoryTests
             intentDigest,
             new ReviewSurfaceContext(ApprovalConventions.ReviewSurfaces.GatewayBrowser, "dummy-review-v1"),
             new Dictionary<string, string> { ["name"] = "demo" });
-        string canonicalJson = ApprovalCanonicalJson.Serialize(envelope.ApprovalPolicy);
+        string canonicalJson = CanonicalJson.Serialize(envelope.ApprovalPolicy);
 
         Assert.DoesNotContain("parameters", canonicalJson, StringComparison.OrdinalIgnoreCase);
     }

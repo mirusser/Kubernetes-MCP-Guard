@@ -22,19 +22,11 @@ internal sealed class PlannerAuditOutbox(IAuditOutboxCore core, NpgsqlDataSource
             var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
             await using (transaction.ConfigureAwait(false))
             {
-                try
-                {
-                    var sequence = await core
-                        .AppendAsync(StreamSchema, ToRow(entry), connection, transaction, cancellationToken)
-                        .ConfigureAwait(false);
-                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                    return sequence;
-                }
-                catch (Exception)
-                {
-                    await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                    throw;
-                }
+                long sequence = await core
+                    .AppendAsync(StreamSchema, ToRow(entry), connection, transaction, cancellationToken)
+                    .ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                return sequence;
             }
         }
     }
@@ -57,7 +49,7 @@ internal sealed class PlannerAuditOutbox(IAuditOutboxCore core, NpgsqlDataSource
             ActorClientId: entry.ActorClientId,
             Outcome: entry.Outcome,
             Reason: entry.Reason,
-            PayloadJsonText: AuditCanonicalJson.Serialize(entry.Payload),
+            PayloadJsonText: CanonicalJson.Serialize(entry.Payload),
             CorrelationColumns: new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [ColProposalId] = entry.ProposalId,

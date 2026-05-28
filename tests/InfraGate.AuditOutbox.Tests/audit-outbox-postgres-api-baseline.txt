@@ -1,6 +1,3 @@
-static class InfraGate.AuditOutbox.Postgres.AuditCanonicalJson
-  static String ComputeSha256Hex(String canonicalText)
-  static String Serialize(Object value)
 static class InfraGate.AuditOutbox.Postgres.PostgresAuditOutboxMigrationRunner
   static Task ApplyAsync(NpgsqlDataSource dataSource, String schemaName, String migrationsDirectory, CancellationToken cancellationToken)
 static class InfraGate.AuditOutbox.Postgres.ServiceCollectionExtensions

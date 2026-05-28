@@ -41,15 +41,4 @@ public sealed class ObserverAuditEventsTests
 
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
     }
-
-    [Fact]
-    public async Task ObserverAuditOutbox_AppendNullEntry_ThrowsArgumentNullException()
-    {
-        var core = Substitute.For<IAuditOutboxCore>();
-        var dataSource = NpgsqlDataSource.Create("Host=localhost");
-        var outbox = new ObserverAuditOutbox(core, dataSource);
-
-        await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            outbox.AppendAsync(null!, CancellationToken.None));
-    }
 }

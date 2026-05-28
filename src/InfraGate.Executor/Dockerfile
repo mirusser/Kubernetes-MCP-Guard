@@ -15,6 +15,7 @@ COPY src/InfraGate.ClientCredentials/ src/InfraGate.ClientCredentials/
 COPY src/InfraGate.Observability/ src/InfraGate.Observability/
 COPY src/InfraGate.RuntimeSafety/ src/InfraGate.RuntimeSafety/
 COPY src/InfraGate.Executor/ src/InfraGate.Executor/
+COPY src/Shared/ src/Shared/
 RUN dotnet publish src/InfraGate.Executor/InfraGate.Executor.csproj \
     --configuration Release \
     --output /app/executor \

@@ -19,7 +19,7 @@ public static class AuditOutboxConventions
 
     // Builds the canonical input object for hash computation.
     // Includes all audit-relevant columns: universal top-level columns + per-stream correlation columns.
-    // The caller is responsible for serializing this to canonical JSON (via ApprovalCanonicalJson.Serialize).
+    // The caller is responsible for serializing this to canonical JSON (via CanonicalJson.Serialize).
     public static Dictionary<string, object?> BuildCanonicalInputObject(AuditOutboxRow row)
     {
         ArgumentNullException.ThrowIfNull(row);

@@ -31,7 +31,7 @@ internal sealed class ApprovalAuditOutbox(IAuditOutboxCore core, NpgsqlDataSourc
             {
                 try
                 {
-                    var sequence = await core
+                    long sequence = await core
                         .AppendAsync(StreamSchema, ToRow(entry), connection, transaction, cancellationToken)
                         .ConfigureAwait(false);
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -50,8 +50,11 @@ internal sealed class ApprovalAuditOutbox(IAuditOutboxCore core, NpgsqlDataSourc
         ApprovalAuditEntry entry,
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        CancellationToken cancellationToken) =>
-        core.AppendAsync(StreamSchema, ToRow(entry), connection, transaction, cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        return core.AppendAsync(StreamSchema, ToRow(entry), connection, transaction, cancellationToken);
+    }
 
     private static AuditOutboxRow ToRow(ApprovalAuditEntry entry) =>
         new(
@@ -61,7 +64,7 @@ internal sealed class ApprovalAuditOutbox(IAuditOutboxCore core, NpgsqlDataSourc
             ActorClientId: entry.ActorClientId,
             Outcome: entry.Outcome,
             Reason: entry.Reason,
-            PayloadJsonText: ApprovalCanonicalJson.Serialize(entry.Payload),
+            PayloadJsonText: CanonicalJson.Serialize(entry.Payload),
             CorrelationColumns: new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["plan_id"] = entry.PlanId,

@@ -4,6 +4,8 @@ using InfraGate.Approvals.Plan;
 using InfraGate.Approvals.Grant;
 using InfraGate.Approvals.Audit;
 using InfraGate.Approvals.Postgres;
+using InfraGate.AuditOutbox.Postgres;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
@@ -39,7 +41,7 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
     {
         await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
         await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
-        var persistence = new PostgresApprovalPersistence(dataSource, new NullApprovalAuditOutbox());
+        var persistence = CreatePersistence(dataSource);
         var envelope = CreateEnvelope();
 
         var created = await persistence.CreatePlanAsync(envelope, NamespaceName, CancellationToken.None);
@@ -56,7 +58,7 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
     {
         await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
         await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
-        var persistence = new PostgresApprovalPersistence(dataSource, new NullApprovalAuditOutbox());
+        var persistence = CreatePersistence(dataSource);
         var envelope = CreateEnvelope(ApprovalPolicy.OperatorApproval("kubernetes-operators"));
 
         await persistence.CreatePlanAsync(envelope, NamespaceName, CancellationToken.None);
@@ -74,7 +76,7 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
     {
         await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
         await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
-        var persistence = new PostgresApprovalPersistence(dataSource, new NullApprovalAuditOutbox());
+        var persistence = CreatePersistence(dataSource);
         var envelope = CreateEnvelope();
         var created = await persistence.CreatePlanAsync(envelope, NamespaceName, CancellationToken.None);
         var challenge = await persistence.CreateChallengeAsync(
@@ -115,7 +117,7 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
     {
         await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
         await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
-        var persistence = new PostgresApprovalPersistence(dataSource, new NullApprovalAuditOutbox());
+        var persistence = CreatePersistence(dataSource);
         var envelope = CreateEnvelope(ApprovalPolicy.OperatorApproval("kubernetes-operators"));
         var created = await persistence.CreatePlanAsync(envelope, NamespaceName, CancellationToken.None);
         var challenge = await persistence.CreateChallengeAsync(
@@ -145,7 +147,7 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
     {
         await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
         await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
-        var persistence = new PostgresApprovalPersistence(dataSource, new NullApprovalAuditOutbox());
+        var persistence = CreatePersistence(dataSource);
         var accessCodes = new PostgresApprovalAccessCodeStore(dataSource);
         var envelope = CreateEnvelope();
         var created = await persistence.CreatePlanAsync(envelope, NamespaceName, CancellationToken.None);
@@ -174,7 +176,7 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
     {
         await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
         await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
-        var persistence = new PostgresApprovalPersistence(dataSource, new NullApprovalAuditOutbox());
+        var persistence = CreatePersistence(dataSource);
         var (envelope, grant) = await CreateApprovedPlanAsync(persistence);
 
         var first = await persistence.BeginExecutionAttemptAsync(envelope.Id, grant, CancellationToken.None);
@@ -191,7 +193,7 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
     {
         await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
         await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
-        var persistence = new PostgresApprovalPersistence(dataSource, new NullApprovalAuditOutbox());
+        var persistence = CreatePersistence(dataSource);
         var (envelope, grant) = await CreateApprovedPlanAsync(persistence);
         var first = await persistence.BeginExecutionAttemptAsync(envelope.Id, grant, CancellationToken.None);
 
@@ -218,7 +220,7 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
     {
         await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
         await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
-        var persistence = new PostgresApprovalPersistence(dataSource, new NullApprovalAuditOutbox());
+        var persistence = CreatePersistence(dataSource);
         var (envelope, grant) = await CreateApprovedPlanAsync(persistence);
         var first = await persistence.BeginExecutionAttemptAsync(envelope.Id, grant, CancellationToken.None);
 
@@ -244,7 +246,7 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
     {
         await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
         await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
-        var persistence = new PostgresApprovalPersistence(dataSource, new NullApprovalAuditOutbox());
+        var persistence = CreatePersistence(dataSource);
         var (envelope, grant) = await CreateApprovedPlanAsync(persistence);
         var attempt = await persistence.BeginExecutionAttemptAsync(envelope.Id, grant, CancellationToken.None);
 
@@ -272,7 +274,7 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
     }
 
     private static async Task<(PlanEnvelope Envelope, ApprovalGrant Grant)> CreateApprovedPlanAsync(
-        PostgresApprovalPersistence persistence)
+        IApprovalPersistence persistence)
     {
         var envelope = CreateEnvelope();
         var created = await persistence.CreatePlanAsync(envelope, NamespaceName, CancellationToken.None);
@@ -332,17 +334,15 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
 
         return envelope with { ReviewDigest = PlanEnvelopeFactory.ComputeReviewDigest(envelope) };
     }
-}
 
-file sealed class NullApprovalAuditOutbox : ITransactionalApprovalAuditOutbox
-{
-    public Task<long> AppendAsync(ApprovalAuditEntry entry, CancellationToken cancellationToken) =>
-        Task.FromResult(0L);
-
-    public Task<long> AppendAsync(
-        ApprovalAuditEntry entry,
-        NpgsqlConnection connection,
-        NpgsqlTransaction transaction,
-        CancellationToken cancellationToken) =>
-        Task.FromResult(0L);
+    private IApprovalPersistence CreatePersistence(NpgsqlDataSource dataSource)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(dataSource);
+        services.AddPostgresAuditOutbox(dataSource);
+        services.AddSingleton<ITransactionalApprovalAuditOutbox, ApprovalAuditOutbox>();
+        services.AddSingleton<IApprovalAuditOutbox>(sp => sp.GetRequiredService<ITransactionalApprovalAuditOutbox>());
+        services.AddSingleton<IApprovalPersistence, PostgresApprovalPersistence>();
+        return services.BuildServiceProvider().GetRequiredService<IApprovalPersistence>();
+    }
 }

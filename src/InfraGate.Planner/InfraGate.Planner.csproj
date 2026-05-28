@@ -11,6 +11,7 @@
     <InternalsVisibleTo Include="InfraGate.Planner.Tests" />
     <InternalsVisibleTo Include="InfraGate.Planner.IntegrationTests" />
     <InternalsVisibleTo Include="InfraGate.Remediation.E2E.Tests" />
+    <InternalsVisibleTo Include="InfraGate.Safety.E2E.Tests" />
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.8" />
     <PackageReference Include="Microsoft.Extensions.AI" Version="10.6.0" />
@@ -36,4 +37,7 @@
     <ProjectReference Include="..\InfraGate.RuntimeSafety\InfraGate.RuntimeSafety.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\CanonicalJson.cs" Link="CanonicalJson.cs" />
+  </ItemGroup>
 </Project>

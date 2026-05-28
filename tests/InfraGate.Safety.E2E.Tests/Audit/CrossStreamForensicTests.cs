@@ -1,11 +1,13 @@
 using Dapper;
 using InfraGate.AuditOutbox.Postgres;
+using InfraGate.Observer.Audit;
+using InfraGate.Planner.Audit;
+using InfraGate.Approvals;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Testcontainers.PostgreSql;
-
-namespace InfraGate.AuditOutbox.Tests.IntegrationTests;
-
+using InfraGate.AuditOutbox;
+namespace InfraGate.Safety.E2E.Tests.Audit;
 /// <summary>
 /// Verifies the cross-stream forensic query: rows inserted into approvals, observer, and planner
 /// streams can be reconstructed as a unified timeline joined by anomaly_id and plan_id.
@@ -32,7 +34,7 @@ public sealed class CrossStreamForensicTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        container = new PostgreSqlBuilder(TestContainersConstants.PostgresImage).Build();
+        container = new PostgreSqlBuilder("postgres:16.2-alpine").Build();
         await container.StartAsync();
 
         dataSource = NpgsqlDataSource.Create(container.GetConnectionString());
@@ -70,19 +72,19 @@ public sealed class CrossStreamForensicTests : IAsyncLifetime
         var t0 = new DateTimeOffset(2025, 6, 1, 10, 0, 0, TimeSpan.Zero);
 
         await AppendRowAsync(AuditOutboxConventions.Streams.Observer, BuildObserverRow(
-            "anomaly.detected", t0, anomalyId: AnomalyId, cycleId: CycleId));
+            ObserverAuditEvents.AnomalyDetected, t0, anomalyId: AnomalyId, cycleId: CycleId));
 
         await AppendRowAsync(AuditOutboxConventions.Streams.Planner, BuildPlannerRow(
-            "handoff.received", t0.AddSeconds(1), anomalyId: AnomalyId));
+            PlannerAuditEvents.HandoffReceived, t0.AddSeconds(1), anomalyId: AnomalyId));
 
         await AppendRowAsync(AuditOutboxConventions.Streams.Planner, BuildPlannerRow(
-            "propose_plan.succeeded", t0.AddSeconds(2), anomalyId: AnomalyId, planId: PlanId));
+            PlannerAuditEvents.ProposePlanSucceeded, t0.AddSeconds(2), anomalyId: AnomalyId, planId: PlanId));
 
         await AppendRowAsync(AuditOutboxConventions.Streams.Approvals, BuildApprovalsRow(
-            "plan.created", t0.AddSeconds(3), planId: PlanId));
+            ApprovalConventions.AuditEvents.PlanRequested, t0.AddSeconds(3), planId: PlanId));
 
         await AppendRowAsync(AuditOutboxConventions.Streams.Approvals, BuildApprovalsRow(
-            "challenge.created", t0.AddSeconds(4), planId: PlanId));
+            ApprovalConventions.AuditEvents.ApprovalChallengeCreated, t0.AddSeconds(4), planId: PlanId));
 
         await using var queryConn = await dataSource!.OpenConnectionAsync();
         var timeline = (await queryConn.QueryAsync<TimelineRow>(ForensicSql,
@@ -90,20 +92,20 @@ public sealed class CrossStreamForensicTests : IAsyncLifetime
 
         Assert.Equal(5, timeline.Length);
 
-        Assert.Equal("observer", timeline[0].Stream);
-        Assert.Equal("anomaly.detected", timeline[0].EventName);
+        Assert.Equal(AuditOutboxConventions.Streams.Observer, timeline[0].Stream);
+        Assert.Equal(ObserverAuditEvents.AnomalyDetected, timeline[0].EventName);
 
-        Assert.Equal("planner", timeline[1].Stream);
-        Assert.Equal("handoff.received", timeline[1].EventName);
+        Assert.Equal(AuditOutboxConventions.Streams.Planner, timeline[1].Stream);
+        Assert.Equal(PlannerAuditEvents.HandoffReceived, timeline[1].EventName);
 
-        Assert.Equal("planner", timeline[2].Stream);
-        Assert.Equal("propose_plan.succeeded", timeline[2].EventName);
+        Assert.Equal(AuditOutboxConventions.Streams.Planner, timeline[2].Stream);
+        Assert.Equal(PlannerAuditEvents.ProposePlanSucceeded, timeline[2].EventName);
 
-        Assert.Equal("approvals", timeline[3].Stream);
-        Assert.Equal("plan.created", timeline[3].EventName);
+        Assert.Equal(AuditOutboxConventions.Streams.Approvals, timeline[3].Stream);
+        Assert.Equal(ApprovalConventions.AuditEvents.PlanRequested, timeline[3].EventName);
 
-        Assert.Equal("approvals", timeline[4].Stream);
-        Assert.Equal("challenge.created", timeline[4].EventName);
+        Assert.Equal(AuditOutboxConventions.Streams.Approvals, timeline[4].Stream);
+        Assert.Equal(ApprovalConventions.AuditEvents.ApprovalChallengeCreated, timeline[4].EventName);
     }
 
     [Fact]
@@ -112,21 +114,21 @@ public sealed class CrossStreamForensicTests : IAsyncLifetime
         var t0 = new DateTimeOffset(2025, 6, 1, 11, 0, 0, TimeSpan.Zero);
 
         await AppendRowAsync(AuditOutboxConventions.Streams.Observer, BuildObserverRow(
-            "anomaly.detected", t0, anomalyId: AnomalyId, cycleId: CycleId));
+            ObserverAuditEvents.AnomalyDetected, t0, anomalyId: AnomalyId, cycleId: CycleId));
         await AppendRowAsync(AuditOutboxConventions.Streams.Observer, BuildObserverRow(
-            "handoff.published", t0.AddSeconds(1), anomalyId: AnomalyId, cycleId: CycleId));
+            ObserverAuditEvents.HandoffPublished, t0.AddSeconds(1), anomalyId: AnomalyId, cycleId: CycleId));
 
         await AppendRowAsync(AuditOutboxConventions.Streams.Planner, BuildPlannerRow(
-            "handoff.received", t0.AddSeconds(2), anomalyId: AnomalyId));
+            PlannerAuditEvents.HandoffReceived, t0.AddSeconds(2), anomalyId: AnomalyId));
 
         await using var queryConn = await dataSource!.OpenConnectionAsync();
 
         var observerRows = (await queryConn.QueryAsync<(string? PrevHash, string EventHash)>(
-            "SELECT previous_event_hash, event_hash FROM observer.audit_outbox ORDER BY audit_sequence"))
+            $"SELECT previous_event_hash, event_hash FROM {AuditOutboxConventions.Streams.Observer}.audit_outbox ORDER BY audit_sequence"))
             .ToArray();
 
         var plannerRows = (await queryConn.QueryAsync<(string? PrevHash, string EventHash)>(
-            "SELECT previous_event_hash, event_hash FROM planner.audit_outbox ORDER BY audit_sequence"))
+            $"SELECT previous_event_hash, event_hash FROM {AuditOutboxConventions.Streams.Planner}.audit_outbox ORDER BY audit_sequence"))
             .ToArray();
 
         // Observer chain is independent: row 1 has NULL prev_hash, row 2 chains to row 1.

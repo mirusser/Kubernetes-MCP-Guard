@@ -8,6 +8,7 @@ using InfraGate.Observer.Diagnostics;
 using InfraGate.Observer.Endpoints;
 using InfraGate.Observer.Handoff;
 using InfraGate.AgentLlm;
+using InfraGate.AuditOutbox;
 using InfraGate.AuditOutbox.Postgres;
 using InfraGate.Observer.Llm;
 using InfraGate.Observer.Mcp;
@@ -146,13 +147,13 @@ builder.Services.AddSingleton<IAnomalyHandoffSink>(sp =>
     return new CompositeAnomalyHandoffSink(sinks, logger);
 });
 
-var auditConnectionString = builder.Configuration[ObserverConventions.ConfigurationKeys.AuditConnectionString];
+string? auditConnectionString = builder.Configuration[ObserverConventions.ConfigurationKeys.AuditConnectionString];
 if (!string.IsNullOrWhiteSpace(auditConnectionString))
 {
     var auditDataSource = NpgsqlDataSource.Create(auditConnectionString);
-    var migrationsDir = Path.Combine(AppContext.BaseDirectory, "Migrations");
+    string migrationsDir = Path.Combine(AppContext.BaseDirectory, "Migrations");
     await PostgresAuditOutboxMigrationRunner.ApplyAsync(
-        auditDataSource, "observer", migrationsDir, CancellationToken.None).ConfigureAwait(false);
+        auditDataSource, AuditOutboxConventions.Streams.Observer, migrationsDir, CancellationToken.None).ConfigureAwait(false);
     builder.Services.AddObserverAuditOutbox(auditDataSource);
 }
 

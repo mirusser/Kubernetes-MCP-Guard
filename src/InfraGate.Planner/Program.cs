@@ -6,6 +6,7 @@ using InfraGate.Planner.Diagnostics;
 using InfraGate.Planner.Endpoints;
 using InfraGate.Planner.Handoff;
 using InfraGate.AgentLlm;
+using InfraGate.AuditOutbox;
 using InfraGate.AuditOutbox.Postgres;
 using InfraGate.Planner.Llm;
 using InfraGate.Planner.Mcp;
@@ -112,13 +113,13 @@ builder.Services.AddSingleton<IRemediationProposalSink>(sp =>
     var logger = sp.GetRequiredService<ILogger<CompositeRemediationProposalSink>>();
     return new CompositeRemediationProposalSink(sinks, logger);
 });
-var auditConnectionString = builder.Configuration[PlannerConventions.ConfigurationKeys.AuditConnectionString];
+string? auditConnectionString = builder.Configuration[PlannerConventions.ConfigurationKeys.AuditConnectionString];
 if (!string.IsNullOrWhiteSpace(auditConnectionString))
 {
     var auditDataSource = NpgsqlDataSource.Create(auditConnectionString);
-    var migrationsDir = Path.Combine(AppContext.BaseDirectory, "Migrations");
+    string migrationsDir = Path.Combine(AppContext.BaseDirectory, "Migrations");
     await PostgresAuditOutboxMigrationRunner.ApplyAsync(
-        auditDataSource, "planner", migrationsDir, CancellationToken.None).ConfigureAwait(false);
+        auditDataSource, AuditOutboxConventions.Streams.Planner, migrationsDir, CancellationToken.None).ConfigureAwait(false);
     builder.Services.AddPlannerAuditOutbox(auditDataSource);
 }
 

@@ -15,7 +15,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\InfraGate.AuditOutbox\InfraGate.AuditOutbox.csproj" />
-    <ProjectReference Include="..\InfraGate.Approvals\InfraGate.Approvals.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\CanonicalJson.cs" Link="CanonicalJson.cs" />
+  </ItemGroup>
 </Project>

@@ -1,5 +1,7 @@
-using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate;
+using System.Text.Json;
+
 using InfraGate.Approvals.Plan;
 using InfraGate.Approvals.Challenge;
 using InfraGate.Approvals.Grant;
@@ -35,8 +37,8 @@ internal sealed class TestApprovalWorkflow :
         string targetNamespace,
         CancellationToken cancellationToken)
     {
-        var json = ApprovalCanonicalJson.Serialize(envelope);
-        var hash = ApprovalCanonicalJson.ComputeSha256Hex(json);
+        var json = CanonicalJson.Serialize(envelope);
+        var hash = CanonicalJson.ComputeSha256Hex(json);
         plans[envelope.Id] = new PlanRecord(envelope, targetNamespace, hash);
         AppendAudit(ApprovalConventions.AuditEvents.PlanRequested,
             new PlanRequestedPayload(envelope.Id, envelope.Operation, targetNamespace, hash,

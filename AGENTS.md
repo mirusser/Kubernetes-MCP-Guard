@@ -115,6 +115,18 @@ When `.codegraph/` is present, prefer these tools over file reads and grep:
 
 Use doc reads for rationale, flow diagrams, and ADR decisions that codegraph cannot answer.
 
+## Agent Memory
+
+Use agentmemory **exclusively via MCP tools** — never via curl or direct HTTP to the REST API:
+
+- `memory_save` — persist a fact, pattern, architecture decision, bug, or workflow rule
+- `memory_recall` — retrieve memories by query
+- `memory_smart_search` — semantic + graph search across all memories
+- `memory_sessions` — list known sessions
+- `memory_lesson_save` — save a lesson learned (maps to `workflow` type internally)
+
+The MCP shim proxies to the engine at `http://localhost:3111` internally — that is not your concern. All memory operations go through MCP, period.
+
 ## Solution Map
 
 Start with [README.md](README.md) for intent and architecture. Use [devs-readme.md](docs/devs-readme.md) for setup, local runs, tool contracts, and verification.

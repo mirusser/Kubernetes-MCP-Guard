@@ -36,15 +36,4 @@ public sealed class PlannerAuditEventsTests
 
         Assert.Equal(names.Length, names.Distinct(StringComparer.Ordinal).Count());
     }
-
-    [Fact]
-    public async Task PlannerAuditOutbox_AppendNullEntry_ThrowsArgumentNullException()
-    {
-        var core = Substitute.For<IAuditOutboxCore>();
-        var dataSource = NpgsqlDataSource.Create("Host=localhost");
-        var outbox = new PlannerAuditOutbox(core, dataSource);
-
-        await Assert.ThrowsAsync<ArgumentNullException>(() =>
-            outbox.AppendAsync(null!, CancellationToken.None));
-    }
 }

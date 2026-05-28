@@ -6,6 +6,8 @@ COPY .editorconfig .
 COPY src/InfraGate.AgentLlm/InfraGate.AgentLlm.csproj src/InfraGate.AgentLlm/
 COPY src/InfraGate.Observer.Contracts/InfraGate.Observer.Contracts.csproj src/InfraGate.Observer.Contracts/
 COPY src/InfraGate.ClientCredentials/InfraGate.ClientCredentials.csproj src/InfraGate.ClientCredentials/
+COPY src/InfraGate.AuditOutbox/InfraGate.AuditOutbox.csproj src/InfraGate.AuditOutbox/
+COPY src/InfraGate.AuditOutbox.Postgres/InfraGate.AuditOutbox.Postgres.csproj src/InfraGate.AuditOutbox.Postgres/
 COPY src/InfraGate.Observability/InfraGate.Observability.csproj src/InfraGate.Observability/
 COPY src/InfraGate.RuntimeSafety/InfraGate.RuntimeSafety.csproj src/InfraGate.RuntimeSafety/
 COPY src/InfraGate.Observer/InfraGate.Observer.csproj src/InfraGate.Observer/
@@ -14,9 +16,12 @@ RUN dotnet restore src/InfraGate.Observer/InfraGate.Observer.csproj
 COPY src/InfraGate.AgentLlm/ src/InfraGate.AgentLlm/
 COPY src/InfraGate.Observer.Contracts/ src/InfraGate.Observer.Contracts/
 COPY src/InfraGate.ClientCredentials/ src/InfraGate.ClientCredentials/
+COPY src/InfraGate.AuditOutbox/ src/InfraGate.AuditOutbox/
+COPY src/InfraGate.AuditOutbox.Postgres/ src/InfraGate.AuditOutbox.Postgres/
 COPY src/InfraGate.Observability/ src/InfraGate.Observability/
 COPY src/InfraGate.RuntimeSafety/ src/InfraGate.RuntimeSafety/
 COPY src/InfraGate.Observer/ src/InfraGate.Observer/
+COPY src/Shared/ src/Shared/
 RUN dotnet publish src/InfraGate.Observer/InfraGate.Observer.csproj \
     --configuration Release \
     --output /app/observer \

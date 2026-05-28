@@ -8,6 +8,7 @@ namespace InfraGate.AuditOutbox.Postgres;
 public static class PostgresAuditOutboxMigrationRunner
 {
     private const string MigrationsSearchPattern = "*.sql";
+    private const string MigrationLockPrefix = "audit_outbox_migration:";
 
     public static async Task ApplyAsync(
         NpgsqlDataSource dataSource,
@@ -82,29 +83,21 @@ public static class PostgresAuditOutboxMigrationRunner
         var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using (transaction.ConfigureAwait(false))
         {
-            try
-            {
-                await connection.ExecuteAsync(new CommandDefinition(
-                    migration.Sql,
-                    transaction: transaction,
-                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+            await connection.ExecuteAsync(new CommandDefinition(
+                migration.Sql,
+                transaction: transaction,
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-                await connection.ExecuteAsync(new CommandDefinition(
-                    $"""
-                    INSERT INTO {schemaName}.schema_migrations (filename, checksum_sha256)
-                    VALUES (@FileName, @ChecksumSha256)
-                    """,
-                    new { migration.FileName, migration.ChecksumSha256 },
-                    transaction,
-                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+            await connection.ExecuteAsync(new CommandDefinition(
+                $"""
+                INSERT INTO {schemaName}.schema_migrations (filename, checksum_sha256)
+                VALUES (@FileName, @ChecksumSha256)
+                """,
+                new { migration.FileName, migration.ChecksumSha256 },
+                transaction,
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
 
-                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception)
-            {
-                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                throw;
-            }
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -144,7 +137,7 @@ public static class PostgresAuditOutboxMigrationRunner
     // Stable migration lock key derived from schema name to avoid collisions across schemas.
     private static long MigrationLockKey(string schemaName)
     {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes("audit_outbox_migration:" + schemaName));
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(MigrationLockPrefix + schemaName));
         return BitConverter.ToInt64(hash, 0);
     }
 

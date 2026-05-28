@@ -29,4 +29,7 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\CanonicalJson.cs" Link="CanonicalJson.cs" />
+  </ItemGroup>
 </Project>
