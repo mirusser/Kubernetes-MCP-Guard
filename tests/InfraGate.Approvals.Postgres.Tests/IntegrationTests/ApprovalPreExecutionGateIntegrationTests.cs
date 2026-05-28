@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Testcontainers.PostgreSql;
 namespace InfraGate.Approvals.Postgres.Tests.IntegrationTests;
+
 [Trait("Category", "Postgres")]
 public sealed class ApprovalPreExecutionGateIntegrationTests : IAsyncLifetime
 {
@@ -28,14 +29,14 @@ public sealed class ApprovalPreExecutionGateIntegrationTests : IAsyncLifetime
 
         var services = new ServiceCollection();
         services.AddPostgresApprovalPersistence(container.GetConnectionString());
-        
+
         var provider = services.BuildServiceProvider();
         dataSource = provider.GetRequiredService<NpgsqlDataSource>();
         persistence = provider.GetRequiredService<IApprovalPersistence>();
         outbox = provider.GetRequiredService<IApprovalAuditOutbox>();
-        
+
         await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
-        
+
         gate = new ApprovalPreExecutionGate(persistence, outbox);
     }
 
@@ -99,7 +100,7 @@ public sealed class ApprovalPreExecutionGateIntegrationTests : IAsyncLifetime
         var planId = ApprovalIds.NewPlanId();
         var payload = JsonSerializer.SerializeToElement(new { name = "demo", replicas = "2" });
         var intentDigest = ApprovalDigest.ComputeSha256("dummy.intent.v1", new { operation = "scale", name = "demo", replicas = "2" });
-        
+
         var envelope = new PlanEnvelope(
             planId,
             ApprovalConventions.Profiles.MutationApproval,

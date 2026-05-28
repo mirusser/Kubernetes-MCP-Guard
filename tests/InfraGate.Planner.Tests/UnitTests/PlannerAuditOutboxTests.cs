@@ -60,7 +60,7 @@ public sealed class PlannerAuditOutboxTests
 
         Assert.Equal(42L, sequence);
         Assert.NotNull(capturedRow);
-        
+
         Assert.Equal(entry.EventName, capturedRow.EventName);
         Assert.Equal(entry.ActorSubject, capturedRow.ActorSubject);
         Assert.Equal(entry.ActorClientId, capturedRow.ActorClientId);

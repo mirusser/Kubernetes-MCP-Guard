@@ -1,4 +1,5 @@
 namespace InfraGate.McpGateway;
+
 internal static class ServerInstructions
 {
     internal const string ApprovalWorkflow =

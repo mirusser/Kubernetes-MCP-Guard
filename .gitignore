@@ -8,6 +8,11 @@ dataprotection-keys/
 TestResults/
 coverage-report/
 deploy/generated/*.env
+*.env
+*-generated.txt
+generated-keys.txt
+test-*.env
+expected-*.txt
 .sonarqube/
 .sonarqube-local/
 actions-runner/

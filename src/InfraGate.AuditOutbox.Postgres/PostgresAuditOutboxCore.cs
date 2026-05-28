@@ -38,9 +38,9 @@ internal sealed class PostgresAuditOutboxCore : IAuditOutboxCore
             cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         var canonicalInputObject = AuditOutboxConventions.BuildCanonicalInputObject(row);
-string canonicalText = CanonicalJson.Serialize(canonicalInputObject);
-string hashInput = (previousHash ?? string.Empty) + canonicalText;
-string eventHash = CanonicalJson.ComputeSha256Hex(hashInput);
+        string canonicalText = CanonicalJson.Serialize(canonicalInputObject);
+        string hashInput = (previousHash ?? string.Empty) + canonicalText;
+        string eventHash = CanonicalJson.ComputeSha256Hex(hashInput);
 
         var parameters = BuildInsertParameters(row, previousHash, eventHash);
         string sql = BuildInsertSql(streamSchema, row.CorrelationColumns.Keys);
