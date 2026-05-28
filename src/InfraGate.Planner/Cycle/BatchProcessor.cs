@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Reflection;
 using System.Text;
@@ -256,13 +257,18 @@ internal sealed class BatchProcessor : BackgroundService
 
         string? responseText = null;
         int toolCallsUsed = 0;
+        int llmCallNumber = 0;
 
         while (toolCallsUsed < maxToolIterations)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            llmCallNumber++;
+            PlannerLogEvents.LogLlmCallStarting(logger, report.AnomalyId, llmCallNumber);
+            var sw = Stopwatch.StartNew();
             var response = await chatClient.GetResponseAsync(messages, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
+            PlannerLogEvents.LogLlmCallCompleted(logger, report.AnomalyId, llmCallNumber, sw.ElapsedMilliseconds);
             responseText = response.Text ?? string.Empty;
 
             var toolCall = TryParseToolCall(responseText);
@@ -295,8 +301,12 @@ internal sealed class BatchProcessor : BackgroundService
         if (toolCallsUsed >= maxToolIterations && TryParseToolCall(responseText ?? string.Empty) is not null)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            llmCallNumber++;
+            PlannerLogEvents.LogLlmCallStarting(logger, report.AnomalyId, llmCallNumber);
+            var sw = Stopwatch.StartNew();
             var finalResponse = await chatClient.GetResponseAsync(messages, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
+            PlannerLogEvents.LogLlmCallCompleted(logger, report.AnomalyId, llmCallNumber, sw.ElapsedMilliseconds);
             responseText = finalResponse.Text ?? string.Empty;
         }
 

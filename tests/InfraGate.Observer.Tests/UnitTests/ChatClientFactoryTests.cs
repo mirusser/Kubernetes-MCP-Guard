@@ -78,7 +78,7 @@ public sealed class ChatClientFactoryTests
     }
 
     [Fact]
-    public void Create_OpenRouterProvider_ReturnsChatClient()
+    public void Create_OpenRouterProvider_ReturnsRateLimitRetryingChatClient()
     {
         var options = Substitute.For<IOptions<ObserverOptions>>();
         options.Value.Returns(new ObserverOptions
@@ -90,8 +90,7 @@ public sealed class ChatClientFactoryTests
         var factory = new ChatClientFactory(options);
         var client = factory.Create();
 
-        Assert.NotNull(client);
-        Assert.IsNotType<AnthropicChatClient>(client);
+        Assert.IsType<RateLimitRetryingChatClient>(client);
     }
 
     [Fact]

@@ -28,17 +28,17 @@ public sealed class SnapshotFetcherTests
 
         var mcpClient = Substitute.For<IObserverMcpClient>();
         mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sStatus, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+            .Returns(Task.FromResult<string?>("{}"));
         mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sEvents, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+            .Returns(Task.FromResult<string?>("{}"));
         mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sPods, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("timeout"));
         mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sDeployments, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+            .Returns(Task.FromResult<string?>("{}"));
         mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sServices, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+            .Returns(Task.FromResult<string?>("{}"));
         mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sEndpoints, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+            .Returns(Task.FromResult<string?>("{}"));
 
         var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, meter);
         await fetcher.FetchAsync("test-ns", CancellationToken.None);
@@ -54,7 +54,7 @@ public sealed class SnapshotFetcherTests
     {
         var mcpClient = Substitute.For<IObserverMcpClient>();
         mcpClient.GetToolResultAsync(Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+            .Returns(Task.FromResult<string?>("{}"));
 
         var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance);
         var snapshot = await fetcher.FetchAsync("test-ns", CancellationToken.None);
@@ -78,17 +78,17 @@ public sealed class SnapshotFetcherTests
     {
         var mcpClient = Substitute.For<IObserverMcpClient>();
         mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sStatus, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+            .Returns(Task.FromResult<string?>("{}"));
         mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sEvents, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+            .Returns(Task.FromResult<string?>("{}"));
         mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sPods, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("timeout"));
         mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sDeployments, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+            .Returns(Task.FromResult<string?>("{}"));
         mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sServices, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+            .Returns(Task.FromResult<string?>("{}"));
         mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sEndpoints, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+            .Returns(Task.FromResult<string?>("{}"));
 
         var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance);
         var snapshot = await fetcher.FetchAsync("test-ns", CancellationToken.None);
@@ -109,7 +109,7 @@ public sealed class SnapshotFetcherTests
     {
         var mcpClient = Substitute.For<IObserverMcpClient>();
         mcpClient.GetToolResultAsync(Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+            .Returns(Task.FromResult<string?>("{}"));
 
         var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance);
         using var cts = new CancellationTokenSource();

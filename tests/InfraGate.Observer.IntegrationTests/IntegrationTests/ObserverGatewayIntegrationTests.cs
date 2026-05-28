@@ -566,7 +566,7 @@ public sealed class ObserverGatewayIntegrationTests
                 .ConfigureAwait(false);
         }
 
-        public async Task<string> GetToolResultAsync(
+        public async Task<string?> GetToolResultAsync(
             string toolName,
             IReadOnlyDictionary<string, object?>? arguments,
             CancellationToken cancellationToken)

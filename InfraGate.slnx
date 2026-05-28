@@ -22,6 +22,7 @@
     <Project Path="src/InfraGate.Executor/InfraGate.Executor.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/InfraGate.AgentLlm.Tests/InfraGate.AgentLlm.Tests.csproj" />
     <Project Path="tests/InfraGate.AuditOutbox.Tests/InfraGate.AuditOutbox.Tests.csproj" />
     <Project Path="tests/InfraGate.ClientCredentials.Tests/InfraGate.ClientCredentials.Tests.csproj" />
     <Project Path="tests/InfraGate.DownstreamAuth.Tests/InfraGate.DownstreamAuth.Tests.csproj" />

@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Diagnostics.Metrics;
 using InfraGate.AgentLlm;
 using InfraGate.Planner.Diagnostics;
@@ -9,8 +10,9 @@ using OpenAI.Chat;
 
 namespace InfraGate.Planner.Llm;
 
-internal sealed class ChatClientFactory(IOptions<PlannerOptions> options, Meter? meter = null) : IChatClientFactory
+internal sealed class ChatClientFactory(IOptions<PlannerOptions> options, Meter? meter = null, ILoggerFactory? loggerFactory = null) : IChatClientFactory
 {
+    private const string OpenRouterApiEndpoint = "https://openrouter.ai/api/v1";
 
     public IChatClient Create()
     {
@@ -40,6 +42,11 @@ internal sealed class ChatClientFactory(IOptions<PlannerOptions> options, Meter?
             ? PlannerConventions.DefaultLlmModel
             : options.Value.LlmModel;
 
+        PlannerLogEvents.LogLlmProviderConfigured(
+            loggerFactory?.CreateLogger(nameof(ChatClientFactory)) ?? NullLogger.Instance,
+            "Anthropic",
+            model);
+
         const string AnthropicApiBase = "https://api.anthropic.com";
         var httpClient = new HttpClient
         {
@@ -68,12 +75,16 @@ internal sealed class ChatClientFactory(IOptions<PlannerOptions> options, Meter?
             ? PlannerConventions.DefaultOpenRouterLlmModel
             : options.Value.LlmModel;
 
-        var chatClient = new ChatClient(
-            model,
-            new ApiKeyCredential(apiKey),
-            new OpenAIClientOptions { Endpoint = new Uri("https://openrouter.ai/api/v1") });
+        PlannerLogEvents.LogLlmProviderConfigured(
+            loggerFactory?.CreateLogger(nameof(ChatClientFactory)) ?? NullLogger.Instance,
+            "OpenRouter",
+            model);
 
-        return chatClient.AsIChatClient();
+        var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(OpenRouterApiEndpoint) };
+        clientOptions.AddPolicy(OpenRouterPipelinePolicy.Default, PipelinePosition.PerCall);
+        var chatClient = new ChatClient(model, new ApiKeyCredential(apiKey), clientOptions);
+
+        return new RateLimitRetryingChatClient(chatClient.AsIChatClient(), loggerFactory?.CreateLogger<RateLimitRetryingChatClient>());
     }
 
     private static LlmProvider ParseProvider(string? provider)

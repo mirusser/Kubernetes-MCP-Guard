@@ -399,7 +399,7 @@ public sealed class ObservationCycleRunnerTests
 
         var mcpClient = Substitute.For<IObserverMcpClient>();
         mcpClient.GetToolResultAsync(Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+            .Returns(Task.FromResult<string?>("{}"));
 
         var runner = new ObservationCycleRunner(
             optionsMonitor,
@@ -447,7 +447,7 @@ public sealed class ObservationCycleRunnerTests
 
         var mcpClient = Substitute.For<IObserverMcpClient>();
         mcpClient.GetToolResultAsync(Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+            .Returns(Task.FromResult<string?>("{}"));
 
         var runner = new ObservationCycleRunner(
             optionsMonitor,

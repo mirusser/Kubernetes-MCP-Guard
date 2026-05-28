@@ -49,6 +49,15 @@ internal static partial class PlannerLogEvents
     [LoggerMessage(Level = LogLevel.Warning, Message = "planner.handoff.http_backpressure: executor returned 429")]
     public static partial void LogHandoffHttpBackpressure(ILogger logger);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "planner.llm.provider provider={Provider} model={Model}")]
+    public static partial void LogLlmProviderConfigured(ILogger logger, string provider, string model);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "planner.llm.call anomalyId={AnomalyId} iteration={Iteration}")]
+    public static partial void LogLlmCallStarting(ILogger logger, string anomalyId, int iteration);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "planner.llm.call_done anomalyId={AnomalyId} iteration={Iteration} durationMs={DurationMs}")]
+    public static partial void LogLlmCallCompleted(ILogger logger, string anomalyId, int iteration, long durationMs);
+
     [LoggerMessage(Level = LogLevel.Debug, Message = "planner.filter.dropped anomalyId={AnomalyId} reason={Reason}")]
     public static partial void LogFilterDropped(ILogger logger, string anomalyId, string reason);
 

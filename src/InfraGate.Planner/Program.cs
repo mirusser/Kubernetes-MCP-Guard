@@ -73,7 +73,8 @@ builder.Services.AddSingleton<IChatClientFactory>(sp =>
 {
     return new ChatClientFactory(
         sp.GetRequiredService<IOptions<PlannerOptions>>(),
-        PlannerMetrics.Meter);
+        PlannerMetrics.Meter,
+        sp.GetRequiredService<ILoggerFactory>());
 });
 builder.Services.AddSingleton<IChatClient>(sp =>
 {

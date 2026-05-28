@@ -3,6 +3,7 @@ using InfraGate.Observer.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
 
 namespace InfraGate.Observer.Mcp;
 
@@ -62,7 +63,7 @@ internal sealed class ObserverMcpClient : IObserverMcpClient, IAsyncDisposable
         ObserverLogEvents.LogMcpConnected(logger, GatewayBaseUrl);
     }
 
-    public async Task<string> GetToolResultAsync(string toolName, IReadOnlyDictionary<string, object?>? arguments, CancellationToken cancellationToken)
+    public async Task<string?> GetToolResultAsync(string toolName, IReadOnlyDictionary<string, object?>? arguments, CancellationToken cancellationToken)
     {
         ToolWhitelist.AssertAllowed(toolName);
 
@@ -76,7 +77,17 @@ internal sealed class ObserverMcpClient : IObserverMcpClient, IAsyncDisposable
             arguments,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        return System.Text.Json.JsonSerializer.Serialize(result);
+        if (result.IsError == true)
+        {
+            ObserverLogEvents.LogMcpToolError(logger, toolName);
+            return null;
+        }
+
+        var text = string.Join(
+            Environment.NewLine,
+            result.Content.OfType<TextContentBlock>().Select(c => c.Text));
+
+        return string.IsNullOrEmpty(text) ? null : text;
     }
 
     public async ValueTask DisposeAsync()

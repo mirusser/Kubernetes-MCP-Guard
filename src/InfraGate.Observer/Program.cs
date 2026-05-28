@@ -92,7 +92,8 @@ builder.Services.AddSingleton<IChatClientFactory>(sp =>
 {
     return new ChatClientFactory(
         sp.GetRequiredService<IOptions<ObserverOptions>>(),
-        ObserverMetrics.Meter);
+        ObserverMetrics.Meter,
+        sp.GetRequiredService<ILoggerFactory>());
 });
 builder.Services.AddSingleton<IChatClient>(sp =>
 {
@@ -205,7 +206,7 @@ static async Task ConnectObserverMcpClientAsync(WebApplication app)
         ObserverLogEvents.LogStartupConnected(
             logger,
             mcpClient.GatewayBaseUrl,
-            allowedNsResponse);
+            allowedNsResponse ?? string.Empty);
     }
     catch (Exception ex)
     {

@@ -229,13 +229,18 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         };
 
         string? llmResponseText = null;
+        var llmCallNumber = 0;
 
         while (toolCallsUsed < maxToolIterations)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            llmCallNumber++;
+            ObserverLogEvents.LogLlmCallStarting(logger, namespaceName, llmCallNumber);
+            var sw = Stopwatch.StartNew();
             var response = await chatClient.GetResponseAsync(messages, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
+            ObserverLogEvents.LogLlmCallCompleted(logger, namespaceName, llmCallNumber, sw.ElapsedMilliseconds);
 
             var responseText = response.Text ?? string.Empty;
 
@@ -251,7 +256,8 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
                     toolResult = await mcpClient.GetToolResultAsync(
                         toolCall.Value.ToolName,
                         toolCall.Value.Arguments,
-                        cancellationToken).ConfigureAwait(false);
+                        cancellationToken).ConfigureAwait(false)
+                        ?? $"Error: tool '{toolCall.Value.ToolName}' returned an error response.";
                 }
                 catch (Exception ex)
                 {
