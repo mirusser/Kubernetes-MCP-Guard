@@ -10,7 +10,6 @@ namespace InfraGate.AuditOutbox.Tests.IntegrationTests;
 [Trait("Category", "Postgres")]
 public sealed class ChainCompositionTests : IAsyncLifetime
 {
-    private const string PostgresImage = "postgres:17-alpine";
     private const string TestSchema = "test_stream";
 
     private static readonly string FixturesDirectory =
@@ -22,7 +21,7 @@ public sealed class ChainCompositionTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        container = new PostgreSqlBuilder(PostgresImage).Build();
+        container = new PostgreSqlBuilder(TestContainersConstants.PostgresImage).Build();
         await container.StartAsync();
 
         dataSource = NpgsqlDataSource.Create(container.GetConnectionString());
@@ -141,6 +140,19 @@ public sealed class ChainCompositionTests : IAsyncLifetime
 
         Assert.Equal(2, hashes.Length);
         Assert.NotEqual(hashes[0], hashes[1]);
+    }
+
+    [Fact]
+    public async Task AppendAsync_WithCancelledToken_ThrowsOperationCanceledException()
+    {
+        await using var conn = await dataSource!.OpenConnectionAsync();
+        await using var tx = await conn.BeginTransactionAsync();
+        var row = BuildRow("test-cancelled");
+        var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            core!.AppendAsync(TestSchema, row, conn, tx, cts.Token));
     }
 
     private static AuditOutboxRow BuildRow(string eventName) =>

@@ -7,13 +7,13 @@ namespace InfraGate.Approvals.Postgres.Tests.IntegrationTests;
 [Trait("Category", "Postgres")]
 public sealed class PostgresApprovalSchemaValidatorTests : IAsyncLifetime
 {
-    private const string PostgresImage = "postgres:17-alpine";
+
 
     private PostgreSqlContainer? container;
 
     public async Task InitializeAsync()
     {
-        container = new PostgreSqlBuilder(PostgresImage)
+        container = new PostgreSqlBuilder(TestContainersConstants.PostgresImage)
             .Build();
 
         await container.StartAsync();

@@ -15,6 +15,10 @@
     <InternalsVisibleTo Include="InfraGate.AuditOutbox.Postgres" />
     <InternalsVisibleTo Include="InfraGate.AuditOutbox.Tests" />
     <InternalsVisibleTo Include="InfraGate.Approvals.Postgres" />
+    <InternalsVisibleTo Include="InfraGate.Observer" />
+    <InternalsVisibleTo Include="InfraGate.Observer.Tests" />
+    <InternalsVisibleTo Include="InfraGate.Observer.IntegrationTests" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
   </ItemGroup>
 
 </Project>

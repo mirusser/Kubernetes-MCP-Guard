@@ -1,25 +1,18 @@
-using InfraGate.Approvals;
-using InfraGate.Approvals.Audit;
 using InfraGate.AuditOutbox;
+using InfraGate.AuditOutbox.Postgres;
 using Npgsql;
 
-namespace InfraGate.Approvals.Postgres;
+namespace InfraGate.Observer.Audit;
 
-internal interface ITransactionalApprovalAuditOutbox : IApprovalAuditOutbox
+internal sealed class ObserverAuditOutbox(IAuditOutboxCore core, NpgsqlDataSource dataSource)
+    : IObserverAuditOutbox
 {
-    Task<long> AppendAsync(
-        ApprovalAuditEntry entry,
-        NpgsqlConnection connection,
-        NpgsqlTransaction transaction,
-        CancellationToken cancellationToken);
-}
+    private const string StreamSchema = AuditOutboxConventions.Streams.Observer;
+    private const string ColCycleId = "cycle_id";
+    private const string ColAnomalyId = "anomaly_id";
+    private const string ColDedupeKey = "dedupe_key";
 
-internal sealed class ApprovalAuditOutbox(IAuditOutboxCore core, NpgsqlDataSource dataSource)
-    : ITransactionalApprovalAuditOutbox
-{
-    private const string StreamSchema = AuditOutboxConventions.Streams.Approvals;
-
-    public async Task<long> AppendAsync(ApprovalAuditEntry entry, CancellationToken cancellationToken)
+    public async Task<long> AppendAsync(ObserverAuditEntry entry, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(entry);
 
@@ -47,13 +40,16 @@ internal sealed class ApprovalAuditOutbox(IAuditOutboxCore core, NpgsqlDataSourc
     }
 
     public Task<long> AppendAsync(
-        ApprovalAuditEntry entry,
+        ObserverAuditEntry entry,
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        CancellationToken cancellationToken) =>
-        core.AppendAsync(StreamSchema, ToRow(entry), connection, transaction, cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        return core.AppendAsync(StreamSchema, ToRow(entry), connection, transaction, cancellationToken);
+    }
 
-    private static AuditOutboxRow ToRow(ApprovalAuditEntry entry) =>
+    private static AuditOutboxRow ToRow(ObserverAuditEntry entry) =>
         new(
             EventName: entry.EventName,
             OccurredAtUtc: DateTimeOffset.UtcNow,
@@ -61,12 +57,11 @@ internal sealed class ApprovalAuditOutbox(IAuditOutboxCore core, NpgsqlDataSourc
             ActorClientId: entry.ActorClientId,
             Outcome: entry.Outcome,
             Reason: entry.Reason,
-            PayloadJsonText: ApprovalCanonicalJson.Serialize(entry.Payload),
+            PayloadJsonText: AuditCanonicalJson.Serialize(entry.Payload),
             CorrelationColumns: new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ["plan_id"] = entry.PlanId,
-                ["challenge_id"] = entry.ChallengeId,
-                ["grant_id"] = entry.GrantId,
-                ["execution_attempt_id"] = entry.ExecutionAttemptId
+                [ColCycleId] = entry.CycleId,
+                [ColAnomalyId] = entry.AnomalyId,
+                [ColDedupeKey] = entry.DedupeKey,
             });
 }

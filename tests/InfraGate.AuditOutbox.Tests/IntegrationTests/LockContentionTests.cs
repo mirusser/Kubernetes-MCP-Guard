@@ -10,7 +10,7 @@ namespace InfraGate.AuditOutbox.Tests.IntegrationTests;
 [Trait("Category", "Postgres")]
 public sealed class LockContentionTests : IAsyncLifetime
 {
-    private const string PostgresImage = "postgres:17-alpine";
+
     private const string TestSchema = "test_stream";
 
     private static readonly string FixturesDirectory =
@@ -22,7 +22,7 @@ public sealed class LockContentionTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        container = new PostgreSqlBuilder(PostgresImage).Build();
+        container = new PostgreSqlBuilder(TestContainersConstants.PostgresImage).Build();
         await container.StartAsync();
 
         dataSource = NpgsqlDataSource.Create(container.GetConnectionString());

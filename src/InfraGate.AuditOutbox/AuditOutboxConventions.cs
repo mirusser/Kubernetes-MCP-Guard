@@ -35,9 +35,12 @@ public static class AuditOutboxConventions
             [ColumnNames.PayloadJsonText] = row.PayloadJsonText,
         };
 
-        foreach (var (key, value) in row.CorrelationColumns)
+        if (row.CorrelationColumns is not null)
         {
-            dict[key] = value;
+            foreach (var (key, value) in row.CorrelationColumns)
+            {
+                dict[key] = value;
+            }
         }
 
         return dict;

@@ -111,7 +111,7 @@ public sealed class RunProfileDocumentTests
         {
             Observer = new ObserverProfile(
                 "http://observer-local",
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
             Planner = new PlannerProfile(
                 null,
                 "http://gateway-local",
@@ -138,6 +138,7 @@ public sealed class RunProfileDocumentTests
                 "/observer/out",
                 "http://planner/handoff",
                 "/observer/state",
+                null,
                 ["default"]),
             new PlannerProfile(
                 "http://planner-default",
@@ -187,7 +188,7 @@ public sealed class RunProfileDocumentTests
             null, null, null, null, null, null,
             new ObserverProfile(
                 "http://observer",
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
             new PlannerProfile(
                 "http://planner",
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),

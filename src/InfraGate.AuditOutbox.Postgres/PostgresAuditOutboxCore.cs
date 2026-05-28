@@ -1,5 +1,4 @@
 using Dapper;
-using InfraGate.Approvals;
 using InfraGate.AuditOutbox;
 using Npgsql;
 
@@ -39,9 +38,9 @@ internal sealed class PostgresAuditOutboxCore : IAuditOutboxCore
             cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         var canonicalInputObject = AuditOutboxConventions.BuildCanonicalInputObject(row);
-        string canonicalText = ApprovalCanonicalJson.Serialize(canonicalInputObject);
-        string hashInput = (previousHash ?? string.Empty) + canonicalText;
-        string eventHash = ApprovalCanonicalJson.ComputeSha256Hex(hashInput);
+string canonicalText = AuditCanonicalJson.Serialize(canonicalInputObject);
+string hashInput = (previousHash ?? string.Empty) + canonicalText;
+string eventHash = AuditCanonicalJson.ComputeSha256Hex(hashInput);
 
         var parameters = BuildInsertParameters(row, previousHash, eventHash);
         string sql = BuildInsertSql(streamSchema, row.CorrelationColumns.Keys);
@@ -81,6 +80,8 @@ internal sealed class PostgresAuditOutboxCore : IAuditOutboxCore
 
     private static string BuildInsertSql(string schema, IEnumerable<string> correlationKeys)
     {
+        ArgumentNullException.ThrowIfNull(correlationKeys);
+
         var keys = correlationKeys.ToArray();
         string corrColumns = keys.Length > 0 ? ", " + string.Join(", ", keys) : string.Empty;
         string corrParams = keys.Length > 0 ? ", " + string.Join(", ", keys.Select(k => $"@{k}")) : string.Empty;

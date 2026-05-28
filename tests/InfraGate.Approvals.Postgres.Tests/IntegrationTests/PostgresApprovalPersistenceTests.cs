@@ -12,7 +12,7 @@ namespace InfraGate.Approvals.Postgres.Tests.IntegrationTests;
 [Trait("Category", "Postgres")]
 public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
 {
-    private const string PostgresImage = "postgres:17-alpine";
+
     private const string PlanId = "plan-postgres-1";
     private const string NamespaceName = "mcp-nginx-demo";
 
@@ -20,7 +20,7 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        container = new PostgreSqlBuilder(PostgresImage)
+        container = new PostgreSqlBuilder(TestContainersConstants.PostgresImage)
             .Build();
 
         await container.StartAsync();

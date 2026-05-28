@@ -1,5 +1,6 @@
 using System.Diagnostics.Metrics;
 using System.Net;
+using InfraGate.Observer.Audit;
 using InfraGate.Observer.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -75,12 +76,15 @@ public sealed class HttpAnomalyHandoffSinkTests
         Assert.Equal(1L, probe.Measurements[0].Value);
     }
 
-    private static HttpAnomalyHandoffSink CreateSink(StubHttpHandler handler, Meter? meter = null)
+    private static HttpAnomalyHandoffSink CreateSink(
+        StubHttpHandler handler,
+        Meter? meter = null,
+        IObserverAuditOutbox? auditOutbox = null)
     {
         const string url = "http://planner/handoff/anomalies";
         var client = new HttpClient(handler) { BaseAddress = new Uri(url) };
         return new HttpAnomalyHandoffSink(
-            client, url, NullLogger<HttpAnomalyHandoffSink>.Instance, meter);
+            client, url, NullLogger<HttpAnomalyHandoffSink>.Instance, auditOutbox, meter);
     }
 
     private static AnomalyHandoffBatch BatchWithReport() => new()
@@ -104,6 +108,78 @@ public sealed class HttpAnomalyHandoffSinkTests
             },
         ],
     };
+
+    // ── Audit outbox ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task PublishAsync_AcceptedResponse_EmitsHandoffPublishedEvent()
+    {
+        var auditOutbox = Substitute.For<IObserverAuditOutbox>();
+        auditOutbox.AppendAsync(Arg.Any<ObserverAuditEntry>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(1L));
+        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.Accepted));
+        var sink = CreateSink(handler, auditOutbox: auditOutbox);
+
+        await sink.PublishAsync(BatchWithReport(), CancellationToken.None);
+
+        await auditOutbox.Received(1).AppendAsync(
+            Arg.Is<ObserverAuditEntry>(e =>
+                e.EventName == ObserverAuditEvents.HandoffPublished &&
+                e.Outcome == "published"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.BadGateway)]
+    public async Task PublishAsync_NonSuccessResponse_EmitsHandoffFailedEvent(HttpStatusCode statusCode)
+    {
+        var auditOutbox = Substitute.For<IObserverAuditOutbox>();
+        auditOutbox.AppendAsync(Arg.Any<ObserverAuditEntry>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(1L));
+        var handler = new StubHttpHandler(_ => new HttpResponseMessage(statusCode));
+        var sink = CreateSink(handler, auditOutbox: auditOutbox);
+
+        await sink.PublishAsync(BatchWithReport(), CancellationToken.None);
+
+        await auditOutbox.Received(1).AppendAsync(
+            Arg.Is<ObserverAuditEntry>(e =>
+                e.EventName == ObserverAuditEvents.HandoffFailed &&
+                e.Outcome == "failed"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PublishAsync_TooManyRequests_DoesNotEmitAuditEvent()
+    {
+        var auditOutbox = Substitute.For<IObserverAuditOutbox>();
+        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.TooManyRequests));
+        var sink = CreateSink(handler, auditOutbox: auditOutbox);
+
+        await sink.PublishAsync(BatchWithReport(), CancellationToken.None);
+
+        await auditOutbox.DidNotReceive().AppendAsync(
+            Arg.Any<ObserverAuditEntry>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PublishAsync_NullAuditOutbox_DoesNotThrowOnSuccess()
+    {
+        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.Accepted));
+        var sink = CreateSink(handler, auditOutbox: null);
+
+        await sink.PublishAsync(BatchWithReport(), CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task PublishAsync_NullAuditOutbox_DoesNotThrowOnFailure()
+    {
+        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        var sink = CreateSink(handler, auditOutbox: null);
+
+        await sink.PublishAsync(BatchWithReport(), CancellationToken.None);
+    }
 
     private static CounterProbe ListenForCounter(Meter meter, string name) => new(meter, name);
 

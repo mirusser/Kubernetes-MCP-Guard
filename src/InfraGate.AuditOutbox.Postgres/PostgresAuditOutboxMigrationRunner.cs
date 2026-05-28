@@ -154,7 +154,8 @@ public static class PostgresAuditOutboxMigrationRunner
         {
             var bytes = File.ReadAllBytes(path);
             string checksum = Convert.ToHexString(SHA256.HashData(bytes)).ToUpperInvariant();
-            return new MigrationFile(Path.GetFileName(path), File.ReadAllText(path), checksum);
+            string sql = Encoding.UTF8.GetString(bytes);
+            return new MigrationFile(Path.GetFileName(path), sql, checksum);
         }
     }
 }

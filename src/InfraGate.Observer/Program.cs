@@ -1,12 +1,14 @@
 using System.Diagnostics.Metrics;
 using InfraGate.ClientCredentials;
 using InfraGate.Observer;
+using InfraGate.Observer.Audit;
 using InfraGate.Observer.Classification;
 using InfraGate.Observer.Cycle;
 using InfraGate.Observer.Diagnostics;
 using InfraGate.Observer.Endpoints;
 using InfraGate.Observer.Handoff;
 using InfraGate.AgentLlm;
+using InfraGate.AuditOutbox.Postgres;
 using InfraGate.Observer.Llm;
 using InfraGate.Observer.Mcp;
 using InfraGate.Observer.Prompts;
@@ -15,6 +17,7 @@ using InfraGate.Observer.State;
 using InfraGate.Observability;
 using InfraGate.RuntimeSafety;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,6 +35,7 @@ builder.Configuration.AddInfraGateEnvironmentVariables(mappings =>
     mappings.Map(ObserverConventions.EnvironmentVariables.DedupeResolutionThreshold, ObserverConventions.ConfigurationKeys.DedupeResolutionThreshold);
     mappings.Map(ObserverConventions.EnvironmentVariables.FileSinkRoot, ObserverConventions.ConfigurationKeys.FileSinkRoot);
     mappings.Map(ObserverConventions.EnvironmentVariables.PlannerHandoffUrl, ObserverConventions.ConfigurationKeys.PlannerHandoffUrl);
+    mappings.Map(ObserverConventions.EnvironmentVariables.AuditConnectionString, ObserverConventions.ConfigurationKeys.AuditConnectionString);
     RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
 });
 
@@ -107,7 +111,8 @@ builder.Services.AddSingleton<IObservationCycleRunner>(sp =>
         sp.GetRequiredService<IAnomalyDedupeStore>(),
         sp.GetRequiredService<IAnomalyHandoffSink>(),
         sp.GetRequiredService<ILogger<ObservationCycleRunner>>(),
-        ObserverMetrics.Meter);
+        ObserverMetrics.Meter,
+        sp.GetService<IObserverAuditOutbox>());
 });
 builder.Services.AddSingleton<CycleSerialisation>();
 builder.Services.AddHostedService<ObservationCycleLoop>();
@@ -134,12 +139,22 @@ builder.Services.AddSingleton<IAnomalyHandoffSink>(sp =>
         var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
         var httpClient = httpClientFactory.CreateClient(ObserverConventions.HttpClients.PlannerHandoff);
         var httpLogger = sp.GetRequiredService<ILogger<HttpAnomalyHandoffSink>>();
-        sinks.Add(new HttpAnomalyHandoffSink(httpClient, options.PlannerHandoffUrl, httpLogger));
+        sinks.Add(new HttpAnomalyHandoffSink(httpClient, options.PlannerHandoffUrl, httpLogger, sp.GetService<IObserverAuditOutbox>()));
     }
 
     var logger = sp.GetRequiredService<ILogger<CompositeAnomalyHandoffSink>>();
     return new CompositeAnomalyHandoffSink(sinks, logger);
 });
+
+var auditConnectionString = builder.Configuration[ObserverConventions.ConfigurationKeys.AuditConnectionString];
+if (!string.IsNullOrWhiteSpace(auditConnectionString))
+{
+    var auditDataSource = NpgsqlDataSource.Create(auditConnectionString);
+    var migrationsDir = Path.Combine(AppContext.BaseDirectory, "Migrations");
+    await PostgresAuditOutboxMigrationRunner.ApplyAsync(
+        auditDataSource, "observer", migrationsDir, CancellationToken.None).ConfigureAwait(false);
+    builder.Services.AddObserverAuditOutbox(auditDataSource);
+}
 
 var app = builder.Build();
 

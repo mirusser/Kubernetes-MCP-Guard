@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using InfraGate.Observer.Audit;
 using InfraGate.Observer.Classification;
 using InfraGate.Observer.Diagnostics;
 using InfraGate.Observer.Handoff;
@@ -21,6 +22,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
     private readonly IObserverMcpClient mcpClient;
     private readonly IAnomalyDedupeStore dedupeStore;
     private readonly IAnomalyHandoffSink handoffSink;
+    private readonly IObserverAuditOutbox? auditOutbox;
     private readonly ILogger<ObservationCycleRunner> logger;
     private readonly Counter<long>? cycleCountCounter;
     private readonly Counter<long>? toolCallsCounter;
@@ -38,7 +40,8 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         IAnomalyDedupeStore dedupeStore,
         IAnomalyHandoffSink handoffSink,
         ILogger<ObservationCycleRunner> logger,
-        Meter? meter = null)
+        Meter? meter = null,
+        IObserverAuditOutbox? auditOutbox = null)
     {
         this.optionsMonitor = optionsMonitor;
         this.snapshotFetcher = snapshotFetcher;
@@ -48,6 +51,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         this.mcpClient = mcpClient;
         this.dedupeStore = dedupeStore;
         this.handoffSink = handoffSink;
+        this.auditOutbox = auditOutbox;
         this.logger = logger;
 
         cycleCountCounter = ObserverMetrics.CreateCycleCountCounter(meter);
@@ -139,7 +143,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
     {
         var detectedAt = DateTimeOffset.UtcNow;
         var opts = optionsMonitor.CurrentValue;
-        var (dedupedReports, resolvedReports) = dedupeStore.ProcessReports(
+        var (dedupedReports, resolvedReports, suppressedReports) = dedupeStore.ProcessReports(
             cycleId, allReports, opts.DedupeSuppressionWindow, opts.DedupeResolutionThreshold, detectedAt);
 
         var finalReports = new List<AnomalyReport>(dedupedReports.Count + resolvedReports.Count);
@@ -156,6 +160,12 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
             };
 
             await handoffSink.PublishAsync(handoffBatch, shutdownToken).ConfigureAwait(false);
+        }
+
+        if (auditOutbox is not null)
+        {
+            await EmitAnomalyAuditEventsAsync(cycleId, dedupedReports, suppressedReports, resolvedReports, shutdownToken)
+                .ConfigureAwait(false);
         }
 
         ObserverLogEvents.LogCycleCompletedDetailed(
@@ -566,6 +576,74 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
 
         return null;
     }
+
+    private async Task EmitAnomalyAuditEventsAsync(
+        string cycleId,
+        IReadOnlyList<AnomalyReport> detectedReports,
+        IReadOnlyList<AnomalyReport> suppressedReports,
+        IReadOnlyList<AnomalyReport> resolvedReports,
+        CancellationToken cancellationToken)
+    {
+        foreach (var report in detectedReports)
+        {
+            await auditOutbox!.AppendAsync(new ObserverAuditEntry(
+                EventName: ObserverAuditEvents.AnomalyDetected,
+                Payload: new
+                {
+                    report.AnomalyId,
+                    kind = report.Kind.ToString("G"),
+                    severity = report.Severity.ToString("G"),
+                    target = $"{report.Target.Kind}/{report.Target.Namespace}/{report.Target.Name}",
+                    report.Summary,
+                },
+                ActorSubject: "service:observer",
+                CycleId: cycleId,
+                AnomalyId: report.AnomalyId,
+                DedupeKey: DedupeKeyString(report),
+                Outcome: report.Status == AnomalyStatus.Resolved ? "resolved" : "active"),
+            cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (var report in suppressedReports)
+        {
+            await auditOutbox!.AppendAsync(new ObserverAuditEntry(
+                EventName: ObserverAuditEvents.AnomalySuppressed,
+                Payload: new
+                {
+                    report.AnomalyId,
+                    kind = report.Kind.ToString("G"),
+                    severity = report.Severity.ToString("G"),
+                    target = $"{report.Target.Kind}/{report.Target.Namespace}/{report.Target.Name}",
+                },
+                ActorSubject: "service:observer",
+                CycleId: cycleId,
+                AnomalyId: report.AnomalyId,
+                DedupeKey: DedupeKeyString(report),
+                Outcome: "suppressed"),
+            cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (var report in resolvedReports)
+        {
+            await auditOutbox!.AppendAsync(new ObserverAuditEntry(
+                EventName: ObserverAuditEvents.AnomalyResolved,
+                Payload: new
+                {
+                    report.AnomalyId,
+                    kind = report.Kind.ToString("G"),
+                    target = $"{report.Target.Kind}/{report.Target.Namespace}/{report.Target.Name}",
+                },
+                ActorSubject: "service:observer",
+                CycleId: cycleId,
+                AnomalyId: report.AnomalyId,
+                DedupeKey: DedupeKeyString(report),
+                Outcome: "resolved"),
+            cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static string DedupeKeyString(AnomalyReport report) =>
+        $"{report.Kind:G}/{report.Target.Kind}/{report.Target.Namespace}/{report.Target.Name}";
 
     // ── LLM output DTOs ─────────────────────────────────────
 

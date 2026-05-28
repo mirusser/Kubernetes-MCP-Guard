@@ -5,7 +5,7 @@ internal sealed class AnomalyDedupeStore : IAnomalyDedupeStore
     private readonly ConcurrentDictionary<DedupKey, ActiveAnomalyState> state = new();
     private long cycleCount;
 
-    public (IReadOnlyList<AnomalyReport> Emitted, IReadOnlyList<AnomalyReport> Resolved) ProcessReports(
+    public (IReadOnlyList<AnomalyReport> Emitted, IReadOnlyList<AnomalyReport> Resolved, IReadOnlyList<AnomalyReport> Suppressed) ProcessReports(
         string cycleId,
         IReadOnlyList<AnomalyReport> incomingReports,
         int suppressionWindowCycles,
@@ -16,6 +16,7 @@ internal sealed class AnomalyDedupeStore : IAnomalyDedupeStore
 
         var seenThisCycle = new HashSet<DedupKey>();
         var emitted = new List<AnomalyReport>();
+        var suppressed = new List<AnomalyReport>();
 
         foreach (var report in incomingReports)
         {
@@ -29,6 +30,7 @@ internal sealed class AnomalyDedupeStore : IAnomalyDedupeStore
 
                 if (currentCycle - existing.FirstSeenCycle < suppressionWindowCycles)
                 {
+                    suppressed.Add(report);
                     continue;
                 }
 
@@ -70,7 +72,7 @@ internal sealed class AnomalyDedupeStore : IAnomalyDedupeStore
             state.TryRemove(key, out _);
         }
 
-        return (emitted, resolved);
+        return (emitted, resolved, suppressed);
     }
 
     public bool HasActiveAnomaly(DedupKey key) => state.ContainsKey(key);

@@ -1,4 +1,5 @@
 using InfraGate.AuditOutbox;
+using InfraGate.AuditOutbox.Postgres;
 using InfraGate.Approvals;
 
 namespace InfraGate.AuditOutbox.Tests.IntegrationTests;
@@ -125,10 +126,40 @@ public sealed class CanonicalizationTests
     }
 
     [Fact]
+    public void AuditCanonicalJson_Serialize_DelegatesToApprovalCanonicalJson()
+    {
+        var input = new Dictionary<string, object?> { ["key"] = "value", ["num"] = 42 };
+
+        string viaApprovals = ApprovalCanonicalJson.Serialize(input);
+        string viaAudit = AuditCanonicalJson.Serialize(input);
+
+        Assert.Equal(viaApprovals, viaAudit);
+    }
+
+    [Fact]
+    public void AuditCanonicalJson_ComputeSha256Hex_SameInput_ProducesSameHash()
+    {
+        string viaApprovals = ApprovalCanonicalJson.ComputeSha256Hex("deterministic-input");
+        string viaAudit = AuditCanonicalJson.ComputeSha256Hex("deterministic-input");
+
+        Assert.Equal(viaApprovals, viaAudit);
+    }
+
+    [Fact]
     public void Streams_Constants_MatchExpectedSchemaNames()
     {
         Assert.Equal("approvals", AuditOutboxConventions.Streams.Approvals);
         Assert.Equal("observer", AuditOutboxConventions.Streams.Observer);
         Assert.Equal("planner", AuditOutboxConventions.Streams.Planner);
+    }
+
+    [Fact]
+    public void BuildCanonicalInputObject_NullCorrelationColumns_DoesNotThrow()
+    {
+        var row = BaseRow with { CorrelationColumns = null! };
+
+        var dict = AuditOutboxConventions.BuildCanonicalInputObject(row);
+
+        Assert.DoesNotContain("test_entity_id", dict.Keys);
     }
 }
