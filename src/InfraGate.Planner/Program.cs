@@ -1,16 +1,19 @@
 using InfraGate.Planner;
+using InfraGate.Planner.Audit;
 using InfraGate.Planner.Cycle;
 using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
 using InfraGate.Planner.Endpoints;
 using InfraGate.Planner.Handoff;
 using InfraGate.AgentLlm;
+using InfraGate.AuditOutbox.Postgres;
 using InfraGate.Planner.Llm;
 using InfraGate.Planner.Mcp;
 using InfraGate.Observability;
 using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.AI;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +28,7 @@ builder.Configuration.AddInfraGateEnvironmentVariables(mappings =>
     mappings.Map(PlannerConventions.EnvironmentVariables.LlmModel, PlannerConventions.ConfigurationKeys.LlmModel);
     mappings.Map(PlannerConventions.EnvironmentVariables.LlmApiKey, PlannerConventions.ConfigurationKeys.LlmApiKey);
     mappings.Map(PlannerConventions.EnvironmentVariables.FileSinkRoot, PlannerConventions.ConfigurationKeys.FileSinkRoot);
+    mappings.Map(PlannerConventions.EnvironmentVariables.AuditConnectionString, PlannerConventions.ConfigurationKeys.AuditConnectionString);
     RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
 });
 
@@ -108,6 +112,16 @@ builder.Services.AddSingleton<IRemediationProposalSink>(sp =>
     var logger = sp.GetRequiredService<ILogger<CompositeRemediationProposalSink>>();
     return new CompositeRemediationProposalSink(sinks, logger);
 });
+var auditConnectionString = builder.Configuration[PlannerConventions.ConfigurationKeys.AuditConnectionString];
+if (!string.IsNullOrWhiteSpace(auditConnectionString))
+{
+    var auditDataSource = NpgsqlDataSource.Create(auditConnectionString);
+    var migrationsDir = Path.Combine(AppContext.BaseDirectory, "Migrations");
+    await PostgresAuditOutboxMigrationRunner.ApplyAsync(
+        auditDataSource, "planner", migrationsDir, CancellationToken.None).ConfigureAwait(false);
+    builder.Services.AddPlannerAuditOutbox(auditDataSource);
+}
+
 builder.Services.AddSingleton<BatchProcessor>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BatchProcessor>());
 

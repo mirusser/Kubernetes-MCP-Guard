@@ -42,6 +42,7 @@ internal static class PlannerConventions
         public const string OAuthAuthority = "INFRA_GATE_PLANNER_OAUTH_AUTHORITY";
         public const string OAuthScope = "INFRA_GATE_PLANNER_OAUTH_SCOPE";
         public const string FileSinkRoot = "INFRA_GATE_PLANNER_FILE_SINK_ROOT";
+        public const string AuditConnectionString = "INFRA_GATE_PLANNER_AUDIT_CONNECTION_STRING";
     }
 
     public static class ConfigurationKeys
@@ -56,6 +57,7 @@ internal static class PlannerConventions
         public const string LlmModel = "InfraGate:Planner:LlmModel";
         public const string LlmApiKey = "InfraGate:Planner:LlmApiKey";
         public const string FileSinkRoot = "InfraGate:Planner:FileSink:Root";
+        public const string AuditConnectionString = "InfraGate:Planner:AuditConnectionString";
     }
 
     public static class Prompts

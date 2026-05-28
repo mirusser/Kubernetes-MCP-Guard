@@ -55,6 +55,48 @@ kill $(pgrep -f 'iii.*iii-config') 2>/dev/null
 kill $(lsof -t -i:3111) 2>/dev/null
 ```
 
+## opencode MCP Integration
+
+The project's opencode config at `~/.config/opencode/opencode.json` launches the agentmemory
+MCP shim as a local server. **Both** `AGENTMEMORY_URL` **and** `AGENTMEMORY_SECRET` must be set:
+
+```json
+"agentmemory": {
+  "type": "local",
+  "command": ["npx", "-y", "@agentmemory/mcp"],
+  "enabled": true,
+  "environment": {
+    "AGENTMEMORY_URL": "http://localhost:3111",
+    "AGENTMEMORY_SECRET": "your-secret-here"
+  }
+}
+```
+
+> **Note**: The field is `"environment"`, not `"env"`. The schema `McpLocalConfig` only recognizes
+> `"environment"` — using `"env"` silently drops the variables.
+
+### Why both env vars are required
+
+The MCP shim (`@agentmemory/mcp`) probes the engine at `/agentmemory/livez` — that endpoint
+returns 200 even without auth, so the shim enters **proxy mode**. But the actual data endpoints
+(`/agentmemory/memories`, `/agentmemory/mcp/call`, etc.) return **401 Unauthorized** without the
+bearer token. Without `AGENTMEMORY_SECRET`, every memory save, recall, or search silently fails
+and the shim returns an MCP error to the agent.
+
+Without the secret, the only way data reaches the engine is through the REST API directly
+(using the `Authorization` header) — MCP tools are broken.
+
+### Startup order
+
+The engine must be running **before** opencode starts its MCP shim. The recommended flow:
+
+1. Run `agentmem` in a terminal (starts engine + worker)
+2. Verify engine is up: `curl -s http://localhost:3111/agentmemory/livez`
+3. Then start opencode (which launches the MCP shim that proxies to the engine)
+
+If opencode starts before the engine, the MCP shim falls back to local InMemoryKV
+(`standalone.json`) — data saved during that window won't appear in the viewer.
+
 ## Verification
 
 After starting:

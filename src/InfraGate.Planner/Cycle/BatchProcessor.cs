@@ -1,6 +1,7 @@
 using System.Diagnostics.Metrics;
 using System.Reflection;
 using System.Text;
+using InfraGate.Planner.Audit;
 using InfraGate.Planner.Decision;
 using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
@@ -21,6 +22,7 @@ internal sealed class BatchProcessor : BackgroundService
     private readonly IRemediationProposalSink proposalSink;
     private readonly ILogger<BatchProcessor> logger;
     private readonly PlannerDedupeStore dedupeStore;
+    private readonly IPlannerAuditOutbox? auditOutbox;
     private readonly Lazy<string> systemPrompt;
     private readonly Counter<long>? invalidOperationCounter;
     private readonly Counter<long>? invalidArgumentsCounter;
@@ -35,7 +37,8 @@ internal sealed class BatchProcessor : BackgroundService
         IRemediationProposalSink proposalSink,
         ILogger<BatchProcessor> logger,
         PlannerDedupeStore? dedupeStore = null,
-        Meter? meter = null)
+        Meter? meter = null,
+        IPlannerAuditOutbox? auditOutbox = null)
     {
         this.optionsMonitor = optionsMonitor;
         this.queue = queue;
@@ -44,6 +47,7 @@ internal sealed class BatchProcessor : BackgroundService
         this.proposalSink = proposalSink;
         this.logger = logger;
         this.dedupeStore = dedupeStore ?? new PlannerDedupeStore();
+        this.auditOutbox = auditOutbox;
         systemPrompt = new Lazy<string>(LoadSystemPrompt);
         invalidOperationCounter = PlannerMetrics.CreateDecisionInvalidOperationCounter(meter);
         invalidArgumentsCounter = PlannerMetrics.CreateDecisionInvalidArgumentsCounter(meter);
@@ -70,20 +74,36 @@ internal sealed class BatchProcessor : BackgroundService
 
                 using var anomalyScope = LogContext.PushProperty("AnomalyId", report.AnomalyId);
 
-                if (!ShouldProcess(report))
+                var filterReason = GetFilterReason(report);
+                if (filterReason is not null)
                 {
+                    if (!string.Equals(filterReason, PlannerConventions.FilterDropReasons.Resolved, StringComparison.Ordinal) && auditOutbox is not null)
+                    {
+                        await EmitProposalSkippedAsync(report.AnomalyId, filterReason, batchCts.Token)
+                            .ConfigureAwait(false);
+                    }
                     continue;
                 }
 
                 if (dedupeStore.HasActivePlan(report.AnomalyId))
                 {
                     PlannerLogEvents.LogFilterDropped(logger, report.AnomalyId, PlannerConventions.FilterDropReasons.DedupeActivePlan);
+                    if (auditOutbox is not null)
+                    {
+                        await EmitProposalSkippedAsync(report.AnomalyId, PlannerConventions.FilterDropReasons.DedupeActivePlan, batchCts.Token)
+                            .ConfigureAwait(false);
+                    }
                     continue;
                 }
 
                 var decision = await DecideAsync(report, opts, batchCts.Token).ConfigureAwait(false);
                 if (decision is null)
                 {
+                    if (auditOutbox is not null)
+                    {
+                        await EmitProposalSkippedAsync(report.AnomalyId, "no_decision", batchCts.Token)
+                            .ConfigureAwait(false);
+                    }
                     continue;
                 }
 
@@ -93,6 +113,11 @@ internal sealed class BatchProcessor : BackgroundService
                     PlannerLogEvents.LogFilterDropped(logger, report.AnomalyId, PlannerConventions.FilterDropReasons.DedupeOperationInBatch);
                     dedupeStore.TrackActivePlan(report.AnomalyId, string.Empty, DateTimeOffset.UtcNow,
                         DateTimeOffset.UtcNow + PlannerConventions.Dedupe.ActivePlanTtl);
+                    if (auditOutbox is not null)
+                    {
+                        await EmitProposalSkippedAsync(report.AnomalyId, PlannerConventions.FilterDropReasons.DedupeOperationInBatch, batchCts.Token)
+                            .ConfigureAwait(false);
+                    }
                     continue;
                 }
 
@@ -162,13 +187,14 @@ internal sealed class BatchProcessor : BackgroundService
         }
     }
 
-    private bool ShouldProcess(AnomalyReport report)
+    // Returns null when the report should be processed; otherwise returns the skip reason.
+    private string? GetFilterReason(AnomalyReport report)
     {
         if (report.Status == AnomalyStatus.Resolved)
         {
             dedupeStore.Remove(report.AnomalyId);
             PlannerLogEvents.LogFilterDropped(logger, report.AnomalyId, PlannerConventions.FilterDropReasons.Resolved);
-            return false;
+            return PlannerConventions.FilterDropReasons.Resolved;
         }
 
         bool isAllowedKind = report.Kind is AnomalyKind.PodUnhealthy
@@ -179,9 +205,10 @@ internal sealed class BatchProcessor : BackgroundService
         if (!isAllowedKind)
         {
             PlannerLogEvents.LogFilterDropped(logger, report.AnomalyId, PlannerConventions.FilterDropReasons.UnsupportedKind);
+            return PlannerConventions.FilterDropReasons.UnsupportedKind;
         }
 
-        return isAllowedKind;
+        return null;
     }
 
     private static string BuildOperationKey(RemediationDecision decision)
@@ -355,20 +382,77 @@ internal sealed class BatchProcessor : BackgroundService
 
             if (TryExtractPlanId(result, out var planId))
             {
+                if (auditOutbox is not null)
+                {
+                    await auditOutbox.AppendAsync(
+                        new PlannerAuditEntry(
+                            EventName: PlannerAuditEvents.ProposePlanSucceeded,
+                            Payload: new
+                            {
+                                operationType = decision.OperationType,
+                                arguments = decision.Arguments,
+                            },
+                            AnomalyId: report.AnomalyId,
+                            PlanId: planId,
+                            ActorSubject: "service:planner",
+                            Outcome: "succeeded"),
+                        cancellationToken).ConfigureAwait(false);
+                }
                 return planId;
             }
 
             proposeFailedCounter?.Add(1);
             PlannerLogEvents.LogProposePlanMissingPlanId(logger, report.AnomalyId);
+            if (auditOutbox is not null)
+            {
+                await auditOutbox.AppendAsync(
+                    new PlannerAuditEntry(
+                        EventName: PlannerAuditEvents.ProposePlanFailed,
+                        Payload: new { reasonCode = "missing_plan_id" },
+                        AnomalyId: report.AnomalyId,
+                        ActorSubject: "service:planner",
+                        Outcome: "failed",
+                        Reason: "missing_plan_id"),
+                    cancellationToken).ConfigureAwait(false);
+            }
             return null;
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException)
         {
             proposeFailedCounter?.Add(1);
             PlannerLogEvents.LogProposePlanFailed(logger, report.AnomalyId, ex);
+            if (auditOutbox is not null)
+            {
+                var statusCode = ex is HttpRequestException httpEx ? (int?)httpEx.StatusCode : null;
+                await auditOutbox.AppendAsync(
+                    new PlannerAuditEntry(
+                        EventName: PlannerAuditEvents.ProposePlanFailed,
+                        Payload: new
+                        {
+                            reasonCode = "gateway_error",
+                            errorClass = ex.GetType().Name,
+                            statusCode,
+                        },
+                        AnomalyId: report.AnomalyId,
+                        ActorSubject: "service:planner",
+                        Outcome: "failed",
+                        Reason: ex.GetType().Name),
+                    cancellationToken).ConfigureAwait(false);
+            }
             return null;
         }
     }
+
+    private Task EmitProposalSkippedAsync(string anomalyId, string reasonCode, CancellationToken cancellationToken) =>
+        auditOutbox!.AppendAsync(
+            new PlannerAuditEntry(
+                EventName: PlannerAuditEvents.ProposalSkipped,
+                Payload: new { reasonCode },
+                AnomalyId: anomalyId,
+                ActorSubject: "service:planner",
+                Outcome: "skipped",
+                Reason: reasonCode),
+            cancellationToken);
 
     private static IReadOnlyDictionary<string, object?> ConvertArguments(Dictionary<string, JsonElement>? arguments)
     {
