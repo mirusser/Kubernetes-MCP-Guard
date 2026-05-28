@@ -78,6 +78,38 @@ public sealed class ChatClientFactoryTests
     }
 
     [Fact]
+    public void Create_OpenRouterProvider_ReturnsChatClient()
+    {
+        var options = Substitute.For<IOptions<ObserverOptions>>();
+        options.Value.Returns(new ObserverOptions
+        {
+            LlmProvider = ObserverConventions.LlmProviders.OpenRouter,
+            LlmApiKey = "test-key",
+        });
+
+        var factory = new ChatClientFactory(options);
+        var client = factory.Create();
+
+        Assert.NotNull(client);
+        Assert.IsNotType<AnthropicChatClient>(client);
+    }
+
+    [Fact]
+    public void Create_OpenRouterProvider_MissingApiKey_ThrowsInvalidOperationException()
+    {
+        var options = Substitute.For<IOptions<ObserverOptions>>();
+        options.Value.Returns(new ObserverOptions
+        {
+            LlmProvider = ObserverConventions.LlmProviders.OpenRouter,
+            LlmApiKey = "",
+        });
+
+        var factory = new ChatClientFactory(options);
+
+        Assert.Throws<InvalidOperationException>(() => factory.Create());
+    }
+
+    [Fact]
     public void Create_UnknownProvider_ThrowsInvalidOperationException()
     {
         var options = Substitute.For<IOptions<ObserverOptions>>();

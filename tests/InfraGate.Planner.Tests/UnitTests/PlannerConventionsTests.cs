@@ -155,6 +155,13 @@ public sealed class PlannerConventionsTests
         Assert.Equal("GOOGLE", PlannerConventions.LlmProviders.Google);
         Assert.Equal("AZURE", PlannerConventions.LlmProviders.Azure);
         Assert.Equal("OLLAMA", PlannerConventions.LlmProviders.Ollama);
+        Assert.Equal("OPENROUTER", PlannerConventions.LlmProviders.OpenRouter);
+    }
+
+    [Fact]
+    public void DefaultOpenRouterLlmModel_IsPinned()
+    {
+        Assert.Equal("deepseek/deepseek-v4-flash:free", PlannerConventions.DefaultOpenRouterLlmModel);
     }
 
     [Fact]

@@ -23,7 +23,7 @@
 - **Tool whitelist** — the Observer only calls the gateway's 8 read-only tools (`get_allowed_namespaces`, `get_k8s_status`, `get_k8s_events`, `get_k8s_pods`, `describe_k8s_resource`, `get_k8s_deployments`, `get_k8s_services`, `get_k8s_endpoints`). Any call to a mutation tool throws `InvalidOperationException` before HTTP.
 - The Observer is a peer MCP client (not embedded in the gateway). It never calls mutation tools, never produces Plan Envelopes or Approval Grants, and never writes through `IApprovalAuditPublisher`.
 - Optional HTTP handoff posts `AnomalyHandoffBatch` payloads to the Remediation Planner's `/handoff/anomalies` endpoint.
-- LLM provider is configurable via env vars; default is Anthropic (`claude-sonnet-4-6`). `INFRA_GATE_OBSERVER_LLM_API_KEY` is required when the LLM phase is active.
+- LLM provider is configurable via env vars; default is Anthropic (`claude-sonnet-4-6`). Supported providers: `anthropic` (default) and `openrouter` (OpenAI-compatible, e.g. DeepSeek free models). `INFRA_GATE_OBSERVER_LLM_API_KEY` is required for both.
 - `POST /observe-now` triggers a synchronous on-demand cycle (30s HTTP timeout) without resetting the scheduled tick. Concurrent calls serialise via a shared semaphore.
 
 ## Settings

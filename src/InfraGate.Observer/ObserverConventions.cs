@@ -56,6 +56,16 @@ internal static class ObserverConventions
         public const string AuditConnectionString = "INFRA_GATE_OBSERVER_AUDIT_CONNECTION_STRING";
     }
 
+    public static class LlmProviders
+    {
+        public const string Anthropic = "ANTHROPIC";
+        public const string OpenAI = "OPENAI";
+        public const string Google = "GOOGLE";
+        public const string Azure = "AZURE";
+        public const string Ollama = "OLLAMA";
+        public const string OpenRouter = "OPENROUTER";
+    }
+
     public static class HttpClients
     {
         public const string PlannerHandoff = "PlannerHandoff";

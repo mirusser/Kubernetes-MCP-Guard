@@ -21,6 +21,7 @@ public static class AnomalyObserverConventions
     public const int MinDedupeResolutionThreshold = 1;
     public const int MaxDedupeResolutionThreshold = 10;
     public const string DefaultLlmModel = "claude-sonnet-4-6";
+    public const string DefaultOpenRouterLlmModel = "deepseek/deepseek-v4-flash:free";
 
     public static string ComputeAnomalyId(AnomalyKind kind, ResourceRef target)
     {

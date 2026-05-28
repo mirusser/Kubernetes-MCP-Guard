@@ -101,6 +101,12 @@ public sealed class AnomalyObserverConventionsTests
     }
 
     [Fact]
+    public void DefaultOpenRouterLlmModel_IsPinned()
+    {
+        Assert.Equal("deepseek/deepseek-v4-flash:free", AnomalyObserverConventions.DefaultOpenRouterLlmModel);
+    }
+
+    [Fact]
     public void ComputeAnomalyId_WithResourceRef_IsDeterministic()
     {
         var target = new ResourceRef { ApiVersion = "v1", Kind = "Pod", Namespace = "default", Name = "my-pod" };

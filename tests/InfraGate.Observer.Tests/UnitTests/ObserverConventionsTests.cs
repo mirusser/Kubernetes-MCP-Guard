@@ -81,6 +81,17 @@ public sealed class ObserverConventionsTests
     }
 
     [Fact]
+    public void LlmProviders_ArePinned()
+    {
+        Assert.Equal("ANTHROPIC", ObserverConventions.LlmProviders.Anthropic);
+        Assert.Equal("OPENAI", ObserverConventions.LlmProviders.OpenAI);
+        Assert.Equal("GOOGLE", ObserverConventions.LlmProviders.Google);
+        Assert.Equal("AZURE", ObserverConventions.LlmProviders.Azure);
+        Assert.Equal("OLLAMA", ObserverConventions.LlmProviders.Ollama);
+        Assert.Equal("OPENROUTER", ObserverConventions.LlmProviders.OpenRouter);
+    }
+
+    [Fact]
     public void HttpClients_PlannerHandoff_IsPinned()
     {
         Assert.Equal("PlannerHandoff", ObserverConventions.HttpClients.PlannerHandoff);

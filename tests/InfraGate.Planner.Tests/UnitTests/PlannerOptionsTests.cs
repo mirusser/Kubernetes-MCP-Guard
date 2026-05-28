@@ -36,6 +36,33 @@ public sealed class PlannerOptionsTests
         Assert.Throws<InvalidOperationException>(() => options.Validate());
     }
 
+    [Fact]
+    public void Validate_OpenRouterProvider_MissingApiKey_Throws()
+    {
+        var options = new PlannerOptions
+        {
+            GatewayBaseUrl = "http://localhost:3001/mcp",
+            LlmProvider = PlannerConventions.LlmProviders.OpenRouter,
+            LlmApiKey = "",
+        };
+
+        Assert.Throws<InvalidOperationException>(() => options.Validate());
+    }
+
+    [Fact]
+    public void Validate_OpenRouterProvider_WithApiKey_DoesNotThrow()
+    {
+        var options = new PlannerOptions
+        {
+            GatewayBaseUrl = "http://localhost:3001/mcp",
+            LlmProvider = PlannerConventions.LlmProviders.OpenRouter,
+            LlmApiKey = "test-key",
+        };
+
+        var ex = Record.Exception(() => options.Validate());
+        Assert.Null(ex);
+    }
+
     [Theory]
     [InlineData(PlannerConventions.MinAnomalyWallClockCapSeconds - 1)]
     [InlineData(PlannerConventions.MaxAnomalyWallClockCapSeconds + 1)]
