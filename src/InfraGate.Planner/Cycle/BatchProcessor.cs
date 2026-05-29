@@ -15,6 +15,7 @@ namespace InfraGate.Planner.Cycle;
 internal sealed class BatchProcessor : BackgroundService
 {
     private static readonly JsonSerializerOptions AnomalyJsonOptions = new(JsonSerializerDefaults.Web);
+    private const string ServicePlannerSubject = "service:planner";
 
     private readonly IOptionsMonitor<PlannerOptions> optionsMonitor;
     private readonly AnomalyBatchQueue queue;
@@ -337,7 +338,7 @@ internal sealed class BatchProcessor : BackgroundService
         }
         catch (JsonException ex)
         {
-            logger.LogDebug("LLM JSON parse failed for anomaly {AnomalyId}: {Json} — {Error}", anomalyId, json, ex.Message);
+            logger.LogDebug(ex, "LLM JSON parse failed for anomaly {AnomalyId}: {Json}", anomalyId, json);
             invalidArgumentsCounter?.Add(1);
             PlannerLogEvents.LogDecisionInvalidArguments(logger, anomalyId, string.Empty);
             return null;
@@ -404,7 +405,7 @@ internal sealed class BatchProcessor : BackgroundService
                             },
                             AnomalyId: report.AnomalyId,
                             PlanId: planId,
-                            ActorSubject: "service:planner",
+                            ActorSubject: ServicePlannerSubject,
                             Outcome: "succeeded"),
                         cancellationToken).ConfigureAwait(false);
                 }
@@ -420,7 +421,7 @@ internal sealed class BatchProcessor : BackgroundService
                         EventName: PlannerAuditEvents.ProposePlanFailed,
                         Payload: new { reasonCode = "missing_plan_id" },
                         AnomalyId: report.AnomalyId,
-                        ActorSubject: "service:planner",
+                        ActorSubject: ServicePlannerSubject,
                         Outcome: "failed",
                         Reason: "missing_plan_id"),
                     cancellationToken).ConfigureAwait(false);
@@ -444,7 +445,7 @@ internal sealed class BatchProcessor : BackgroundService
                             statusCode,
                         },
                         AnomalyId: report.AnomalyId,
-                        ActorSubject: "service:planner",
+                        ActorSubject: ServicePlannerSubject,
                         Outcome: "failed",
                         Reason: ex.GetType().Name),
                     cancellationToken).ConfigureAwait(false);
@@ -459,7 +460,7 @@ internal sealed class BatchProcessor : BackgroundService
                 EventName: PlannerAuditEvents.ProposalSkipped,
                 Payload: new { reasonCode },
                 AnomalyId: anomalyId,
-                ActorSubject: "service:planner",
+                ActorSubject: ServicePlannerSubject,
                 Outcome: "skipped",
                 Reason: reasonCode),
             cancellationToken);

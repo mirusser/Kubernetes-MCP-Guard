@@ -5,8 +5,7 @@ using InfraGate.McpGateway.Notifications;
 using ModelContextProtocol.Protocol;
 
 var builder = WebApplication.CreateBuilder(args);
-{
-    builder.Configuration.AddInfraGateConfiguration(args);
+builder.Configuration.AddInfraGateConfiguration(args);
     builder.AddInfraGateServices();
 
     builder.Services
@@ -42,9 +41,9 @@ var builder = WebApplication.CreateBuilder(args);
                     await server.RunAsync(ct).ConfigureAwait(false);
                     handlerLogger.LogInformation("RunSessionHandler: server.RunAsync completed normally");
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException ex)
                 {
-                    handlerLogger.LogInformation(
+                    handlerLogger.LogInformation(ex,
                         "RunSessionHandler: session cancelled (client disconnected)"); // NOSONAR
                 }
                 catch (Exception ex)
@@ -88,19 +87,17 @@ var builder = WebApplication.CreateBuilder(args);
         .WithUnsubscribeFromResourcesHandler((request, ct) =>
             new ValueTask<EmptyResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>()
                 .Unsubscribe(request.Server.SessionId, request.Params)));
-}
 var app = builder.Build();
-{
-    await builder.Configuration.RunPostgresMigrationsAsync(app).ConfigureAwait(false);
 
-    await app.Services.GetRequiredService<PostgresApprovalSchemaValidator>()
-        .ValidateAsync(CancellationToken.None).ConfigureAwait(false);
+await builder.Configuration.RunPostgresMigrationsAsync(app).ConfigureAwait(false);
 
-    app.UseAuthentication();
-    app.UseAuthorization();
-    app.MapGatewayApprovalEndpoints();
-    app.MapMcp(McpGatewayConventions.McpPath)
-        .RequireAuthorization(GatewayAuthConventions.Schemes.PolicyName);
-}
+await app.Services.GetRequiredService<PostgresApprovalSchemaValidator>()
+    .ValidateAsync(CancellationToken.None).ConfigureAwait(false);
+
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapGatewayApprovalEndpoints();
+app.MapMcp(McpGatewayConventions.McpPath)
+    .RequireAuthorization(GatewayAuthConventions.Schemes.PolicyName);
 
 await app.RunAsync().ConfigureAwait(false);

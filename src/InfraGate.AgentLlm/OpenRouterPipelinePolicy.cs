@@ -10,7 +10,9 @@ public sealed class OpenRouterPipelinePolicy : PipelinePolicy
     private const string RefererHeaderName = "HTTP-Referer";
     private const string TitleHeaderName = "X-Title";
 
+#pragma warning disable S1075 // Hardcoded URI is required for the default Referer header.
     public const string DefaultRefererUrl = "https://github.com/mirusser/Kubernetes-MCP-Guard";
+#pragma warning restore S1075
     public const string DefaultAppTitle = "infra-gate";
 
     public static readonly OpenRouterPipelinePolicy Default = new();
@@ -44,8 +46,8 @@ public sealed class OpenRouterPipelinePolicy : PipelinePolicy
     {
         var response = message.Response;
         if (response?.ContentStream is null) return;
-        
-        // System.ClientModel buffers HTTP responses by default. 
+
+        // System.ClientModel buffers HTTP responses by default.
         response.ContentStream.Position = 0;
         using var reader = new StreamReader(response.ContentStream, leaveOpen: true);
         var content = reader.ReadToEnd();
