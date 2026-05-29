@@ -6,12 +6,21 @@ using InfraGate.Approvals.Audit;
 using InfraGate.KubernetesAdapter.Policy;
 using InfraGate.KubernetesAdapter.Evidence;
 using InfraGate.KubernetesAdapter.Approval;
+using k8s;
+using k8s.Models;
 
 namespace InfraGate.KubernetesAdapter.PlanBuilding;
 
 public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanBuilder
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    private static readonly Dictionary<string, Type> ManifestTypeMap = new(StringComparer.Ordinal)
+    {
+        ["apps/v1/Deployment"] = typeof(V1Deployment),
+        ["v1/Service"] = typeof(V1Service),
+        ["v1/ConfigMap"] = typeof(V1ConfigMap)
+    };
 
     private static readonly IReadOnlyList<FreshnessCheck> ManifestFreshnessChecks =
     [
@@ -68,22 +77,23 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
                 KubernetesAdapterConventions.ResultReasonCodes.MissingArguments);
         }
 
+        var policyResult = CheckManifestPolicy(manifest);
+        if (policyResult.IsDenied)
+        {
+            var policyMessage = $"Manifest rejected by policy:{Environment.NewLine}{policyResult.FormatRefusal()}";
+            return PlanBuildResult.Failed(
+                policyMessage,
+                DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, policyMessage),
+                KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked);
+        }
+
         var applyEvidence = await GetApplyEvidenceAsync(namespaceName, manifest, ct).ConfigureAwait(false);
         if (applyEvidence.Error is not null)
         {
             return applyEvidence.Error;
         }
 
-        if (applyEvidence.Evidence!.PolicyBlocked)
-        {
-            var message = $"Manifest rejected by policy:{Environment.NewLine}{applyEvidence.Evidence.PolicyRefusal}";
-            return PlanBuildResult.Failed(
-                message,
-                DryRunAudit(KubernetesAdapterConventions.PlanOperations.Apply, namespaceName, message),
-                KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked);
-        }
-
-        var diffs = await GetManifestDiffsAsync(namespaceName, manifest, applyEvidence.Evidence.DryRun.Objects, ct)
+        var diffs = await GetManifestDiffsAsync(namespaceName, manifest, applyEvidence.Evidence!.DryRun.Objects, ct)
             .ConfigureAwait(false);
         if (diffs.Error is not null)
         {
@@ -91,6 +101,9 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
         }
 
         var objects = diffs.Diffs!.Select(d => d.Object).ToArray();
+        var planFindings = policyResult.Findings
+            .Select(f => new KubernetesPlanPolicyFinding(f.Severity.ToString(), f.Code, f.ObjectRef, f.Message))
+            .ToArray();
         var payload = new KubernetesPlanPayload(
             namespaceName,
             $"Apply {objects.Length} supported Kubernetes object(s) in namespace '{namespaceName}'.",
@@ -103,7 +116,7 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
             Manifest = manifest,
             DryRun = applyEvidence.Evidence.DryRun,
             Diffs = diffs.Diffs!,
-            PolicyFindings = applyEvidence.Evidence.PolicyFindings
+            PolicyFindings = planFindings
         };
 
         return BuildEnvelope(
@@ -691,5 +704,20 @@ public sealed class KubernetesPlanBuilder(IToolCaller toolCaller) : IDomainPlanB
 
         value = 0;
         return false;
+    }
+
+    private static KubernetesPolicyResult CheckManifestPolicy(string manifest)
+    {
+        try
+        {
+            var objects = KubernetesYaml.LoadAllFromString(manifest, ManifestTypeMap)
+                .OfType<IKubernetesObject<V1ObjectMeta>>()
+                .ToList();
+            return KubernetesPolicyValidator.Validate(objects, KubernetesPolicyOptions.Default);
+        }
+        catch
+        {
+            return new KubernetesPolicyResult([]);
+        }
     }
 }

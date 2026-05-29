@@ -1,6 +1,4 @@
-using InfraGate.KubernetesAdapter.PlanBuilding;
-
-namespace InfraGate.KubernetesAdapter.Evidence;
+namespace InfraGate.McpServer.Models;
 
 public sealed record class KubernetesPlanDiff(
     KubernetesObjectRef Object,

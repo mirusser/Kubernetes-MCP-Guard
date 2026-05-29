@@ -1,4 +1,4 @@
-namespace InfraGate.KubernetesAdapter.PlanBuilding;
+namespace InfraGate.McpServer.Models;
 
 public sealed record class KubernetesObjectRef(
     string ApiVersion,

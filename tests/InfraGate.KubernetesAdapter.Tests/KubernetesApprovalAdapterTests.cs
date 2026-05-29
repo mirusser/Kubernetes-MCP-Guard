@@ -5,7 +5,7 @@ using InfraGate.KubernetesAdapter.Approval;
 using InfraGate.KubernetesAdapter.Evidence;
 using InfraGate.KubernetesAdapter.PlanBuilding;
 
-namespace InfraGate.McpServer.Tests.UnitTests;
+namespace InfraGate.KubernetesAdapter.Tests.UnitTests;
 
 public sealed class KubernetesApprovalAdapterTests
 {

@@ -1,4 +1,4 @@
-namespace InfraGate.KubernetesAdapter.Evidence;
+namespace InfraGate.McpServer.Models;
 
 public sealed record class KubernetesPlanDryRun(
     string Status,

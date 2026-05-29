@@ -6,7 +6,7 @@ using InfraGate.KubernetesAdapter;
 using InfraGate.KubernetesAdapter.Evidence;
 using InfraGate.KubernetesAdapter.PlanBuilding;
 
-namespace InfraGate.McpServer.Tests.UnitTests;
+namespace InfraGate.KubernetesAdapter.Tests.UnitTests;
 
 public sealed class KubernetesPlanBuilderTests
 {
@@ -96,20 +96,42 @@ public sealed class KubernetesPlanBuilderTests
     [Fact]
     public async Task BuildAsync_ApplyManifest_PolicyBlocked_ReturnsFailed()
     {
-        var dryRun = MakeDryRun("demo", "nginx");
-        var toolCaller = new FakeToolCaller()
-            .With("dry_run_apply_manifest", ApplyEvidenceBlockedJson(dryRun, "[PRIVILEGED_CONTAINER] Privileged container detected (apps/v1 Deployment demo/nginx)"));
+        var toolCaller = new FakeToolCaller();
         var builder = new KubernetesPlanBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "apply_manifest",
-            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: apps/v1" },
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = PrivilegedDeploymentManifest },
             TestRequester,
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked, result.ReasonCode);
+        Assert.DoesNotContain("dry_run_apply_manifest", toolCaller.CalledTools);
     }
+
+    private const string PrivilegedDeploymentManifest = """
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: nginx
+          namespace: demo
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: nginx
+          template:
+            metadata:
+              labels:
+                app: nginx
+            spec:
+              containers:
+              - name: app
+                image: nginx:1.27-alpine
+                securityContext:
+                  privileged: true
+        """;
 
     [Fact]
     public async Task BuildAsync_DeleteManifest_HappyPath_ReturnsPlanWithEnvelope()

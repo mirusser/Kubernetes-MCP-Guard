@@ -1,8 +1,9 @@
 using InfraGate.KubernetesAdapter;
-using InfraGate.McpServer;
 using InfraGate.KubernetesAdapter.Policy;
+using k8s;
+using k8s.Models;
 
-namespace InfraGate.McpServer.Tests.UnitTests;
+namespace InfraGate.KubernetesAdapter.Tests.UnitTests;
 
 public sealed class KubernetesPolicyValidatorTests
 {
@@ -610,8 +611,8 @@ public sealed class KubernetesPolicyValidatorTests
                                    path: /etc
                        """;
         var options = new KubernetesPolicyOptions { DenyHostPathVolumes = false };
-        var parsed = KubernetesManifestParser.ParseSupported(manifest, "demo");
-        var result = KubernetesPolicyValidator.Validate(parsed.Objects, options);
+        var objects = ParseObjects(manifest);
+        var result = KubernetesPolicyValidator.Validate(objects, options);
 
         Assert.DoesNotContain(result.Findings, f => f.Code == KubernetesAdapterConventions.PolicyCodes.DeploymentHostPath);
     }
@@ -639,17 +640,26 @@ public sealed class KubernetesPolicyValidatorTests
                                  image: nginx:latest
                        """;
         var options = new KubernetesPolicyOptions { DenyLatestImageTag = false };
-        var parsed = KubernetesManifestParser.ParseSupported(manifest, "demo");
-        var result = KubernetesPolicyValidator.Validate(parsed.Objects, options);
+        var objects = ParseObjects(manifest);
+        var result = KubernetesPolicyValidator.Validate(objects, options);
 
         Assert.DoesNotContain(result.Findings, f => f.Code == KubernetesAdapterConventions.PolicyCodes.ImageLatestTag);
     }
 
-    private static KubernetesPolicyResult Validate(string manifest)
+    private static readonly Dictionary<string, Type> YamlTypeMap = new(StringComparer.Ordinal)
     {
-        var parsed = KubernetesManifestParser.ParseSupported(manifest, "demo");
-        return KubernetesPolicyValidator.Validate(parsed.Objects, KubernetesPolicyOptions.Default);
-    }
+        ["apps/v1/Deployment"] = typeof(V1Deployment),
+        ["v1/Service"] = typeof(V1Service),
+        ["v1/ConfigMap"] = typeof(V1ConfigMap)
+    };
+
+    private static IReadOnlyList<IKubernetesObject<V1ObjectMeta>> ParseObjects(string manifest) =>
+        KubernetesYaml.LoadAllFromString(manifest, YamlTypeMap)
+            .OfType<IKubernetesObject<V1ObjectMeta>>()
+            .ToList();
+
+    private static KubernetesPolicyResult Validate(string manifest) =>
+        KubernetesPolicyValidator.Validate(ParseObjects(manifest), KubernetesPolicyOptions.Default);
 
     private const string SafeDeploymentManifest = """
                                                    apiVersion: apps/v1

@@ -155,9 +155,7 @@ public sealed class KubernetesConfigProviderTests
         bool isInClusterConfigEnabled = false) =>
         new(
             new HashSet<string>(["mcp-nginx-demo"], StringComparer.Ordinal),
-            ProductionPath("approvals"),
             runtimeMode,
-            IsApprovalRootExplicit: true,
             HasExplicitAllowedNamespaces: true,
             kubeConfig,
             isInClusterConfigEnabled,

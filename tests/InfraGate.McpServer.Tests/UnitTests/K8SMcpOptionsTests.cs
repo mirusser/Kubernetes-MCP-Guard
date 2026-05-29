@@ -7,54 +7,34 @@ namespace InfraGate.McpServer.Tests.UnitTests;
 
 public sealed class KubernetesMcpOptionsTests
 {
-    private const string DefaultApprovalRootDirectory = ".mcp-approvals";
     private const string DownstreamAuthority = "https://idp.example.com";
 
     [Fact]
     public void Constructor_UsesOptionalDefaults_WhenFlagsOmitted()
     {
         var options = new KubernetesMcpOptions(
-            new HashSet<string>(["demo"], StringComparer.Ordinal),
-            ProductionPath("approvals"));
+            new HashSet<string>(["demo"], StringComparer.Ordinal));
 
-        Assert.True(options.IsApprovalRootExplicit);
         Assert.True(options.HasExplicitAllowedNamespaces);
         Assert.False(options.HasExplicitKubeConfig);
         Assert.False(options.IsInClusterConfigEnabled);
     }
 
     [Fact]
-    public void FromEnvironment_UsesDefaultApprovalRootAndNamespace_WhenUnset()
+    public void FromEnvironment_UsesDefaultNamespace_WhenUnset()
     {
         using var environment = EnvironmentVariableScope.Set(
-            (KubernetesConventions.EnvironmentVariables.ApprovalRoot, null),
             (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null));
 
         var options = KubernetesMcpOptions.FromEnvironment();
 
-        Assert.Equal(
-            Path.Combine(Directory.GetCurrentDirectory(), DefaultApprovalRootDirectory),
-            options.ApprovalRoot);
         Assert.Equal([KubernetesMcpOptions.DefaultNamespace], options.AllowedNamespaces);
-    }
-
-    [Fact]
-    public void FromEnvironment_UsesConfiguredApprovalRoot_WhenSet()
-    {
-        using var environment = EnvironmentVariableScope.Set(
-            (KubernetesConventions.EnvironmentVariables.ApprovalRoot, "/tmp/infra-gate-approvals"),
-            (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null));
-
-        var options = KubernetesMcpOptions.FromEnvironment();
-
-        Assert.Equal("/tmp/infra-gate-approvals", options.ApprovalRoot);
     }
 
     [Fact]
     public void FromEnvironment_UsesConfiguredNamespaces_WhenSet()
     {
         using var environment = EnvironmentVariableScope.Set(
-            (KubernetesConventions.EnvironmentVariables.ApprovalRoot, null),
             (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, "alpha, beta ,,gamma"));
 
         var options = KubernetesMcpOptions.FromEnvironment();
@@ -67,7 +47,6 @@ public sealed class KubernetesMcpOptionsTests
     {
         using var environment = EnvironmentVariableScope.Set(
             (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
-            (KubernetesConventions.EnvironmentVariables.ApprovalRoot, null),
             (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null),
             (KubernetesConventions.EnvironmentVariables.KubeConfig, null),
             (KubernetesConventions.EnvironmentVariables.UseInClusterConfig, "true"));
@@ -99,8 +78,7 @@ public sealed class KubernetesMcpOptionsTests
             {
                 [RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment] =
                     RuntimeSafetyConventions.EnvironmentValues.Production,
-                [KubernetesConventions.ConfigurationKeys.ApprovalRoot] = ProductionPath("approvals"),
-                [KubernetesConventions.ConfigurationKeys.KubeConfig] = ProductionPath("kubeconfig"),
+                [KubernetesConventions.ConfigurationKeys.KubeConfig] = "/var/lib/kubeconfig",
                 [KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":0"] = "alpha",
                 [KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":1"] = "beta"
             })
@@ -109,10 +87,8 @@ public sealed class KubernetesMcpOptionsTests
         var options = KubernetesMcpOptions.FromConfiguration(configuration);
 
         Assert.Equal(RuntimeMode.Production, options.RuntimeMode);
-        Assert.Equal(ProductionPath("approvals"), options.ApprovalRoot);
-        Assert.Equal(ProductionPath("kubeconfig"), options.KubeConfig);
+        Assert.Equal("/var/lib/kubeconfig", options.KubeConfig);
         Assert.Equal(["alpha", "beta"], options.AllowedNamespaces.Order(StringComparer.Ordinal));
-        Assert.True(options.IsApprovalRootExplicit);
         Assert.True(options.HasExplicitAllowedNamespaces);
     }
 
@@ -123,7 +99,6 @@ public sealed class KubernetesMcpOptionsTests
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 [KubernetesConventions.ConfigurationKeys.KubeConfig] = "/json/kubeconfig",
-                [KubernetesConventions.ConfigurationKeys.ApprovalRoot] = "/data/approvals",
                 [KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":0"] = "alpha",
                 [KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":1"] = "beta"
             })
@@ -132,7 +107,6 @@ public sealed class KubernetesMcpOptionsTests
         var options = KubernetesMcpOptions.FromConfiguration(configuration);
 
         Assert.Equal("/json/kubeconfig", options.KubeConfig);
-        Assert.Equal("/data/approvals", options.ApprovalRoot);
         Assert.Equal(["alpha", "beta"], options.AllowedNamespaces.Order(StringComparer.Ordinal));
     }
 
@@ -195,7 +169,6 @@ public sealed class KubernetesMcpOptionsTests
     {
         using var environment = EnvironmentVariableScope.Set(
             (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
-            (KubernetesConventions.EnvironmentVariables.ApprovalRoot, null),
             (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null),
             (KubernetesConventions.EnvironmentVariables.KubeConfig, null),
             (KubernetesConventions.EnvironmentVariables.UseInClusterConfig, null));
@@ -235,7 +208,6 @@ public sealed class KubernetesMcpOptionsTests
         using var environment = EnvironmentVariableScope.Set(
             (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"),
-            (KubernetesConventions.EnvironmentVariables.ApprovalRoot, null),
             (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null),
             (KubernetesConventions.EnvironmentVariables.KubeConfig, null),
             (KubernetesConventions.EnvironmentVariables.UseInClusterConfig, null));
@@ -273,13 +245,16 @@ public sealed class KubernetesMcpOptionsTests
 
     private static EnvironmentVariableScope SetProductionEnvironment(params (string Name, string? Value)[] overrides)
     {
+        string kubeConfig = Path.Combine(
+            Path.GetPathRoot(Directory.GetCurrentDirectory()) ?? Path.DirectorySeparatorChar.ToString(),
+            "var", "lib", "infra-gate-tests", "kubeconfig");
+
         var variables = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             [RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment] =
                 RuntimeSafetyConventions.EnvironmentValues.Production,
-            [KubernetesConventions.EnvironmentVariables.ApprovalRoot] = ProductionPath("approvals"),
             [KubernetesConventions.EnvironmentVariables.AllowedNamespaces] = "mcp-nginx-demo",
-            [KubernetesConventions.EnvironmentVariables.KubeConfig] = ProductionPath("kubeconfig"),
+            [KubernetesConventions.EnvironmentVariables.KubeConfig] = kubeConfig,
             [KubernetesConventions.EnvironmentVariables.UseInClusterConfig] = null,
             [DownstreamAuthConventions.EnvironmentVariables.Required] = "true",
             [DownstreamAuthConventions.EnvironmentVariables.Authority] = DownstreamAuthority
@@ -291,13 +266,6 @@ public sealed class KubernetesMcpOptionsTests
         }
 
         return EnvironmentVariableScope.Set(variables.Select(item => (item.Key, item.Value)).ToArray());
-    }
-
-    private static string ProductionPath(string fileName)
-    {
-        string root = Path.GetPathRoot(Directory.GetCurrentDirectory()) ?? Path.DirectorySeparatorChar.ToString();
-
-        return Path.Combine(root, "var", "lib", "infra-gate-tests", fileName);
     }
 
     private sealed class EnvironmentVariableScope : IDisposable

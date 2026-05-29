@@ -10,7 +10,7 @@ using InfraGate.KubernetesAdapter.Evidence;
 using InfraGate.KubernetesAdapter.Execution;
 using InfraGate.KubernetesAdapter.PlanBuilding;
 
-namespace InfraGate.McpServer.Tests.UnitTests;
+namespace InfraGate.KubernetesAdapter.Tests.UnitTests;
 
 public sealed class KubernetesPlanExecutorTests
 {

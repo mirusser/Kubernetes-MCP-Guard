@@ -1,8 +1,4 @@
-using InfraGate.Approvals;
-using InfraGate.Approvals.Plan;
-using InfraGate.KubernetesAdapter;
-using InfraGate.KubernetesAdapter.PlanBuilding;
-using InfraGate.KubernetesAdapter.Policy;
+using InfraGate.McpServer.Models;
 using k8s;
 using k8s.Models;
 using Microsoft.Extensions.Logging;
@@ -43,10 +39,10 @@ public sealed class KubernetesExecutionService
             return ex.Message;
         }
 
-        var policyResult = KubernetesPolicyValidator.Validate(parsed.Objects, KubernetesPolicyOptions.Default);
-        if (policyResult.IsDenied)
+        var policyRefusal = CheckDenyPolicy(parsed.Objects);
+        if (policyRefusal is not null)
         {
-            return $"Apply refused by policy:{Environment.NewLine}{policyResult.FormatRefusal()}";
+            return policyRefusal;
         }
 
         var messages = new List<string>();
@@ -63,7 +59,7 @@ public sealed class KubernetesExecutionService
                 return KubernetesManagerHelpers.FormatServerSideApplyException("Apply failed", ex);
             }
 
-            messages.Add($"Applied {obj.ApiVersion} {obj.Kind} {obj.Metadata.NamespaceProperty}/{obj.Metadata.Name}");
+            messages.Add($"{KubernetesConventions.ExecutionMessages.ApplySuccess} {obj.ApiVersion} {obj.Kind} {obj.Metadata.NamespaceProperty}/{obj.Metadata.Name}");
         }
 
         return string.Join(Environment.NewLine, messages);
@@ -140,7 +136,7 @@ public sealed class KubernetesExecutionService
             return validation;
         }
 
-        var restartedAtUtc = DateTimeOffset.UtcNow.ToString(ApprovalConventions.DateTimeFormats.RoundTrip);
+        var restartedAtUtc = DateTimeOffset.UtcNow.ToString(KubernetesConventions.DateTimeFormats.RoundTrip);
 
         try
         {
@@ -361,4 +357,73 @@ public sealed class KubernetesExecutionService
                 }
             }
         }, V1Patch.PatchType.StrategicMergePatch);
+
+    private static string? CheckDenyPolicy(IReadOnlyList<IKubernetesObject<V1ObjectMeta>> objects)
+    {
+        var denials = new List<string>();
+
+        foreach (var obj in objects)
+        {
+            if (obj is V1Deployment deployment)
+            {
+                CheckDeploymentDenyRules(deployment, denials);
+            }
+            else if (obj is V1Service service)
+            {
+                CheckServiceDenyRules(service, denials);
+            }
+        }
+
+        return denials.Count > 0
+            ? $"{KubernetesConventions.ExecutionMessages.PolicyRefusal}{Environment.NewLine}{string.Join(Environment.NewLine, denials)}"
+            : null;
+    }
+
+    private static void CheckDeploymentDenyRules(V1Deployment deployment, List<string> denials)
+    {
+        var podSpec = deployment.Spec?.Template?.Spec;
+        if (podSpec is null) return;
+
+        var objRef = $"apps/v1 Deployment {deployment.Metadata.NamespaceProperty}/{deployment.Metadata.Name}";
+
+        if (podSpec.HostNetwork == true)
+            denials.Add($"  [{KubernetesConventions.PolicyCodes.DeploymentHostNamespace}] hostNetwork is not allowed. ({objRef})");
+        if (podSpec.HostPID == true)
+            denials.Add($"  [{KubernetesConventions.PolicyCodes.DeploymentHostNamespace}] hostPID is not allowed. ({objRef})");
+        if (podSpec.HostIPC == true)
+            denials.Add($"  [{KubernetesConventions.PolicyCodes.DeploymentHostNamespace}] hostIPC is not allowed. ({objRef})");
+
+        foreach (var volume in (podSpec.Volumes ?? []).Where(v => v.HostPath is not null))
+            denials.Add($"  [{KubernetesConventions.PolicyCodes.DeploymentHostPath}] Volume '{volume.Name}' uses hostPath, which is not allowed. ({objRef})");
+
+        var allContainers = (podSpec.Containers ?? []).Concat(podSpec.InitContainers ?? []);
+        foreach (var container in allContainers)
+        {
+            if (container.SecurityContext?.Privileged == true)
+                denials.Add($"  [{KubernetesConventions.PolicyCodes.DeploymentPrivilegedContainer}] Container '{container.Name}' is privileged, which is not allowed. ({objRef})");
+
+            var caps = container.SecurityContext?.Capabilities?.Add;
+            if (caps?.Count > 0)
+                denials.Add($"  [{KubernetesConventions.PolicyCodes.DeploymentAddedCapabilities}] Container '{container.Name}' adds Linux capabilities [{string.Join(", ", caps)}], which is not allowed. ({objRef})");
+
+            if (IsLatestOrImplicitImageTag(container.Image))
+                denials.Add($"  [{KubernetesConventions.PolicyCodes.ImageLatestTag}] Container '{container.Name}' uses image '{container.Image}' which resolves to latest. Pin to a specific tag. ({objRef})");
+        }
+    }
+
+    private static void CheckServiceDenyRules(V1Service service, List<string> denials)
+    {
+        var type = service.Spec?.Type;
+        var objRef = $"v1 Service {service.Metadata.NamespaceProperty}/{service.Metadata.Name}";
+
+        if (string.Equals(type, "LoadBalancer", StringComparison.Ordinal))
+            denials.Add($"  [{KubernetesConventions.PolicyCodes.ServiceLoadBalancer}] Service type LoadBalancer is not allowed. ({objRef})");
+        if (string.Equals(type, "NodePort", StringComparison.Ordinal))
+            denials.Add($"  [{KubernetesConventions.PolicyCodes.ServiceNodePort}] Service type NodePort is not allowed. ({objRef})");
+    }
+
+    private static bool IsLatestOrImplicitImageTag(string? image) =>
+        string.IsNullOrEmpty(image) ||
+        !image.Contains(':', StringComparison.Ordinal) ||
+        image.EndsWith(":latest", StringComparison.Ordinal);
 }

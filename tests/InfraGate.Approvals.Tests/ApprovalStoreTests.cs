@@ -4,14 +4,11 @@ using InfraGate.Approvals.Plan;
 using InfraGate.Approvals.Execution;
 using InfraGate.Approvals.Audit;
 using InfraGate.Approvals.AuditPayloads;
-using InfraGate.McpServer;
-
-
-namespace InfraGate.McpServer.Tests.UnitTests;
+namespace InfraGate.Approvals.Tests.UnitTests;
 
 public sealed class ApprovalStoreTests
 {
-    private const string TargetNamespace = KubernetesMcpOptions.DefaultNamespace;
+    private const string TargetNamespace = "mcp-nginx-demo";
 
     [Fact]
     public void NewPlanId_ReturnsOpaquePlanIdentifier()

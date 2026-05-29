@@ -1,7 +1,7 @@
 using InfraGate.Approvals;
 using InfraGate.Approvals.Plan;
 
-namespace InfraGate.McpServer.Tests.UnitTests;
+namespace InfraGate.Approvals.Tests.UnitTests;
 
 public sealed class ApprovalConventionsTests
 {

@@ -1,11 +1,7 @@
 using System.Net;
-using InfraGate.Approvals;
-using InfraGate.Approvals.Plan;
-using InfraGate.KubernetesAdapter;
-using InfraGate.KubernetesAdapter.Evidence;
-using InfraGate.KubernetesAdapter.PlanBuilding;
 using InfraGate.McpServer;
 using InfraGate.McpServer.Diff;
+using InfraGate.McpServer.Models;
 using k8s;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
@@ -23,7 +19,7 @@ public sealed class KubernetesDiffServiceTests
     {
         var diff = KubernetesDiffService.BuildDiff(DeploymentRef, liveJson: null, DeploymentJson("nginx:1.27-alpine"));
 
-        Assert.Equal(ApprovalConventions.DiffChangeTypes.Create, diff.ChangeType);
+        Assert.Equal(KubernetesConventions.DiffChangeTypes.Create, diff.ChangeType);
         Assert.Contains("will be created", diff.Summary);
         Assert.Contains("/spec/template/spec/containers/0/image", diff.AddedPaths);
         Assert.Contains("+apiVersion: apps/v1", diff.UnifiedDiff);
@@ -37,7 +33,7 @@ public sealed class KubernetesDiffServiceTests
             DeploymentJson("nginx:1.27-alpine", resourceVersion: "1", readyReplicas: 1),
             DeploymentJson("nginx:1.28-alpine", resourceVersion: "2", readyReplicas: 0));
 
-        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Equal(KubernetesConventions.DiffChangeTypes.Update, diff.ChangeType);
         Assert.Contains("/spec/template/spec/containers/0/image", diff.ChangedPaths);
         Assert.DoesNotContain("/metadata/resourceVersion", diff.ChangedPaths);
         Assert.DoesNotContain("/status/readyReplicas", diff.ChangedPaths);
@@ -52,7 +48,7 @@ public sealed class KubernetesDiffServiceTests
     {
         var diff = KubernetesDiffService.BuildDiff(DeploymentRef, DeploymentJson("nginx:1.27-alpine"), proposedJson: null);
 
-        Assert.Equal(ApprovalConventions.DiffChangeTypes.Delete, diff.ChangeType);
+        Assert.Equal(KubernetesConventions.DiffChangeTypes.Delete, diff.ChangeType);
         Assert.Contains("will be deleted", diff.Summary);
         Assert.Contains("/spec/template/spec/containers/0/image", diff.RemovedPaths);
         Assert.Contains("-apiVersion: apps/v1", diff.UnifiedDiff);
@@ -66,7 +62,7 @@ public sealed class KubernetesDiffServiceTests
             DeploymentJson("nginx:1.27-alpine", resourceVersion: "1", readyReplicas: 1),
             DeploymentJson("nginx:1.27-alpine", resourceVersion: "2", readyReplicas: 0));
 
-        Assert.Equal(ApprovalConventions.DiffChangeTypes.NoOp, diff.ChangeType);
+        Assert.Equal(KubernetesConventions.DiffChangeTypes.NoOp, diff.ChangeType);
         Assert.Empty(diff.AddedPaths);
         Assert.Empty(diff.RemovedPaths);
         Assert.Empty(diff.ChangedPaths);
@@ -81,7 +77,7 @@ public sealed class KubernetesDiffServiceTests
             ConfigMapJson("world", resourceVersion: "1"),
             ConfigMapJson("universe", resourceVersion: "2"));
 
-        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Equal(KubernetesConventions.DiffChangeTypes.Update, diff.ChangeType);
         Assert.Contains("/data/hello", diff.ChangedPaths);
         Assert.DoesNotContain("managedFields", diff.UnifiedDiff);
         Assert.DoesNotContain("resourceVersion", diff.UnifiedDiff);
@@ -95,7 +91,7 @@ public sealed class KubernetesDiffServiceTests
             """{"data":{"hello":"world"}}""",
             """{"data":{"hello":"world","new-key":"new-value"}}""");
 
-        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Equal(KubernetesConventions.DiffChangeTypes.Update, diff.ChangeType);
         Assert.Contains("/data/new-key", diff.AddedPaths);
         Assert.Empty(diff.RemovedPaths);
     }
@@ -108,7 +104,7 @@ public sealed class KubernetesDiffServiceTests
             """{"data":{"hello":"world","old-key":"old-value"}}""",
             """{"data":{"hello":"world"}}""");
 
-        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Equal(KubernetesConventions.DiffChangeTypes.Update, diff.ChangeType);
         Assert.Contains("/data/old-key", diff.RemovedPaths);
         Assert.Empty(diff.AddedPaths);
     }
@@ -121,7 +117,7 @@ public sealed class KubernetesDiffServiceTests
             """{"spec":{"containers":[{"name":"app","image":"nginx:1.27"}]}}""",
             """{"spec":{"containers":[{"name":"app","image":"nginx:1.27"},{"name":"sidecar","image":"busybox:1.36"}]}}""");
 
-        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Equal(KubernetesConventions.DiffChangeTypes.Update, diff.ChangeType);
         Assert.Contains("/spec/containers/1/image", diff.AddedPaths);
         Assert.Contains("/spec/containers/1/name", diff.AddedPaths);
     }
@@ -134,7 +130,7 @@ public sealed class KubernetesDiffServiceTests
             """{"spec":{"containers":[{"name":"app","image":"nginx:1.27"},{"name":"sidecar","image":"busybox:1.36"}]}}""",
             """{"spec":{"containers":[{"name":"app","image":"nginx:1.27"}]}}""");
 
-        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Equal(KubernetesConventions.DiffChangeTypes.Update, diff.ChangeType);
         Assert.Contains("/spec/containers/1/image", diff.RemovedPaths);
         Assert.Contains("/spec/containers/1/name", diff.RemovedPaths);
     }
@@ -144,7 +140,7 @@ public sealed class KubernetesDiffServiceTests
     {
         var diff = KubernetesDiffService.BuildDiff(DeploymentRef, liveJson: null, proposedJson: null);
 
-        Assert.Equal(ApprovalConventions.DiffChangeTypes.NoOp, diff.ChangeType);
+        Assert.Equal(KubernetesConventions.DiffChangeTypes.NoOp, diff.ChangeType);
         Assert.Equal("No diff.", diff.UnifiedDiff);
     }
 
@@ -160,7 +156,7 @@ public sealed class KubernetesDiffServiceTests
         });
         var diff = new KubernetesPlanDiff(
             DeploymentRef,
-            ApprovalConventions.DiffChangeTypes.Update,
+            KubernetesConventions.DiffChangeTypes.Update,
             "apps/v1 Deployment demo/demo will be updated.",
             "--- live\n+++ proposed\n...",
             """{"spec":{"replicas":1}}""",
@@ -171,7 +167,7 @@ public sealed class KubernetesDiffServiceTests
 
         var drift = await KubernetesDiffService.FindDriftAsync(
             client,
-            KubernetesAdapterConventions.PlanOperations.Apply,
+            KubernetesConventions.MutationOperations.Apply,
             [diff],
             CancellationToken.None);
 
@@ -190,7 +186,7 @@ public sealed class KubernetesDiffServiceTests
         });
         var diff = new KubernetesPlanDiff(
             DeploymentRef,
-            ApprovalConventions.DiffChangeTypes.Update,
+            KubernetesConventions.DiffChangeTypes.Update,
             "apps/v1 Deployment demo/demo will be updated.",
             "--- live\n+++ proposed\n...",
             LiveObjectJson: null,
@@ -201,7 +197,7 @@ public sealed class KubernetesDiffServiceTests
 
         var drift = await KubernetesDiffService.FindDriftAsync(
             client,
-            KubernetesAdapterConventions.PlanOperations.Apply,
+            KubernetesConventions.MutationOperations.Apply,
             [diff],
             CancellationToken.None);
 
@@ -228,13 +224,13 @@ public sealed class KubernetesDiffServiceTests
 
         var diffs = await KubernetesDiffService.BuildDiffsAsync(
             client,
-            KubernetesAdapterConventions.PlanOperations.Scale,
+            KubernetesConventions.MutationOperations.Scale,
             objects,
             dryRunObjects,
             CancellationToken.None);
 
         var diff = Assert.Single(diffs);
-        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Equal(KubernetesConventions.DiffChangeTypes.Update, diff.ChangeType);
         Assert.Contains("demo/demo", diff.Summary);
         Assert.Contains("scale", api.LastRequest!.Path, StringComparison.Ordinal);
     }
@@ -285,13 +281,13 @@ public sealed class KubernetesDiffServiceTests
 
         var diffs = await KubernetesDiffService.BuildDiffsAsync(
             client,
-            KubernetesAdapterConventions.PlanOperations.Apply,
+            KubernetesConventions.MutationOperations.Apply,
             objects,
             dryRunObjects,
             CancellationToken.None);
 
         var diff = Assert.Single(diffs);
-        Assert.Equal(ApprovalConventions.DiffChangeTypes.Update, diff.ChangeType);
+        Assert.Equal(KubernetesConventions.DiffChangeTypes.Update, diff.ChangeType);
         Assert.Contains("/spec/template/spec/containers/0/image", diff.ChangedPaths);
     }
 

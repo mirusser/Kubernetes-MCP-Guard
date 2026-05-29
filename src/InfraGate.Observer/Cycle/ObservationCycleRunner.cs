@@ -459,7 +459,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         var jsonStart = text.IndexOf('{', StringComparison.Ordinal);
         if (jsonStart < 0) return null;
 
-        var jsonEnd = text.LastIndexOf('}', StringComparison.Ordinal);
+        var jsonEnd = text.LastIndexOf('}');
         if (jsonEnd < 0 || jsonEnd <= jsonStart) return null;
 
         var json = text[jsonStart..(jsonEnd + 1)];

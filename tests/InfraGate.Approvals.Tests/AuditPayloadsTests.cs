@@ -5,7 +5,7 @@ using InfraGate.Approvals.Plan;
 using InfraGate.Approvals.AuditPayloads;
 using Xunit;
 
-namespace InfraGate.McpServer.Tests.UnitTests;
+namespace InfraGate.Approvals.Tests.UnitTests;
 
 public sealed class AuditPayloadsTests
 {

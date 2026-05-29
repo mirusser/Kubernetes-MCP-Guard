@@ -1,5 +1,3 @@
-using InfraGate.Approvals;
-using InfraGate.Approvals.Plan;
 using InfraGate.DownstreamAuth;
 using InfraGate.RuntimeSafety;
 using Microsoft.Extensions.Configuration;
@@ -8,9 +6,7 @@ namespace InfraGate.McpServer;
 
 public sealed record class KubernetesMcpOptions(
     IReadOnlySet<string> AllowedNamespaces,
-    string ApprovalRoot,
     RuntimeMode RuntimeMode = RuntimeMode.Development,
-    bool IsApprovalRootExplicit = true,
     bool HasExplicitAllowedNamespaces = true,
     string? KubeConfig = null,
     bool IsInClusterConfigEnabled = false,
@@ -18,8 +14,6 @@ public sealed record class KubernetesMcpOptions(
     DownstreamAuthOptions? DownstreamAuth = null)
 {
     public const string DefaultNamespace = KubernetesConventions.DefaultNamespace;
-    private static readonly IReadOnlySet<string> DeniedApprovalRootNames =
-        new HashSet<string>([ApprovalConventions.Storage.DefaultRootDirectory], StringComparer.Ordinal);
 
     public bool HasExplicitKubeConfig => !string.IsNullOrWhiteSpace(KubeConfig);
 
@@ -30,11 +24,6 @@ public sealed record class KubernetesMcpOptions(
     {
         RuntimeMode runtimeMode = RuntimeModeResolver.FromEnvironment();
         var downstreamAuth = DownstreamAuthOptions.FromEnvironment();
-        string? approvalRootValue = Environment.GetEnvironmentVariable(KubernetesConventions.EnvironmentVariables.ApprovalRoot);
-        bool isApprovalRootExplicit = !string.IsNullOrWhiteSpace(approvalRootValue);
-        string approvalRoot = string.IsNullOrWhiteSpace(approvalRootValue)
-            ? Path.Combine(Directory.GetCurrentDirectory(), ApprovalConventions.Storage.DefaultRootDirectory)
-            : approvalRootValue;
 
         string? allowedNamespacesValue =
             Environment.GetEnvironmentVariable(KubernetesConventions.EnvironmentVariables.AllowedNamespaces);
@@ -48,9 +37,7 @@ public sealed record class KubernetesMcpOptions(
 
         return new KubernetesMcpOptions(
             allowedNamespaces,
-            approvalRoot,
             runtimeMode,
-            isApprovalRootExplicit,
             hasExplicitAllowedNamespaces,
             kubeConfig,
             isInClusterConfigEnabled,
@@ -72,12 +59,6 @@ public sealed record class KubernetesMcpOptions(
             .GetSection("InfraGate:Kubernetes")
             .Get<InfraGateKubernetesSettings>();
 
-        string? approvalRootValue = configuration[KubernetesConventions.ConfigurationKeys.ApprovalRoot];
-        bool isApprovalRootExplicit = !string.IsNullOrWhiteSpace(approvalRootValue);
-        string approvalRoot = string.IsNullOrWhiteSpace(approvalRootValue)
-            ? Path.Combine(Directory.GetCurrentDirectory(), ApprovalConventions.Storage.DefaultRootDirectory)
-            : approvalRootValue;
-
         string? allowedNamespacesValue = configuration[KubernetesConventions.EnvironmentVariables.AllowedNamespaces];
         bool hasExplicitAllowedNamespaces = !string.IsNullOrWhiteSpace(allowedNamespacesValue) ||
             (k8sSettings?.AllowedNamespaces is { Count: > 0 }) ||
@@ -89,9 +70,7 @@ public sealed record class KubernetesMcpOptions(
 
         return new KubernetesMcpOptions(
             allowedNamespaces,
-            approvalRoot,
             runtimeMode,
-            isApprovalRootExplicit,
             hasExplicitAllowedNamespaces,
             kubeConfig,
             isInClusterConfigEnabled,
@@ -136,12 +115,6 @@ public sealed record class KubernetesMcpOptions(
             throw new InvalidOperationException(
                 $"{KubernetesConventions.EnvironmentVariables.AllowedNamespaces} must be explicitly configured in Production mode.");
         }
-
-        ProductionSafetyValidator.RequirePersistentDirectory(
-            ApprovalRoot,
-            KubernetesConventions.EnvironmentVariables.ApprovalRoot,
-            IsApprovalRootExplicit,
-            DeniedApprovalRootNames);
     }
 
     public static IReadOnlySet<string> ParseAllowedNamespaces(string? value)
@@ -190,5 +163,4 @@ public sealed record class KubernetesMcpOptions(
 
         return ParseAllowedNamespaces(configuration[KubernetesConventions.ConfigurationKeys.AllowedNamespaces]);
     }
-
 }
