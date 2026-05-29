@@ -152,18 +152,23 @@ internal sealed class AnomalyParseExecutor(
         {
             var c = text[i];
 
-            if (escape) { escape = false; continue; }
-            if (c == '\\' && inString) { escape = true; continue; }
-            if (c == '"') { inString = !inString; continue; }
-            if (inString) continue;
+            if (HandleStringState(c, ref inString, ref escape)) continue;
 
-            if (c == '[' || c == '{') depth++;
-            else if (c == ']' || c == '}') depth--;
+            if (c is '[' or '{') depth++;
+            else if (c is ']' or '}') depth--;
 
             if (depth == 0) return text[startIndex..(i + 1)];
         }
 
         return null;
+    }
+
+    private static bool HandleStringState(char c, ref bool inString, ref bool escape)
+    {
+        if (escape) { escape = false; return true; }
+        if (c == '\\' && inString) { escape = true; return true; }
+        if (c == '"') { inString = !inString; return true; }
+        return inString;
     }
 
     private static AnomalyKind ParseAnomalyKind(string? value) => value switch

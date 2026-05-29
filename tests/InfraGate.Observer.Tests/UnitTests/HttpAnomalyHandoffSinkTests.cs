@@ -169,7 +169,8 @@ public sealed class HttpAnomalyHandoffSinkTests
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.Accepted));
         var sink = CreateSink(handler, auditOutbox: null);
 
-        await sink.PublishAsync(BatchWithReport(), CancellationToken.None);
+        var ex = await Record.ExceptionAsync(() => sink.PublishAsync(BatchWithReport(), CancellationToken.None));
+        Assert.Null(ex);
     }
 
     [Fact]
@@ -178,7 +179,8 @@ public sealed class HttpAnomalyHandoffSinkTests
         var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
         var sink = CreateSink(handler, auditOutbox: null);
 
-        await sink.PublishAsync(BatchWithReport(), CancellationToken.None);
+        var ex = await Record.ExceptionAsync(() => sink.PublishAsync(BatchWithReport(), CancellationToken.None));
+        Assert.Null(ex);
     }
 
     private static CounterProbe ListenForCounter(Meter meter, string name) => new(meter, name);

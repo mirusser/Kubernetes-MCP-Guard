@@ -184,7 +184,7 @@ public sealed class WorkflowExecutorTests
         var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
         var decision = new RemediationDecision("restart_deployment", new Dictionary<string, object?>(), null);
         var decisionCtx = new DecisionContext(report, decision);
-        
+
         var mcpClient = new FakePlannerMcpClient { Response = """{"planId":"plan-123"}""" };
         var auditOutbox = new FakePlannerAuditOutbox();
         var context = new FakeWorkflowContext();

@@ -21,7 +21,7 @@ public sealed class PlannerPostgresFixture : IAsyncLifetime
         await container.StartAsync();
 
         DataSource = NpgsqlDataSource.Create(container.GetConnectionString());
-        
+
         var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Migrations");
         if (!Directory.Exists(fixturesDir))
         {

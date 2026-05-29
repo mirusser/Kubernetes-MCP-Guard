@@ -32,7 +32,7 @@ public sealed class RateLimitRetryingChatClient(
         }
 
         var totalDelay = TimeSpan.Zero;
-        for (var attempt = 0; ; attempt++)
+        for (var attempt = 0; attempt <= retryDelays.Length; attempt++)
         {
             try
             {
@@ -61,6 +61,8 @@ public sealed class RateLimitRetryingChatClient(
                 await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
             }
         }
+
+        throw new InvalidOperationException("Unreachable");
     }
 
     private static void LogRaw(ILogger logger, string text) =>

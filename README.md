@@ -1,14 +1,14 @@
 # 🛡️ Kubernetes MCP Guard
 
-**A reference implementation for safe AI-driven Kubernetes remediation.**  
+**Human-approved, AI-driven Kubernetes remediation through a guarded MCP gateway.**
 
-> **Safe remediation, by design:**  
->  
+> **Remediation, by design:**
+>
 > Observer detects anomalies.  
 > Planner proposes an evidence-backed plan.  
 > Human reviewer approves out-of-band.  
 > Executor runs only the approved digest-bound plan.  
-> Everything is auditable.
+> Everything is auditable.  
 
 </br>
 
