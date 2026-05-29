@@ -101,13 +101,14 @@ builder.Services.AddSingleton<IChatClient>(sp =>
     return factory.Create();
 });
 builder.Services.AddSingleton<IAnomalyDedupeStore, AnomalyDedupeStore>();
+builder.Services.AddSingleton<ToolCallingAgentFactory>();
 builder.Services.AddSingleton<IObservationCycleRunner>(sp =>
 {
     return new ObservationCycleRunner(
         sp.GetRequiredService<IOptionsMonitor<ObserverOptions>>(),
         sp.GetRequiredService<ISnapshotFetcher>(),
         sp.GetRequiredService<ISystemPromptProvider>(),
-        sp.GetRequiredService<IChatClient>(),
+        sp.GetRequiredService<ToolCallingAgentFactory>(),
         sp.GetRequiredService<ISeverityClassifier>(),
         sp.GetRequiredService<IObserverMcpClient>(),
         sp.GetRequiredService<IAnomalyDedupeStore>(),

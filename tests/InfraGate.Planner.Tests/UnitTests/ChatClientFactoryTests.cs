@@ -11,7 +11,7 @@ public sealed class ChatClientFactoryTests
     [InlineData("anthropic")]
     [InlineData("Anthropic")]
     [InlineData("ANTHROPIC")]
-    public void Create_AnthropicProvider_ReturnsAnthropicChatClient(string provider)
+    public void Create_AnthropicProvider_ThrowsInvalidOperationException(string provider)
     {
         var options = Substitute.For<IOptions<PlannerOptions>>();
         options.Value.Returns(new PlannerOptions
@@ -22,14 +22,15 @@ public sealed class ChatClientFactoryTests
         });
 
         var factory = new ChatClientFactory(options);
-        var client = factory.Create();
 
-        Assert.IsType<AnthropicChatClient>(client);
+        var ex = Assert.Throws<InvalidOperationException>(() => factory.Create());
+        Assert.Contains("OpenRouter", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Create_MissingApiKey_ThrowsInvalidOperationException()
+    public void Create_AnthropicProvider_MissingApiKey_StillThrowsGuardException()
     {
+        // The Anthropic guard fires before the API key check.
         var options = Substitute.For<IOptions<PlannerOptions>>();
         options.Value.Returns(new PlannerOptions
         {
@@ -40,7 +41,8 @@ public sealed class ChatClientFactoryTests
 
         var factory = new ChatClientFactory(options);
 
-        Assert.Throws<InvalidOperationException>(() => factory.Create());
+        var ex = Assert.Throws<InvalidOperationException>(() => factory.Create());
+        Assert.Contains("OpenRouter", ex.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -64,8 +66,9 @@ public sealed class ChatClientFactoryTests
     }
 
     [Fact]
-    public void Create_WhitespaceProvider_ReturnsAnthropicChatClient()
+    public void Create_WhitespaceProvider_ThrowsInvalidOperationException()
     {
+        // Whitespace resolves to Anthropic, which is now guarded.
         var options = Substitute.For<IOptions<PlannerOptions>>();
         options.Value.Returns(new PlannerOptions
         {
@@ -75,9 +78,9 @@ public sealed class ChatClientFactoryTests
         });
 
         var factory = new ChatClientFactory(options);
-        var client = factory.Create();
 
-        Assert.IsType<AnthropicChatClient>(client);
+        var ex = Assert.Throws<InvalidOperationException>(() => factory.Create());
+        Assert.Contains("OpenRouter", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

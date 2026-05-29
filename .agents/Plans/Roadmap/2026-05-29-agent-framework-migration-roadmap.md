@@ -5,12 +5,14 @@
 
 Based on the `loose-roadmap.md` and the current state of `k8s-toolkit`, this document prioritizes the features to tackle first to modernize the AI agents. Currently, `Observer` and `Planner` are implemented using raw `Microsoft.Extensions.AI` (`IChatClient`) inside custom ASP.NET background services. This roadmap outlines the steps to replace this manual orchestration with structured, enterprise-grade abstractions.
 
-## 1. Migrating to Managed Agent Workflows
+## 1. Migrating to Managed Agent Workflows ✅ Done (2026-05-29)
 *Maps to roadmap item: "Designing, building, and configuring AI agents, including defining roles, guardrails, prompt libraries, memory boundaries, workflows, and validation steps."*
 
 * **Refactor the `Observer`'s `ObservationCycleLoop`:** Replace the manual LLM calling loop and strict `(max 8)` tool-call cap with an `Agent` abstraction from the framework. Define an explicit agent graph where the `Observer` agent natively handles its own tool iteration.
 * **Refactor the `Planner`'s `BatchProcessor`:** Use the framework's sequential workflow capabilities to manage the lifecycle of receiving a batch of anomalies, analyzing them, and emitting `propose_plan` decisions. 
 * **Standardize Memory Boundaries:** The framework provides native chat history management. Offload the manual tracking of context windows and snapshot inclusions to the framework's managed state and chat history objects.
+
+**Delivered:** Both `ObservationCycleRunner` and `BatchProcessor` use `WorkflowBuilder`-based graphs. `ToolCallingAgentFactory` is the shared agent construction seam (wired + registered in both `Program.cs` files). The Planner workflow splits into five focused executors (`FilterExecutor`, `DedupeGateExecutor`, `DecideExecutor`, `ValidateExecutor`, `ProposeExecutor`). Provider guard added to both `ChatClientFactory` implementations (Anthropic blocked; use OpenRouter). Focused executor tests and updated READMEs included.
 
 ## 2. Standardizing the Prompt Libraries
 *Maps to roadmap item: "Developing and maintaining structured prompt libraries for AI agents supporting tasks across the SDLC."*

@@ -17,9 +17,13 @@ internal sealed class ChatClientFactory(IOptions<ObserverOptions> options, Meter
     {
         var provider = ParseProvider(options.Value.LlmProvider);
 
+        if (provider == LlmProvider.Anthropic)
+            throw new InvalidOperationException(
+                "LlmProvider.Anthropic does not support native function calling. " +
+                $"Configure {ObserverConventions.EnvironmentVariables.LlmProvider}=OpenRouter.");
+
         return provider switch
         {
-            LlmProvider.Anthropic => CreateAnthropicClient(),
             LlmProvider.OpenRouter => CreateOpenRouterClient(),
             _ => throw new NotSupportedException($"LLM provider '{provider}' is not yet implemented."),
         };

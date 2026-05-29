@@ -1,3 +1,4 @@
+using Microsoft.Extensions.AI;
 using ModelContextProtocol.Client;
 
 namespace InfraGate.Planner.Mcp;
@@ -80,6 +81,20 @@ internal sealed class PlannerMcpClient : IPlannerMcpClient, IAsyncDisposable
             .ConfigureAwait(false);
 
         return JsonSerializer.Serialize(result);
+    }
+
+    public async Task<IReadOnlyList<AITool>> GetReadOnlyToolsAsync(CancellationToken cancellationToken)
+    {
+        if (mcpClient is null)
+        {
+            throw new InvalidOperationException("MCP client is not connected. Call ConnectAsync first.");
+        }
+
+        var allTools = await mcpClient.ListToolsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        return allTools
+            .Where(t => PlannerConventions.ToolNames.ReadOnlyToolNames.Contains(t.Name))
+            .Cast<AITool>()
+            .ToList();
     }
 
     public async ValueTask DisposeAsync()

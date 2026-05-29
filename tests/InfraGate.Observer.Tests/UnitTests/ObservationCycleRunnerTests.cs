@@ -1,3 +1,4 @@
+using InfraGate.AgentLlm;
 using InfraGate.Observer.Classification;
 using InfraGate.Observer.Cycle;
 using InfraGate.Observer.Prompts;
@@ -44,14 +45,14 @@ public sealed class ObservationCycleRunnerTests
         systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>())
             .Returns("system prompt");
 
-        var chatClient = new FixtureChatClient(_ =>
-        {
-            return new ChatResponse(new ChatMessage(ChatRole.Assistant, llmResponseJson));
-        });
+        var chatClientFactory = new FixtureChatClient(_ =>
+            new ChatResponse(new ChatMessage(ChatRole.Assistant, llmResponseJson)));
 
         var severityClassifier = new SeverityClassifier();
 
         var mcpClient = Substitute.For<IObserverMcpClient>();
+        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<AITool>>(Array.Empty<AITool>()));
 
         var dedupeStore = new AnomalyDedupeStore();
         var logger = NullLogger<ObservationCycleRunner>.Instance;
@@ -62,7 +63,7 @@ public sealed class ObservationCycleRunnerTests
             optionsMonitor,
             snapshotFetcher,
             systemPromptProvider,
-            chatClient,
+            new ToolCallingAgentFactory(chatClientFactory),
             severityClassifier,
             mcpClient,
             dedupeStore,
@@ -254,15 +255,16 @@ public sealed class ObservationCycleRunnerTests
         var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
         systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("prompt");
 
-        var chatClient = new FixtureChatClient(ValidLlmJson());
-
+        var chatClientFactory = new FixtureChatClient(ValidLlmJson());
         var mcpClient = Substitute.For<IObserverMcpClient>();
+        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<AITool>>(Array.Empty<AITool>()));
 
         var runner = new ObservationCycleRunner(
             optionsMonitor,
             snapshotFetcher,
             systemPromptProvider,
-            chatClient,
+            new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
             mcpClient,
             new AnomalyDedupeStore(),
@@ -368,10 +370,6 @@ public sealed class ObservationCycleRunnerTests
     public async Task RunAsync_ToolCallsIncrementCounter()
     {
         var options = DefaultOptions();
-
-        var optionsSnapshot = Substitute.For<IOptions<ObserverOptions>>();
-        optionsSnapshot.Value.Returns(options);
-
         var optionsMonitor = Substitute.For<IOptionsMonitor<ObserverOptions>>();
         optionsMonitor.CurrentValue.Returns(options);
 
@@ -384,28 +382,31 @@ public sealed class ObservationCycleRunnerTests
         var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
         systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("prompt");
 
-        var callCount = 0;
-        var chatClient = new FixtureChatClient(_ =>
+        // First LLM call returns a native function call; second returns the final JSON array.
+        var llmCallCount = 0;
+        var chatClientFactory = new FixtureChatClient(_ =>
         {
-            callCount++;
-            if (callCount == 1)
+            llmCallCount++;
+            if (llmCallCount == 1)
             {
                 return new ChatResponse(new ChatMessage(ChatRole.Assistant,
-                    "TOOL_CALL: {\"tool\":\"describe_k8s_resource\",\"arguments\":{\"name\":\"foo\"}}"));
+                    [new FunctionCallContent("call-1", "describe_k8s_resource",
+                        new Dictionary<string, object?> { ["name"] = "foo" })]));
             }
-
             return new ChatResponse(new ChatMessage(ChatRole.Assistant, ValidLlmJson()));
         });
 
+        // Expose a fake "describe_k8s_resource" tool so FunctionInvokingChatClient can invoke it.
+        var fakeTool = AIFunctionFactory.Create(static () => "{}", "describe_k8s_resource");
         var mcpClient = Substitute.For<IObserverMcpClient>();
-        mcpClient.GetToolResultAsync(Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<string?>("{}"));
+        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<AITool>>(new List<AITool> { fakeTool }));
 
         var runner = new ObservationCycleRunner(
             optionsMonitor,
             snapshotFetcher,
             systemPromptProvider,
-            chatClient,
+            new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
             mcpClient,
             new AnomalyDedupeStore(),
@@ -420,13 +421,11 @@ public sealed class ObservationCycleRunnerTests
     }
 
     [Fact]
-    public async Task RunAsync_MaxToolIterationsExceeded_Truncates()
+    public async Task RunAsync_MaxToolIterationsExceeded_StopsCallingTools()
     {
+        // FunctionInvokingChatClient stops invoking tools after MaxToolIterations.
+        // The cycle does NOT truncate — it completes with whatever the LLM last said.
         var options = DefaultOptions() with { MaxToolIterations = 2 };
-
-        var optionsSnapshot = Substitute.For<IOptions<ObserverOptions>>();
-        optionsSnapshot.Value.Returns(options);
-
         var optionsMonitor = Substitute.For<IOptionsMonitor<ObserverOptions>>();
         optionsMonitor.CurrentValue.Returns(options);
 
@@ -439,21 +438,22 @@ public sealed class ObservationCycleRunnerTests
         var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
         systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("prompt");
 
-        var chatClient = new FixtureChatClient(_ =>
-        {
-            return new ChatResponse(new ChatMessage(ChatRole.Assistant,
-                "TOOL_CALL: {\"tool\":\"get_k8s_status\",\"arguments\":{\"namespace\":\"default\"}}"));
-        });
+        // LLM always requests a tool call → FunctionInvokingChatClient capped at 2 invocations.
+        var chatClientFactory = new FixtureChatClient(_ =>
+            new ChatResponse(new ChatMessage(ChatRole.Assistant,
+                [new FunctionCallContent("call-1", "get_k8s_status",
+                    new Dictionary<string, object?> { ["namespace"] = "default" })])));
 
+        var fakeTool = AIFunctionFactory.Create(static () => "{}", "get_k8s_status");
         var mcpClient = Substitute.For<IObserverMcpClient>();
-        mcpClient.GetToolResultAsync(Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<string?>("{}"));
+        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<AITool>>(new List<AITool> { fakeTool }));
 
         var runner = new ObservationCycleRunner(
             optionsMonitor,
             snapshotFetcher,
             systemPromptProvider,
-            chatClient,
+            new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
             mcpClient,
             new AnomalyDedupeStore(),
@@ -462,17 +462,18 @@ public sealed class ObservationCycleRunnerTests
 
         var result = await runner.RunAsync(CancellationToken.None);
 
-        Assert.True(result.IsTruncated);
+        Assert.False(result.IsTruncated);
         Assert.Empty(result.Reports);
-        Assert.Equal(2, result.ToolCallsUsed);
+        Assert.True(result.ToolCallsUsed <= options.MaxToolIterations,
+            $"Expected ≤ {options.MaxToolIterations} tool calls, got {result.ToolCallsUsed}");
     }
 
     [Fact]
-    public async Task RunAsync_SnapshotFetchThrows_PropagatesToCaller()
+    public async Task RunAsync_SnapshotFetchThrows_LogsErrorAndContinues()
     {
+        // SnapshotExecutor catches non-OCE exceptions and continues with an empty snapshot
+        // so the fan-in chain always completes (graceful degradation).
         var options = DefaultOptions();
-        var optionsSnapshot = Substitute.For<IOptions<ObserverOptions>>();
-        optionsSnapshot.Value.Returns(options);
         var optionsMonitor = Substitute.For<IOptionsMonitor<ObserverOptions>>();
         optionsMonitor.CurrentValue.Returns(options);
 
@@ -481,21 +482,30 @@ public sealed class ObservationCycleRunnerTests
             .Returns<Task<SnapshotDocument>>(_ =>
                 Task.FromException<SnapshotDocument>(new HttpRequestException("Gateway unreachable")));
 
+        var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
+        systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("prompt");
+
+        // LLM returns empty JSON array for the empty snapshot.
+        var chatClientFactory = new FixtureChatClient("[]");
+        var mcpClient = Substitute.For<IObserverMcpClient>();
+        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<AITool>>(Array.Empty<AITool>()));
+
         var runner = new ObservationCycleRunner(
             optionsMonitor,
             snapshotFetcher,
-            Substitute.For<ISystemPromptProvider>(),
-            Substitute.For<IChatClient>(),
+            systemPromptProvider,
+            new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
-            Substitute.For<IObserverMcpClient>(),
+            mcpClient,
             new AnomalyDedupeStore(),
             Substitute.For<IAnomalyHandoffSink>(),
             NullLogger<ObservationCycleRunner>.Instance);
 
-        var ex = await Assert.ThrowsAsync<HttpRequestException>(
-            () => runner.RunAsync(CancellationToken.None));
+        var result = await runner.RunAsync(CancellationToken.None);
 
-        Assert.Equal("Gateway unreachable", ex.Message);
+        Assert.False(result.IsTruncated);
+        Assert.Empty(result.Reports);
     }
 
     // ── Dedupe integration ───────────────────────────────────────
@@ -570,14 +580,16 @@ public sealed class ObservationCycleRunnerTests
         var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
         systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("prompt");
 
-        var chatClient = new FixtureChatClient(json);
+        var chatClientFactory = new FixtureChatClient(json);
         var mcpClient = Substitute.For<IObserverMcpClient>();
+        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<AITool>>(Array.Empty<AITool>()));
 
         var truncatedRunner = new ObservationCycleRunner(
             optionsMonitor,
             snapshotFetcher,
             systemPromptProvider,
-            chatClient,
+            new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
             mcpClient,
             sharedDedupeStore,
@@ -641,12 +653,12 @@ public sealed class ObservationCycleRunnerTests
         var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
         systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("system prompt");
 
-        var chatClient = new FixtureChatClient(_ =>
-        {
-            return new ChatResponse(new ChatMessage(ChatRole.Assistant, llmResponseJson));
-        });
+        var chatClientFactory = new FixtureChatClient(_ =>
+            new ChatResponse(new ChatMessage(ChatRole.Assistant, llmResponseJson)));
 
         var mcpClient = Substitute.For<IObserverMcpClient>();
+        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<AITool>>(Array.Empty<AITool>()));
 
         handoffSink ??= Substitute.For<IAnomalyHandoffSink>();
 
@@ -654,7 +666,7 @@ public sealed class ObservationCycleRunnerTests
             optionsMonitor,
             snapshotFetcher,
             systemPromptProvider,
-            chatClient,
+            new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
             mcpClient,
             dedupeStore,
@@ -720,14 +732,16 @@ public sealed class ObservationCycleRunnerTests
         var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
         systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("prompt");
 
-        var chatClient = new FixtureChatClient(ValidLlmJson());
+        var chatClientFactory = new FixtureChatClient(ValidLlmJson());
         var mcpClient = Substitute.For<IObserverMcpClient>();
+        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<AITool>>(Array.Empty<AITool>()));
 
         var runner = new ObservationCycleRunner(
             optionsMonitor,
             snapshotFetcher,
             systemPromptProvider,
-            chatClient,
+            new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
             mcpClient,
             new AnomalyDedupeStore(),

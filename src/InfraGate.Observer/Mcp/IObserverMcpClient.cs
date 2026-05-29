@@ -6,4 +6,5 @@ internal interface IObserverMcpClient
     bool IsConnected { get; }
     Task ConnectAsync(CancellationToken cancellationToken);
     Task<string?> GetToolResultAsync(string toolName, IReadOnlyDictionary<string, object?>? arguments, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AITool>> GetReadOnlyToolsAsync(CancellationToken cancellationToken);
 }

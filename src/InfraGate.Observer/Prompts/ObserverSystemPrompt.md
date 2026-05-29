@@ -23,16 +23,6 @@ You may only use these read-only tools:
 - get_k8s_endpoints — list EndpointSlices and their addresses
 - describe_k8s_resource — detailed view of any single resource
 
-To call a tool, return ONLY a JSON object in this exact format (and nothing else):
-```json
-{
-  "Tool": "tool_name",
-  "Arguments": {
-    "arg1": "value"
-  }
-}
-```
-
 ## Analysis Workflow
 
 1. Call get_k8s_status and get_k8s_events for the namespace `{NAMESPACE}`.

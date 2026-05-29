@@ -1,8 +1,13 @@
-using Microsoft.Extensions.AI;
+using InfraGate.AgentLlm;
 
 namespace InfraGate.Observer.Tests.UnitTests;
 
-public sealed class FixtureChatClient : IChatClient
+/// <summary>
+/// Test double that implements both <see cref="IChatClient"/> and <see cref="IChatClientFactory"/>.
+/// Pass it as the factory argument to <see cref="InfraGate.Observer.Cycle.ObservationCycleRunner"/>
+/// so the same fixture is used by <see cref="InfraGate.AgentLlm.ToolCallingAgentFactory"/> inside the workflow.
+/// </summary>
+public sealed class FixtureChatClient : IChatClient, IChatClientFactory
 {
     private readonly Func<IEnumerable<ChatMessage>, ChatResponse> responseFactory;
 
@@ -15,6 +20,9 @@ public sealed class FixtureChatClient : IChatClient
         : this(_ => new ChatResponse(new ChatMessage(ChatRole.Assistant, textResponse)))
     {
     }
+
+    // IChatClientFactory — returns itself so the workflow reuses this fixture.
+    public IChatClient Create() => this;
 
     public Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
@@ -32,12 +40,7 @@ public sealed class FixtureChatClient : IChatClient
         throw new NotSupportedException();
     }
 
-    public void Dispose()
-    {
-    }
+    public void Dispose() { }
 
-    object? IChatClient.GetService(Type serviceType, object? serviceKey)
-    {
-        return null;
-    }
+    object? IChatClient.GetService(Type serviceType, object? serviceKey) => null;
 }

@@ -8,10 +8,11 @@
 
 - `Program.cs` wires Serilog, `InfraGate.RuntimeSafety` mode detection, `InfraGate.ClientCredentials` OAuth token acquisition, and the `Microsoft.Extensions.AI` `IChatClient` for the chosen LLM provider.
 - `ObservationCycleLoop` (an `IHostedService`) ticks on a configurable cadence (default 60s) and orchestrates one **Observation Cycle** per tick.
-- Each cycle calls `ISnapshotFetcher` to collect a deterministic baseline (`SnapshotDocument`) from the gateway's read-only tools, then sends it to the LLM with the system prompt from `Prompts/ObserverSystemPrompt.md`.
-- The LLM proposes anomalies with bounded follow-up tool calls (max 8 per cycle). Proposed anomalies pass through `ISeverityClassifier` — rules-derived severity is the source of truth; LLM disagreements are logged + counted but do not change emitted `Severity`.
-- `IAnomalyDedupeStore` suppresses repeat reports within a suppression window (default 5 cycles) and emits `Resolved` reports after an anomaly is absent for a resolution threshold (default 2 cycles).
-- Final `AnomalyReport[]` batches are published through `IAnomalyHandoffSink` (logging sink always on; JSON file sink and HTTP Planner handoff opt-in).
+- Each cycle builds a per-namespace **workflow graph** via `ObservationCycleRunner.BuildWorkflow` using `Microsoft.Agents.AI.Workflows.WorkflowBuilder`. The graph fans out from a `CycleInputPassthroughExecutor` to N per-namespace chains, each running:
+  1. `SnapshotExecutor` — calls `ISnapshotFetcher` to collect a deterministic baseline (`SnapshotDocument`) from the gateway's read-only tools.
+  2. `ChatClientAgent` (via `ToolCallingAgentFactory`) — sends the snapshot to the LLM with the system prompt from `Prompts/ObserverSystemPrompt.md`; bounded follow-up tool calls (max 8 per cycle).
+  3. `AnomalyParseExecutor` — parses the LLM output into `AnomalyReport[]`, applies `ISeverityClassifier` (rules-derived severity wins; LLM disagreements logged + counted).
+- All namespace chains fan-in to `CycleAggregateExecutor`, which applies `IAnomalyDedupeStore` suppression and publishes the final `AnomalyReport[]` batch through `IAnomalyHandoffSink`.
 - Cycle-level telemetry: wall-clock cap (20s default), tool-iteration cap (8), and metrics via `System.Diagnostics.Metrics` (`Meter("InfraGate.Observer", "1.0")`).
 
 ## Important Contracts
@@ -23,7 +24,7 @@
 - **Tool whitelist** — the Observer only calls the gateway's 8 read-only tools (`get_allowed_namespaces`, `get_k8s_status`, `get_k8s_events`, `get_k8s_pods`, `describe_k8s_resource`, `get_k8s_deployments`, `get_k8s_services`, `get_k8s_endpoints`). Any call to a mutation tool throws `InvalidOperationException` before HTTP.
 - The Observer is a peer MCP client (not embedded in the gateway). It never calls mutation tools, never produces Plan Envelopes or Approval Grants, and never writes through `IApprovalAuditPublisher`.
 - Optional HTTP handoff posts `AnomalyHandoffBatch` payloads to the Remediation Planner's `/handoff/anomalies` endpoint.
-- LLM provider is configurable via env vars; default is Anthropic (`claude-sonnet-4-6`). Supported providers: `anthropic` (default) and `openrouter` (OpenAI-compatible, e.g. DeepSeek free models). `INFRA_GATE_OBSERVER_LLM_API_KEY` is required for both.
+- LLM provider is configurable via env vars. Supported provider: `openrouter` (OpenAI-compatible). `INFRA_GATE_OBSERVER_LLM_API_KEY` is required. Configuring `ANTHROPIC` as the provider throws `InvalidOperationException` at startup — use OpenRouter instead.
 - `POST /observe-now` triggers a synchronous on-demand cycle (30s HTTP timeout) without resetting the scheduled tick. Concurrent calls serialise via a shared semaphore.
 
 ## Settings

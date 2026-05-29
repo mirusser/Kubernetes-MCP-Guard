@@ -55,7 +55,7 @@ internal sealed class SnapshotFetcher : ISnapshotFetcher
         {
             return await mcpClient.GetToolResultAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException)
         {
             ObserverLogEvents.LogSnapshotFetchFailed(logger, toolName, namespaceName, ex);
 

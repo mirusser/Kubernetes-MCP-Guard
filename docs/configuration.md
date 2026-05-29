@@ -62,7 +62,7 @@ The Observer exposes `POST /observe-now` for manual on-demand cycle triggering:
 
 ## InfraGate.Planner
 
-The Remediation Planner listens on port `3004` by default, accepts `POST /handoff/anomalies`, and proposes approval-pending plans through the gateway. Its v1 operation menu is `restart_deployment` and `scale_deployment`. Direct runtime configuration is under `InfraGate:Planner`; generated env files and local Compose use the `INFRA_GATE_PLANNER_*` prefix.
+The Remediation Planner listens on port `3004` by default, accepts `POST /handoff/anomalies`, and proposes approval-pending plans through the gateway. Its v1 operation menu is `restart_deployment`, `scale_deployment`, and `set_deployment_image`. Direct runtime configuration is under `InfraGate:Planner`; generated env files and local Compose use the `INFRA_GATE_PLANNER_*` prefix.
 
 | Variable | Component | Required | Default | Example | Description | Production guidance |
 | --- | --- | :---: | --- | --- | --- | --- |

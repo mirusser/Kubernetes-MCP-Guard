@@ -7,6 +7,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.Net;
 using System.Text.Json;
+using InfraGate.AgentLlm;
 using InfraGate.ClientCredentials;
 using InfraGate.Planner.Diagnostics;
 using Microsoft.AspNetCore.Builder;
@@ -131,7 +132,7 @@ public sealed class PlannerGatewayIntegrationTests
 
     private static BatchProcessor CreateProcessor(
         IPlannerMcpClient mcpClient,
-        IChatClient chatClient,
+        FixtureChatClient chatClientFactory,
         IRemediationProposalSink sink,
         PlannerDedupeStore? dedupeStore = null)
     {
@@ -147,14 +148,14 @@ public sealed class PlannerGatewayIntegrationTests
         return new BatchProcessor(
             optionsMonitor,
             new AnomalyBatchQueue(),
-            chatClient,
+            new ToolCallingAgentFactory(chatClientFactory),
             mcpClient,
             sink,
             NullLogger<BatchProcessor>.Instance,
             dedupeStore);
     }
 
-    private static IChatClient CreateRestartDeploymentChatClient(string name, string ns)
+    private static FixtureChatClient CreateRestartDeploymentChatClient(string name, string ns)
     {
         return new FixtureChatClient($$"""
         {
@@ -367,6 +368,17 @@ public sealed class PlannerGatewayIntegrationTests
                 .ConfigureAwait(false);
         }
 
+        public async Task<IReadOnlyList<AITool>> GetReadOnlyToolsAsync(CancellationToken cancellationToken)
+        {
+            if (mcpClient is null)
+                throw new InvalidOperationException("Not connected.");
+            var allTools = await mcpClient.ListToolsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+            return allTools
+                .Where(t => PlannerConventions.ToolNames.ReadOnlyToolNames.Contains(t.Name))
+                .Cast<AITool>()
+                .ToList();
+        }
+
         public async Task<string> CallToolAsync(
             string toolName,
             IReadOnlyDictionary<string, object?>? arguments,
@@ -394,9 +406,10 @@ public sealed class PlannerGatewayIntegrationTests
         }
     }
 
-    // Minimal IChatClient fixed response stub (mirrors the unit-test FixtureChatClient).
-    private sealed class FixtureChatClient(string textResponse) : IChatClient
+    // Minimal IChatClient/IChatClientFactory fixed response stub (mirrors the unit-test FixtureChatClient).
+    private sealed class FixtureChatClient(string textResponse) : IChatClient, IChatClientFactory
     {
+        public IChatClient Create() => this;
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,

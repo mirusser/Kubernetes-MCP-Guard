@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
+using InfraGate.AgentLlm;
 using InfraGate.ClientCredentials;
 using InfraGate.Observer.Diagnostics;
 using Microsoft.AspNetCore.Builder;
@@ -143,7 +144,7 @@ public sealed class ObserverGatewayIntegrationTests
     private static ObservationCycleRunner CreateRunner(
         IObserverMcpClient mcpClient,
         IAnomalyHandoffSink sink,
-        IChatClient chatClient,
+        FixtureChatClient chatClientFactory,
         IAnomalyDedupeStore? dedupeStore = null,
         ObserverOptions? options = null)
     {
@@ -154,7 +155,7 @@ public sealed class ObserverGatewayIntegrationTests
             optionsMonitor,
             new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, ObserverMetrics.Meter),
             new SystemPromptProvider(),
-            chatClient,
+            new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
             mcpClient,
             dedupeStore ?? new AnomalyDedupeStore(),
@@ -177,7 +178,7 @@ public sealed class ObserverGatewayIntegrationTests
         };
     }
 
-    private static IChatClient CreateSnapshotDrivenChatClient()
+    private static FixtureChatClient CreateSnapshotDrivenChatClient()
     {
         return new FixtureChatClient(messages =>
         {
@@ -566,6 +567,17 @@ public sealed class ObserverGatewayIntegrationTests
                 .ConfigureAwait(false);
         }
 
+        public async Task<IReadOnlyList<AITool>> GetReadOnlyToolsAsync(CancellationToken cancellationToken)
+        {
+            if (mcpClient is null)
+                throw new InvalidOperationException("MCP client is not connected. Call ConnectAsync first.");
+            var allTools = await mcpClient.ListToolsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+            return allTools
+                .Where(t => ObserverConventions.ToolNames.ReadOnlyToolNames.Contains(t.Name))
+                .Cast<AITool>()
+                .ToList();
+        }
+
         public async Task<string?> GetToolResultAsync(
             string toolName,
             IReadOnlyDictionary<string, object?>? arguments,
@@ -646,7 +658,7 @@ public sealed class ObserverGatewayIntegrationTests
         public IDisposable? OnChange(Action<T, string?> listener) => null;
     }
 
-    private sealed class FixtureChatClient : IChatClient
+    private sealed class FixtureChatClient : IChatClient, IChatClientFactory
     {
         private readonly Func<IEnumerable<ChatMessage>, ChatResponse> responseFactory;
 
@@ -654,6 +666,8 @@ public sealed class ObserverGatewayIntegrationTests
         {
             this.responseFactory = responseFactory;
         }
+
+        public IChatClient Create() => this;
 
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,

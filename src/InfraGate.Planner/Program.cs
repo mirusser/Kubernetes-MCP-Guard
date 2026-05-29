@@ -76,6 +76,7 @@ builder.Services.AddSingleton<IChatClientFactory>(sp =>
         PlannerMetrics.Meter,
         sp.GetRequiredService<ILoggerFactory>());
 });
+builder.Services.AddSingleton<ToolCallingAgentFactory>();
 builder.Services.AddSingleton<IChatClient>(sp =>
 {
     var factory = sp.GetRequiredService<IChatClientFactory>();
