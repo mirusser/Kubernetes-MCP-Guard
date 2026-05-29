@@ -33,7 +33,7 @@ internal sealed class PostgresAuditOutboxCore : IAuditOutboxCore
             cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         string? previousHash = await connection.QuerySingleOrDefaultAsync<string?>(new CommandDefinition(
-            $"SELECT event_hash FROM {streamSchema}.audit_outbox ORDER BY audit_sequence DESC LIMIT 1",
+            GetSelectPreviousHashSql(streamSchema),
             transaction: transaction,
             cancellationToken: cancellationToken)).ConfigureAwait(false);
 
@@ -53,6 +53,13 @@ internal sealed class PostgresAuditOutboxCore : IAuditOutboxCore
 
         return auditSequence;
     }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> SelectPreviousHashSqlCache = new(StringComparer.Ordinal);
+
+    private static string GetSelectPreviousHashSql(string schema) =>
+        SelectPreviousHashSqlCache.GetOrAdd(
+            schema,
+            static s => $"SELECT event_hash FROM {s}.audit_outbox ORDER BY audit_sequence DESC LIMIT 1");
 
     private static DynamicParameters BuildInsertParameters(
         AuditOutboxRow row,

@@ -63,7 +63,7 @@ profiles:
       clientSecret: observer-secret
       scope: mcp:tools.readonly
       llmProvider: openrouter
-      llmModel: deepseek/deepseek-v4-flash:free
+      llmModel: openrouter/free
       cycleCadenceSeconds: "60"
       cycleWallClockCapSeconds: "120"
       maxToolIterations: "8"
@@ -83,7 +83,7 @@ profiles:
       oauthAuthority: http://keycloak:8080/realms/infra-gate
       scope: mcp:tools.propose mcp:tools.readonly
       llmProvider: openrouter
-      llmModel: deepseek/deepseek-v4-flash:free
+      llmModel: openrouter/free
       maxToolIterations: "4"
       fileSinkRoot: /data/planner/proposals
       plannerHostPath: ../../.mcp-remediation/proposals
@@ -126,7 +126,7 @@ profiles:
       clientSecret: observer-secret
       scope: mcp:tools.readonly
       llmProvider: openrouter
-      llmModel: deepseek/deepseek-v4-flash:free
+      llmModel: openrouter/free
       cycleCadenceSeconds: "60"
       cycleWallClockCapSeconds: "120"
       maxToolIterations: "8"
@@ -144,7 +144,7 @@ profiles:
       oauthAuthority: http://127.0.0.1:3010/realms/infra-gate
       scope: mcp:tools.propose mcp:tools.readonly
       llmProvider: openrouter
-      llmModel: deepseek/deepseek-v4-flash:free
+      llmModel: openrouter/free
       maxToolIterations: "4"
       fileSinkRoot: .mcp-planner/proposals
     executor:

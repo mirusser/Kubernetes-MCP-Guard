@@ -20,6 +20,8 @@ public static class PostgresAuditOutboxMigrationRunner
         ArgumentException.ThrowIfNullOrWhiteSpace(schemaName);
         ArgumentException.ThrowIfNullOrWhiteSpace(migrationsDirectory);
 
+        ValidateSchemaName(schemaName);
+
         if (!Directory.Exists(migrationsDirectory))
         {
             throw new InvalidOperationException(
@@ -89,10 +91,7 @@ public static class PostgresAuditOutboxMigrationRunner
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
             await connection.ExecuteAsync(new CommandDefinition(
-                $"""
-                INSERT INTO {schemaName}.schema_migrations (filename, checksum_sha256)
-                VALUES (@FileName, @ChecksumSha256)
-                """,
+                GetInsertMigrationSql(schemaName),
                 new { migration.FileName, migration.ChecksumSha256 },
                 transaction,
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
@@ -125,11 +124,7 @@ public static class PostgresAuditOutboxMigrationRunner
         }
 
         return await connection.QuerySingleOrDefaultAsync<string?>(new CommandDefinition(
-            $"""
-            SELECT checksum_sha256
-            FROM {schemaName}.schema_migrations
-            WHERE filename = @FileName
-            """,
+            GetSelectChecksumSql(schemaName),
             new { FileName = fileName },
             cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
@@ -140,6 +135,44 @@ public static class PostgresAuditOutboxMigrationRunner
         byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(MigrationLockPrefix + schemaName));
         return BitConverter.ToInt64(hash, 0);
     }
+
+    private static void ValidateSchemaName(string schema)
+    {
+        if (schema.Length == 0 || !char.IsLetter(schema[0]) && schema[0] != '_')
+        {
+            throw new ArgumentException(
+                $"Schema name '{schema}' is not a valid PostgreSQL identifier.", nameof(schema));
+        }
+
+        for (int i = 1; i < schema.Length; i++)
+        {
+            if (!char.IsLetterOrDigit(schema[i]) && schema[i] != '_')
+            {
+                throw new ArgumentException(
+                    $"Schema name '{schema}' is not a valid PostgreSQL identifier.", nameof(schema));
+            }
+        }
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> InsertMigrationSqlCache = new(StringComparer.Ordinal);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> SelectChecksumSqlCache = new(StringComparer.Ordinal);
+
+    private static string GetInsertMigrationSql(string schema) =>
+        InsertMigrationSqlCache.GetOrAdd(
+            schema,
+            static s => $"""
+                INSERT INTO {s}.schema_migrations (filename, checksum_sha256)
+                VALUES (@FileName, @ChecksumSha256)
+                """);
+
+    private static string GetSelectChecksumSql(string schema) =>
+        SelectChecksumSqlCache.GetOrAdd(
+            schema,
+            static s => $"""
+                SELECT checksum_sha256
+                FROM {s}.schema_migrations
+                WHERE filename = @FileName
+                """);
 
     private sealed record class MigrationFile(string FileName, string Sql, string ChecksumSha256)
     {

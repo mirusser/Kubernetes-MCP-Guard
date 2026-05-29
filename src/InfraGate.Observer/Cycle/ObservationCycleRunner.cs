@@ -244,7 +244,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
 
             var responseText = response.Text ?? string.Empty;
 
-            var toolCall = TryParseToolCall(responseText);
+            var toolCall = TryParseToolCall(logger, responseText);
             if (toolCall is not null)
             {
                 toolCallsUsed++;
@@ -334,7 +334,23 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
                 continue;
             }
 
-            var evidence = BuildAnomalyEvidence(kind, target, llmReport);
+            var annotations = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (llmReport.Annotations is { ValueKind: JsonValueKind.Object } obj)
+            {
+                foreach (var prop in obj.EnumerateObject())
+                {
+                    annotations[prop.Name] = prop.Value.ValueKind switch
+                    {
+                        JsonValueKind.String => prop.Value.GetString() ?? string.Empty,
+                        JsonValueKind.Number => prop.Value.GetRawText(),
+                        JsonValueKind.True => "true",
+                        JsonValueKind.False => "false",
+                        _ => prop.Value.GetRawText()
+                    };
+                }
+            }
+
+            var evidence = BuildAnomalyEvidence(kind, target, annotations);
             var (classifierSeverity, matchedRule) = severityClassifier.Classify(evidence);
 
             if (classifierSeverity != llmSeverity)
@@ -345,8 +361,6 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
             }
 
             var anomalyId = AnomalyObserverConventions.ComputeAnomalyId(kind, target);
-
-            var annotations = llmReport.Annotations ?? new Dictionary<string, string>(StringComparer.Ordinal);
             if (!string.IsNullOrEmpty(matchedRule))
             {
                 annotations["MatchedRule"] = matchedRule;
@@ -371,9 +385,8 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         return (reports, disagreements);
     }
 
-    private static AnomalyEvidence BuildAnomalyEvidence(AnomalyKind kind, ResourceRef target, LlmAnomalyOutput llmReport)
+    private static AnomalyEvidence BuildAnomalyEvidence(AnomalyKind kind, ResourceRef target, IReadOnlyDictionary<string, string> annotations)
     {
-        var annotations = llmReport.Annotations ?? new Dictionary<string, string>(StringComparer.Ordinal);
 
         return new AnomalyEvidence
         {
@@ -441,41 +454,28 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         return null;
     }
 
-    private const string ToolCallPrefix = "TOOL_CALL:";
-
-    private static (string ToolName, IReadOnlyDictionary<string, object?> Arguments)? TryParseToolCall(string text)
+    private static (string ToolName, IReadOnlyDictionary<string, object?> Arguments)? TryParseToolCall(ILogger logger, string text)
     {
-        var prefixIndex = text.IndexOf(ToolCallPrefix, StringComparison.Ordinal);
-        if (prefixIndex < 0)
-        {
-            return null;
-        }
+        var jsonStart = text.IndexOf('{', StringComparison.Ordinal);
+        if (jsonStart < 0) return null;
 
-        var jsonStart = text.IndexOf('{', prefixIndex);
-        if (jsonStart < 0)
-        {
-            return null;
-        }
-
-        var jsonEnd = text.LastIndexOf('}');
-        if (jsonEnd < 0 || jsonEnd <= jsonStart)
-        {
-            return null;
-        }
+        var jsonEnd = text.LastIndexOf('}', StringComparison.Ordinal);
+        if (jsonEnd < 0 || jsonEnd <= jsonStart) return null;
 
         var json = text[jsonStart..(jsonEnd + 1)];
 
         try
         {
             var toolCall = JsonSerializer.Deserialize<LlmToolCall>(json, LlmOutputSerializerOptions.Instance);
-            if (toolCall is { Tool: not null })
+            if (!string.IsNullOrWhiteSpace(toolCall?.Tool))
             {
-                var args = toolCall.Arguments ?? new Dictionary<string, object?>(StringComparer.Ordinal);
+                var args = toolCall.Arguments ?? toolCall.Parameters ?? new Dictionary<string, object?>(StringComparer.Ordinal);
                 return (toolCall.Tool, args);
             }
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            ObserverLogEvents.LogLlmNonJsonToolCall(logger, ex);
             // Benign — LLM sometimes returns non-JSON tool calls; skip and continue.
         }
 
@@ -663,7 +663,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         public string? Summary { get; set; }
         public List<LlmEvidenceOutput>? Evidence { get; set; }
         public LlmRemediationOutput? Suggested { get; set; }
-        public Dictionary<string, string>? Annotations { get; set; }
+        public JsonElement? Annotations { get; set; }
     }
 
     // JSON deserialization DTOs.
@@ -695,6 +695,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
     {
         public string? Tool { get; set; }
         public Dictionary<string, object?>? Arguments { get; set; }
+        public Dictionary<string, object?>? Parameters { get; set; }
     }
 #pragma warning restore S1144, S3459
 }

@@ -114,6 +114,11 @@ internal static partial class ObserverLogEvents
         Message = "Failed to parse LLM output as JSON array for namespace {Namespace}")]
     public static partial void LogJsonParseFailed(ILogger logger, string @namespace, Exception ex);
 
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "LLM returned unparseable or non-JSON tool call format. Will fallback to parsing as anomaly report.")]
+    public static partial void LogLlmNonJsonToolCall(ILogger logger, Exception ex);
+
     // ── Handoff ─────────────────────────────────────────────────
 
     [LoggerMessage(
