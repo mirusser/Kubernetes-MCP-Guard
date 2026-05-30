@@ -64,6 +64,14 @@ internal sealed class GatewayToolDispatcher(
         tools.Add(ToolDefinitionFactory.CreateProposePlanTool());
         tools.Add(ToolDefinitionFactory.CreateWaitForPlanApprovalTool());
 
+        var user = httpContextAccessor.HttpContext?.User;
+        if (user is not null)
+        {
+            tools = tools
+                .Where(t => ToolScopeCatalog.IsVisibleTo(t.Name, t.Annotations?.ReadOnlyHint == true, user))
+                .ToList();
+        }
+
         return new ListToolsResult { Tools = tools };
     }
 
@@ -80,68 +88,39 @@ internal sealed class GatewayToolDispatcher(
     {
         string toolName = request.Name;
 
-        if (toolName.Equals(McpGatewayConventions.ToolNames.ApplyApprovedPlan, StringComparison.Ordinal))
+        var synthesizedScopes = ToolScopeCatalog.GetSynthesizedScopes(toolName);
+        if (synthesizedScopes is not null)
         {
-            var scopeResult = await scopeGuard.RequireAnyScopeAsync(
-                toolName,
-                McpGatewayConventions.ToolScopeRequirements.MutationScope,
-                McpGatewayConventions.ToolScopeRequirements.ExecuteScope).ConfigureAwait(false);
+            var scopeResult = await scopeGuard.RequireAnyScopeAsync(toolName, synthesizedScopes.ToArray()).ConfigureAwait(false);
             if (scopeResult is not null)
             {
                 return scopeResult;
             }
 
-            return await HandleApplyApprovedPlanAsync(request, ct).ConfigureAwait(false);
-        }
-
-        if (toolName.Equals(McpGatewayConventions.ToolNames.GetPlanStatus, StringComparison.Ordinal))
-        {
-            var scopeResult = await scopeGuard.RequireMutationScopeAsync(toolName).ConfigureAwait(false);
-            if (scopeResult is not null)
+            if (toolName.Equals(McpGatewayConventions.ToolNames.ApplyApprovedPlan, StringComparison.Ordinal))
             {
-                return scopeResult;
+                return await HandleApplyApprovedPlanAsync(request, ct).ConfigureAwait(false);
             }
 
-            return await HandleGetPlanStatusAsync(request, ct).ConfigureAwait(false);
-        }
-
-        if (toolName.Equals(McpGatewayConventions.ToolNames.WaitForPlanApproval, StringComparison.Ordinal))
-        {
-            var scopeResult = await scopeGuard.RequireAnyScopeAsync(
-                toolName,
-                McpGatewayConventions.ToolScopeRequirements.MutationScope,
-                McpGatewayConventions.ToolScopeRequirements.ExecuteScope).ConfigureAwait(false);
-            if (scopeResult is not null)
+            if (toolName.Equals(McpGatewayConventions.ToolNames.GetPlanStatus, StringComparison.Ordinal))
             {
-                return scopeResult;
+                return await HandleGetPlanStatusAsync(request, ct).ConfigureAwait(false);
             }
 
-            return await HandleWaitForPlanApprovalAsync(request, ct).ConfigureAwait(false);
-        }
-
-        if (toolName.Equals(McpGatewayConventions.ToolNames.ProposePlan, StringComparison.Ordinal))
-        {
-            var scopeResult = await scopeGuard.RequireAnyScopeAsync(
-                toolName,
-                McpGatewayConventions.ToolScopeRequirements.MutationScope,
-                McpGatewayConventions.ToolScopeRequirements.ProposeScope).ConfigureAwait(false);
-            if (scopeResult is not null)
+            if (toolName.Equals(McpGatewayConventions.ToolNames.WaitForPlanApproval, StringComparison.Ordinal))
             {
-                return scopeResult;
+                return await HandleWaitForPlanApprovalAsync(request, ct).ConfigureAwait(false);
             }
 
-            return await HandleProposePlanAsync(request, ct).ConfigureAwait(false);
-        }
-
-        if (toolName.StartsWith(McpGatewayConventions.ToolNames.RequestToolPrefix, StringComparison.Ordinal))
-        {
-            var scopeResult = await scopeGuard.RequireMutationScopeAsync(toolName).ConfigureAwait(false);
-            if (scopeResult is not null)
+            if (toolName.Equals(McpGatewayConventions.ToolNames.ProposePlan, StringComparison.Ordinal))
             {
-                return scopeResult;
+                return await HandleProposePlanAsync(request, ct).ConfigureAwait(false);
             }
 
-            return await HandleRequestMutationAsync(toolName, request, ct).ConfigureAwait(false);
+            if (toolName.StartsWith(McpGatewayConventions.ToolNames.RequestToolPrefix, StringComparison.Ordinal))
+            {
+                return await HandleRequestMutationAsync(toolName, request, ct).ConfigureAwait(false);
+            }
         }
 
         return await DispatchDownstreamToolAsync(toolName, request, ct).ConfigureAwait(false);
@@ -181,7 +160,8 @@ internal sealed class GatewayToolDispatcher(
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        var scopeResult = await scopeGuard.RequireAnyToolScopeAsync(toolName).ConfigureAwait(false);
+        var scopes = ToolScopeCatalog.GetRequiredScopes(toolName, hasReadOnlyHint: true);
+        var scopeResult = await scopeGuard.RequireAnyScopeAsync(toolName, scopes.ToArray()).ConfigureAwait(false);
         if (scopeResult is not null)
         {
             return scopeResult;

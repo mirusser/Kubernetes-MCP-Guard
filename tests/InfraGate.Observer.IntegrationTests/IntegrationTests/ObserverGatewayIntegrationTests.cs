@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
 using InfraGate.AgentLlm;
+using InfraGate.AgentMcp;
 using InfraGate.ClientCredentials;
 using InfraGate.Observer.Diagnostics;
 using Microsoft.AspNetCore.Builder;
@@ -62,7 +63,14 @@ public sealed class ObserverGatewayIntegrationTests
         Assert.Contains(gateway.Calls, call => call.ToolName == ObserverConventions.ToolNames.GetK8sDeployments);
         Assert.Contains(gateway.Calls, call => call.ToolName == ObserverConventions.ToolNames.GetK8sServices);
         Assert.Contains(gateway.Calls, call => call.ToolName == ObserverConventions.ToolNames.GetK8sEndpoints);
-        Assert.All(gateway.Calls, call => Assert.Contains(call.ToolName, ObserverConventions.ToolNames.ReadOnlyToolNames));
+        IReadOnlySet<string> expectedReadOnlyTools = new HashSet<string>(StringComparer.Ordinal)
+        {
+            ObserverConventions.ToolNames.GetAllowedNamespaces, ObserverConventions.ToolNames.GetK8sStatus,
+            ObserverConventions.ToolNames.GetK8sEvents, ObserverConventions.ToolNames.GetK8sPods,
+            ObserverConventions.ToolNames.DescribeK8sResource, ObserverConventions.ToolNames.GetK8sDeployments,
+            ObserverConventions.ToolNames.GetK8sServices, ObserverConventions.ToolNames.GetK8sEndpoints,
+        };
+        Assert.All(gateway.Calls, call => Assert.Contains(call.ToolName, expectedReadOnlyTools));
         Assert.All(gateway.AuthorizationHeaders, header => Assert.Equal("Bearer observer-token", header));
         Assert.True(gateway.TokenProvider.GetTokenCalls > 0);
 
@@ -153,7 +161,7 @@ public sealed class ObserverGatewayIntegrationTests
     }
 
     private static ObservationCycleRunner CreateRunner(
-        IObserverMcpClient mcpClient,
+        IAgentMcpToolset mcpClient,
         IAnomalyHandoffSink sink,
         FixtureChatClient chatClientFactory,
         IAnomalyDedupeStore? dedupeStore = null,
@@ -348,9 +356,9 @@ public sealed class ObserverGatewayIntegrationTests
             return fixture;
         }
 
-        public async Task<HttpMcpObserverClient> CreateObserverClientAsync()
+        public async Task<HttpMcpAgentToolset> CreateObserverClientAsync()
         {
-            var client = new HttpMcpObserverClient(server, TokenProvider);
+            var client = new HttpMcpAgentToolset(server, TokenProvider);
             await client.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
             return client;
         }
@@ -388,12 +396,20 @@ public sealed class ObserverGatewayIntegrationTests
         private static IList<Tool> CreateTools()
         {
             var schema = JsonSerializer.SerializeToElement(new { type = "object" });
-            return ObserverConventions.ToolNames.ReadOnlyToolNames
+            string[] readOnlyToolNames =
+            [
+                ObserverConventions.ToolNames.GetAllowedNamespaces, ObserverConventions.ToolNames.GetK8sStatus,
+                ObserverConventions.ToolNames.GetK8sEvents, ObserverConventions.ToolNames.GetK8sPods,
+                ObserverConventions.ToolNames.DescribeK8sResource, ObserverConventions.ToolNames.GetK8sDeployments,
+                ObserverConventions.ToolNames.GetK8sServices, ObserverConventions.ToolNames.GetK8sEndpoints,
+            ];
+            return readOnlyToolNames
                 .Select(toolName => new Tool
                 {
                     Name = toolName,
                     Description = $"Stubbed read-only tool {toolName}.",
                     InputSchema = schema,
+                    Annotations = new ToolAnnotations { ReadOnlyHint = true },
                 })
                 .ToList();
         }
@@ -526,14 +542,14 @@ public sealed class ObserverGatewayIntegrationTests
         """;
     }
 
-    private sealed class HttpMcpObserverClient : IObserverMcpClient, IAsyncDisposable
+    private sealed class HttpMcpAgentToolset : IAgentMcpToolset, IAsyncDisposable
     {
         private readonly TestServer server;
         private readonly IClientCredentialsTokenProvider tokenProvider;
         private HttpClient? httpClient;
         private McpClient? mcpClient;
 
-        public HttpMcpObserverClient(TestServer server, IClientCredentialsTokenProvider tokenProvider)
+        public HttpMcpAgentToolset(TestServer server, IClientCredentialsTokenProvider tokenProvider)
         {
             this.server = server;
             this.tokenProvider = tokenProvider;
@@ -578,35 +594,29 @@ public sealed class ObserverGatewayIntegrationTests
                 .ConfigureAwait(false);
         }
 
-        public async Task<IReadOnlyList<AITool>> GetReadOnlyToolsAsync(CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<AITool>> GetAgentToolsAsync(CancellationToken cancellationToken)
         {
             if (mcpClient is null)
                 throw new InvalidOperationException("MCP client is not connected. Call ConnectAsync first.");
             var allTools = await mcpClient.ListToolsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
             return allTools
-                .Where(t => ObserverConventions.ToolNames.ReadOnlyToolNames.Contains(t.Name))
+                .Where(t => t.ProtocolTool.Annotations?.ReadOnlyHint == true)
                 .Cast<AITool>()
                 .ToList();
         }
 
-        public async Task<string?> GetToolResultAsync(
+        public async Task<CallToolResult> CallToolAsync(
             string toolName,
             IReadOnlyDictionary<string, object?>? arguments,
             CancellationToken cancellationToken)
         {
-            ToolWhitelist.AssertAllowed(toolName);
-
             if (mcpClient is null)
             {
                 throw new InvalidOperationException("MCP client is not connected. Call ConnectAsync first.");
             }
 
-            var result = await mcpClient.CallToolAsync(
-                toolName,
-                arguments,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-
-            return JsonSerializer.Serialize(result);
+            return await mcpClient.CallToolAsync(toolName, arguments, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
         }
 
         public async ValueTask DisposeAsync()

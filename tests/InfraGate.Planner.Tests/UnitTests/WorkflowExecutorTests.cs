@@ -7,7 +7,8 @@ using InfraGate.Planner.Cycle.Workflow;
 using InfraGate.Planner.Decision;
 using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
-using InfraGate.Planner.Mcp;
+using InfraGate.AgentMcp;
+using ModelContextProtocol.Protocol;
 using InfraGate.Remediation.Contracts;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -185,7 +186,7 @@ public sealed class WorkflowExecutorTests
         var decision = new RemediationDecision("restart_deployment", new Dictionary<string, object?>(), null);
         var decisionCtx = new DecisionContext(report, decision);
 
-        var mcpClient = new FakePlannerMcpClient { Response = """{"planId":"plan-123"}""" };
+        var mcpClient = new FakeAgentMcpToolset { ResponseText = """{"planId":"plan-123"}""" };
         var auditOutbox = new FakePlannerAuditOutbox();
         var context = new FakeWorkflowContext();
 
@@ -274,14 +275,16 @@ public sealed class WorkflowExecutorTests
         public Task<long> AppendAsync(PlannerAuditEntry entry, Npgsql.NpgsqlConnection connection, Npgsql.NpgsqlTransaction transaction, CancellationToken cancellationToken) => Task.FromResult(1L);
     }
 
-    private sealed class FakePlannerMcpClient : IPlannerMcpClient
+    private sealed class FakeAgentMcpToolset : IAgentMcpToolset
     {
         public string GatewayBaseUrl => "http://fake";
         public bool IsConnected => true;
-        public string Response { get; set; } = "{}";
+        public string ResponseText { get; set; } = "{}";
 
         public Task ConnectAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task<string> CallToolAsync(string toolName, IReadOnlyDictionary<string, object?>? arguments, CancellationToken cancellationToken) => Task.FromResult(Response);
-        public Task<IReadOnlyList<AITool>> GetReadOnlyToolsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<AITool>>([]);
+        public Task<CallToolResult> CallToolAsync(string toolName, IReadOnlyDictionary<string, object?>? arguments, CancellationToken cancellationToken) =>
+            Task.FromResult(new CallToolResult { Content = [new TextContentBlock { Text = ResponseText }] });
+        public Task<IReadOnlyList<AITool>> GetAgentToolsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<AITool>>([]);
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

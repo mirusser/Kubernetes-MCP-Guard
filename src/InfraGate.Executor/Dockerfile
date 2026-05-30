@@ -1,21 +1,18 @@
+FROM alpine:3.21 AS filter
+WORKDIR /src
+COPY . .
+RUN mkdir /out && \
+    find . -name '*.csproj' | tar -cf - -T - | tar -xf - -C /out
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
 
 COPY Directory.Build.props .
 COPY .editorconfig .
-COPY src/InfraGate.Remediation.Contracts/InfraGate.Remediation.Contracts.csproj src/InfraGate.Remediation.Contracts/
-COPY src/InfraGate.ClientCredentials/InfraGate.ClientCredentials.csproj src/InfraGate.ClientCredentials/
-COPY src/InfraGate.Observability/InfraGate.Observability.csproj src/InfraGate.Observability/
-COPY src/InfraGate.RuntimeSafety/InfraGate.RuntimeSafety.csproj src/InfraGate.RuntimeSafety/
-COPY src/InfraGate.Executor/InfraGate.Executor.csproj src/InfraGate.Executor/
+COPY --from=filter /out/src/ ./src/
 RUN dotnet restore src/InfraGate.Executor/InfraGate.Executor.csproj
 
-COPY src/InfraGate.Remediation.Contracts/ src/InfraGate.Remediation.Contracts/
-COPY src/InfraGate.ClientCredentials/ src/InfraGate.ClientCredentials/
-COPY src/InfraGate.Observability/ src/InfraGate.Observability/
-COPY src/InfraGate.RuntimeSafety/ src/InfraGate.RuntimeSafety/
-COPY src/InfraGate.Executor/ src/InfraGate.Executor/
-COPY src/Shared/ src/Shared/
+COPY src/ src/
 RUN dotnet publish src/InfraGate.Executor/InfraGate.Executor.csproj \
     --configuration Release \
     --output /app/executor \

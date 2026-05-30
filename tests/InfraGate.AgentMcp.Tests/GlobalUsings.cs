@@ -1,0 +1,14 @@
+global using System.Net;
+global using System.Text.Json;
+global using InfraGate.AgentMcp;
+global using InfraGate.ClientCredentials;
+global using Microsoft.AspNetCore.Builder;
+global using Microsoft.AspNetCore.Hosting;
+global using Microsoft.AspNetCore.TestHost;
+global using Microsoft.Extensions.AI;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Logging.Abstractions;
+global using ModelContextProtocol.Client;
+global using ModelContextProtocol.Protocol;
+global using ModelContextProtocol.Server;
+global using Xunit;

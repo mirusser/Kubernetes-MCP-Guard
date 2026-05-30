@@ -55,6 +55,40 @@ public sealed class GatewayToolDispatcherTests
     }
 
     [Fact]
+    public async Task ListToolsAsync_ReadOnlyHint_ExposedOnReadOnlyTools()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+
+        var result = await context.Dispatcher.ListToolsAsync(new ListToolsRequestParams(), CancellationToken.None);
+
+        var readOnlyTool = Assert.Single(result.Tools, t => t.Name == "get_allowed_namespaces");
+        Assert.True(readOnlyTool.Annotations?.ReadOnlyHint);
+
+        var proposePlan = Assert.Single(result.Tools, t => t.Name == McpGatewayConventions.ToolNames.ProposePlan);
+        Assert.False(proposePlan.Annotations?.ReadOnlyHint == true);
+
+        var applyApprovedPlan = Assert.Single(result.Tools, t => t.Name == McpGatewayConventions.ToolNames.ApplyApprovedPlan);
+        Assert.False(applyApprovedPlan.Annotations?.ReadOnlyHint == true);
+    }
+
+    [Fact]
+    public async Task ListToolsAsync_ScopeFiltering_FiltersToolsVisibleToUser()
+    {
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            httpScope: GatewayAuthConventions.DefaultReadOnlyOAuthScope);
+
+        var result = await context.Dispatcher.ListToolsAsync(new ListToolsRequestParams(), CancellationToken.None);
+
+        Assert.Contains(result.Tools, t => t.Name == "get_allowed_namespaces");
+        Assert.Contains(result.Tools, t => t.Name == McpGatewayConventions.ToolNames.GetPlanStatus);
+        
+        Assert.DoesNotContain(result.Tools, t => t.Name == "request_apply_manifest");
+        Assert.DoesNotContain(result.Tools, t => t.Name == McpGatewayConventions.ToolNames.ProposePlan);
+        Assert.DoesNotContain(result.Tools, t => t.Name == McpGatewayConventions.ToolNames.ApplyApprovedPlan);
+    }
+
+    [Fact]
     public async Task CallToolAsync_GetPlanStatus_MissingPlanId_ReturnsError()
     {
         var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));

@@ -3,7 +3,6 @@ global using InfraGate.Observer.Classification;
 global using InfraGate.Observer.Contracts;
 global using InfraGate.Observer.Cycle;
 global using InfraGate.Observer.Handoff;
-global using InfraGate.Observer.Mcp;
 global using InfraGate.Observer.Snapshot;
 global using InfraGate.Observer.State;
 global using Microsoft.Extensions.Options;

@@ -4,7 +4,7 @@ using InfraGate.Planner.Audit;
 using InfraGate.Planner.Cycle.Workflow;
 using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
-using InfraGate.Planner.Mcp;
+using InfraGate.AgentMcp;
 using InfraGate.Prompts;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -16,7 +16,7 @@ internal sealed class BatchProcessor : BackgroundService
     private readonly IOptionsMonitor<PlannerOptions> optionsMonitor;
     private readonly AnomalyBatchQueue queue;
     private readonly ToolCallingAgentFactory agentFactory;
-    private readonly IPlannerMcpClient mcpClient;
+    private readonly IAgentMcpToolset mcpClient;
     private readonly IRemediationProposalSink proposalSink;
     private readonly ILogger<BatchProcessor> logger;
     private readonly PlannerDedupeStore dedupeStore;
@@ -33,7 +33,7 @@ internal sealed class BatchProcessor : BackgroundService
         IOptionsMonitor<PlannerOptions> optionsMonitor,
         AnomalyBatchQueue queue,
         ToolCallingAgentFactory agentFactory,
-        IPlannerMcpClient mcpClient,
+        IAgentMcpToolset mcpClient,
         IRemediationProposalSink proposalSink,
         ILogger<BatchProcessor> logger,
         IPromptLibrary promptLibrary,
@@ -63,7 +63,7 @@ internal sealed class BatchProcessor : BackgroundService
         batchCts.CancelAfter(TimeSpan.FromSeconds(opts.BatchWallClockCapSeconds));
 
         // Throws OCE immediately if shutdown CT was already cancelled.
-        var tools = await mcpClient.GetReadOnlyToolsAsync(batchCts.Token).ConfigureAwait(false);
+        var tools = await mcpClient.GetAgentToolsAsync(batchCts.Token).ConfigureAwait(false);
 
         if (batch.Reports.Count == 0) return;
 

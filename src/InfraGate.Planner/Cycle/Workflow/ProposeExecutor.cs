@@ -1,17 +1,19 @@
 using System.Diagnostics.Metrics;
+using System.Text.Json;
 using InfraGate.Planner.Audit;
 using InfraGate.Planner.Decision;
 using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
-using InfraGate.Planner.Mcp;
+using InfraGate.AgentMcp;
 using Microsoft.Agents.AI.Workflows;
+using ModelContextProtocol.Protocol;
 
 namespace InfraGate.Planner.Cycle.Workflow;
 
 [YieldsOutput(typeof(RemediationProposal))]
 internal sealed class ProposeExecutor(
     string id,
-    IPlannerMcpClient mcpClient,
+    IAgentMcpToolset mcpClient,
     PlannerDedupeStore dedupeStore,
     IPlannerAuditOutbox? auditOutbox,
     Counter<long>? proposeFailedCounter,
@@ -53,7 +55,7 @@ internal sealed class ProposeExecutor(
     {
         try
         {
-            var result = await mcpClient.CallToolAsync(
+            var callResult = await mcpClient.CallToolAsync(
                 PlannerConventions.ToolNames.ProposePlan,
                 new Dictionary<string, object?>(StringComparer.Ordinal)
                 {
@@ -61,8 +63,20 @@ internal sealed class ProposeExecutor(
                     [PlannerConventions.ToolArguments.OperationArguments] = decision.Arguments,
                 },
                 cancellationToken).ConfigureAwait(false);
+            string? planId = null;
+            if (callResult.Content is not null)
+            {
+                foreach (var block in callResult.Content.OfType<TextContentBlock>())
+                {
+                    if (TryExtractPlanId(block.Text, out var extracted))
+                    {
+                        planId = extracted;
+                        break;
+                    }
+                }
+            }
 
-            if (TryExtractPlanId(result, out var planId))
+            if (planId is not null)
             {
                 if (auditOutbox is not null)
                 {

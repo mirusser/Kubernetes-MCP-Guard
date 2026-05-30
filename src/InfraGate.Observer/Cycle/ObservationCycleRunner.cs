@@ -5,7 +5,7 @@ using InfraGate.Observer.Audit;
 using InfraGate.Observer.Classification;
 using InfraGate.Observer.Cycle.Workflow;
 using InfraGate.Observer.Diagnostics;
-using InfraGate.Observer.Mcp;
+using InfraGate.AgentMcp;
 using InfraGate.Prompts;
 using InfraGate.Observer.Snapshot;
 using InfraGate.Observer.State;
@@ -46,7 +46,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
     private readonly IPromptLibrary promptLibrary;
     private readonly ToolCallingAgentFactory agentFactory;
     private readonly ISeverityClassifier severityClassifier;
-    private readonly IObserverMcpClient mcpClient;
+    private readonly IAgentMcpToolset mcpClient;
     private readonly IAnomalyDedupeStore dedupeStore;
     private readonly IAnomalyHandoffSink handoffSink;
     private readonly IObserverAuditOutbox? auditOutbox;
@@ -63,7 +63,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         IPromptLibrary promptLibrary,
         ToolCallingAgentFactory agentFactory,
         ISeverityClassifier severityClassifier,
-        IObserverMcpClient mcpClient,
+        IAgentMcpToolset mcpClient,
         IAnomalyDedupeStore dedupeStore,
         IAnomalyHandoffSink handoffSink,
         ILogger<ObservationCycleRunner> logger,
@@ -105,7 +105,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         using var cycleCts = CancellationTokenSource.CreateLinkedTokenSource(shutdownToken);
         cycleCts.CancelAfter(TimeSpan.FromSeconds(opts.WallClockCapSeconds));
 
-        var tools = await mcpClient.GetReadOnlyToolsAsync(cycleCts.Token).ConfigureAwait(false);
+        var tools = await mcpClient.GetAgentToolsAsync(cycleCts.Token).ConfigureAwait(false);
         var input = new CycleWorkflowInput(cycleId, opts.MaxToolIterations);
 
         var renderedPrompts = new Dictionary<string, string>(opts.AllowedNamespaces.Count, StringComparer.Ordinal);

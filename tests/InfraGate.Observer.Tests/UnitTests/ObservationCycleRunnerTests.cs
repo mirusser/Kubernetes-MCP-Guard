@@ -59,9 +59,7 @@ public sealed class ObservationCycleRunnerTests
 
         var severityClassifier = new SeverityClassifier();
 
-        var mcpClient = Substitute.For<IObserverMcpClient>();
-        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<AITool>>(Array.Empty<AITool>()));
+        var mcpClient = new TestAgentMcpToolset();
 
         var dedupeStore = new AnomalyDedupeStore();
         var logger = NullLogger<ObservationCycleRunner>.Instance;
@@ -264,9 +262,7 @@ public sealed class ObservationCycleRunnerTests
         var promptLibrary = BuildTestPromptLibrary();
 
         var chatClientFactory = new FixtureChatClient(ValidLlmJson());
-        var mcpClient = Substitute.For<IObserverMcpClient>();
-        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<AITool>>(Array.Empty<AITool>()));
+        var mcpClient = new TestAgentMcpToolset();
 
         var runner = new ObservationCycleRunner(
             optionsMonitor,
@@ -405,9 +401,7 @@ public sealed class ObservationCycleRunnerTests
 
         // Expose a fake "describe_k8s_resource" tool so FunctionInvokingChatClient can invoke it.
         var fakeTool = AIFunctionFactory.Create(static () => "{}", "describe_k8s_resource");
-        var mcpClient = Substitute.For<IObserverMcpClient>();
-        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<AITool>>(new List<AITool> { fakeTool }));
+        var mcpClient = new TestAgentMcpToolset { ToolsToReturn = [fakeTool] };
 
         var runner = new ObservationCycleRunner(
             optionsMonitor,
@@ -451,9 +445,7 @@ public sealed class ObservationCycleRunnerTests
                     new Dictionary<string, object?> { ["namespace"] = "default" })])));
 
         var fakeTool = AIFunctionFactory.Create(static () => "{}", "get_k8s_status");
-        var mcpClient = Substitute.For<IObserverMcpClient>();
-        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<AITool>>(new List<AITool> { fakeTool }));
+        var mcpClient = new TestAgentMcpToolset { ToolsToReturn = [fakeTool] };
 
         var runner = new ObservationCycleRunner(
             optionsMonitor,
@@ -492,9 +484,7 @@ public sealed class ObservationCycleRunnerTests
 
         // LLM returns empty JSON array for the empty snapshot.
         var chatClientFactory = new FixtureChatClient("[]");
-        var mcpClient = Substitute.For<IObserverMcpClient>();
-        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<AITool>>(Array.Empty<AITool>()));
+        var mcpClient = new TestAgentMcpToolset();
 
         var runner = new ObservationCycleRunner(
             optionsMonitor,
@@ -585,9 +575,7 @@ public sealed class ObservationCycleRunnerTests
         var promptLibrary = BuildTestPromptLibrary();
 
         var chatClientFactory = new FixtureChatClient(json);
-        var mcpClient = Substitute.For<IObserverMcpClient>();
-        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<AITool>>(Array.Empty<AITool>()));
+        var mcpClient = new TestAgentMcpToolset();
 
         var truncatedRunner = new ObservationCycleRunner(
             optionsMonitor,
@@ -659,9 +647,7 @@ public sealed class ObservationCycleRunnerTests
         var chatClientFactory = new FixtureChatClient(_ =>
             new ChatResponse(new ChatMessage(ChatRole.Assistant, llmResponseJson)));
 
-        var mcpClient = Substitute.For<IObserverMcpClient>();
-        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<AITool>>(Array.Empty<AITool>()));
+        var mcpClient = new TestAgentMcpToolset();
 
         handoffSink ??= Substitute.For<IAnomalyHandoffSink>();
 
@@ -735,9 +721,7 @@ public sealed class ObservationCycleRunnerTests
         var promptLibrary = BuildTestPromptLibrary();
 
         var chatClientFactory = new FixtureChatClient(ValidLlmJson());
-        var mcpClient = Substitute.For<IObserverMcpClient>();
-        mcpClient.GetReadOnlyToolsAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<AITool>>(Array.Empty<AITool>()));
+        var mcpClient = new TestAgentMcpToolset();
 
         var runner = new ObservationCycleRunner(
             optionsMonitor,

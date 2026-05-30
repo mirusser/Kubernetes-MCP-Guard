@@ -1,18 +1,19 @@
 using System.Diagnostics.Metrics;
+using InfraGate.AgentMcp;
 using InfraGate.Observer.Diagnostics;
-using InfraGate.Observer.Mcp;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Protocol;
 
 namespace InfraGate.Observer.Snapshot;
 
 internal sealed class SnapshotFetcher : ISnapshotFetcher
 {
-    private readonly IObserverMcpClient mcpClient;
+    private readonly IAgentMcpToolset mcpClient;
     private readonly ILogger<SnapshotFetcher> logger;
     private readonly Counter<long>? snapshotFetchErrorsCounter;
 
     public SnapshotFetcher(
-        IObserverMcpClient mcpClient,
+        IAgentMcpToolset mcpClient,
         ILogger<SnapshotFetcher> logger,
         Meter? meter = null)
     {
@@ -53,7 +54,19 @@ internal sealed class SnapshotFetcher : ISnapshotFetcher
     {
         try
         {
-            return await mcpClient.GetToolResultAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
+            var result = await mcpClient.CallToolAsync(toolName, arguments, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (result.IsError == true)
+            {
+                ObserverLogEvents.LogMcpToolError(logger, toolName);
+                return null;
+            }
+
+            string text = string.Join(
+                Environment.NewLine,
+                result.Content.OfType<TextContentBlock>().Select(c => c.Text));
+            return string.IsNullOrEmpty(text) ? null : text;
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException)
         {

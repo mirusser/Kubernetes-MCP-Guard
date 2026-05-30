@@ -206,6 +206,11 @@ _Avoid_: Ad-hoc prompt loader, manual string replacement
 A structured asset (e.g., Handlebars) containing LLM instructions and placeholders, rendered by the **Prompt Library** before being passed to an agent.
 _Avoid_: Static markdown file, unvalidated string template
 
+**Agent MCP Toolset**:
+The shared `IAgentMcpToolset` abstraction in `InfraGate.AgentMcp` used by AI agents (Observer, Planner) to connect to the MCP Gateway. It enforces visibility filtering based on `ReadOnlyHint` annotations and abstracts the connection lifecycle.
+_Avoid_: McpClient, direct gateway transport
+
+
 ### Anomaly Observation
 
 **Anomaly Observer**:

@@ -14,16 +14,16 @@ Based on the `loose-roadmap.md` and the current state of `k8s-toolkit`, this doc
 
 **Delivered:** Both `ObservationCycleRunner` and `BatchProcessor` use `WorkflowBuilder`-based graphs. `ToolCallingAgentFactory` is the shared agent construction seam (wired + registered in both `Program.cs` files). The Planner workflow splits into five focused executors (`FilterExecutor`, `DedupeGateExecutor`, `DecideExecutor`, `ValidateExecutor`, `ProposeExecutor`). Provider guard added to both `ChatClientFactory` implementations (Anthropic blocked; use OpenRouter). Focused executor tests and updated READMEs included.
 
-## 2. Standardizing the Prompt Libraries
+## 2. Standardizing the Prompt Libraries ✅ Done (2026-05-30)
 *Maps to roadmap item: "Developing and maintaining structured prompt libraries for AI agents supporting tasks across the SDLC."*
 
 * **Transition Static Prompts:** Move away from relying entirely on static markdown files (e.g., `Prompts/ObserverSystemPrompt.md`).
 * **Adopt Framework Templates:** Transition these into a unified **Prompt Library** (`IPromptLibrary`) backed by Semantic Kernel's Handlebars template renderer (the Microsoft Agent Framework lacks native template support). This treats prompts as configuration assets that take templated, validated arguments, making continuous tuning and versioning much easier.
 
-## 3. Integrating MCP Tools natively into the Framework
+## 3. Integrating MCP Tools natively into the Framework ✅ Done (2026-05-30)
 *Maps to roadmap item: "Integrating AI agents with enterprise tools..."*
 
-* **Replace Custom Calling Logic:** The agents currently maintain an explicit tool whitelist and serialize tool calls manually. We will replace this with the Microsoft Agent Framework's deep extensibility for plugins.
+* **Replace Custom Calling Logic:** The agents now use `IAgentMcpToolset` for dynamically filtering tools based on `ReadOnlyHint`. We will map this abstraction directly into the Microsoft Agent Framework's plugin system to avoid manual serialization of tool calls.
 * **Build MCP Tool Providers:** Build an MCP Plugin/Tool-Provider for the agent framework that dynamically loads the `mcp:tools.readonly` scope for the `Observer` and the `mcp:tools.propose` scope for the `Planner`. The framework's LLM router will seamlessly decide when to invoke the MCP gateway without custom loop logic.
 
 ## 4. Upgrading AI Observability and Telemetry

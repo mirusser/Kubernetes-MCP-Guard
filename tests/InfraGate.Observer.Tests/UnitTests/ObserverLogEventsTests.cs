@@ -211,7 +211,7 @@ public sealed class ObserverLogEventsTests
     [Fact]
     public void LogMcpConnected_LogsAtInformationLevel()
     {
-        var logger = new CapturingLogger<ObserverMcpClient>();
+        var logger = new CapturingLogger<ObserverLogEventsTests>();
         ObserverLogEvents.LogMcpConnected(logger, "http://localhost:3001/mcp");
 
         Assert.Single(logger.Entries);

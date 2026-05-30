@@ -1,5 +1,11 @@
 using System.Diagnostics.Metrics;
+using System.Reflection;
+using InfraGate.AgentLlm;
+using InfraGate.AgentMcp;
+using InfraGate.AuditOutbox;
+using InfraGate.AuditOutbox.Postgres;
 using InfraGate.ClientCredentials;
+using InfraGate.Observability;
 using InfraGate.Observer;
 using InfraGate.Observer.Audit;
 using InfraGate.Observer.Classification;
@@ -7,18 +13,12 @@ using InfraGate.Observer.Cycle;
 using InfraGate.Observer.Diagnostics;
 using InfraGate.Observer.Endpoints;
 using InfraGate.Observer.Handoff;
-using InfraGate.AgentLlm;
-using InfraGate.AuditOutbox;
-using InfraGate.AuditOutbox.Postgres;
 using InfraGate.Observer.Llm;
-using InfraGate.Observer.Mcp;
-using System.Reflection;
-using InfraGate.Prompts;
 using InfraGate.Observer.Snapshot;
 using InfraGate.Observer.State;
-using InfraGate.Observability;
+using InfraGate.Prompts;
 using InfraGate.RuntimeSafety;
-using Microsoft.Extensions.Configuration;
+using ModelContextProtocol.Protocol;
 using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -79,11 +79,15 @@ builder.Services.AddClientCredentialsTokenProvider(authOptions);
 builder.Services.AddHttpClient(ObserverConventions.HttpClients.PlannerHandoff)
     .AddClientCredentialsBearerHandler();
 
-builder.Services.AddSingleton<IObserverMcpClient, ObserverMcpClient>();
+builder.Services.AddInfraGateAgentMcp(new AgentMcpOptions
+{
+    GatewayBaseUrl = observerOptions.GatewayBaseUrl,
+    ClientName = ObserverConventions.DefaultClientId,
+});
 builder.Services.AddSingleton<ISnapshotFetcher>(sp =>
 {
     return new SnapshotFetcher(
-        sp.GetRequiredService<IObserverMcpClient>(),
+        sp.GetRequiredService<IAgentMcpToolset>(),
         sp.GetRequiredService<ILogger<SnapshotFetcher>>(),
         ObserverMetrics.Meter);
 });
@@ -117,7 +121,7 @@ builder.Services.AddSingleton<IObservationCycleRunner>(sp =>
         sp.GetRequiredService<IPromptLibrary>(),
         sp.GetRequiredService<ToolCallingAgentFactory>(),
         sp.GetRequiredService<ISeverityClassifier>(),
-        sp.GetRequiredService<IObserverMcpClient>(),
+        sp.GetRequiredService<IAgentMcpToolset>(),
         sp.GetRequiredService<IAnomalyDedupeStore>(),
         sp.GetRequiredService<IAnomalyHandoffSink>(),
         sp.GetRequiredService<ILogger<ObservationCycleRunner>>(),
@@ -207,22 +211,25 @@ static async Task ConnectObserverMcpClientAsync(WebApplication app)
 {
     var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
     var logger = loggerFactory.CreateLogger("InfraGate.Observer.Startup");
-    var mcpClient = app.Services.GetRequiredService<IObserverMcpClient>();
+    var mcpClient = app.Services.GetRequiredService<IAgentMcpToolset>();
     var configuration = app.Services.GetRequiredService<IConfiguration>();
 
     try
     {
         await mcpClient.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
 
-        var allowedNsResponse = await mcpClient.GetToolResultAsync(
+        var nsResult = await mcpClient.CallToolAsync(
             ObserverConventions.ToolNames.GetAllowedNamespaces,
             null,
             CancellationToken.None).ConfigureAwait(false);
+        string allowedNsResponse = nsResult.IsError != true
+            ? string.Join(Environment.NewLine, nsResult.Content.OfType<TextContentBlock>().Select(c => c.Text))
+            : string.Empty;
 
         ObserverLogEvents.LogStartupConnected(
             logger,
             mcpClient.GatewayBaseUrl,
-            allowedNsResponse ?? string.Empty);
+            allowedNsResponse);
     }
     catch (Exception ex)
     {

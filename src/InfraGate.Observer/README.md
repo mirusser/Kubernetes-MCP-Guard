@@ -21,7 +21,7 @@
 - **Severity** — three-level rules-derived classification: `High` (service zero endpoints, deployment totally unavailable, all pods in critical condition), `Medium` (partial deployment unavailability, single pod in critical condition with healthy siblings, sustained warning events), `Low` (single pod restart, pending pod within grace, one-off warning events).
 - **AnomalyStatus** — `Active | Resolved` (v1). No `Persistent` or `Flapping` statuses.
 - **AnomalyId** — stable 12-char hex hash of `(Kind, ApiVersion, Kind, Namespace, Name)`. Stable across cycles for the same underlying anomaly.
-- **Tool whitelist** — the Observer only calls the gateway's 8 read-only tools (`get_allowed_namespaces`, `get_k8s_status`, `get_k8s_events`, `get_k8s_pods`, `describe_k8s_resource`, `get_k8s_deployments`, `get_k8s_services`, `get_k8s_endpoints`). Any call to a mutation tool throws `InvalidOperationException` before HTTP.
+- **Read-Only Scope** — the Observer connects to the gateway with a read-only scope, meaning the Gateway filters the tools to strictly those marked with `ReadOnlyHint`. Any hallucinated call to a mutation tool is rejected by the Gateway.
 - The Observer is a peer MCP client (not embedded in the gateway). It never calls mutation tools, never produces Plan Envelopes or Approval Grants, and never writes through `IApprovalAuditPublisher`.
 - Optional HTTP handoff posts `AnomalyHandoffBatch` payloads to the Remediation Planner's `/handoff/anomalies` endpoint.
 - LLM provider is configurable via env vars. Supported provider: `openrouter` (OpenAI-compatible). `INFRA_GATE_OBSERVER_LLM_API_KEY` is required. Configuring `ANTHROPIC` as the provider throws `InvalidOperationException` at startup — use OpenRouter instead.

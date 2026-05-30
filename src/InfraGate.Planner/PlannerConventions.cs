@@ -128,30 +128,6 @@ internal static class PlannerConventions
         public const string GetK8sServices = "get_k8s_services";
         public const string GetK8sEndpoints = "get_k8s_endpoints";
 
-        public static readonly IReadOnlySet<string> ReadOnlyToolNames = new HashSet<string>(StringComparer.Ordinal)
-        {
-            GetAllowedNamespaces,
-            GetK8sStatus,
-            GetK8sEvents,
-            GetK8sPods,
-            DescribeK8sResource,
-            GetK8sDeployments,
-            GetK8sServices,
-            GetK8sEndpoints,
-        };
-
-        public static readonly IReadOnlySet<string> AllowedToolNames = new HashSet<string>(StringComparer.Ordinal)
-        {
-            ProposePlan,
-            GetAllowedNamespaces,
-            GetK8sStatus,
-            GetK8sEvents,
-            GetK8sPods,
-            DescribeK8sResource,
-            GetK8sDeployments,
-            GetK8sServices,
-            GetK8sEndpoints,
-        };
     }
 
     public static class Claims

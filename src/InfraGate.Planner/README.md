@@ -15,14 +15,14 @@
   4. `ValidateExecutor` — checks the operation type against the v1 allow-list, normalises arguments via `OperationArgumentValidator`, and deduplicates within-batch operation keys.
   5. `ProposeExecutor` — calls `propose_plan` via the MCP client; on success emits `propose_plan.succeeded` audit and yields a `RemediationProposal` as workflow output.
 - Successful proposals are emitted as `RemediationProposalBatch` payloads through `IRemediationProposalSink`: logging is always on, JSON file output is opt-in, and HTTP handoff to the Executor is enabled when configured.
-- The Planner may inspect the cluster through the gateway's read-only tool whitelist, but it never calls execution tools.
+- The Planner may inspect the cluster through the gateway's read-only tools, but it never calls execution tools.
 
 ## Important Contracts
 
 - **Input contract:** `InfraGate.Observer.Contracts.AnomalyHandoffBatch`.
 - **Output contract:** `InfraGate.Remediation.Contracts.RemediationProposalBatch`.
 - **V1 operation menu:** `restart_deployment` with `name` and `namespace`; `scale_deployment` with `name`, `namespace`, and non-negative `replicas`; `set_deployment_image` with `name`, `namespace`, `container`, and `image`.
-- **Tool whitelist:** `propose_plan` plus the same read-only inspection tools used by the Observer.
+- **Execution Scope Guard:** The Planner is configured with a propose scope, limiting its discovery to `propose_plan` plus read-only inspection tools. Execution tools remain invisible.
 - **Identity and scope:** default client id `infra-gate-planner`; default scope `mcp:tools.propose mcp:tools.readonly`.
 - **Safety model:** the Planner creates Plan Envelopes with Operator Approval Policy through the gateway. It does not approve, grant, or execute plans.
 

@@ -8,6 +8,7 @@ using System.Diagnostics.Metrics;
 using System.Net;
 using System.Text.Json;
 using InfraGate.AgentLlm;
+using InfraGate.AgentMcp;
 using InfraGate.ClientCredentials;
 using InfraGate.Planner.Cycle;
 using InfraGate.Planner.Diagnostics;
@@ -130,6 +131,18 @@ public sealed class PlannerGatewayIntegrationTests
         Assert.False(string.IsNullOrWhiteSpace(proposal.PlanId));
     }
 
+    [Fact]
+    public async Task GetAgentToolsAsync_ExcludesProposePlanTool()
+    {
+        await using var gateway = PlannerGatewayFixture.Create();
+        await using var mcpClient = await gateway.CreatePlannerClientAsync();
+
+        var tools = await mcpClient.GetAgentToolsAsync(CancellationToken.None);
+
+        Assert.DoesNotContain(tools, t => t.Name == PlannerConventions.ToolNames.ProposePlan);
+        Assert.Contains(tools, t => t.Name == PlannerConventions.ToolNames.GetAllowedNamespaces);
+    }
+
     // --- helpers ---
 
     private static IPromptLibrary BuildTestPromptLibrary()
@@ -142,7 +155,7 @@ public sealed class PlannerGatewayIntegrationTests
     }
 
     private static BatchProcessor CreateProcessor(
-        IPlannerMcpClient mcpClient,
+        IAgentMcpToolset mcpClient,
         FixtureChatClient chatClientFactory,
         IRemediationProposalSink sink,
         PlannerDedupeStore? dedupeStore = null)
@@ -301,9 +314,9 @@ public sealed class PlannerGatewayIntegrationTests
             return fixture;
         }
 
-        public async Task<HttpMcpPlannerClient> CreatePlannerClientAsync()
+        public async Task<HttpMcpAgentToolset> CreatePlannerClientAsync()
         {
-            var client = new HttpMcpPlannerClient(server, TokenProvider);
+            var client = new HttpMcpAgentToolset(server, TokenProvider);
             await client.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
             return client;
         }
@@ -329,25 +342,41 @@ public sealed class PlannerGatewayIntegrationTests
         private static IList<Tool> CreateTools()
         {
             var schema = JsonSerializer.SerializeToElement(new { type = "object" });
-            return PlannerConventions.ToolNames.AllowedToolNames
+            string[] readOnlyToolNames =
+            [
+                PlannerConventions.ToolNames.GetAllowedNamespaces, PlannerConventions.ToolNames.GetK8sStatus,
+                PlannerConventions.ToolNames.GetK8sEvents, PlannerConventions.ToolNames.GetK8sPods,
+                PlannerConventions.ToolNames.DescribeK8sResource, PlannerConventions.ToolNames.GetK8sDeployments,
+                PlannerConventions.ToolNames.GetK8sServices, PlannerConventions.ToolNames.GetK8sEndpoints,
+            ];
+            var tools = readOnlyToolNames
                 .Select(toolName => new Tool
                 {
                     Name = toolName,
-                    Description = $"Stubbed tool {toolName}.",
+                    Description = $"Stubbed read-only tool {toolName}.",
                     InputSchema = schema,
+                    Annotations = new ToolAnnotations { ReadOnlyHint = true },
                 })
-                .ToList();
+                .ToList<Tool>();
+            tools.Add(new Tool
+            {
+                Name = PlannerConventions.ToolNames.ProposePlan,
+                Description = "Stubbed propose_plan tool.",
+                InputSchema = schema,
+            });
+            return tools;
         }
     }
 
-    // Thin MCP client that drives PlannerMcpClient against the in-process TestServer.
-    private sealed class HttpMcpPlannerClient : IPlannerMcpClient, IAsyncDisposable
+    // Thin IAgentMcpToolset backed by the in-process TestServer.
+    private sealed class HttpMcpAgentToolset : IAgentMcpToolset, IAsyncDisposable
     {
         private readonly TestServer server;
         private readonly StubTokenProvider tokenProvider;
+        private HttpClient? httpClient;
         private McpClient? mcpClient;
 
-        public HttpMcpPlannerClient(TestServer server, StubTokenProvider tokenProvider)
+        public HttpMcpAgentToolset(TestServer server, StubTokenProvider tokenProvider)
         {
             this.server = server;
             this.tokenProvider = tokenProvider;
@@ -360,53 +389,52 @@ public sealed class PlannerGatewayIntegrationTests
 
         public async Task ConnectAsync(CancellationToken cancellationToken)
         {
-            var httpClient = PlannerMcpClient.CreateHttpClient(
-                GatewayBaseUrl,
+            if (mcpClient is not null) return;
+
+            var bearerHandler = new ClientCredentialsBearerHandler(
                 tokenProvider,
-                NullLoggerFactory.Instance,
-                server.CreateHandler());
+                NullLogger<ClientCredentialsBearerHandler>.Instance)
+            {
+                InnerHandler = server.CreateHandler()
+            };
+            httpClient = new HttpClient(bearerHandler) { BaseAddress = new Uri("http://localhost") };
 
             var transport = new HttpClientTransport(
                 new HttpClientTransportOptions
                 {
                     Endpoint = new Uri(GatewayBaseUrl),
                     Name = "planner-integration-test",
+                    TransportMode = HttpTransportMode.StreamableHttp,
                 },
                 httpClient,
                 NullLoggerFactory.Instance,
-                ownsHttpClient: true);
+                ownsHttpClient: false);
 
             mcpClient = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        public async Task<IReadOnlyList<AITool>> GetReadOnlyToolsAsync(CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<AITool>> GetAgentToolsAsync(CancellationToken cancellationToken)
         {
             if (mcpClient is null)
                 throw new InvalidOperationException("Not connected.");
             var allTools = await mcpClient.ListToolsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
             return allTools
-                .Where(t => PlannerConventions.ToolNames.ReadOnlyToolNames.Contains(t.Name))
+                .Where(t => t.ProtocolTool.Annotations?.ReadOnlyHint == true)
                 .Cast<AITool>()
                 .ToList();
         }
 
-        public async Task<string> CallToolAsync(
+        public async Task<CallToolResult> CallToolAsync(
             string toolName,
             IReadOnlyDictionary<string, object?>? arguments,
             CancellationToken cancellationToken)
         {
-            PlannerToolWhitelist.AssertAllowed(toolName);
-
             if (mcpClient is null)
-            {
                 throw new InvalidOperationException("Not connected.");
-            }
 
-            var result = await mcpClient.CallToolAsync(toolName, arguments, cancellationToken: cancellationToken)
+            return await mcpClient.CallToolAsync(toolName, arguments, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-
-            return JsonSerializer.Serialize(result);
         }
 
         public async ValueTask DisposeAsync()
@@ -415,6 +443,8 @@ public sealed class PlannerGatewayIntegrationTests
             {
                 await mcpClient.DisposeAsync().ConfigureAwait(false);
             }
+
+            httpClient?.Dispose();
         }
     }
 

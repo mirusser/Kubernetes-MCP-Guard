@@ -31,6 +31,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\InfraGate.AgentLlm\InfraGate.AgentLlm.csproj" />
+    <ProjectReference Include="..\InfraGate.AgentMcp\InfraGate.AgentMcp.csproj" />
     <ProjectReference Include="..\InfraGate.Prompts\InfraGate.Prompts.csproj" />
     <ProjectReference Include="..\InfraGate.AuditOutbox\InfraGate.AuditOutbox.csproj" />
     <ProjectReference Include="..\InfraGate.AuditOutbox.Postgres\InfraGate.AuditOutbox.Postgres.csproj" />

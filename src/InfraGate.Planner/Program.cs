@@ -9,8 +9,9 @@ using InfraGate.AgentLlm;
 using InfraGate.AuditOutbox;
 using InfraGate.AuditOutbox.Postgres;
 using InfraGate.Planner.Llm;
-using InfraGate.Planner.Mcp;
+using InfraGate.AgentMcp;
 using InfraGate.Prompts;
+using ModelContextProtocol.Protocol;
 using InfraGate.Observability;
 using System.Reflection;
 using System.Text;
@@ -71,7 +72,11 @@ var authOptions = new ClientCredentialsTokenOptions
 };
 builder.Services.AddClientCredentialsTokenProvider(authOptions);
 
-builder.Services.AddSingleton<IPlannerMcpClient, PlannerMcpClient>();
+builder.Services.AddInfraGateAgentMcp(new AgentMcpOptions
+{
+    GatewayBaseUrl = plannerOptions.GatewayBaseUrl,
+    ClientName = PlannerConventions.DefaultClientId,
+});
 builder.Services.AddSingleton<IChatClientFactory>(sp =>
 {
     return new ChatClientFactory(
@@ -208,17 +213,20 @@ static async Task ConnectPlannerMcpClientAsync(WebApplication app)
 {
     var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
     var logger = loggerFactory.CreateLogger("InfraGate.Planner.Startup");
-    var mcpClient = app.Services.GetRequiredService<IPlannerMcpClient>();
+    var mcpClient = app.Services.GetRequiredService<IAgentMcpToolset>();
     var configuration = app.Services.GetRequiredService<IConfiguration>();
 
     try
     {
         await mcpClient.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
 
-        var allowedNsResponse = await mcpClient.CallToolAsync(
+        var nsResult = await mcpClient.CallToolAsync(
             PlannerConventions.ToolNames.GetAllowedNamespaces,
             null,
             CancellationToken.None).ConfigureAwait(false);
+        string allowedNsResponse = nsResult.IsError != true
+            ? string.Join(Environment.NewLine, nsResult.Content.OfType<TextContentBlock>().Select(c => c.Text))
+            : string.Empty;
 
         PlannerLogEvents.LogStartupConnected(
             logger,
