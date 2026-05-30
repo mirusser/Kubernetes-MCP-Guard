@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using InfraGate.AgentGuardrails;
 using InfraGate.AgentLlm;
 using InfraGate.Observer.Audit;
 using InfraGate.Observer.Classification;
@@ -56,6 +57,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
     private readonly Counter<long>? severityDisagreementCounter;
     private readonly Counter<long>? reportsEmittedCounter;
     private readonly Histogram<double>? cycleDurationHistogram;
+    private readonly AgentGuardrailPolicy? guardrailPolicy;
 
     public ObservationCycleRunner( // NOSONAR:S107 — DI constructor; all params are required services.
         IOptionsMonitor<ObserverOptions> optionsMonitor,
@@ -68,7 +70,8 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         IAnomalyHandoffSink handoffSink,
         ILogger<ObservationCycleRunner> logger,
         Meter? meter = null,
-        IObserverAuditOutbox? auditOutbox = null)
+        IObserverAuditOutbox? auditOutbox = null,
+        AgentGuardrailPolicy? guardrailPolicy = null)
     {
         this.optionsMonitor = optionsMonitor;
         this.snapshotFetcher = snapshotFetcher;
@@ -80,6 +83,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         this.handoffSink = handoffSink;
         this.auditOutbox = auditOutbox;
         this.logger = logger;
+        this.guardrailPolicy = guardrailPolicy;
 
         cycleCountCounter = ObserverMetrics.CreateCycleCountCounter(meter);
         toolCallsCounter = ObserverMetrics.CreateToolCallsCounter(meter);
@@ -198,7 +202,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
             string ns = namespaces[i];
             string systemPrompt = renderedPrompts[ns];
 
-            var (agent, getCount) = agentFactory.Create($"observer-{ns}", systemPrompt, tools, opts.MaxToolIterations, observerResponseFormat);
+            var (agent, getCount) = agentFactory.Create($"observer-{ns}", systemPrompt, tools, opts.MaxToolIterations, observerResponseFormat, guardrailPolicy);
             var agentBinding = agent.BindAsExecutor(new AIAgentHostOptions { ForwardIncomingMessages = false });
 
             ExecutorBinding snap = new SnapshotExecutor($"snapshot-{i}", ns, snapshotFetcher, logger);

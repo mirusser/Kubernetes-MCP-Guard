@@ -17,6 +17,16 @@
 - Successful proposals are emitted as `RemediationProposalBatch` payloads through `IRemediationProposalSink`: logging is always on, JSON file output is opt-in, and HTTP handoff to the Executor is enabled when configured.
 - The Planner may inspect the cluster through the gateway's read-only tools, but it never calls execution tools.
 
+## Guardrails
+
+The Planner is protected at two layers:
+
+1. **Agent-layer tool-call guardrail** (from `InfraGate.AgentGuardrails`): `ToolCallingAgentFactory` composes a framework function-invocation middleware (`UseToolCallGuardrail`) enforcing an explicit allow-list of the 8 read-only tool names from `PlannerConventions.ToolNames` (excluding `propose_plan`, which is called deterministically by `ProposeExecutor`, never by the LLM). Any tool call outside this allow-list is blocked, not executed, and recorded as a `tool_call.blocked` guardrail metric.
+
+2. **Workflow-layer decision validation** (`ValidateExecutor`): validates the LLM's chosen operation type against the v1 allow-list (`restart_deployment`, `scale_deployment`, `set_deployment_image`), normalizes arguments, and deduplicates in-batch operation keys. Every validation outcome — accepted, rejected (`invalid_operation`, `invalid_arguments`, `dedupe_in_batch`) — is recorded as a reason-tagged `infragate.agentguardrails.decision` metric, replacing the two formerly bespoke counter instruments.
+
+Both layers feed the `InfraGate.AgentGuardrails` meter, registered in the Planner's telemetry pipeline. **Hallucination rate** = `decision{rejected,reason∈{invalid_operation,invalid_arguments}} / decision{accepted+rejected}`; `dedupe_in_batch` drops are excluded from the numerator.
+
 ## Important Contracts
 
 - **Input contract:** `InfraGate.Observer.Contracts.AnomalyHandoffBatch`.

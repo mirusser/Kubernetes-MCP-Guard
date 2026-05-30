@@ -1,4 +1,5 @@
 using System.Diagnostics.Metrics;
+using InfraGate.AgentGuardrails;
 using InfraGate.AgentLlm;
 using InfraGate.Planner.Audit;
 using InfraGate.Planner.Cycle.Workflow;
@@ -24,10 +25,10 @@ internal sealed class BatchProcessor : BackgroundService
     private readonly IPromptLibrary promptLibrary;
     private static readonly IReadOnlyDictionary<string, object?> emptyPromptArgs =
         new Dictionary<string, object?>(0, StringComparer.Ordinal);
-    private readonly Counter<long>? invalidOperationCounter;
-    private readonly Counter<long>? invalidArgumentsCounter;
     private readonly Counter<long>? timeoutCounter;
     private readonly Counter<long>? proposeFailedCounter;
+    private readonly AgentGuardrailPolicy? guardrailPolicy;
+    private readonly AgentGuardrailMetrics? guardrailMetrics;
 
     public BatchProcessor( // NOSONAR:S107 — orchestrator dependencies are explicit production seams.
         IOptionsMonitor<PlannerOptions> optionsMonitor,
@@ -39,7 +40,9 @@ internal sealed class BatchProcessor : BackgroundService
         IPromptLibrary promptLibrary,
         PlannerDedupeStore? dedupeStore = null,
         Meter? meter = null,
-        IPlannerAuditOutbox? auditOutbox = null)
+        IPlannerAuditOutbox? auditOutbox = null,
+        AgentGuardrailPolicy? guardrailPolicy = null,
+        AgentGuardrailMetrics? guardrailMetrics = null)
     {
         this.optionsMonitor = optionsMonitor;
         this.queue = queue;
@@ -50,10 +53,10 @@ internal sealed class BatchProcessor : BackgroundService
         this.promptLibrary = promptLibrary;
         this.dedupeStore = dedupeStore ?? new PlannerDedupeStore();
         this.auditOutbox = auditOutbox;
-        invalidOperationCounter = PlannerMetrics.CreateDecisionInvalidOperationCounter(meter);
-        invalidArgumentsCounter = PlannerMetrics.CreateDecisionInvalidArgumentsCounter(meter);
         timeoutCounter = PlannerMetrics.CreateDecisionTimeoutCounter(meter);
         proposeFailedCounter = PlannerMetrics.CreateProposeFailedCounter(meter);
+        this.guardrailPolicy = guardrailPolicy;
+        this.guardrailMetrics = guardrailMetrics;
     }
 
     internal async Task ProcessBatchAsync(AnomalyHandoffBatch batch, CancellationToken shutdownToken)
@@ -147,9 +150,9 @@ internal sealed class BatchProcessor : BackgroundService
             filterExecs.Add(new FilterExecutor(filterIds[i], dedupeStore, auditOutbox, logger));
             dedupeExecs.Add(new DedupeGateExecutor($"dedupe-{i}", dedupeStore, auditOutbox, logger));
             decideExecs.Add(new DecideExecutor($"decide-{i}", agentFactory, systemPrompt, tools,
-                opts.MaxToolIterations, opts.AnomalyWallClockCapSeconds, timeoutCounter, logger));
+                opts.MaxToolIterations, opts.AnomalyWallClockCapSeconds, timeoutCounter, logger, guardrailPolicy));
             validateExecs.Add(new ValidateExecutor($"validate-{i}", batchOperationKeys, dedupeStore,
-                invalidOperationCounter, invalidArgumentsCounter, logger));
+                guardrailMetrics, logger));
             proposeExecs.Add(new ProposeExecutor($"propose-{i}", mcpClient, dedupeStore,
                 auditOutbox, proposeFailedCounter, logger));
         }

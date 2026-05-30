@@ -1,4 +1,5 @@
 using System.Diagnostics.Metrics;
+using InfraGate.AgentGuardrails;
 using InfraGate.AgentLlm;
 using InfraGate.Planner.Decision;
 using InfraGate.Planner.Diagnostics;
@@ -16,7 +17,8 @@ internal sealed class DecideExecutor(
     int maxToolIterations,
     int anomalyWallClockCapSeconds,
     Counter<long>? timeoutCounter,
-    ILogger logger) : Executor<AnomalyReport>(id)
+    ILogger logger,
+    AgentGuardrailPolicy? guardrailPolicy = null) : Executor<AnomalyReport>(id)
 {
     private static readonly JsonSerializerOptions anomalyJsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly ChatResponseFormat decisionResponseFormat = ChatResponseFormat.ForJsonSchema<LlmDecisionOutput>();
@@ -52,7 +54,7 @@ internal sealed class DecideExecutor(
     private async Task<RemediationDecision?> DecideCoreAsync(AnomalyReport message, CancellationToken cancellationToken)
     {
         string anomalyJson = JsonSerializer.Serialize(message, anomalyJsonOptions);
-        var (agent, _) = agentFactory.Create($"planner-{message.AnomalyId[..8]}", systemPrompt, tools, maxToolIterations, decisionResponseFormat);
+        var (agent, _) = agentFactory.Create($"planner-{message.AnomalyId[..8]}", systemPrompt, tools, maxToolIterations, decisionResponseFormat, guardrailPolicy);
 
         var response = await agent.RunAsync(anomalyJson, cancellationToken: cancellationToken).ConfigureAwait(false);
         string responseText = response.Text ?? string.Empty;

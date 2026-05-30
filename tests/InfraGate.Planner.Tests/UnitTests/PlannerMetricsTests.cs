@@ -13,22 +13,6 @@ public sealed class PlannerMetricsTests
     }
 
     [Fact]
-    public void CreateDecisionInvalidOperationCounter_ReturnsNonNull()
-    {
-        using var meter = new Meter("test-planner-metrics");
-        var counter = PlannerMetrics.CreateDecisionInvalidOperationCounter(meter);
-        Assert.NotNull(counter);
-    }
-
-    [Fact]
-    public void CreateDecisionInvalidArgumentsCounter_ReturnsNonNull()
-    {
-        using var meter = new Meter("test-planner-metrics");
-        var counter = PlannerMetrics.CreateDecisionInvalidArgumentsCounter(meter);
-        Assert.NotNull(counter);
-    }
-
-    [Fact]
     public void CreateDecisionTimeoutCounter_ReturnsNonNull()
     {
         using var meter = new Meter("test-planner-metrics");

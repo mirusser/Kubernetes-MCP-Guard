@@ -331,6 +331,7 @@ Use specific release tags for stable demos. The `:dev` tag tracks the developmen
 - [src/InfraGate.Observer/README.md](src/InfraGate.Observer/README.md): LLM-driven anomaly observer.
 - [src/InfraGate.Planner/README.md](src/InfraGate.Planner/README.md): LLM-driven remediation planner.
 - [src/InfraGate.Executor/README.md](src/InfraGate.Executor/README.md): deterministic remediation executor.
+- [src/InfraGate.AgentGuardrails/README.md](src/InfraGate.AgentGuardrails/README.md): tool-call guardrail middleware and hallucination-rate metric.
 
 ## ⚖️ Boundaries And Non-Goals
 

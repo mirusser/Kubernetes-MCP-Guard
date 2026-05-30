@@ -17,4 +17,8 @@
     <InternalsVisibleTo Include="InfraGate.AgentLlm.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\InfraGate.AgentGuardrails\InfraGate.AgentGuardrails.csproj" />
+  </ItemGroup>
+
 </Project>

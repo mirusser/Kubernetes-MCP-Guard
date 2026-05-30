@@ -5,6 +5,7 @@ using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
 using InfraGate.Planner.Endpoints;
 using InfraGate.Planner.Handoff;
+using InfraGate.AgentGuardrails;
 using InfraGate.AgentLlm;
 using InfraGate.AuditOutbox;
 using InfraGate.AuditOutbox.Postgres;
@@ -49,7 +50,7 @@ builder.AddInfraGateObservability(opt =>
 builder.AddInfraGateTelemetry(opt =>
 {
     opt.ServiceName = "infragate-planner";
-    opt.MeterNames = [PlannerMetrics.MeterName];
+    opt.MeterNames = [PlannerMetrics.MeterName, AgentGuardrailConventions.MeterName];
 });
 
 ConfigureUrls(builder);
@@ -90,6 +91,22 @@ builder.Services.AddSingleton<IChatClientFactory>(sp =>
         sp.GetRequiredService<ILoggerFactory>());
 });
 builder.Services.AddSingleton<ToolCallingAgentFactory>();
+builder.Services.AddAgentGuardrails();
+builder.Services.AddSingleton(_ =>
+{
+    var allowedTools = new HashSet<string>(StringComparer.Ordinal)
+    {
+        PlannerConventions.ToolNames.GetAllowedNamespaces,
+        PlannerConventions.ToolNames.GetK8sStatus,
+        PlannerConventions.ToolNames.GetK8sEvents,
+        PlannerConventions.ToolNames.GetK8sPods,
+        PlannerConventions.ToolNames.DescribeK8sResource,
+        PlannerConventions.ToolNames.GetK8sDeployments,
+        PlannerConventions.ToolNames.GetK8sServices,
+        PlannerConventions.ToolNames.GetK8sEndpoints,
+    };
+    return new AgentGuardrailPolicy(allowedTools);
+});
 builder.Services.AddSingleton<IChatClient>(sp =>
 {
     var factory = sp.GetRequiredService<IChatClientFactory>();

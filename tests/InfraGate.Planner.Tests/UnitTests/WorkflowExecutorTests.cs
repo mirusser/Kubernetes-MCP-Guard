@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.Metrics;
 using System.Text.Json;
+using InfraGate.AgentGuardrails;
 using InfraGate.AgentLlm;
 using InfraGate.Observer.Contracts;
 using InfraGate.Planner.Audit;
@@ -153,10 +155,28 @@ public sealed class WorkflowExecutorTests
         var decisionCtx = new DecisionContext(report, decision);
         var context = new FakeWorkflowContext();
 
-        var executor = new ValidateExecutor("validate-0", new ConcurrentDictionary<string, byte>(), new PlannerDedupeStore(), null, null, NullLogger.Instance);
+        using var testMeter = new Meter("test-validate-invalid-op");
+        var metrics = new AgentGuardrailMetrics(testMeter);
+        var recorded = new List<Measurement<long>>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == AgentGuardrailConventions.DecisionCounterName)
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+            recorded.Add(new Measurement<long>(value, tags)));
+        listener.Start();
+
+        var executor = new ValidateExecutor("validate-0", new ConcurrentDictionary<string, byte>(), new PlannerDedupeStore(), metrics, NullLogger.Instance);
         await executor.HandleAsync(decisionCtx, context, CancellationToken.None);
 
         Assert.Empty(context.SentMessages);
+        var measurement = Assert.Single(recorded);
+        Assert.Equal(1L, measurement.Value);
+        var tags = measurement.Tags.ToArray();
+        Assert.Equal(AgentGuardrailConventions.Outcomes.Rejected, tags.First(t => t.Key == AgentGuardrailConventions.Tags.GuardrailOutcome).Value);
+        Assert.Equal(AgentGuardrailConventions.Reasons.InvalidOperation, tags.First(t => t.Key == AgentGuardrailConventions.Tags.GuardrailReason).Value);
     }
 
     [Fact]
@@ -167,12 +187,102 @@ public sealed class WorkflowExecutorTests
         var decisionCtx = new DecisionContext(report, decision);
         var context = new FakeWorkflowContext();
 
-        var executor = new ValidateExecutor("validate-0", new ConcurrentDictionary<string, byte>(), new PlannerDedupeStore(), null, null, NullLogger.Instance);
+        using var testMeter = new Meter("test-validate-valid-op");
+        var metrics = new AgentGuardrailMetrics(testMeter);
+        var recorded = new List<Measurement<long>>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == AgentGuardrailConventions.DecisionCounterName)
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+            recorded.Add(new Measurement<long>(value, tags)));
+        listener.Start();
+
+        var executor = new ValidateExecutor("validate-0", new ConcurrentDictionary<string, byte>(), new PlannerDedupeStore(), metrics, NullLogger.Instance);
         await executor.HandleAsync(decisionCtx, context, CancellationToken.None);
 
         var forwarded = Assert.Single(context.SentMessages);
         var forwardedCtx = Assert.IsType<DecisionContext>(forwarded);
         Assert.Equal("restart_deployment", forwardedCtx.Decision.OperationType);
+
+        var measurement = Assert.Single(recorded);
+        Assert.Equal(1L, measurement.Value);
+        var tags = measurement.Tags.ToArray();
+        Assert.Equal(AgentGuardrailConventions.Outcomes.Accepted, tags.First(t => t.Key == AgentGuardrailConventions.Tags.GuardrailOutcome).Value);
+        Assert.Equal(AgentGuardrailConventions.Reasons.None, tags.First(t => t.Key == AgentGuardrailConventions.Tags.GuardrailReason).Value);
+    }
+
+    [Fact]
+    public async Task ValidateExecutor_InvalidArguments_DropsWithoutForwarding()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        // Invalid arguments for scale_deployment (missing namespace, bad replicas)
+        var decision = new RemediationDecision("scale_deployment", new Dictionary<string, object?> { ["name"] = "nginx" }, null);
+        var decisionCtx = new DecisionContext(report, decision);
+        var context = new FakeWorkflowContext();
+
+        using var testMeter = new Meter("test-validate-invalid-args");
+        var metrics = new AgentGuardrailMetrics(testMeter);
+        var recorded = new List<Measurement<long>>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == AgentGuardrailConventions.DecisionCounterName)
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+            recorded.Add(new Measurement<long>(value, tags)));
+        listener.Start();
+
+        var executor = new ValidateExecutor("validate-0", new ConcurrentDictionary<string, byte>(), new PlannerDedupeStore(), metrics, NullLogger.Instance);
+        await executor.HandleAsync(decisionCtx, context, CancellationToken.None);
+
+        Assert.Empty(context.SentMessages);
+        var measurement = Assert.Single(recorded);
+        Assert.Equal(1L, measurement.Value);
+        var tags = measurement.Tags.ToArray();
+        Assert.Equal(AgentGuardrailConventions.Outcomes.Rejected, tags.First(t => t.Key == AgentGuardrailConventions.Tags.GuardrailOutcome).Value);
+        Assert.Equal(AgentGuardrailConventions.Reasons.InvalidArguments, tags.First(t => t.Key == AgentGuardrailConventions.Tags.GuardrailReason).Value);
+    }
+
+    [Fact]
+    public async Task ValidateExecutor_DedupeInBatch_DropsWithoutForwarding()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        var decision = new RemediationDecision("restart_deployment", new Dictionary<string, object?> { ["name"] = "nginx", ["namespace"] = "default" }, null);
+        var decisionCtx = new DecisionContext(report, decision);
+        var context = new FakeWorkflowContext();
+
+        using var testMeter = new Meter("test-validate-dedupe");
+        var metrics = new AgentGuardrailMetrics(testMeter);
+        var recorded = new List<Measurement<long>>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == AgentGuardrailConventions.DecisionCounterName)
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+            recorded.Add(new Measurement<long>(value, tags)));
+        listener.Start();
+
+        var executor = new ValidateExecutor("validate-0", new ConcurrentDictionary<string, byte>(), new PlannerDedupeStore(), metrics, NullLogger.Instance);
+        
+        // Handle once (should be accepted)
+        await executor.HandleAsync(decisionCtx, context, CancellationToken.None);
+        // Handle twice (should be dedupe blocked)
+        await executor.HandleAsync(decisionCtx, context, CancellationToken.None);
+
+        Assert.Single(context.SentMessages); // Only forwarded once
+        Assert.Equal(2, recorded.Count);
+        
+        var secondMeasurement = recorded[1];
+        Assert.Equal(1L, secondMeasurement.Value);
+        var tags = secondMeasurement.Tags.ToArray();
+        Assert.Equal(AgentGuardrailConventions.Outcomes.Rejected, tags.First(t => t.Key == AgentGuardrailConventions.Tags.GuardrailOutcome).Value);
+        Assert.Equal(AgentGuardrailConventions.Reasons.DedupeInBatch, tags.First(t => t.Key == AgentGuardrailConventions.Tags.GuardrailReason).Value);
     }
 
     // ------------------------------------------------------------------ //

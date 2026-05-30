@@ -69,7 +69,7 @@ domain language (`CONTEXT.md`). Three forks were resolved with the user (2026-05
   to *reduce* hallucination risk. Deferred unless the rejection metrics later prove a need.
 
 - **New `InfraGate.AgentGuardrails` module (decision 3).** Two real consumers (Observer **and** Planner)
-  already flow through the shared `ToolCallingAgentFactory` — *two adapters = a real seam*, not a
+  already flow through the shared `ToolCallingAgentFactory` — *two clients = a real seam*, not a
   hypothetical one. The guardrail concept (interceptor + outcome vocabulary + metric) is distinct from
   agent construction (`InfraGate.AgentLlm`) and from observability transport (`InfraGate.Observability`).
   *Deletion test:* fold it back into `AgentLlm` + `Planner` and the guardrail naming/metric semantics

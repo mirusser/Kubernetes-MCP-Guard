@@ -57,6 +57,7 @@ Use this skill when you need to get oriented in `k8s-toolkit`, start a broad inv
    | Downstream auth: client credentials, token providers, McpServer integration | `src/InfraGate.DownstreamAuth/` (no README yet — read source directly; see `DownstreamAuthConventions`, `DownstreamAuthOptions`, `IDownstreamServiceTokenProvider`) |
    | Prompt Library, Handlebars templates, system prompts | `src/InfraGate.Prompts/README.md` |
    | Agent MCP Toolset, ReadOnly filtering, connection abstraction | `src/InfraGate.AgentMcp/README.md` |
+   | Agent guardrails, tool-call middleware, hallucination metrics | `src/InfraGate.AgentGuardrails/README.md` |
    | Observability, tracing, metrics | `src/InfraGate.Observability/README.md` |
    | Runtime safety, env-var config, production guard | `src/InfraGate.RuntimeSafety/README.md` |
    | Test work | Matching `tests/*/README.md` |

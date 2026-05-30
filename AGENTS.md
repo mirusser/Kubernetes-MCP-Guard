@@ -147,6 +147,7 @@ Load only the project README you need:
   - [InfraGate.RunProfiles](src/InfraGate.RunProfiles/README.md): CLI tool that compiles named run profiles from `deploy/run-profiles.yaml` into `.env` files and appsettings JSON for Docker Compose and .NET runtime binding.
   - [InfraGate.Prompts](src/InfraGate.Prompts/README.md): Prompt Library — `IPromptLibrary` seam over a Semantic Kernel Handlebars renderer; used by Observer and Planner for parameterised system prompts.
   - [InfraGate.AgentMcp](src/InfraGate.AgentMcp/README.md): Agent MCP Toolset — abstraction connecting Observer and Planner to the MCP Gateway with ReadOnlyHint filtering.
+  - [InfraGate.AgentGuardrails](src/InfraGate.AgentGuardrails/README.md): shared guardrail module — tool-call guardrail middleware, guardrail/hallucination metric taxonomy; composed into both Observer and Planner agents.
   - [InfraGate.Observer](src/InfraGate.Observer/README.md): Anomaly Observer — LLM-driven periodic cluster inspection through the MCP gateway read-only tools.
   - [InfraGate.Planner](src/InfraGate.Planner/README.md): Remediation Planner — LLM-driven Anomaly Report consumer that proposes approval-pending plans through `propose_plan`.
   - [InfraGate.Executor](src/InfraGate.Executor/README.md): Remediation Executor — deterministic plan watcher that waits for approval and executes approved plans.

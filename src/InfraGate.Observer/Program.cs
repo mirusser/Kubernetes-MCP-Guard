@@ -1,5 +1,6 @@
 using System.Diagnostics.Metrics;
 using System.Reflection;
+using InfraGate.AgentGuardrails;
 using InfraGate.AgentLlm;
 using InfraGate.AgentMcp;
 using InfraGate.AuditOutbox;
@@ -53,7 +54,7 @@ builder.AddInfraGateObservability(opt =>
 builder.AddInfraGateTelemetry(opt =>
 {
     opt.ServiceName = "infragate-observer";
-    opt.MeterNames = [ObserverMetrics.MeterName];
+    opt.MeterNames = [ObserverMetrics.MeterName, AgentGuardrailConventions.MeterName];
 });
 
 ConfigureUrls(builder);
@@ -118,6 +119,22 @@ builder.Services.AddSingleton<IChatClient>(sp =>
 });
 builder.Services.AddSingleton<IAnomalyDedupeStore, AnomalyDedupeStore>();
 builder.Services.AddSingleton<ToolCallingAgentFactory>();
+builder.Services.AddAgentGuardrails();
+builder.Services.AddSingleton(_ =>
+{
+    var allowedTools = new HashSet<string>(StringComparer.Ordinal)
+    {
+        ObserverConventions.ToolNames.GetAllowedNamespaces,
+        ObserverConventions.ToolNames.GetK8sStatus,
+        ObserverConventions.ToolNames.GetK8sEvents,
+        ObserverConventions.ToolNames.GetK8sPods,
+        ObserverConventions.ToolNames.DescribeK8sResource,
+        ObserverConventions.ToolNames.GetK8sDeployments,
+        ObserverConventions.ToolNames.GetK8sServices,
+        ObserverConventions.ToolNames.GetK8sEndpoints,
+    };
+    return new AgentGuardrailPolicy(allowedTools);
+});
 builder.Services.AddSingleton<IObservationCycleRunner>(sp =>
 {
     return new ObservationCycleRunner(
@@ -131,7 +148,8 @@ builder.Services.AddSingleton<IObservationCycleRunner>(sp =>
         sp.GetRequiredService<IAnomalyHandoffSink>(),
         sp.GetRequiredService<ILogger<ObservationCycleRunner>>(),
         ObserverMetrics.Meter,
-        sp.GetService<IObserverAuditOutbox>());
+        sp.GetService<IObserverAuditOutbox>(),
+        sp.GetService<AgentGuardrailPolicy>());
 });
 builder.Services.AddSingleton<CycleSerialisation>();
 builder.Services.AddHostedService<ObservationCycleLoop>();

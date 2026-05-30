@@ -58,7 +58,8 @@ public sealed class SnapshotFetcherTests
     {
         var mcpClient = new TestAgentMcpToolset();
 
-        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance);
+        using var meter = new Meter("test-meter-returns-snapshot");
+        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, meter);
         var snapshot = await fetcher.FetchAsync("test-ns", CancellationToken.None);
 
         Assert.Equal("test-ns", snapshot.Namespace);
@@ -87,7 +88,8 @@ public sealed class SnapshotFetcherTests
             }
         };
 
-        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance);
+        using var meter = new Meter("test-meter-partial-snapshot");
+        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, meter);
         var snapshot = await fetcher.FetchAsync("test-ns", CancellationToken.None);
 
         Assert.Equal("test-ns", snapshot.Namespace);
@@ -103,7 +105,8 @@ public sealed class SnapshotFetcherTests
     {
         var mcpClient = new TestAgentMcpToolset();
 
-        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance);
+        using var meter = new Meter("test-meter-cancelled-token");
+        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, meter);
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 

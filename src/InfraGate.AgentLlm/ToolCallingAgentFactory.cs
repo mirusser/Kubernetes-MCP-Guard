@@ -1,3 +1,4 @@
+using InfraGate.AgentGuardrails;
 using Microsoft.Agents.AI;
 
 namespace InfraGate.AgentLlm;
@@ -6,7 +7,7 @@ namespace InfraGate.AgentLlm;
 /// Builds a <see cref="ChatClientAgent"/> with native function invocation, a per-call iterations cap,
 /// and a counter that tracks how many tool calls the agent makes across a single run.
 /// </summary>
-public sealed class ToolCallingAgentFactory(IChatClientFactory chatClientFactory)
+public sealed class ToolCallingAgentFactory(IChatClientFactory chatClientFactory, AgentGuardrailMetrics? guardrailMetrics = null)
 {
     /// <summary>
     /// Creates a <see cref="ChatClientAgent"/> whose underlying <see cref="IChatClient"/> pipeline
@@ -19,7 +20,8 @@ public sealed class ToolCallingAgentFactory(IChatClientFactory chatClientFactory
         string instructions,
         IReadOnlyList<AITool> tools,
         int maxToolIterations,
-        ChatResponseFormat? responseFormat = null)
+        ChatResponseFormat? responseFormat = null,
+        AgentGuardrailPolicy? guardrailPolicy = null)
     {
         var count = 0;
 
@@ -46,7 +48,14 @@ public sealed class ToolCallingAgentFactory(IChatClientFactory chatClientFactory
         };
 
         AIAgent agent = new ChatClientAgent(chatClient, agentOptions);
-        agent = agent.AsBuilder().UseOpenTelemetry().Build();
+
+        var agentBuilder = agent.AsBuilder().UseOpenTelemetry();
+        if (guardrailPolicy is not null && guardrailMetrics is not null)
+        {
+            agentBuilder = agentBuilder.UseToolCallGuardrail(guardrailPolicy, guardrailMetrics, name);
+        }
+
+        agent = agentBuilder.Build();
 
         return (agent, () => Volatile.Read(ref count));
     }

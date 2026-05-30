@@ -15,6 +15,12 @@
 - All namespace chains fan-in to `CycleAggregateExecutor`, which applies `IAnomalyDedupeStore` suppression and publishes the final `AnomalyReport[]` batch through `IAnomalyHandoffSink`.
 - Cycle-level telemetry: wall-clock cap (20s default), tool-iteration cap (8), and metrics via `System.Diagnostics.Metrics` (`Meter("InfraGate.Observer", "1.0")`).
 
+## Guardrails
+
+The Observer agent is protected by a **tool-call guardrail** from `InfraGate.AgentGuardrails`. At agent construction, `ToolCallingAgentFactory` composes a framework function-invocation middleware (`UseToolCallGuardrail`) that enforces an explicit allow-list of the 8 read-only tool names from `ObserverConventions.ToolNames`. Any tool call outside this allow-list is blocked, not executed, and recorded as a `tool_call.blocked` guardrail metric. The guardrail is defense-in-depth — the McpGateway remains the ultimate runtime control, and §3's `ReadOnlyHint` filtering already limits the toolset at selection time.
+
+The `InfraGate.AgentGuardrails` meter is registered in the Observer's telemetry pipeline and exports through the existing Serilog span bridge / opt-in OTLP.
+
 ## Important Contracts
 
 - **AnomalyKind** — four-bucket enum: `PodUnhealthy`, `DeploymentUnavailable`, `ServiceNoEndpoints`, `WarningEvent`. Sub-classification lives in `Annotations["PodCondition"]`.

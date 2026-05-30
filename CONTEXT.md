@@ -211,6 +211,21 @@ The shared `IAgentMcpToolset` abstraction in `InfraGate.AgentMcp` used by AI age
 _Avoid_: McpClient, direct gateway transport
 
 
+### Guardrails
+
+**Tool-Call Guardrail**:
+A framework function-invocation middleware (`AIAgentBuilder.Use(...)`) in `InfraGate.AgentGuardrails` that enforces an explicit, caller-declared tool-name allow-list at invocation time. Every agent tool call must be in the allow-list; disallowed calls are blocked, metered, and not executed. Owned by the guardrail module and composed into the shared `ToolCallingAgentFactory` seam so both Observer and Planner agents get it.
+_Avoid_: ReadOnlyHint filtering, Gateway tool-permission check
+
+**Guardrail Metric**:
+A consolidated `Counter<long>` on the `InfraGate.AgentGuardrails` meter that records every guardrail outcome — tool blocks at the agent layer and decision rejections at the workflow layer — with a reason tag (`tool_not_allowed`, `invalid_operation`, `invalid_arguments`, `dedupe_in_batch`). The two formerly bespoke Planner counters (`infragate.planner.decision.invalid_operation`, `infragate.planner.decision.invalid_arguments`) were removed in favour of this single reason-tagged counter.
+_Avoid_: PlannerMetrics, ObserverMetrics, ad-hoc counter
+
+**Hallucination Rate**:
+The decision-layer ratio `rejected{reason=invalid_operation,invalid_arguments} / (accepted+rejected)` computed from the **Guardrail Metric**. The `dedupe_in_batch` reason is excluded from the numerator because it represents an operational drop, not a hallucination. The tool-block rate uses `tool_call.blocked` divided by the allowed-call span count from §4's per-function spans.
+_Avoid_: Agent error rate, task failure rate
+
+
 ### Anomaly Observation
 
 **Anomaly Observer**:

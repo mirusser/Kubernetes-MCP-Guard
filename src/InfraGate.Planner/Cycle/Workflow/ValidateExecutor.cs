@@ -1,4 +1,4 @@
-using System.Diagnostics.Metrics;
+using InfraGate.AgentGuardrails;
 using InfraGate.Planner.Decision;
 using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
@@ -11,8 +11,7 @@ internal sealed class ValidateExecutor(
     string id,
     ConcurrentDictionary<string, byte> batchOperationKeys,
     PlannerDedupeStore dedupeStore,
-    Counter<long>? invalidOperationCounter,
-    Counter<long>? invalidArgumentsCounter,
+    AgentGuardrailMetrics? guardrailMetrics,
     ILogger logger) : Executor<DecisionContext>(id)
 {
     public override async ValueTask HandleAsync(
@@ -25,7 +24,7 @@ internal sealed class ValidateExecutor(
 
         if (!PlannerConventions.OperationTypes.AllowedOperationTypes.Contains(decision.OperationType))
         {
-            invalidOperationCounter?.Add(1);
+            guardrailMetrics?.RecordDecision(GuardrailDecisionOutcome.Rejected, AgentGuardrailConventions.Reasons.InvalidOperation);
             PlannerLogEvents.LogDecisionInvalidOperation(logger, report.AnomalyId, decision.OperationType);
             return;
         }
@@ -37,7 +36,7 @@ internal sealed class ValidateExecutor(
                 report.AnomalyId,
                 decision.OperationType,
                 string.Join(", ", decision.Arguments.Select(kv => $"{kv.Key}={kv.Value}")));
-            invalidArgumentsCounter?.Add(1);
+            guardrailMetrics?.RecordDecision(GuardrailDecisionOutcome.Rejected, AgentGuardrailConventions.Reasons.InvalidArguments);
             PlannerLogEvents.LogDecisionInvalidArguments(logger, report.AnomalyId, decision.OperationType);
             return;
         }
@@ -47,12 +46,14 @@ internal sealed class ValidateExecutor(
 
         if (!batchOperationKeys.TryAdd(operationKey, 0))
         {
+            guardrailMetrics?.RecordDecision(GuardrailDecisionOutcome.Rejected, AgentGuardrailConventions.Reasons.DedupeInBatch);
             PlannerLogEvents.LogFilterDropped(logger, report.AnomalyId, PlannerConventions.FilterDropReasons.DedupeOperationInBatch);
             dedupeStore.TrackActivePlan(report.AnomalyId, string.Empty, DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow + PlannerConventions.Dedupe.ActivePlanTtl);
             return;
         }
 
+        guardrailMetrics?.RecordDecision(GuardrailDecisionOutcome.Accepted, AgentGuardrailConventions.Reasons.None);
         PlannerLogEvents.LogDecisionCompleted(logger, report.AnomalyId, normalized.OperationType);
         await context.SendMessageAsync(ctx with { Decision = normalized }, cancellationToken).ConfigureAwait(false);
     }
