@@ -1,6 +1,10 @@
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Execution;
 using InfraGate.KubernetesAdapter;
+using InfraGate.KubernetesAdapter.Evidence;
+using InfraGate.KubernetesAdapter.PlanBuilding;
 
 namespace InfraGate.McpServer.Tests.UnitTests;
 
@@ -163,6 +167,28 @@ public sealed class KubernetesPlanBuilderTests
 
         Assert.True(result.Succeeded);
         Assert.Equal("scale", result.Envelope!.Operation);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ApprovalPolicyProvided_StampsPolicyOnEnvelope()
+    {
+        var dryRun = MakeDryRun("demo", "nginx");
+        var diff = MakeDiff("demo", "nginx");
+        var toolCaller = new FakeToolCaller()
+            .With("dry_run_scale_deployment", DryRunJson(dryRun))
+            .With("diff_deployment", DiffJson([diff]));
+        var builder = new KubernetesPlanBuilder(toolCaller);
+        var approvalPolicy = ApprovalPolicy.OperatorApproval("kubernetes-operators");
+
+        var result = await builder.BuildAsync(
+            "scale_deployment",
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["name"] = "nginx", ["replicas"] = 3 },
+            TestRequester,
+            approvalPolicy,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(approvalPolicy, result.Envelope!.ApprovalPolicy);
     }
 
     [Fact]

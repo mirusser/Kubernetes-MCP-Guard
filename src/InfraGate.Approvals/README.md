@@ -2,10 +2,14 @@
 
 `InfraGate.Approvals` is the generic approval storage, challenge, grant, audit, and pre-execution gate layer. It defines the plan lifecycle (pending → approved → applied), generic plan envelopes with adapter payloads, digest-bound evidence artifact summaries, approval challenge records, durable approval grants, audit event conventions, and the strongly-typed audit payload schema. Runtime persistence is PostgreSQL-backed through `InfraGate.Approvals.Postgres`.
 
+**Owns:** generic plan/challenge/grant/pre-execution/audit contracts and workflows
+
 ## Runtime Flow
 
 - `ApprovalStore.cs` is the legacy file-backed plan store (no longer wired at runtime). PostgreSQL-backed persistence lives in `InfraGate.Approvals.Postgres` behind the `IApprovalPersistence` seam.
 - `PlanEnvelope.cs`, `PlanEnvelope.Typed.cs`, and `PlanRequester.cs` model the generic approval envelope and the requester identity bound to it.
+- `ApprovalPolicy.cs` models Same-Subject Approval and Operator Approval Policy as generic approval policy values carried by the plan envelope.
+- `ApprovalAccessCode.cs`, `IApprovalAccessCodeStore.cs`, and the in-memory/PostgreSQL access-code stores model one-time Approval Access Codes used by the gateway code-entry route.
 - `EvidenceArtifactSummary.cs` records digest-bound references to adapter evidence included in the Review Digest without teaching the generic core Kubernetes semantics.
 - `IApprovalPreExecutionGate.cs` / `ApprovalPreExecutionGate.cs` validate generic grant/digest/reuse gates, publish `pre_execution.grant.validated`, and call the domain adapter's pre-execution check before any mutation is executed.
 - `IApprovalPersistence.cs` composes the four approval workflow interfaces (`IApprovalPlanWorkflow`, `IApprovalChallengeWorkflow`, `IApprovalExecutionWorkflow`, `IApprovalAuditPublisher`) into a single persistence seam. `PostgresApprovalPersistence` in `InfraGate.Approvals.Postgres` is the runtime implementation.
@@ -22,6 +26,7 @@
 - Audit events use names from `ApprovalConventions.AuditEvents`. Payloads are typed `IPlanAuditPayload` or `IChallengeAuditPayload` records; their JSON keys under `JsonSerializerDefaults.Web` are the contract. Adapter audit details live under nested flexible `adapterPayload` fields.
 - Hash and digest comparison uses `FixedTimeStringComparer` where stored integrity values are compared.
 - Challenges are ephemeral (default TTL: 15 minutes) and terminal once resolved; approved challenges issue an Approval Grant for the default Single-Execution Plan.
+- Approval Access Codes are short-lived, single-use routing tokens bound to an Approval Challenge. They do not replace Identity Provider authentication for the approver.
 - [Design rationale: why plan and challenge are separate records](../../docs/why-separated-plan-from-challenge.md).
 
 ## Settings

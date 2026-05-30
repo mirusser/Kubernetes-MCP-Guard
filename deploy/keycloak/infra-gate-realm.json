@@ -26,7 +26,10 @@
         "description": "${role_default-roles}",
         "composite": true,
         "composites": {
-          "realm": ["offline_access", "uma_authorization"]
+          "realm": [
+            "offline_access",
+            "uma_authorization"
+          ]
         },
         "clientRole": false
       }
@@ -45,8 +48,12 @@
         "subType": "anonymous",
         "subComponents": {},
         "config": {
-          "host-sending-registration-request-must-match": ["false"],
-          "client-uris-must-match": ["true"],
+          "host-sending-registration-request-must-match": [
+            "false"
+          ],
+          "client-uris-must-match": [
+            "true"
+          ],
           "trusted-hosts": [
             "localhost",
             "127.0.0.1",
@@ -60,7 +67,9 @@
         "subType": "anonymous",
         "subComponents": {},
         "config": {
-          "allow-default-scopes": ["true"],
+          "allow-default-scopes": [
+            "true"
+          ],
           "allowed-client-scopes": [
             "openid",
             "profile",
@@ -77,7 +86,9 @@
         "subType": "anonymous",
         "subComponents": {},
         "config": {
-          "max-clients": ["200"]
+          "max-clients": [
+            "200"
+          ]
         }
       },
       {
@@ -93,8 +104,12 @@
         "subType": "authenticated",
         "subComponents": {},
         "config": {
-          "host-sending-registration-request-must-match": ["false"],
-          "client-uris-must-match": ["true"],
+          "host-sending-registration-request-must-match": [
+            "false"
+          ],
+          "client-uris-must-match": [
+            "true"
+          ],
           "trusted-hosts": [
             "localhost",
             "127.0.0.1",
@@ -346,6 +361,19 @@
             "access.token.claim": "true",
             "userinfo.token.claim": "false"
           }
+        },
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "true",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "claim.name": "groups",
+            "userinfo.token.claim": "false"
+          }
         }
       ]
     },
@@ -402,6 +430,50 @@
           "consentRequired": false,
           "config": {
             "included.custom.audience": "urn:infra-gate:mcp-server",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp:tools.propose",
+      "description": "Allows calling propose_plan tool; granted to the Planner service identity",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "mcp-gateway-audience-propose",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "http://127.0.0.1:3001/mcp",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp:tools.execute",
+      "description": "Allows calling wait_for_plan_approval and execute_approved_plan; granted to the Executor service identity",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "mcp-gateway-audience-execute",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "http://127.0.0.1:3001/mcp",
+            "id.token.claim": "false",
             "access.token.claim": "true"
           }
         }
@@ -544,6 +616,41 @@
         "offline_access",
         "mcp:tools"
       ]
+    },
+    {
+      "clientId": "infra-gate-planner",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "planner-secret",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "defaultClientScopes": [
+        "basic",
+        "mcp:tools.propose",
+        "mcp:tools.readonly"
+      ],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "infra-gate-executor",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "executor-secret",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "defaultClientScopes": [
+        "basic",
+        "mcp:tools.execute"
+      ],
+      "optionalClientScopes": []
     }
   ],
   "users": [
@@ -561,7 +668,12 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["default-roles-infra-gate"]
+      "realmRoles": [
+        "default-roles-infra-gate"
+      ],
+      "groups": [
+        "/kubernetes-operators"
+      ]
     },
     {
       "username": "demo2",
@@ -577,7 +689,43 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["default-roles-infra-gate"]
+      "realmRoles": [
+        "default-roles-infra-gate"
+      ],
+      "groups": [
+        "/kubernetes-operators"
+      ]
+    },
+    {
+      "username": "demo-operator",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "demo-operator@example.com",
+      "firstName": "Demo",
+      "lastName": "Operator",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "operator",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "default-roles-infra-gate"
+      ],
+      "groups": [
+        "/kubernetes-operators"
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "name": "kubernetes-operators",
+      "path": "/kubernetes-operators",
+      "attributes": {},
+      "realmRoles": [],
+      "clientRoles": {},
+      "subGroups": []
     }
   ]
 }

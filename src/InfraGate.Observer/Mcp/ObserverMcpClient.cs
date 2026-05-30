@@ -38,7 +38,10 @@ internal sealed class ObserverMcpClient : IObserverMcpClient, IAsyncDisposable
         }
 
         var bearerLogger = loggerFactory.CreateLogger<ClientCredentialsBearerHandler>();
-        var bearerHandler = new ClientCredentialsBearerHandler(TokenProvider, bearerLogger);
+        var bearerHandler = new ClientCredentialsBearerHandler(TokenProvider, bearerLogger)
+        {
+            InnerHandler = new SocketsHttpHandler()
+        };
         var httpClient = new HttpClient(bearerHandler)
         {
             BaseAddress = new Uri(GatewayBaseUrl)

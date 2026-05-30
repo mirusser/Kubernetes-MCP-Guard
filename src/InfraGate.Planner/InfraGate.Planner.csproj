@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="InfraGate.Planner.Tests" />
+    <InternalsVisibleTo Include="InfraGate.Planner.IntegrationTests" />
+    <InternalsVisibleTo Include="InfraGate.Remediation.E2E.Tests" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.6.0" />
+    <PackageReference Include="ModelContextProtocol" Version="1.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Prompts\PlannerSystemPrompt.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\InfraGate.AgentLlm\InfraGate.AgentLlm.csproj" />
+    <ProjectReference Include="..\InfraGate.Observer.Contracts\InfraGate.Observer.Contracts.csproj" />
+    <ProjectReference Include="..\InfraGate.Remediation.Contracts\InfraGate.Remediation.Contracts.csproj" />
+    <ProjectReference Include="..\InfraGate.ClientCredentials\InfraGate.ClientCredentials.csproj" />
+    <ProjectReference Include="..\InfraGate.Observability\InfraGate.Observability.csproj" />
+    <ProjectReference Include="..\InfraGate.RuntimeSafety\InfraGate.RuntimeSafety.csproj" />
+  </ItemGroup>
+
+</Project>

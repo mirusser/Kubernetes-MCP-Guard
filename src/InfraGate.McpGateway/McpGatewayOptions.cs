@@ -1,9 +1,10 @@
 using System.Globalization;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
 using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Email;
 using InfraGate.RuntimeSafety;
-using Microsoft.Extensions.Configuration;
 
 namespace InfraGate.McpGateway;
 
@@ -19,7 +20,10 @@ public sealed record class McpGatewayOptions(
     RuntimeMode RuntimeMode = RuntimeMode.Development,
     bool IsGuardAuditRootExplicit = true,
     bool IsApprovalRootExplicit = true,
-    DownstreamAuthOptions? DownstreamAuth = null)
+    DownstreamAuthOptions? DownstreamAuth = null,
+    string OperatorGroup = McpGatewayConventions.DefaultOperatorGroup,
+    string? OperatorEmail = null,
+    SmtpApprovalEmailOptions? Smtp = null)
 {
     public const string DefaultUrl = McpGatewayConventions.DefaultUrl;
     public static readonly TimeSpan DefaultApprovalChallengeTtl = TimeSpan.FromMinutes(15);
@@ -57,6 +61,17 @@ public sealed record class McpGatewayOptions(
         TimeSpan approvalChallengeTtl = ParseTimeSpanSeconds(
             Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.ApprovalChallengeTtlSeconds),
             DefaultApprovalChallengeTtl);
+        string operatorGroup =
+            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.OperatorGroup) ??
+            McpGatewayConventions.DefaultOperatorGroup;
+        string? operatorEmail = Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.OperatorEmail);
+        var smtp = CreateSmtpOptions(
+            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpHost),
+            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpPort),
+            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpFrom),
+            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpUser),
+            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpPassword),
+            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpEnableSsl));
 
         return new McpGatewayOptions(
             auth,
@@ -70,7 +85,10 @@ public sealed record class McpGatewayOptions(
             runtimeMode,
             isGuardAuditRootExplicit,
             isApprovalRootExplicit,
-            downstreamAuth);
+            downstreamAuth,
+            operatorGroup,
+            operatorEmail,
+            smtp);
     }
 
     public static McpGatewayOptions FromConfiguration(IConfiguration configuration)
@@ -110,6 +128,15 @@ public sealed record class McpGatewayOptions(
         TimeSpan approvalChallengeTtl = ParseTimeSpanSeconds(
             approvalSettings?.ChallengeTtlSeconds,
             DefaultApprovalChallengeTtl);
+        string operatorGroup = approvalSettings?.OperatorGroup ?? McpGatewayConventions.DefaultOperatorGroup;
+        string? operatorEmail = approvalSettings?.OperatorEmail;
+        var smtp = CreateSmtpOptions(
+            approvalSettings?.Smtp?.Host,
+            approvalSettings?.Smtp?.Port,
+            approvalSettings?.Smtp?.From,
+            approvalSettings?.Smtp?.User,
+            approvalSettings?.Smtp?.Password,
+            approvalSettings?.Smtp?.EnableSsl);
 
         return new McpGatewayOptions(
             auth,
@@ -123,7 +150,10 @@ public sealed record class McpGatewayOptions(
             runtimeMode,
             isGuardAuditRootExplicit,
             isApprovalRootExplicit,
-            downstreamAuth);
+            downstreamAuth,
+            operatorGroup,
+            operatorEmail,
+            smtp);
     }
 
     public void ValidateProductionSafety()
@@ -189,6 +219,36 @@ public sealed record class McpGatewayOptions(
         return string.IsNullOrWhiteSpace(value)
             ? defaultValue
             : TimeSpan.FromSeconds(double.Parse(value, CultureInfo.InvariantCulture));
+    }
+
+    private static SmtpApprovalEmailOptions? CreateSmtpOptions(
+        string? host,
+        string? port,
+        string? from,
+        string? user,
+        string? password,
+        string? enableSsl)
+    {
+        if (string.IsNullOrWhiteSpace(host) &&
+            string.IsNullOrWhiteSpace(from))
+        {
+            return null;
+        }
+
+        int parsedPort = string.IsNullOrWhiteSpace(port)
+            ? SmtpApprovalEmailOptions.DefaultPort
+            : int.Parse(port, CultureInfo.InvariantCulture);
+        bool parsedEnableSsl = string.IsNullOrWhiteSpace(enableSsl)
+            ? SmtpApprovalEmailOptions.DefaultEnableSsl
+            : bool.Parse(enableSsl);
+
+        return new SmtpApprovalEmailOptions(
+            host ?? string.Empty,
+            parsedPort,
+            from ?? string.Empty,
+            user,
+            password,
+            parsedEnableSsl);
     }
 
 }

@@ -1,5 +1,8 @@
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Grant;
+using InfraGate.Approvals.Audit;
 using InfraGate.Approvals.Postgres;
 using Npgsql;
 using Testcontainers.PostgreSql;
@@ -49,6 +52,24 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CreatePlanAsync_OperatorApprovalPolicy_RoundTripsPendingPlan()
+    {
+        await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
+        await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
+        var persistence = new PostgresApprovalPersistence(dataSource);
+        var envelope = CreateEnvelope(ApprovalPolicy.OperatorApproval("kubernetes-operators"));
+
+        await persistence.CreatePlanAsync(envelope, NamespaceName, CancellationToken.None);
+        var pending = await persistence.GetPendingPlanAsync(envelope.Id, CancellationToken.None);
+
+        Assert.True(pending.IsPending);
+        Assert.Equal(envelope.ApprovalPolicy, pending.Envelope?.ApprovalPolicy);
+        Assert.Equal(
+            "kubernetes-operators",
+            pending.Envelope?.ApprovalPolicy.Parameters?[ApprovalConventions.ApprovalPolicyParameters.OperatorGroup]);
+    }
+
+    [Fact]
     public async Task ApproveChallengeAsync_PendingChallenge_IssuesGrantAndReturnsGrantedPlan()
     {
         await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
@@ -87,6 +108,65 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
         Assert.Equal(ApprovalConventions.ChallengeStatuses.Approved, approvedChallenge?.Status);
         Assert.Equal(challenge.Id, approvedChallenge?.Outcome?.ChallengeId);
         Assert.Equal(grant.Id, approvedChallenge?.Outcome?.GrantId);
+    }
+
+    [Fact]
+    public async Task ApproveChallengeAsync_OperatorApprovalPolicy_RoundTripsGrantPolicy()
+    {
+        await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
+        await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
+        var persistence = new PostgresApprovalPersistence(dataSource);
+        var envelope = CreateEnvelope(ApprovalPolicy.OperatorApproval("kubernetes-operators"));
+        var created = await persistence.CreatePlanAsync(envelope, NamespaceName, CancellationToken.None);
+        var challenge = await persistence.CreateChallengeAsync(
+            envelope.Id,
+            created.Hash,
+            envelope.Requester.Subject,
+            envelope.Requester.AuthenticationType,
+            TimeSpan.FromMinutes(5),
+            envelope.IntentDigest,
+            envelope.ReviewDigest,
+            CancellationToken.None);
+
+        var grant = await persistence.ApproveChallengeAsync(
+            challenge,
+            envelope,
+            "operator-user",
+            CancellationToken.None);
+        var granted = await persistence.GetGrantedPlanAsync(envelope.Id, CancellationToken.None);
+
+        Assert.True(granted.IsGranted, granted.Message);
+        Assert.Equal(envelope.ApprovalPolicy, grant.ApprovalPolicy);
+        Assert.Equal(envelope.ApprovalPolicy, granted.Grant?.ApprovalPolicy);
+    }
+
+    [Fact]
+    public async Task ApprovalAccessCodeStore_GeneratedCode_IsSingleUse()
+    {
+        await using var dataSource = NpgsqlDataSource.Create(container!.GetConnectionString());
+        await PostgresApprovalMigrationRunner.ApplyAsync(dataSource, CancellationToken.None);
+        var persistence = new PostgresApprovalPersistence(dataSource);
+        var accessCodes = new PostgresApprovalAccessCodeStore(dataSource);
+        var envelope = CreateEnvelope();
+        var created = await persistence.CreatePlanAsync(envelope, NamespaceName, CancellationToken.None);
+        var challenge = await persistence.CreateChallengeAsync(
+            envelope.Id,
+            created.Hash,
+            envelope.Requester.Subject,
+            envelope.Requester.AuthenticationType,
+            TimeSpan.FromMinutes(5),
+            envelope.IntentDigest,
+            envelope.ReviewDigest,
+            CancellationToken.None);
+        var code = await accessCodes.GenerateAsync(challenge.Id, TimeSpan.FromMinutes(5), CancellationToken.None);
+
+        var first = await accessCodes.ConsumeAsync(code.Code, CancellationToken.None);
+        var second = await accessCodes.ConsumeAsync(code.Code, CancellationToken.None);
+
+        Assert.True(first.Succeeded);
+        Assert.Equal(challenge.Id, first.ChallengeId);
+        Assert.False(second.Succeeded);
+        Assert.Equal(ApprovalConventions.AccessCodes.ConsumeResultReasonCodes.Consumed, second.ReasonCode);
     }
 
     [Fact]
@@ -210,7 +290,7 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
         return (envelope, grant);
     }
 
-    private static PlanEnvelope CreateEnvelope()
+    private static PlanEnvelope CreateEnvelope(ApprovalPolicy? approvalPolicy = null)
     {
         var createdAt = DateTimeOffset.UtcNow.AddMinutes(-1);
         var payload = JsonSerializer.SerializeToElement(new
@@ -237,7 +317,7 @@ public sealed class PostgresApprovalPersistenceTests : IAsyncLifetime
             createdAt,
             createdAt.AddHours(1),
             new PlanRequester("requester", "oauth-jwt"),
-            ApprovalPolicy.SameSubject(),
+            approvalPolicy ?? ApprovalPolicy.SameSubject(),
             ExecutionReusePolicy.SingleExecution(),
             FreshnessPolicy.Empty,
             new ReviewSurfaceContext("gateway-browser", "test-renderer"),

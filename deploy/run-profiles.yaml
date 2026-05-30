@@ -58,17 +58,42 @@ profiles:
     observer:
       aspnetcoreUrls: http://0.0.0.0:3003
       gatewayBaseUrl: http://gateway:3001/mcp
-      tokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
+      oauthAuthority: http://keycloak:8080/realms/infra-gate
       clientId: infra-gate-observer
       clientSecret: observer-secret
       scope: mcp:tools.readonly
       llmProvider: anthropic
       llmModel: claude-sonnet-4-6
       cycleCadenceSeconds: "60"
-      cycleWallClockCapSeconds: "20"
+      cycleWallClockCapSeconds: "120"
       maxToolIterations: "8"
       fileSinkRoot: /data/observer/findings
-      observerHostPath: ../.mcp-observer/findings
+      plannerHandoffUrl: http://planner:3004/handoff/anomalies
+      observerHostPath: ../../.mcp-observer/findings
+      allowedNamespaces:
+        - mcp-nginx-demo
+    planner:
+      aspnetcoreUrls: http://0.0.0.0:3004
+      gatewayBaseUrl: http://gateway:3001/mcp
+      executorHandoffUrl: http://executor:3005/handoff/proposals
+      tokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
+      clientId: infra-gate-planner
+      clientSecret: planner-secret
+      oauthAuthority: http://keycloak:8080/realms/infra-gate
+      scope: mcp:tools.propose mcp:tools.readonly
+      llmProvider: anthropic
+      llmModel: claude-sonnet-4-6
+      maxToolIterations: "4"
+      fileSinkRoot: /data/planner/proposals
+      plannerHostPath: ../../.mcp-remediation/proposals
+    executor:
+      aspnetcoreUrls: http://0.0.0.0:3005
+      gatewayBaseUrl: http://gateway:3001/mcp
+      tokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
+      clientId: infra-gate-executor
+      clientSecret: executor-secret
+      oauthAuthority: http://keycloak:8080/realms/infra-gate
+      scope: mcp:tools.execute
 
   local-source-gateway:
     kind: dotnet
@@ -95,16 +120,40 @@ profiles:
     observer:
       aspnetcoreUrls: http://0.0.0.0:3003
       gatewayBaseUrl: http://127.0.0.1:3001/mcp
-      tokenEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token
+      oauthAuthority: http://127.0.0.1:3010/realms/infra-gate
       clientId: infra-gate-observer
       clientSecret: observer-secret
       scope: mcp:tools.readonly
       llmProvider: anthropic
       llmModel: claude-sonnet-4-6
       cycleCadenceSeconds: "60"
-      cycleWallClockCapSeconds: "20"
+      cycleWallClockCapSeconds: "120"
       maxToolIterations: "8"
       fileSinkRoot: .mcp-observer/findings
+      plannerHandoffUrl: http://127.0.0.1:3004/handoff/anomalies
+      allowedNamespaces:
+        - mcp-nginx-demo
+    planner:
+      aspnetcoreUrls: http://0.0.0.0:3004
+      gatewayBaseUrl: http://127.0.0.1:3001/mcp
+      executorHandoffUrl: http://127.0.0.1:3005/handoff/proposals
+      tokenEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token
+      clientId: infra-gate-planner
+      clientSecret: planner-secret
+      oauthAuthority: http://127.0.0.1:3010/realms/infra-gate
+      scope: mcp:tools.propose mcp:tools.readonly
+      llmProvider: anthropic
+      llmModel: claude-sonnet-4-6
+      maxToolIterations: "4"
+      fileSinkRoot: .mcp-planner/proposals
+    executor:
+      aspnetcoreUrls: http://0.0.0.0:3005
+      gatewayBaseUrl: http://127.0.0.1:3001/mcp
+      tokenEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token
+      clientId: infra-gate-executor
+      clientSecret: executor-secret
+      oauthAuthority: http://127.0.0.1:3010/realms/infra-gate
+      scope: mcp:tools.execute
 
   local-stdio:
     kind: mcp-stdio
@@ -134,6 +183,8 @@ profiles:
       oauthTokenEndpoint: http://172.17.0.1:3010/realms/infra-gate/protocol/openid-connect/token
     genericApprovalCore:
       approvalRoot: /data/approvals
+      postgresConnectionString: "Host=postgres;Port=5432;Database=infra-gate;Username=infra-gate;Password=infra-gate-dev-password"
+      runMigrationsOnStartup: "true"
     host:
       bindAddress: 127.0.0.1
       bindPort: "3001"

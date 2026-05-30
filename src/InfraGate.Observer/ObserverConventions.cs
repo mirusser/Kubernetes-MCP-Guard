@@ -30,6 +30,7 @@ internal static class ObserverConventions
         public const string DedupeSuppressionWindow = "InfraGate:Observer:DedupeSuppressionWindow";
         public const string DedupeResolutionThreshold = "InfraGate:Observer:DedupeResolutionThreshold";
         public const string FileSinkRoot = "InfraGate:Observer:FileSink:Root";
+        public const string PlannerHandoffUrl = "InfraGate:Observer:PlannerHandoffUrl";
     }
 
     public static class EnvironmentVariables
@@ -50,6 +51,12 @@ internal static class ObserverConventions
         public const string DedupeSuppressionWindow = "INFRA_GATE_OBSERVER_DEDUPE_SUPPRESSION_WINDOW";
         public const string DedupeResolutionThreshold = "INFRA_GATE_OBSERVER_DEDUPE_RESOLUTION_THRESHOLD";
         public const string FileSinkRoot = "INFRA_GATE_OBSERVER_FILE_SINK_ROOT";
+        public const string PlannerHandoffUrl = "INFRA_GATE_OBSERVER_PLANNER_HANDOFF_URL";
+    }
+
+    public static class HttpClients
+    {
+        public const string PlannerHandoff = "PlannerHandoff";
     }
 
     public static class ToolNames

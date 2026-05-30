@@ -256,18 +256,6 @@ public sealed class ObserverLogEventsTests
     }
 
     [Fact]
-    public void LogLlmTokenUsage_LogsAtDebugLevel_WithTokenCounts()
-    {
-        var logger = new CapturingLogger<ObserverLogEventsTests>();
-        ObserverLogEvents.LogLlmTokenUsage(logger, 150, 80);
-
-        Assert.Single(logger.Entries);
-        Assert.Equal(LogLevel.Debug, logger.Entries[0].Level);
-        Assert.Equal(150, logger.Entries[0].Properties["InputTokens"]);
-        Assert.Equal(80, logger.Entries[0].Properties["OutputTokens"]);
-    }
-
-    [Fact]
     public void LogAnomalyReport_LogsAtInformationLevel()
     {
         var logger = new CapturingLogger<LoggingAnomalyHandoffSink>();

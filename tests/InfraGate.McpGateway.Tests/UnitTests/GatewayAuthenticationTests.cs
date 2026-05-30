@@ -72,6 +72,23 @@ public sealed class GatewayAuthenticationTests
     }
 
     [Theory]
+    [InlineData("mcp:tools.propose")]
+    [InlineData("mcp:tools.execute")]
+    public async Task McpEndpoint_AllowsServiceToolScopes(string scope)
+    {
+        using var server = CreateOAuthServer(out var signingKey);
+        using var client = server.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            CreateJwt(signingKey, scope: scope));
+
+        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("ok", await response.Content.ReadAsStringAsync());
+    }
+
+    [Theory]
     [InlineData("wrong-issuer")]
     [InlineData("wrong-audience")]
     [InlineData("expired")]

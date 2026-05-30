@@ -1,6 +1,13 @@
 using System.Security.Claims;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Challenge;
+using InfraGate.Approvals.PreExecution;
+using InfraGate.Approvals.Audit;
 using InfraGate.KubernetesAdapter;
+using InfraGate.KubernetesAdapter.Approval;
+using InfraGate.KubernetesAdapter.Evidence;
+using InfraGate.KubernetesAdapter.PlanBuilding;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Notifications;
@@ -78,7 +85,7 @@ public sealed class GatewayApprovalServiceTests
         Assert.False(result.IsApproved);
         Assert.Equal(ApprovalGateStatus.Refused, result.Status);
         Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.AuthenticatedSubjectRequired, result.ReasonCode);
-        Assert.Contains("authenticated OAuth subject", result.Message);
+        Assert.Equal(McpGatewayMessages.Authorization.RefusedAuthenticatedSubjectRequired(), result.Message);
         Assert.Equal(0, context.Workflow.ChallengeCount);
     }
 
@@ -206,6 +213,43 @@ public sealed class GatewayApprovalServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired, result.ReasonCode);
+        Assert.False(context.Workflow.IsGranted(plan.Id));
+    }
+
+    [Fact]
+    public async Task ApproveChallengeAsync_OperatorApprovalWithGroup_Approves()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(
+            context.Workflow,
+            requester: new PlanRequester("service:planner", "oauth-jwt"),
+            approvalPolicy: ApprovalPolicy.OperatorApproval("kubernetes-operators"));
+        var pending = await context.Workflow.GetPendingPlanAsync(plan.Id, CancellationToken.None);
+        var challengeId = await CreateStoredChallengeAsync(context, plan.Id, pending.Hash!);
+        SetUser(context.HttpContextAccessor, "operator-user", "kubernetes-operators");
+
+        var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.True(context.Workflow.IsGranted(plan.Id));
+    }
+
+    [Fact]
+    public async Task ApproveChallengeAsync_OperatorApprovalWithoutGroup_Rejects()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(
+            context.Workflow,
+            requester: new PlanRequester("service:planner", "oauth-jwt"),
+            approvalPolicy: ApprovalPolicy.OperatorApproval("kubernetes-operators"));
+        var pending = await context.Workflow.GetPendingPlanAsync(plan.Id, CancellationToken.None);
+        var challengeId = await CreateStoredChallengeAsync(context, plan.Id, pending.Hash!);
+        SetUser(context.HttpContextAccessor, "operator-user", "platform-operators");
+
+        var result = await context.Service.ApproveChallengeAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.OperatorGroupRequired, result.ReasonCode);
         Assert.False(context.Workflow.IsGranted(plan.Id));
     }
 
@@ -447,6 +491,45 @@ public sealed class GatewayApprovalServiceTests
     }
 
     [Fact]
+    public async Task DenyChallengeAsync_OperatorApprovalWithGroup_Denies()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(
+            context.Workflow,
+            requester: new PlanRequester("service:planner", "oauth-jwt"),
+            approvalPolicy: ApprovalPolicy.OperatorApproval("kubernetes-operators"));
+        var pending = await context.Workflow.GetPendingPlanAsync(plan.Id, CancellationToken.None);
+        var challengeId = await CreateStoredChallengeAsync(context, plan.Id, pending.Hash!);
+        SetUser(context.HttpContextAccessor, "operator-user", "kubernetes-operators");
+
+        var result = await context.Service.DenyChallengeAsync(challengeId, CancellationToken.None);
+        var challenge = context.Workflow.GetChallenge(challengeId);
+
+        Assert.True(result.Succeeded, result.Message);
+        Assert.Equal(ApprovalConventions.ChallengeStatuses.Denied, challenge?.Status);
+        Assert.False(context.Workflow.IsGranted(plan.Id));
+    }
+
+    [Fact]
+    public async Task DenyChallengeAsync_OperatorApprovalWithoutGroup_Rejects()
+    {
+        var context = CreateContext();
+        var plan = await CreatePendingPlanAsync(
+            context.Workflow,
+            requester: new PlanRequester("service:planner", "oauth-jwt"),
+            approvalPolicy: ApprovalPolicy.OperatorApproval("kubernetes-operators"));
+        var pending = await context.Workflow.GetPendingPlanAsync(plan.Id, CancellationToken.None);
+        var challengeId = await CreateStoredChallengeAsync(context, plan.Id, pending.Hash!);
+        SetUser(context.HttpContextAccessor, "operator-user", "platform-operators");
+
+        var result = await context.Service.DenyChallengeAsync(challengeId, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(McpGatewayConventions.ApprovalReasonCodes.OperatorGroupRequired, result.ReasonCode);
+        Assert.False(context.Workflow.IsGranted(plan.Id));
+    }
+
+    [Fact]
     public async Task CancelChallengeAsync_SameSubject_CancelsWithoutGrantAndWritesAudit()
     {
         var context = CreateContext();
@@ -535,7 +618,9 @@ public sealed class GatewayApprovalServiceTests
         bool includeDryRun = true,
         bool includeDiff = true,
         string operation = KubernetesAdapterConventions.PlanOperations.Scale,
-        DateTimeOffset? createdAtUtc = null)
+        DateTimeOffset? createdAtUtc = null,
+        PlanRequester? requester = null,
+        ApprovalPolicy? approvalPolicy = null)
     {
         var objects = new[] { new KubernetesObjectRef("apps/v1", "Deployment", NamespaceName, "demo") };
         var payload = new KubernetesPlanPayload(
@@ -555,8 +640,9 @@ public sealed class GatewayApprovalServiceTests
             ApprovalIds.NewPlanId(),
             operation,
             createdAtUtc ?? DateTimeOffset.UtcNow,
-            new PlanRequester(Subject, "test"),
-            payload);
+            requester ?? new PlanRequester(Subject, "test"),
+            payload,
+            approvalPolicy: approvalPolicy);
         var envelope = KubernetesApprovalAdapter.ToEnvelope(typedEnvelope);
         await workflow.CreatePlanAsync(envelope, payload.Namespace, CancellationToken.None);
 
@@ -604,8 +690,8 @@ public sealed class GatewayApprovalServiceTests
         var challenge = await context.Workflow.CreateChallengeAsync(
             planId,
             pendingPlanHash,
-            Subject,
-            "test",
+            pending.Envelope?.Requester.Subject ?? Subject,
+            pending.Envelope?.Requester.AuthenticationType ?? "test",
             McpGatewayOptions.DefaultApprovalChallengeTtl,
             pending.Envelope?.IntentDigest ?? CreateDigest("intent"),
             pending.Envelope?.ReviewDigest ?? CreateDigest("review"),
@@ -646,15 +732,18 @@ public sealed class GatewayApprovalServiceTests
             planReviewAdapter);
     }
 
-    private static void SetUser(HttpContextAccessor accessor, string subject)
+    private static void SetUser(HttpContextAccessor accessor, string subject, params string[] groups)
     {
+        var claims = new List<Claim>
+        {
+            new(GatewayAuthConventions.Claims.Subject, subject),
+            new(GatewayAuthConventions.Claims.Scope, "mcp:tools")
+        };
+        claims.AddRange(groups.Select(group => new Claim(GatewayAuthConventions.Claims.Groups, group)));
+
         accessor.HttpContext = new DefaultHttpContext
         {
-            User = new ClaimsPrincipal(new ClaimsIdentity(
-            [
-                new Claim(GatewayAuthConventions.Claims.Subject, subject),
-                new Claim(GatewayAuthConventions.Claims.Scope, "mcp:tools")
-            ], "test"))
+            User = new ClaimsPrincipal(new ClaimsIdentity(claims, "test"))
         };
     }
 

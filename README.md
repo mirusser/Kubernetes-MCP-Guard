@@ -3,14 +3,14 @@
 **A reference implementation for safe AI-driven Kubernetes remediation.**  
 
 > **Safe remediation, by design:**  
->
-> Observer agent detects anomalies.  
-> Executor agent proposes a plan.  
+>  
+> Observer detects anomalies.  
+> Planner proposes an evidence-backed plan.  
 > Human reviewer approves out-of-band.  
-> System executes only the approved digest.  
-> Everything is auditable.  
->
+> Executor runs only the approved digest-bound plan.  
+> Everything is auditable.
 
+</br>
 
 [![Unit Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/ci.yml)
 [![Integration Tests](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml/badge.svg?branch=main)](https://github.com/mirusser/Kubernetes-MCP-Guard/actions/workflows/integration-tests.yml)
@@ -19,18 +19,34 @@
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=mirusser_Kubernetes-MCP-Guard&metric=coverage)](https://sonarcloud.io/summary/new_code?id=mirusser_Kubernetes-MCP-Guard)
 ![Badge Hi Mom]<br>
 
-<sub>![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?style=flat-square&logo=dotnet) ![Kubernetes](https://img.shields.io/badge/Kubernetes-Cloud--Native-326ce5?style=flat-square&logo=kubernetes) ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ed?style=flat-square&logo=docker) ![MCP](https://img.shields.io/badge/MCP-HTTP%20Gateway-black?style=flat-square) ![AI Agents](https://img.shields.io/badge/AI%20Agents-Observer%20%2F%20Executor-7c3aed?style=flat-square)</sub>
+<sub>![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?style=flat-square&logo=dotnet) ![Kubernetes](https://img.shields.io/badge/Kubernetes-Cloud--Native-326ce5?style=flat-square&logo=kubernetes) ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ed?style=flat-square&logo=docker) ![MCP](https://img.shields.io/badge/MCP-HTTP%20Gateway-black?style=flat-square) ![AI Agents](https://img.shields.io/badge/AI%20Agents-Observer%20%2F%20Planner%20%2F%20Executor-7c3aed?style=flat-square)</sub>
 
 
 ### 📝 TL;DR
-**A security-first bridge between AI agents and Kubernetes, with out of band Human-in-the-Loop (HITL) plan based approval for every gateway-exposed mutation.**
+**A security-first bridge between AI agents and Kubernetes, with out-of-band, human-in-the-loop (HITL), plan-based approval for every gateway-exposed mutation.**
 
 Agents can inspect a narrow cluster surface and propose changes, but writes are staged as server-side dry-run plans and execute only after an OAuth-authenticated human approves the exact review snapshot in a separate browser session.
 
-<sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments rather than production-certified infrastructure.</em></sub>
+<sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments, not production-certified infrastructure.</em></sub>
 
-<sub><em>Kubernetes MCP Guard is internally named **InfraGate**. </em></sub>
+<sub><em>The codebase uses **InfraGate** as the internal project name.</em></sub>
 
+## 🎬 Demo
+
+https://github.com/user-attachments/assets/4e06b4ee-db80-4d74-96cc-38dfbb413042
+
+
+> Demo scenario:  
+>  
+> 1. A Deployment is intentionally broken.  
+> 2. The Observer detects the unhealthy workload.  
+> 3. The Planner proposes a bounded remediation.  
+> 4. An approval access code is sent to the configured operator by email.
+> 5. An authenticated human approves the exact plan in the browser.  
+> 6. The Executor applies the approved mutation.  
+>  
+
+The walkthrough in [docs/demo-failing-deployment.md](docs/demo-failing-deployment.md) shows the full flow against a deliberately broken Deployment.
 
 ## 🧠 Core Ideas
 
@@ -47,78 +63,70 @@ The repository also separates the generic approval lifecycle from the Kubernetes
 
 <sub><em>See [CONTEXT.md](CONTEXT.md), [docs/mutation-approval-profile.md](docs/mutation-approval-profile.md), [docs/mutation-approval-flow.md](docs/mutation-approval-flow.md).</em></sub>
 
-## 🎬 Demo
-
-https://github.com/user-attachments/assets/7f43c34f-6516-4141-ad26-e488112d8afd
-
-The walkthrough in [docs/demo-failing-deployment.md](docs/demo-failing-deployment.md) shows the full flow against a deliberately broken Deployment: diagnose, request a plan, approve in the browser, execute, verify, and inspect audit logs.
-
 ## 🗺️ Architecture
 
 ```mermaid
 ---
-title: Kubernetes MCP Guard Runtime
+title: Autonomous Process Boundaries
 ---
 flowchart TB
-    Client["MCP client<br/>Codex / Claude Code"]
-    Browser["Human browser<br/>approval UI"]
-
-    subgraph Gateway["HTTP MCP Gateway"]
-        Auth["OAuth JWT validation<br/>scope checks"]
-        Guardrails["Prompt-injection scan<br/>response sanitization"]
-        ApprovalUI["Browser approval endpoints<br/>OAuth cookie + anti-forgery"]
-        Dispatcher["Gateway tool dispatcher"]
-        Auth --> Dispatcher
-        Dispatcher --> Guardrails
-        ApprovalUI --> Dispatcher
+    subgraph ObserverProc["Observer"]
+        direction TB
+        ORunner["ObservationCycleRunner + LLM analyze"]
+        OMcp["ObserverMcpClient<br/>read-only whitelist"]
+        OHandoff["AnomalyHandoffSink"]
+        ORunner --> OMcp
+        ORunner --> OHandoff
     end
 
-    subgraph Core["Generic Approval Flow"]
-        direction LR
-        Envelope["Plan Envelope<br/>Intent + Review Digests"]
-        Challenge["Approval Challenge<br/>TTL + requester binding"]
-        Grant["Approval Grant<br/>single-execution default"]
-        Gates["pre-execution gates"]
-        Audit["approval audit<br/>(PostgreSQL)"]
-        Envelope --> Challenge
-        Challenge --> Grant
-        Grant --> Gates
-        Challenge --> Audit
-        Gates --> Audit
+    subgraph PlannerProc["Planner"]
+        direction TB
+        PIn["/handoff/anomalies<br/>azp=infra-gate-observer"]
+        PBatch["BatchProcessor<br/>LLM + argument validation"]
+        PMcp["PlannerMcpClient<br/>readonly + propose_plan"]
+        POut["RemediationProposalSink"]
+        PIn --> PBatch --> PMcp
+        PBatch --> POut
     end
 
-    subgraph Adapter["Kubernetes Adapter"]
-        Intent["Mutation Intent"]
-        Evidence["dry-run / diff / policy evidence"]
-        Freshness["freshness + domain policy checks"]
-        Intent --> Evidence
-        Evidence --> Freshness
+    subgraph ExecutorProc["Executor"]
+        direction TB
+        EIn["/handoff/proposals<br/>azp=infra-gate-planner"]
+        Watch["PlanWatcher"]
+        EMcp["ExecutorMcpClient<br/>wait + execute only"]
+        EIn --> Watch --> EMcp
     end
 
-    subgraph Server["Kubernetes MCP Server"]
-        Tools["typed MCP tools"]
-        Reads["bounded observability"]
-        Mutations["raw Kubernetes mutations<br/>called only after approval gates"]
-        Tools --> Reads
-        Tools --> Mutations
+    subgraph GatewayProc["McpGateway"]
+        direction TB
+        Dispatch["GatewayToolDispatcher"]
+        Scope["ToolScopeGuard"]
+        ProposeHandler["ProposePlanHandler"]
+        Approval["Generic Approval Core"]
+        PreGate["ApprovalPreExecutionGate"]
+        AdapterBoundary["Kubernetes Adapter"]
+        DownstreamClient["DownstreamMcpClient"]
+        Dispatch --> Scope
+        Scope --> ProposeHandler --> Approval
+        Scope --> PreGate --> Approval
+        ProposeHandler --> AdapterBoundary
+        PreGate --> AdapterBoundary
+        AdapterBoundary --> DownstreamClient
     end
 
-    subgraph K8s["Kubernetes Boundary"]
-        RBAC["namespace-scoped RBAC"]
+    subgraph ServerProc["McpServer"]
+        direction TB
+        Tools["KubernetesTools<br/>read / evidence / destructive annotations"]
         API["Kubernetes API"]
-        RBAC --> API
+        Tools --> API
     end
 
-    Client -->|"/mcp + OAuth JWT"| Auth
-    Dispatcher --> Adapter
-    Adapter --> Server
-    Dispatcher --> Envelope
-    ApprovalUI --> Challenge
-    Gates --> Freshness
-    Client -.->|"approval URL"| Browser
-    Browser -->|"/approvals/*"| ApprovalUI
-    Reads --> RBAC
-    Mutations --> RBAC
+    OMcp --> Dispatch
+    OHandoff --> PIn
+    PMcp --> Dispatch
+    POut --> EIn
+    EMcp --> Dispatch
+    DownstreamClient --> Tools
 ```
 
 Full request-flow diagrams live in [docs/architecture.md](docs/architecture.md).
@@ -129,7 +137,7 @@ The central safety property is that approval is necessary but not sufficient. A 
 
 | Phase | What happens | What can block it |
 | --- | --- | --- |
-| **Plan** | The MCP client calls `request_*`; the Kubernetes adapter gathers dry-run, diff, and policy evidence; the generic core stores a Plan Envelope with Intent and Review Digests. | Namespace rejection, manifest allow-list rejection, dry-run failure, domain policy denial, unsupported legacy plan format. |
+| **Plan** | A human-driven MCP client calls `request_*`, or the Planner calls `propose_plan`; the Kubernetes adapter gathers dry-run, diff, and policy evidence; the generic core stores a Plan Envelope with Intent and Review Digests. | Namespace rejection, manifest allow-list rejection, dry-run failure, domain policy denial, unsupported legacy plan format. |
 | **Approve** | The client calls `execute_approved_plan`; the gateway creates or reuses a short-lived Approval Challenge and returns a browser URL. The browser renders the stored review snapshot, not model-supplied approval text. | Expired challenge, wrong authenticated subject, anti-forgery failure, changed digest binding, denied/rejected/canceled Challenge Outcome. |
 | **Execute** | After approval, the client retries `execute_approved_plan`; the gateway validates the Approval Grant, digests, validity window, reuse policy, freshness checks, and domain policy checks before the adapter writes. | Missing/expired/mismatched grant, digest mismatch, already-applied Single-Execution Plan, second dry-run failure, policy failure, live-state drift. |
 
@@ -149,12 +157,31 @@ The [InfraGate.Observer](src/InfraGate.Observer/README.md) is an LLM-driven agen
 | Anomaly detection | LLM-assisted classification across four categories: Pod unhealthy, Deployment unavailable, Service no endpoints, Warning events. |
 | Severity classification | Rules-derived `High`/`Medium`/`Low` with LLM disagreement telemetry. |
 | Deduplication & resolution | In-memory dedupe window suppresses repeat reports; automatic `Resolved` emission when anomalies clear. |
-| Handoff | Log sink always on; JSON file sink opt-in via `INFRA_GATE_OBSERVER_FILE_SINK_ROOT`. |
+| Handoff | Log sink always on; JSON file sink and Planner HTTP handoff are opt-in; see [docs/configuration.md](docs/configuration.md). |
 
-### 🤖🛠️ Executor
+### 🤖📋 Remediation Planner
 
-> Planned: consumes Anomaly Reports, requests bounded remediation plans, and executes only after out-of-band approval.
+The [InfraGate.Planner](src/InfraGate.Planner/README.md) consumes Anomaly Reports, chooses a bounded remediation operation, and creates approval-pending Operator Approval Policy plans through `propose_plan`.
 
+| Capability | Description |
+| --- | --- |
+| Anomaly intake | Receives `AnomalyHandoffBatch` payloads from the Observer over HTTP. |
+| Operation menu | Chooses only `restart_deployment`, `scale_deployment`, or `set_deployment_image` in v1. |
+| Plan proposal | Calls `propose_plan` to create a digest-bound Plan Envelope for operator approval. |
+| Approval notification | `propose_plan` creates an Approval Access Code and sends the configured operator email through the gateway SMTP sender when configured. |
+| Scope boundary | Planner can propose plans and use read-only inspection tools; it cannot execute plans. |
+
+### 🤖🛠️ Remediation Executor
+
+The [InfraGate.Executor](src/InfraGate.Executor/README.md) consumes Planner proposals, waits for approval, and executes only after the gateway reports that an Approval Grant exists.
+
+| Capability | Description |
+| --- | --- |
+| Proposal intake | Receives `RemediationProposalBatch` payloads from the Planner over HTTP. |
+| Approval wait | Calls `wait_for_plan_approval` for each plan id until approval, timeout, or terminal status. |
+| Approved execution | Calls `execute_approved_plan` only after approval is reported. |
+| Scope boundary | Executor can wait and execute approved plans; it cannot create plans or call read-only inspection tools. |
+| Gateway gates | The gateway still enforces approval grants, digests, freshness, policy checks, and single execution. |
 
 ### 🛡️ Gateway Protections
 
@@ -190,6 +217,7 @@ The [InfraGate.Observer](src/InfraGate.Observer/README.md) is an LLM-driven agen
 | `request_scale_deployment` | Dry-run and plan a Deployment replica-count change. |
 | `request_restart_deployment` | Dry-run and plan a Deployment rollout restart. |
 | `request_set_deployment_image` | Dry-run and plan a Deployment container image update. |
+| `propose_plan` | Create an approval-pending Operator Approval Policy plan for the autonomous Planner operation menu. |
 | `execute_approved_plan` | Create the browser approval challenge or execute an approved, digest-bound plan after gates pass. |
 | `get_plan_status` | Read the current approval status for a plan. |
 | `wait_for_plan_approval` | Wait briefly for an out-of-band browser approval and return status JSON without applying the plan. |
@@ -300,7 +328,9 @@ Use specific release tags for stable demos. The `:dev` tag tracks the developmen
 - [src/InfraGate.Approvals/README.md](src/InfraGate.Approvals/README.md): generic approval storage, challenges, grants, gates, and audit payloads.
 - [src/InfraGate.KubernetesAdapter/README.md](src/InfraGate.KubernetesAdapter/README.md): Kubernetes mutation intent, evidence, policy, freshness checks, and execution.
 - [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md): private Kubernetes MCP server and typed tool surface.
-- [src/InfraGate.Observer/README.md](src/InfraGate.Observer/README.md): LLM-driven anomaly observer — periodic cluster inspection and Anomaly Report emission.
+- [src/InfraGate.Observer/README.md](src/InfraGate.Observer/README.md): LLM-driven anomaly observer.
+- [src/InfraGate.Planner/README.md](src/InfraGate.Planner/README.md): LLM-driven remediation planner.
+- [src/InfraGate.Executor/README.md](src/InfraGate.Executor/README.md): deterministic remediation executor.
 
 ## ⚖️ Boundaries And Non-Goals
 

@@ -1,4 +1,5 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
 using InfraGate.McpGateway;
 using InfraGate.McpServer;
 using ModelContextProtocol.Client;

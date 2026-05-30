@@ -1,5 +1,6 @@
 using System.Diagnostics.Metrics;
-using Microsoft.Extensions.AI;
+using InfraGate.AgentLlm;
+using InfraGate.Observer.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace InfraGate.Observer.Llm;
@@ -50,7 +51,8 @@ internal sealed class ChatClientFactory : IChatClientFactory
             },
         };
 
-        return new AnthropicChatClient(httpClient, model, NullLoggerFactory.Instance, meter);
+        var counter = ObserverMetrics.CreateLlmTokensCounter(meter);
+        return new AnthropicChatClient(httpClient, model, NullLoggerFactory.Instance, counter);
     }
 
     private static LlmProvider ParseProvider(string? provider)

@@ -1,4 +1,9 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Challenge;
+using InfraGate.Approvals.Execution;
+using InfraGate.Approvals.Audit;
+using InfraGate.Approvals.AccessCodes;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
@@ -19,6 +24,7 @@ public static class PostgresApprovalPersistenceServiceCollectionExtensions
         services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<IApprovalPersistence>());
         services.AddSingleton<IApprovalExecutionWorkflow>(sp => sp.GetRequiredService<IApprovalPersistence>());
         services.AddSingleton<IApprovalAuditPublisher>(sp => sp.GetRequiredService<IApprovalPersistence>());
+        services.AddSingleton<IApprovalAccessCodeStore, PostgresApprovalAccessCodeStore>();
         services.AddSingleton<PostgresApprovalSchemaValidator>();
 
         return services;

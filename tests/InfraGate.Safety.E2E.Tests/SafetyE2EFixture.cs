@@ -6,11 +6,13 @@ using System.Text;
 using System.Text.Json;
 using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
 using InfraGate.DownstreamAuth;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
+using InfraGate.McpGateway.Email;
 using InfraGate.McpGateway.Notifications;
 using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.OAuth;
@@ -413,10 +415,17 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
     [System.Text.RegularExpressions.GeneratedRegex(@"\b[0-9A-Fa-f]{32}\b", System.Text.RegularExpressions.RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial System.Text.RegularExpressions.Regex PlanIdPattern();
 
-    public static string ParsePlanId(string text) =>
-        PlanIdPattern().Matches(text) is { Count: > 0 } matches
-            ? matches[0].Value
-            : throw new InvalidOperationException("Could not extract a PlanId from the text.");
+    public static string ParsePlanId(string text)
+    {
+        var matches = PlanIdPattern().Matches(text);
+        if (matches.Count > 0)
+        {
+            return matches[0].Value;
+        }
+
+        System.Console.Error.WriteLine("DEBUG ParsePlanId FAILED. Text=" + (text ?? "(null)"));
+        throw new InvalidOperationException("Could not extract a PlanId from the text.");
+    }
 
     public static string ParseChallengeId(string text) =>
         ChallengeIdPattern().Match(text) is { Success: true } match
@@ -527,8 +536,12 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                 services.AddKubernetesAdapter();
                 services.AddSingleton<DownstreamToolRegistry>();
                 services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
+                services.AddSingleton<IToolScopeGuard, ToolScopeGuard>();
                 services.AddHttpContextAccessor();
                 services.AddLogging();
+                services.AddSingleton<IApprovalAccessCodeStore, InMemoryApprovalAccessCodeStore>();
+                services.AddSingleton<IApprovalEmailSender>(_ => new NullApprovalEmailSender());
+                services.AddSingleton<IProposePlanHandler, ProposePlanHandler>();
                 services.AddAntiforgery();
                 services.AddGatewayAuthentication(options.Auth);
                 services.PostConfigure<OAuthOptions>(GatewayAuthConventions.Schemes.ApprovalOAuth, oauthOptions =>
@@ -556,7 +569,8 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                         {
                             httpCtx.Items[NotificationsConventions.McpSessionIdItemKey] = request.Server.SessionId;
                         }
-                        return new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct));
+                        var textTask = request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct);
+                        return new ValueTask<CallToolResult>(textTask);
                     });
             })
             .Configure(app =>
@@ -679,9 +693,11 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
         {
             var result = await client.CallToolAsync(toolName, arguments, cancellationToken: cancellationToken);
 
-            return string.Join(
+            var text = string.Join(
                 Environment.NewLine,
                 result.Content.OfType<TextContentBlock>().Select(content => content.Text));
+
+            return text;
         }
 
         public ValueTask DisposeAsync() => client.DisposeAsync();
@@ -705,4 +721,10 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
             });
         }
     }
+}
+
+internal sealed class NullApprovalEmailSender : IApprovalEmailSender
+{
+    public Task SendAsync(ApprovalEmailContent content, CancellationToken cancellationToken) =>
+        Task.CompletedTask;
 }

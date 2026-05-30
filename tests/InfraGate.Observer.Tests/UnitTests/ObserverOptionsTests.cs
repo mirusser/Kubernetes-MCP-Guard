@@ -80,7 +80,8 @@ public sealed class ObserverOptionsTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(31)]
+    [InlineData(9)]
+    [InlineData(301)]
     public void Validate_WallClockCapOutOfBounds_Throws(int wallClockCapSeconds)
     {
         var options = new ObserverOptions
@@ -93,9 +94,9 @@ public sealed class ObserverOptionsTests
     }
 
     [Theory]
-    [InlineData(1)]
-    [InlineData(20)]
-    [InlineData(30)]
+    [InlineData(10)]
+    [InlineData(120)]
+    [InlineData(300)]
     public void Validate_WallClockCapWithinBounds_DoesNotThrow(int wallClockCapSeconds)
     {
         var options = new ObserverOptions

@@ -22,7 +22,7 @@ Agent note: in the Codex sandbox used for this repo, Docker commands can start t
 Let the setup script initialize the local server:
 
 ```bash
-tools/sonarqube/prepare-local.sh
+./tools/sonarqube/prepare-local.sh
 ```
 
 On a fresh SonarQube volume this script changes the default `admin` password, creates the local project, generates a user token, and writes the ignored file `.sonarqube-local/local.env`. The analysis script loads that file automatically.
@@ -48,7 +48,7 @@ Do not commit tokens or shell history files containing tokens. `.sonarqube-local
 From the repository root:
 
 ```bash
-tools/sonarqube/run-analysis.sh
+./tools/sonarqube/run-analysis.sh
 ```
 
 The script resolves the repository root from its own path, so absolute or relative invocation from another directory also works.

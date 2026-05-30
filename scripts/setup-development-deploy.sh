@@ -251,7 +251,7 @@ fi
 echo "Starting local Keycloak via $KEYCLOAK_COMPOSE_FILE ..."
 KEYCLOAK_BIND_ADDRESS="$KEYCLOAK_BIND_ADDRESS" \
 KEYCLOAK_PORT="$KEYCLOAK_PORT" \
-docker compose -f "$KEYCLOAK_COMPOSE_FILE" up -d keycloak
+docker compose --env-file "$ENV_FILE" -f "$KEYCLOAK_COMPOSE_FILE" up -d keycloak
 
 echo "Waiting for Keycloak discovery at $KEYCLOAK_DISCOVERY_URL ..."
 elapsed=0

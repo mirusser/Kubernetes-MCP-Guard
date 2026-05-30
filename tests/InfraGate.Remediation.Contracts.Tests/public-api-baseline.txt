@@ -1,0 +1,12 @@
+interface InfraGate.Remediation.Contracts.IRemediationProposalSink
+  Task PublishAsync(RemediationProposalBatch batch, CancellationToken cancellationToken)
+
+class InfraGate.Remediation.Contracts.RemediationProposal
+  String AnomalyId { get; set; }
+  String PlanId { get; set; }
+  DateTimeOffset ProposedAt { get; set; }
+
+class InfraGate.Remediation.Contracts.RemediationProposalBatch
+  String CycleId { get; set; }
+  DateTimeOffset EmittedAt { get; set; }
+  IReadOnlyList<RemediationProposal> Proposals { get; set; }

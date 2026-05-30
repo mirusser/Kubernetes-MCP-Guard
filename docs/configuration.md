@@ -24,11 +24,11 @@ Defaults below come from the current source code and workflows. Paths shown as `
 
 ## InfraGate.Observer
 
-The Anomaly Observer listens on port `3003` by default and polls the MCP gateway on a configurable cadence. All variables use the `INFRA_GATE_OBSERVER_*` prefix.
+The Anomaly Observer listens on port `3003` by default and polls the MCP gateway on a configurable cadence. Observer-specific variables use the `INFRA_GATE_OBSERVER_*` prefix.
 
 | Variable | Component | Required | Default | Example | Description | Production guidance |
 | --- | --- | :---: | --- | --- | --- | --- |
-| `ASPNETCORE_URLS` | `InfraGate.Observer` | No | `http://127.0.0.1:3003` | `http://0.0.0.0:3003` | ASP.NET Core bind URL for the Observer HTTP server (`/health` endpoint). | Bind intentionally; put behind TLS if exposing outside loopback. |
+| `ASPNETCORE_URLS` / `INFRA_GATE_OBSERVER_ASPNETCORE_URLS` | `InfraGate.Observer`, Compose interpolation | No | Runtime default `http://127.0.0.1:3003`; Compose default `http://0.0.0.0:3003` | `http://0.0.0.0:3003` | ASP.NET Core bind URL for the Observer HTTP server (`/health`, `/observe-now`). The prefixed variable is generated for Compose and mapped to `ASPNETCORE_URLS` inside the container. | Bind intentionally; put behind TLS if exposing outside loopback. |
 | `INFRA_GATE_OBSERVER_CYCLE_INTERVAL_SECONDS` | `InfraGate.Observer` | No | `60` | `60` | Observation cycle cadence in seconds. Bounds: 10–3600. | Below 10s hammers gateway + LLM; above 1h is not observation. |
 | `INFRA_GATE_OBSERVER_WALL_CLOCK_CAP_SECONDS` | `InfraGate.Observer` | No | `20` | `20` | Per-cycle wall-clock cap. Truncated cycles emit no reports. | Keep below cadence so cycles never overlap; below `/observe-now` HTTP timeout (30s). |
 | `INFRA_GATE_OBSERVER_MAX_TOOL_ITERATIONS` | `InfraGate.Observer` | No | `8` | `8` | Maximum LLM tool-call iterations per cycle. | Bounds agentic loops independent of clock time. |
@@ -36,14 +36,19 @@ The Anomaly Observer listens on port `3003` by default and polls the MCP gateway
 | `INFRA_GATE_OBSERVER_ALLOWED_NAMESPACES` | `InfraGate.Observer` | No | Unset | `mcp-nginx-demo` | Comma-separated namespace allow-list for snapshot fetching. | Align with gateway namespace allowlist. |
 | `INFRA_GATE_OBSERVER_LLM_PROVIDER` | `InfraGate.Observer` | No | `anthropic` | `anthropic` | LLM provider for anomaly detection. Supported: `anthropic`. Others (`openai`, `google`, `azure`, `ollama`) are reserved for future implementation. | Use a provider supported by `Microsoft.Extensions.AI`. |
 | `INFRA_GATE_OBSERVER_LLM_MODEL` | `InfraGate.Observer` | No | `claude-sonnet-4-6` | `claude-sonnet-4-6` | LLM model name. Applies when `INFRA_GATE_OBSERVER_LLM_PROVIDER` is set. | Model selection affects token cost and detection quality. |
-| `INFRA_GATE_OBSERVER_LLM_API_KEY` | `InfraGate.Observer` | No | Unset | (secret) | LLM provider API key. Never logged. Required when a provider is configured. | Use a secret manager in production; env var is development-only. |
+| `INFRA_GATE_OBSERVER_LLM_API_KEY` | `InfraGate.Observer` | Yes for Anthropic | None | (secret) | LLM provider API key. Never logged. Required when the Anthropic provider is active. | Use a secret manager in production; env var is development-only. Never commit generated files containing this value. |
 | `INFRA_GATE_OBSERVER_CLIENT_ID` | `InfraGate.Observer` | No | `infra-gate-observer` | `infra-gate-observer` | OAuth client ID for the Observer service account. | Register this client with the IdP and grant `mcp:tools.readonly` scope. |
 | `INFRA_GATE_OBSERVER_CLIENT_SECRET` | `InfraGate.Observer` | Yes | None | (secret) | OAuth client secret for client_credentials flow. | Use a secret manager in production; env var is development-only. |
-| `INFRA_GATE_OBSERVER_OAUTH_AUTHORITY` | `InfraGate.Observer` | Yes | None | `http://keycloak:8080/realms/infra-gate` | OAuth token endpoint authority. | Match the gateway's issuer. |
+| `INFRA_GATE_OBSERVER_OAUTH_AUTHORITY` | `InfraGate.Observer` | Yes | None | `http://keycloak:8080/realms/infra-gate` | OAuth/OIDC authority used for client_credentials token discovery. | Match the gateway's issuer. |
 | `INFRA_GATE_OBSERVER_OAUTH_SCOPE` | `InfraGate.Observer` | No | `mcp:tools.readonly` | `mcp:tools.readonly` | OAuth scope requested by the Observer. | Must include `mcp:tools.readonly` for gateway access. |
 | `INFRA_GATE_OBSERVER_DEDUPE_SUPPRESSION_WINDOW` | `InfraGate.Observer` | No | `5` | `5` | Number of cycles within which repeated detection of the same anomaly is suppressed (deduplication window). Bounds: 1–30. | Lower values increase report noise; higher values delay re-emission of persistent anomalies. |
 | `INFRA_GATE_OBSERVER_DEDUPE_RESOLUTION_THRESHOLD` | `InfraGate.Observer` | No | `2` | `2` | Number of consecutive cycles an anomaly must be absent before emitting a `Resolved` report. Bounds: 1–10. | Lower values clear anomalies faster; higher values prevent transient flapping. |
 | `INFRA_GATE_OBSERVER_FILE_SINK_ROOT` | `InfraGate.Observer` | No | Unset | `/data/observer/findings` | Directory for the opt-in JSON file handoff sink. When set and non-empty, each cycle writes a `{cycleId}.json` file atomically. | Use a durable bind-mount; operator owns cleanup and rotation. |
+| `INFRA_GATE_OBSERVER_PLANNER_HANDOFF_URL` | `InfraGate.Observer` | No | Unset | `http://planner:3004/handoff/anomalies` | Optional HTTP handoff target for publishing `AnomalyHandoffBatch` payloads to the Remediation Planner. When unset, Observer output is limited to logging and the optional JSON file sink. | Required for the autonomous remediation loop. Use a service-local HTTPS route or trusted private network path outside local development. |
+| `INFRA_GATE_OBSERVER_IMAGE` | Compose | No | `infragate-observer` | `ghcr.io/example/infragate-observer` | Observer container image used by local Compose. | Pin release tags for shared environments. |
+| `INFRA_GATE_OBSERVER_BIND_ADDRESS` | Compose | No | `127.0.0.1` | `127.0.0.1` | Host bind address for the Observer container port. | Keep loopback unless a reverse proxy or private network boundary is configured. |
+| `INFRA_GATE_OBSERVER_BIND_PORT` | Compose | No | `3003` | `3003` | Host port mapped to the Observer container. | Avoid exposing publicly; this is an operational control endpoint. |
+| `INFRA_GATE_OBSERVER_HOST_PATH` | Compose / Run Profiles | No | Repo-root `.mcp-observer/findings` when generated by `scripts/generate-env.sh` | `./.mcp-observer/findings` | Host path mounted to the Observer JSON finding sink directory. | Use protected durable storage when enabled; otherwise leave the file sink unset. |
 
 ### On-Demand Observation Trigger
 
@@ -53,6 +58,52 @@ The Observer exposes `POST /observe-now` for manual on-demand cycle triggering:
 - Waits up to 2 seconds for an in-flight scheduled cycle to complete before starting.
 - Background schedule is unaffected and continues on its normal cadence.
 - The 30-second timeout and 2-second slack window are **hardcoded** and not configurable via environment variables.
+
+## InfraGate.Planner
+
+The Remediation Planner listens on port `3004` by default, accepts `POST /handoff/anomalies`, and proposes approval-pending plans through the gateway. Its v1 operation menu is `restart_deployment` and `scale_deployment`. Direct runtime configuration is under `InfraGate:Planner`; generated env files and local Compose use the `INFRA_GATE_PLANNER_*` prefix.
+
+| Variable | Component | Required | Default | Example | Description | Production guidance |
+| --- | --- | :---: | --- | --- | --- | --- |
+| `ASPNETCORE_URLS` / `INFRA_GATE_PLANNER_ASPNETCORE_URLS` | `InfraGate.Planner`, Compose interpolation | No | Runtime default `http://localhost:3004`; Compose default `http://0.0.0.0:3004` | `http://0.0.0.0:3004` | ASP.NET Core bind URL for the Planner HTTP server (`/health`, `/handoff/anomalies`). The prefixed variable is generated for Compose and mapped to `ASPNETCORE_URLS` inside the container. | Bind intentionally; put behind TLS or a private service network when exposed outside loopback. |
+| `INFRA_GATE_PLANNER_GATEWAY_BASE_URL` | `InfraGate.Planner` | Yes | None | `http://gateway:3001/mcp` | MCP gateway HTTP endpoint used for read-only inspection and `propose_plan`. | Must be reachable only from the Planner service account path. Prefer HTTPS outside local Compose. |
+| `INFRA_GATE_PLANNER_EXECUTOR_HANDOFF_URL` | `InfraGate.Planner` | No | Unset | `http://executor:3005/handoff/proposals` | Optional HTTP handoff target for publishing `RemediationProposalBatch` payloads to the Executor. When unset, proposals are logged and optionally written to the JSON file sink but are not pushed to an Executor. | Required for the autonomous remediation loop. Keep the route service-local and authenticated. |
+| `INFRA_GATE_PLANNER_ANOMALY_WALL_CLOCK_CAP_SECONDS` | `InfraGate.Planner` | No | `30` | `30` | Per-anomaly decision cap covering LLM reasoning and plan proposal. Bounds: 5–120. | Keep bounded to control LLM cost and avoid tying up batch processing. |
+| `INFRA_GATE_PLANNER_BATCH_WALL_CLOCK_CAP_SECONDS` | `InfraGate.Planner` | No | `300` | `300` | Per-batch processing cap. Proposals completed before the cap are still published. Bounds: 30–900. | Keep below operational alert windows; high values can delay later batches. |
+| `INFRA_GATE_PLANNER_MAX_TOOL_ITERATIONS` | `InfraGate.Planner` | No | `4` | `4` | Maximum read-only inspection tool calls the LLM may request per anomaly. Bounds: 1–10. | Lower values reduce cost and blast radius; raise only with measured need. |
+| `INFRA_GATE_PLANNER_LLM_PROVIDER` | `InfraGate.Planner` | No | `anthropic` | `anthropic` | LLM provider for remediation decisions. The current implemented provider is Anthropic; other parsed provider names are future wiring points. | Use a provider explicitly supported by the deployed binary. |
+| `INFRA_GATE_PLANNER_LLM_MODEL` | `InfraGate.Planner` | No | `claude-sonnet-4-6` | `claude-sonnet-4-6` | LLM model name used by the Planner chat client. | Model choice affects cost and remediation quality. Validate prompt behavior before changing. |
+| `INFRA_GATE_PLANNER_LLM_API_KEY` | `InfraGate.Planner` | Yes for Anthropic | None | (secret) | API key for the configured LLM provider. | Use a secret manager in production; env var is development-only. Never commit generated files containing this value. |
+| `INFRA_GATE_PLANNER_CLIENT_ID` | `InfraGate.Planner` | No | `infra-gate-planner` | `infra-gate-planner` | OAuth client id for the Planner service account. | Register a dedicated confidential client and grant only `mcp:tools.propose` plus `mcp:tools.readonly`. |
+| `INFRA_GATE_PLANNER_CLIENT_SECRET` | `InfraGate.Planner` | Yes | None | (secret) | OAuth client secret for Planner client_credentials flow. | Use a secret manager in production; rotate independently from Observer and Executor secrets. |
+| `INFRA_GATE_PLANNER_OAUTH_AUTHORITY` | `InfraGate.Planner` | Yes | None | `http://keycloak:8080/realms/infra-gate` | OAuth/OIDC authority used for client_credentials token acquisition and inbound Observer JWT validation. | Use the same issuer trusted by the gateway; use HTTPS outside local development. |
+| `INFRA_GATE_PLANNER_OAUTH_SCOPE` | `InfraGate.Planner` | No | `mcp:tools.propose mcp:tools.readonly` | `mcp:tools.propose mcp:tools.readonly` | OAuth scopes requested for Planner gateway calls. | Do not grant execution scopes to the Planner identity. |
+| `INFRA_GATE_PLANNER_FILE_SINK_ROOT` | `InfraGate.Planner` | No | Unset | `/data/planner/proposals` | Directory for the opt-in JSON file proposal sink. | Use durable storage only when proposal capture is operationally required; define retention. |
+| `INFRA_GATE_PLANNER_TOKEN_ENDPOINT` | Run Profiles / Compose | No | Profile value when emitted | `http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token` | Generated profile value for local Compose parity. The current Planner runtime discovers tokens from `INFRA_GATE_PLANNER_OAUTH_AUTHORITY`. | Keep aligned with the authority and IdP realm; do not treat as a direct runtime override. |
+| `INFRA_GATE_PLANNER_IMAGE` | Compose | No | `infragate-planner` | `ghcr.io/example/infragate-planner` | Planner container image used by local Compose. | Pin release tags for shared environments. |
+| `INFRA_GATE_PLANNER_BIND_ADDRESS` | Compose | No | `127.0.0.1` | `127.0.0.1` | Host bind address for the Planner container port. | Keep loopback unless a reverse proxy or private network boundary is configured. |
+| `INFRA_GATE_PLANNER_BIND_PORT` | Compose | No | `3004` | `3004` | Host port mapped to the Planner container. | Avoid exposing publicly; this is an internal handoff endpoint. |
+| `INFRA_GATE_PLANNER_HOST_PATH` | Compose / Run Profiles | No | Repo-root `.mcp-remediation/proposals` when generated by `scripts/generate-env.sh` | `./.mcp-remediation/proposals` | Host path mounted to the Planner JSON proposal sink directory. | Use protected durable storage when enabled; otherwise leave the file sink unset. |
+
+## InfraGate.Executor
+
+The Remediation Executor listens on port `3005` by default, accepts `POST /handoff/proposals`, waits for approval with `wait_for_plan_approval`, and calls `execute_approved_plan` only after approval. Direct runtime configuration is under `InfraGate:Executor`; generated env files and local Compose use the `INFRA_GATE_EXECUTOR_*` prefix.
+
+| Variable | Component | Required | Default | Example | Description | Production guidance |
+| --- | --- | :---: | --- | --- | --- | --- |
+| `ASPNETCORE_URLS` / `INFRA_GATE_EXECUTOR_ASPNETCORE_URLS` | `InfraGate.Executor`, Compose interpolation | No | Runtime default `http://localhost:3005`; Compose default `http://0.0.0.0:3005` | `http://0.0.0.0:3005` | ASP.NET Core bind URL for the Executor HTTP server (`/health`, `/handoff/proposals`). The prefixed variable is generated for Compose and mapped to `ASPNETCORE_URLS` inside the container. | Bind intentionally; keep the handoff endpoint service-local. |
+| `INFRA_GATE_EXECUTOR_GATEWAY_BASE_URL` | `InfraGate.Executor` | Yes | None | `http://gateway:3001/mcp` | MCP gateway HTTP endpoint used for `wait_for_plan_approval` and `execute_approved_plan`. | Must be reachable only from the Executor service account path. Prefer HTTPS outside local Compose. |
+| `INFRA_GATE_EXECUTOR_CONCURRENCY_CAP` | `InfraGate.Executor` | No | `64` | `64` | Maximum in-flight watched plans. Batches exceeding available slots are rejected with `429`. Bounds: 1–256. | Size for gateway connection capacity and expected approval volume. |
+| `INFRA_GATE_EXECUTOR_WATCH_TIMEOUT_SECONDS` | `InfraGate.Executor` | No | `900` | `900` | Wall-clock timeout for each plan watch. Bounds: 60–3600. | Keep aligned with challenge TTL and operator response expectations. |
+| `INFRA_GATE_EXECUTOR_CLIENT_ID` | `InfraGate.Executor` | No | `infra-gate-executor` | `infra-gate-executor` | OAuth client id for the Executor service account. | Register a dedicated confidential client and grant only `mcp:tools.execute`. |
+| `INFRA_GATE_EXECUTOR_CLIENT_SECRET` | `InfraGate.Executor` | Yes | None | (secret) | OAuth client secret for Executor client_credentials flow. | Use a secret manager in production; rotate independently from Planner secrets. |
+| `INFRA_GATE_EXECUTOR_OAUTH_AUTHORITY` | `InfraGate.Executor` | Yes | None | `http://keycloak:8080/realms/infra-gate` | OAuth/OIDC authority used for client_credentials token acquisition and inbound Planner JWT validation. | Use the same issuer trusted by the gateway; use HTTPS outside local development. |
+| `INFRA_GATE_EXECUTOR_OAUTH_SCOPE` | `InfraGate.Executor` | No | `mcp:tools.execute` | `mcp:tools.execute` | OAuth scope requested for Executor gateway calls. | Do not grant proposal or read-only scopes to the Executor identity. |
+| `INFRA_GATE_EXECUTOR_TOKEN_ENDPOINT` | Run Profiles / Compose | No | Profile value when emitted | `http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token` | Generated profile value for local Compose parity. The current Executor runtime discovers tokens from `INFRA_GATE_EXECUTOR_OAUTH_AUTHORITY`. | Keep aligned with the authority and IdP realm; do not treat as a direct runtime override. |
+| `INFRA_GATE_EXECUTOR_IMAGE` | Compose | No | `infragate-executor` | `ghcr.io/example/infragate-executor` | Executor container image used by local Compose. | Pin release tags for shared environments. |
+| `INFRA_GATE_EXECUTOR_BIND_ADDRESS` | Compose | No | `127.0.0.1` | `127.0.0.1` | Host bind address for the Executor container port. | Keep loopback unless a reverse proxy or private network boundary is configured. |
+| `INFRA_GATE_EXECUTOR_BIND_PORT` | Compose | No | `3005` | `3005` | Host port mapped to the Executor container. | Avoid exposing publicly; this is an internal handoff endpoint. |
+| `INFRA_GATE_EXECUTOR_HOST_PATH` | Run Profiles | No | Unset | `/var/lib/infra-gate/executor` | Optional generated host-path value reserved for Executor deployments. The current local Compose file does not mount an Executor data directory. | Leave unset unless a deployment profile introduces durable Executor-owned files. |
 
 ## McpGateway
 
@@ -65,6 +116,14 @@ The Observer exposes `POST /observe-now` for manual on-demand cycle triggering:
 | `K8S_MCP_APPROVAL_ROOT` | `InfraGate.McpGateway`, `InfraGate.McpServer` | Required in Production | `<working directory>/.mcp-approvals` | `/data/approvals` | Retained for ASP.NET Core Data Protection key storage only. Approval state and audit are PostgreSQL-backed. | Use a durable, protected absolute path for Data Protection keys. Production requires an explicit durable path. |
 | `INFRA_GATE_APPROVAL_BASE_URL` | `InfraGate.McpGateway` | Required in Production | Request-derived URL, or `http://127.0.0.1:3001` when no request is available | `https://gateway.example.com` | Public base URL used when returning approval links to the MCP client. | Set explicitly to the external HTTPS URL users open in a browser. Production refuses missing, HTTP, or loopback values. |
 | `INFRA_GATE_APPROVAL_CHALLENGE_TTL_SECONDS` | `InfraGate.McpGateway` | No | `900` | `900` | Approval URL lifetime in seconds. | Keep short enough to limit stale approvals while allowing human review. |
+| `INFRA_GATE_OPERATOR_GROUP` | `InfraGate.McpGateway` | No | `kubernetes-operators` | `kubernetes-operators` | Group claim required for approving Operator Approval Policy plans. | Keep aligned with the IdP group path and grant membership only to real operators. |
+| `INFRA_GATE_OPERATOR_EMAIL` | `InfraGate.McpGateway` | Required for approval email delivery | Unset; local Compose default `operators@example.local` | `operators@example.com` | Destination email address for Approval Access Code notifications created by `propose_plan`. Plans are still created if email delivery is not configured. | Use a monitored operator group mailbox or distribution list. |
+| `INFRA_GATE_GATEWAY_SMTP_HOST` | `InfraGate.McpGateway` | Required for approval email delivery | Unset; local Compose default `mailpit` | `smtp.example.com` | SMTP host used by the gateway approval email sender. | Use an authenticated, monitored SMTP relay; local Mailpit is development-only. |
+| `INFRA_GATE_GATEWAY_SMTP_PORT` | `InfraGate.McpGateway` | No | `25` when SMTP is configured; local Compose default `1025` | `587` | SMTP port. Bounds: 1–65535. | Prefer TLS-capable relay ports according to your mail infrastructure. |
+| `INFRA_GATE_GATEWAY_SMTP_FROM` | `InfraGate.McpGateway` | Required for approval email delivery | Unset; local Compose default `infragate@example.local` | `infragate@example.com` | Sender address for Approval Access Code notifications. | Use a verified sender domain; monitor bounces. |
+| `INFRA_GATE_GATEWAY_SMTP_USER` | `InfraGate.McpGateway` | No | Unset | `smtp-user` | Optional SMTP username. | Use secret storage and least-privilege SMTP credentials. |
+| `INFRA_GATE_GATEWAY_SMTP_PASSWORD` | `InfraGate.McpGateway` | No | Unset | (secret) | Optional SMTP password. | Use secret storage; never commit generated env files containing this value. |
+| `INFRA_GATE_GATEWAY_SMTP_ENABLE_SSL` | `InfraGate.McpGateway` | No | `true` when SMTP is configured; local Compose default `false` for Mailpit | `true` | Enables SMTP TLS/STARTTLS on the approval email client. | Keep enabled for production SMTP relays; disable only for local Mailpit or trusted development-only relays. |
 
 ## McpGateway.Auth
 
@@ -90,7 +149,14 @@ The local OAuth Compose path (`deploy/local-oauth`) and the development compose 
 | `mcp-smoke-client` | Public direct-grant client used by CI/smoke tests to acquire non-browser tokens. |
 | `mcp-client-limited` | Public direct-grant client with valid audience but no `mcp:tools`, used for 403 insufficient-scope coverage. |
 | `infra-gate-approval-ui` | Public authorization-code + PKCE S256 client for browser approvals. |
+| `infra-gate-observer` | Confidential client_credentials client for the Anomaly Observer. |
+| `infra-gate-planner` | Confidential client_credentials client for the Remediation Planner. |
+| `infra-gate-executor` | Confidential client_credentials client for the Remediation Executor. |
 | `mcp:tools` | Client scope with the audience mapper for `http://127.0.0.1:3001/mcp` and a subject mapper suitable for local tests. |
+| `mcp:tools.readonly` | Observer scope mapped to gateway read-only inspection tools. |
+| `mcp:tools.propose` | Planner scope mapped to the `propose_plan` gateway tool. |
+| `mcp:tools.execute` | Executor scope mapped to `wait_for_plan_approval` and `execute_approved_plan`. |
+| `kubernetes-operators` | Demo operator group used by Operator Approval Policy checks. |
 
 Anonymous OIDC Dynamic Client Registration is enabled only in the local/demo realm. Registration policies restrict redirect URIs to trusted loopback hosts, limit allowed client scopes, cap anonymous client count, and disable full-scope registration. Production deployments should use pre-registered or admin-managed clients instead.
 
@@ -131,7 +197,7 @@ dotnet run --project src/InfraGate.RunProfiles -- generate local-compose \
 
 **Section inheritance**: profiles only inherit `defaults:` values for sections they explicitly declare. A profile must include `gateway: {}` to receive gateway defaults; omitting the key produces no gateway vars. This keeps test profiles free of Compose-only configuration.
 
-**`--set` overrides**: use `section.field=value` syntax. Section names match the YAML keys (`gateway`, `identityProvider`, `approvalAuthority`, `genericApprovalCore`, `host`). Overrides are applied after merging defaults. Use them for host-path fields when a run needs paths different from the profile defaults; `scripts/generate-env.sh` uses them to emit absolute repository-root paths for local Compose runs.
+**`--set` overrides**: use `section.field=value` syntax. Section names match the YAML keys (`gateway`, `identityProvider`, `approvalAuthority`, `genericApprovalCore`, `host`, `observer`, `planner`, `executor`). Overrides are applied after merging defaults. Use them for host-path fields when a run needs paths different from the profile defaults; `scripts/generate-env.sh` uses them to emit absolute repository-root paths for local Compose runs.
 
 **`--force`**: by default, `generate` refuses to overwrite an existing file. Pass `--force` when the generator must write to a system path (e.g., `/etc/infra-gate/development.env` from `scripts/setup-development-deploy.sh`).
 

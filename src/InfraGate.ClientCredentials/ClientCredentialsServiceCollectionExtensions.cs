@@ -12,6 +12,7 @@ public static class ClientCredentialsServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
 
+        services.AddHttpClient();
         services.TryAddSingleton(options);
         services.TryAddSingleton<IClientCredentialsTokenProvider>(sp =>
         {

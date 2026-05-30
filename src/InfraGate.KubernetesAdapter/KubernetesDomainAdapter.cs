@@ -1,4 +1,6 @@
 using InfraGate.Approvals;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.Execution;
 
 namespace InfraGate.KubernetesAdapter;
 
@@ -13,8 +15,9 @@ internal sealed class KubernetesDomainAdapter(
         string mutationToolName,
         IReadOnlyDictionary<string, object?> arguments,
         PlanRequester requester,
+        ApprovalPolicy approvalPolicy,
         CancellationToken ct) =>
-        planBuilder.BuildAsync(mutationToolName, arguments, requester, ct);
+        planBuilder.BuildAsync(mutationToolName, arguments, requester, approvalPolicy, ct);
 
     public Task<DomainPlanExecutionResult> CheckPreExecutionAsync(PlanEnvelope envelope, CancellationToken ct) =>
         planExecutor.CheckPreExecutionAsync(envelope, ct);

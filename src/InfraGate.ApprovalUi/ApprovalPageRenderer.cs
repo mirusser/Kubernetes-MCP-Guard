@@ -40,6 +40,19 @@ public sealed class ApprovalPageRenderer : IApprovalPageRenderer, IDisposable, I
         });
     }
 
+    public Task<string> RenderCodePageAsync(ApprovalCodePageData codePageData)
+    {
+        return renderer.Dispatcher.InvokeAsync(async () =>
+        {
+            var component = await renderer.RenderComponentAsync<CodePage>(
+                ParameterView.FromDictionary(new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["Data"] = codePageData
+                })).ConfigureAwait(false);
+            return component.ToHtmlString();
+        });
+    }
+
     public void Dispose()
     {
         renderer.Dispose();

@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\InfraGate.AgentLlm\InfraGate.AgentLlm.csproj" />
     <ProjectReference Include="..\InfraGate.Observer.Contracts\InfraGate.Observer.Contracts.csproj" />
     <ProjectReference Include="..\InfraGate.ClientCredentials\InfraGate.ClientCredentials.csproj" />
     <ProjectReference Include="..\InfraGate.Observability\InfraGate.Observability.csproj" />

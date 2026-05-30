@@ -47,6 +47,21 @@ public sealed class McpGatewayOptionsTests
     }
 
     [Fact]
+    public void FromEnvironment_WithSmtpEnableSslFalse_ConfiguresSmtpWithoutTls()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
+            (McpGatewayConventions.EnvironmentVariables.SmtpHost, "mailpit"),
+            (McpGatewayConventions.EnvironmentVariables.SmtpFrom, "infragate@example.local"),
+            (McpGatewayConventions.EnvironmentVariables.SmtpEnableSsl, "false"));
+
+        var options = McpGatewayOptions.FromEnvironment();
+
+        Assert.NotNull(options.Smtp);
+        Assert.False(options.Smtp.EnableSsl);
+    }
+
+    [Fact]
     public void FromEnvironment_UsesInfraGateEnvironmentOverStandardEnvironment()
     {
         using var environment = EnvironmentVariableScope.Set(

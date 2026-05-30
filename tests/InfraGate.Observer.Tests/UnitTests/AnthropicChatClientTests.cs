@@ -1,5 +1,5 @@
 using System.Net;
-using InfraGate.Observer.Llm;
+using InfraGate.AgentLlm;
 
 namespace InfraGate.Observer.Tests.UnitTests;
 

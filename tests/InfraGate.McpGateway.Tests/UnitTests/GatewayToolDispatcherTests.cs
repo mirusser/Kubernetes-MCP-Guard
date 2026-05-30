@@ -1,9 +1,17 @@
 using System.Security.Claims;
 using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate.Approvals.AccessCodes;
+using InfraGate.Approvals.Execution;
+using InfraGate.Approvals.Plan;
+using InfraGate.Approvals.PreExecution;
 using InfraGate.KubernetesAdapter;
+using InfraGate.KubernetesAdapter.Approval;
+using InfraGate.KubernetesAdapter.Evidence;
+using InfraGate.KubernetesAdapter.PlanBuilding;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Email;
 using InfraGate.McpGateway.Notifications;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -37,6 +45,16 @@ public sealed class GatewayToolDispatcherTests
     }
 
     [Fact]
+    public async Task ListToolsAsync_ProposePlan_ReturnsTool()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+
+        var result = await context.Dispatcher.ListToolsAsync(new ListToolsRequestParams(), CancellationToken.None);
+
+        Assert.Contains(result.Tools, tool => tool.Name == McpGatewayConventions.ToolNames.ProposePlan);
+    }
+
+    [Fact]
     public async Task CallToolAsync_GetPlanStatus_MissingPlanId_ReturnsError()
     {
         var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
@@ -49,7 +67,7 @@ public sealed class GatewayToolDispatcherTests
             CancellationToken.None);
 
         Assert.True(result.IsError);
-        Assert.Equal("Missing required argument: planId.", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+        Assert.Equal(McpGatewayMessages.ArgumentValidation.MissingPlanId, Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
     }
 
     [Fact]
@@ -65,7 +83,7 @@ public sealed class GatewayToolDispatcherTests
             CancellationToken.None);
 
         Assert.True(result.IsError);
-        Assert.Equal("Missing required argument: planId.", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+        Assert.Equal(McpGatewayMessages.ArgumentValidation.MissingPlanId, Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
     }
 
     [Fact]
@@ -83,6 +101,19 @@ public sealed class GatewayToolDispatcherTests
     public async Task CallToolAsync_WaitForPlanApproval_UnknownPlan_ReturnsNotFoundJson()
     {
         var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+        string planId = ApprovalIds.NewPlanId();
+
+        var result = await CallWaitForPlanApprovalAsync(context, planId);
+
+        AssertPlanStatusJson(result, planId, ApprovalConventions.PlanStatusValues.NotFound, timedOut: false);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_WaitForPlanApproval_WithExecuteScope_ReturnsStatusJson()
+    {
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            httpScope: McpGatewayConventions.ToolScopeRequirements.ExecuteScope);
         string planId = ApprovalIds.NewPlanId();
 
         var result = await CallWaitForPlanApprovalAsync(context, planId);
@@ -157,7 +188,7 @@ public sealed class GatewayToolDispatcherTests
             [McpGatewayConventions.ToolArguments.TimeoutSeconds] = input
         };
 
-        bool ok = GatewayToolDispatcher.TryGetWaitTimeoutSeconds(args, out int timeout, out string? error);
+        bool ok = ToolArgumentConverter.TryGetWaitTimeoutSeconds(args, out int timeout, out string? error);
 
         Assert.True(ok);
         Assert.Equal(expected, timeout);
@@ -173,10 +204,10 @@ public sealed class GatewayToolDispatcherTests
             [McpGatewayConventions.ToolArguments.TimeoutSeconds] = input
         };
 
-        bool ok = GatewayToolDispatcher.TryGetWaitTimeoutSeconds(args, out _, out string? error);
+        bool ok = ToolArgumentConverter.TryGetWaitTimeoutSeconds(args, out _, out string? error);
 
         Assert.False(ok);
-        Assert.Equal("timeoutSeconds must be an integer between 1 and 300.", error);
+        Assert.Equal(McpGatewayMessages.ArgumentValidation.TimeoutMustBeInteger, error);
     }
 
     [Fact]
@@ -187,10 +218,10 @@ public sealed class GatewayToolDispatcherTests
             [McpGatewayConventions.ToolArguments.TimeoutSeconds] = -1.0d
         };
 
-        bool ok = GatewayToolDispatcher.TryGetWaitTimeoutSeconds(args, out _, out string? error);
+        bool ok = ToolArgumentConverter.TryGetWaitTimeoutSeconds(args, out _, out string? error);
 
         Assert.False(ok);
-        Assert.Equal("timeoutSeconds must be an integer between 1 and 300.", error);
+        Assert.Equal(McpGatewayMessages.ArgumentValidation.TimeoutMustBeInteger, error);
     }
 
     [Fact]
@@ -248,7 +279,7 @@ public sealed class GatewayToolDispatcherTests
             CancellationToken.None);
 
         Assert.True(result.IsError);
-        Assert.Contains("destructive", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+        Assert.Equal(McpGatewayMessages.ToolRouting.DestructiveToolRequiresRequest("apply_manifest"), Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
         Assert.Empty(context.Downstream.Calls);
     }
 
@@ -356,6 +387,33 @@ public sealed class GatewayToolDispatcherTests
     }
 
     [Fact]
+    public async Task CallToolAsync_ApprovedPlanWithExecuteScope_ExecutesPlan()
+    {
+        var executor = new FakeDomainPlanExecutor(
+            DomainPlanExecutionResult.Success("Applied successfully.", "mcp-nginx-demo"),
+            DomainPlanExecutionResult.Success("Pre-execution checks passed.", null));
+        var context = CreateContext(
+            executor,
+            httpScope: McpGatewayConventions.ToolScopeRequirements.ExecuteScope);
+        var envelope = await CreateGrantedPlanAsync(context.Workflow);
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+                Arguments = new Dictionary<string, JsonElement>
+                {
+                    [McpGatewayConventions.ToolArguments.PlanId] = JsonSerializer.SerializeToElement(envelope.Id)
+                }
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError is not true);
+        Assert.Single(executor.ExecuteCalls);
+        Assert.True(context.Workflow.IsApplied(envelope.Id));
+    }
+
+    [Fact]
     public async Task CallToolAsync_ApprovedPlanPassingPreExecutionGate_WritesGrantValidatedAudit()
     {
         var executor = new FakeDomainPlanExecutor(
@@ -400,7 +458,7 @@ public sealed class GatewayToolDispatcherTests
         string audit = context.Workflow.GetAuditEventsJson();
 
         Assert.True(result.IsError);
-        Assert.Contains("execution failed", Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+        Assert.Equal(McpGatewayMessages.Approval.PlanExecutionFailed(envelope.Id, "downstream mutation failed"), Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
         Assert.Contains($@"""eventName"": ""{ApprovalConventions.AuditEvents.ApplyFailed}""", audit);
         Assert.False(context.Workflow.IsApplied(envelope.Id));
     }
@@ -494,11 +552,122 @@ public sealed class GatewayToolDispatcherTests
         Assert.Equal(Subject, auditEvent.Subject);
     }
 
+    [Fact]
+    public async Task CallToolAsync_ReadOnlyToolWithExecuteScope_WritesScopeDeniedAudit()
+    {
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            httpScope: McpGatewayConventions.ToolScopeRequirements.ExecuteScope);
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = "get_allowed_namespaces"
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.DoesNotContain(context.Downstream.Calls, call => call == "get_allowed_namespaces");
+        Assert.Single(context.GuardrailAudit.Events);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_RequestMutationWithExecuteScope_WritesScopeDeniedAudit()
+    {
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            httpScope: McpGatewayConventions.ToolScopeRequirements.ExecuteScope);
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = "request_scale_deployment"
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Single(context.GuardrailAudit.Events);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_ProposePlanWithProposeScope_CreatesOperatorPlanAndSendsAccessCode()
+    {
+        var plan = CreatePlanEnvelope("mcp-nginx-demo") with
+        {
+            ApprovalPolicy = ApprovalPolicy.OperatorApproval("kubernetes-operators"),
+            Requester = new PlanRequester("service:planner", "oauth-jwt")
+        };
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            planBuilder: new CapturingDomainPlanBuilder(PlanBuildResult.Success(
+                plan,
+                plan.Id,
+                "mcp-nginx-demo")),
+            httpScope: McpGatewayConventions.ToolScopeRequirements.ProposeScope,
+            subject: "service:planner",
+            operatorEmail: "ops@example.com");
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.ProposePlan,
+                Arguments = new Dictionary<string, JsonElement>
+                {
+                    ["operationType"] = JsonSerializer.SerializeToElement("restart_deployment"),
+                    ["arguments"] = JsonSerializer.SerializeToElement(new
+                    {
+                        name = "demo",
+                        @namespace = "mcp-nginx-demo"
+                    })
+                }
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError is not true);
+        var pending = await context.Workflow.GetPendingPlanAsync(plan.Id, CancellationToken.None);
+        Assert.True(pending.IsPending);
+        Assert.Equal(ApprovalConventions.ApprovalPolicyTypes.OperatorApproval, pending.Envelope?.ApprovalPolicy.Type);
+        Assert.Equal("kubernetes-operators", pending.Envelope?.ApprovalPolicy.Parameters?[ApprovalConventions.ApprovalPolicyParameters.OperatorGroup]);
+        Assert.Single(context.EmailSender.Sent);
+        Assert.Contains("ops@example.com", context.EmailSender.Sent[0].ToAddress);
+
+        string text = Assert.Single(result.Content.OfType<TextContentBlock>()).Text;
+        using var document = JsonDocument.Parse(text);
+        Assert.Equal(plan.Id, document.RootElement.GetProperty("planId").GetString());
+        Assert.True(document.RootElement.GetProperty("accessCodeSent").GetBoolean());
+        Assert.Equal("/approvals/code", new Uri(document.RootElement.GetProperty("approvalUrl").GetString()!).AbsolutePath);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_ProposePlanWithExecuteScope_Rejects()
+    {
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            httpScope: McpGatewayConventions.ToolScopeRequirements.ExecuteScope);
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.ProposePlan,
+                Arguments = new Dictionary<string, JsonElement>
+                {
+                    ["operationType"] = JsonSerializer.SerializeToElement("restart_deployment"),
+                    ["arguments"] = JsonSerializer.SerializeToElement(new { name = "demo" })
+                }
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.Single(context.GuardrailAudit.Events);
+    }
+
     private static TestContext CreateContext(
         IDomainPlanExecutor planExecutor,
         IDomainPlanBuilder? planBuilder = null,
         IGatewayApprovalService? approvals = null,
-        string? httpScope = null)
+        string? httpScope = null,
+        string subject = Subject,
+        string? operatorEmail = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-dispatcher-tests", Guid.NewGuid().ToString("N"));
         var workflow = new TestApprovalWorkflow();
@@ -509,12 +678,13 @@ public sealed class GatewayToolDispatcherTests
             Directory.GetCurrentDirectory(),
             root,
             "http://gateway.test",
-            McpGatewayOptions.DefaultApprovalChallengeTtl);
+            McpGatewayOptions.DefaultApprovalChallengeTtl,
+            OperatorEmail: operatorEmail);
         var httpContext = new DefaultHttpContext
         {
             User = new ClaimsPrincipal(new ClaimsIdentity(
             [
-                new Claim(GatewayAuthConventions.Claims.Subject, Subject),
+                new Claim(GatewayAuthConventions.Claims.Subject, subject),
                 new Claim(GatewayAuthConventions.Claims.Scope, httpScope ?? "mcp:tools")
             ], "test"))
         };
@@ -546,6 +716,16 @@ public sealed class GatewayToolDispatcherTests
         var subscriptions = new SubscriptionRegistry();
 
         var guardrailAudit = new InMemoryAuditStore();
+        var emailSender = new FakeApprovalEmailSender();
+        var proposePlanHandler = new ProposePlanHandler(
+            domainAdapter,
+            workflow,
+            gatewayApprovalService,
+            new InMemoryApprovalAccessCodeStore(),
+            emailSender,
+            gatewayOptions,
+            httpContextAccessor,
+            NullLogger<ProposePlanHandler>.Instance);
 
         return new TestContext(
             new GatewayToolDispatcher(
@@ -557,15 +737,17 @@ public sealed class GatewayToolDispatcherTests
                 workflow,
                 workflow,
                 new ApprovalPreExecutionGate(workflow, workflow),
-                httpContextAccessor,
+                proposePlanHandler,
                 subscriptions,
-                guardrailAudit,
+                new ToolScopeGuard(httpContextAccessor, guardrailAudit, NullLogger<ToolScopeGuard>.Instance),
+                httpContextAccessor,
                 NullLogger<GatewayToolDispatcher>.Instance),
             workflow,
             downstream,
             subscriptions,
             httpContext,
-            guardrailAudit);
+            guardrailAudit,
+            emailSender);
     }
 
     private static async Task<PlanEnvelope> CreateGrantedPlanAsync(
@@ -711,8 +893,9 @@ public sealed class GatewayToolDispatcherTests
             string mutationToolName,
             IReadOnlyDictionary<string, object?> arguments,
             PlanRequester requester,
+            ApprovalPolicy approvalPolicy,
             CancellationToken ct) =>
-            builder.BuildAsync(mutationToolName, arguments, requester, ct);
+            builder.BuildAsync(mutationToolName, arguments, requester, approvalPolicy, ct);
 
         public Task<DomainPlanExecutionResult> CheckPreExecutionAsync(PlanEnvelope envelope, CancellationToken ct) =>
             executor.CheckPreExecutionAsync(envelope, ct);
@@ -733,8 +916,35 @@ public sealed class GatewayToolDispatcherTests
             string mutationToolName,
             IReadOnlyDictionary<string, object?> arguments,
             PlanRequester requester,
+            ApprovalPolicy approvalPolicy,
             CancellationToken ct) =>
             Task.FromResult(result);
+    }
+
+    private sealed class CapturingDomainPlanBuilder(PlanBuildResult result) : IDomainPlanBuilder
+    {
+        public List<(string OperationType, PlanRequester Requester, ApprovalPolicy ApprovalPolicy)> Calls { get; } = [];
+
+        public Task<PlanBuildResult> BuildAsync(
+            string mutationToolName,
+            IReadOnlyDictionary<string, object?> arguments,
+            PlanRequester requester,
+            ApprovalPolicy approvalPolicy,
+            CancellationToken ct)
+        {
+            Calls.Add((mutationToolName, requester, approvalPolicy));
+            var envelope = result.Envelope is null
+                ? null
+                : result.Envelope with
+                {
+                    Requester = requester,
+                    ApprovalPolicy = approvalPolicy
+                };
+
+            return Task.FromResult(envelope is null
+                ? result
+                : PlanBuildResult.Success(envelope, envelope.Id, result.TargetNamespace));
+        }
     }
 
     private sealed class FakeDomainPlanExecutor(
@@ -774,6 +984,17 @@ public sealed class GatewayToolDispatcherTests
         public Task WriteAsync(GuardrailAuditEvent auditEvent, CancellationToken cancellationToken)
         {
             Events.Add(auditEvent);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeApprovalEmailSender : IApprovalEmailSender
+    {
+        public List<ApprovalEmailContent> Sent { get; } = [];
+
+        public Task SendAsync(ApprovalEmailContent content, CancellationToken cancellationToken)
+        {
+            Sent.Add(content);
             return Task.CompletedTask;
         }
     }
@@ -821,7 +1042,8 @@ public sealed class GatewayToolDispatcherTests
         FakeDownstream Downstream,
         SubscriptionRegistry Subscriptions,
         DefaultHttpContext HttpContext,
-        InMemoryAuditStore GuardrailAudit);
+        InMemoryAuditStore GuardrailAudit,
+        FakeApprovalEmailSender EmailSender);
 
     private sealed class NullNotificationDispatcher : IApprovalNotificationDispatcher
     {

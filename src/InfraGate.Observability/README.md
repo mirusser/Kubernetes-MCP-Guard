@@ -2,6 +2,8 @@
 
 `InfraGate.Observability` provides shared Serilog-based structured logging configuration for the MCP Gateway and MCP Server.
 
+**Owns:** shared Serilog structured logging configuration
+
 ## Contents
 
 - `ObservabilityOptions.cs` defines the `WriteToConsole`, `ConsoleToStandardError`, and `FilePath` configuration flags.
