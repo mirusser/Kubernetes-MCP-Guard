@@ -17,8 +17,10 @@ namespace InfraGate.Observer.Cycle;
 
 internal sealed class ObservationCycleRunner : IObservationCycleRunner
 {
-    // Wrapper DTO for the LLM response format — prevents the model from emitting bare null instead of [].
-    // AnomalyParseExecutor.ExtractJsonArray finds the '[' inside this object, so no parser changes needed.
+    // Justification: These DTOs exist solely for ChatResponseFormat.ForJsonSchema<T>() reflection below.
+    // System.Text.Json discovers the properties to generate a JSON schema that constrains the LLM output format.
+    // The properties are never read/written by imperative C# code — they are schema-only metadata.
+    // AnomalyParseExecutor.ExtractJsonArray finds the '[' inside the serialised object, so no parser changes needed.
     private sealed class AnomalyBatchOutput
     {
         public List<AnomalyOutputItem> Anomalies { get; init; } = [];

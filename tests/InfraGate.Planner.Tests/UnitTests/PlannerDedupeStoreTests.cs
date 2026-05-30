@@ -60,7 +60,8 @@ public sealed class PlannerDedupeStoreTests
     {
         var store = new PlannerDedupeStore();
 
-        store.Remove("anomaly-unknown");
+        var ex = Record.Exception(() => store.Remove("anomaly-unknown"));
+        Assert.Null(ex);
     }
 
     [Fact]

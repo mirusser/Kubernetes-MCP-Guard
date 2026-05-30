@@ -16,7 +16,7 @@ public sealed class RateLimitRetryingChatClient(
         TimeSpan.FromSeconds(60),
     ];
 
-    private readonly ILogger resolvedLogger = logger ?? NullLogger<RateLimitRetryingChatClient>.Instance;
+    private readonly ILogger log = logger ?? NullLogger<RateLimitRetryingChatClient>.Instance;
 
     public RateLimitRetryingChatClient(IChatClient inner, ILogger<RateLimitRetryingChatClient>? logger = null)
         : this(inner, defaultRetryDelays, logger) { }
@@ -26,9 +26,9 @@ public sealed class RateLimitRetryingChatClient(
         ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        if (resolvedLogger.IsEnabled(LogLevel.Information))
+        if (log.IsEnabled(LogLevel.Information))
         {
-            LogRaw(resolvedLogger, "llm.input ──────────────────────────\n" + FormatMessages(messages));
+            LogRaw(log, "llm.input ──────────────────────────\n" + FormatMessages(messages));
         }
 
         var totalDelay = TimeSpan.Zero;
@@ -40,11 +40,11 @@ public sealed class RateLimitRetryingChatClient(
                     .ConfigureAwait(false);
                 if (attempt > 0)
                 {
-                    AgentLogEvents.LogRateLimitRecovered(resolvedLogger, attempt, retryDelays.Length, totalDelay.TotalSeconds);
+                    AgentLogEvents.LogRateLimitRecovered(log, attempt, retryDelays.Length, totalDelay.TotalSeconds);
                 }
-                if (resolvedLogger.IsEnabled(LogLevel.Information))
+                if (log.IsEnabled(LogLevel.Information))
                 {
-                    LogRaw(resolvedLogger, "llm.output ─────────────────────────\n" + (response.Text ?? string.Empty));
+                    LogRaw(log, "llm.output ─────────────────────────\n" + (response.Text ?? string.Empty));
                 }
                 return response;
             }
@@ -52,12 +52,12 @@ public sealed class RateLimitRetryingChatClient(
             {
                 if (attempt >= retryDelays.Length)
                 {
-                    AgentLogEvents.LogRateLimitExhausted(resolvedLogger, retryDelays.Length);
+                    AgentLogEvents.LogRateLimitExhausted(log, retryDelays.Length);
                     throw;
                 }
                 var delay = retryDelays[attempt];
                 totalDelay += delay;
-                AgentLogEvents.LogRateLimitRetry(resolvedLogger, delay.TotalSeconds, attempt + 1, retryDelays.Length);
+                AgentLogEvents.LogRateLimitRetry(log, delay.TotalSeconds, attempt + 1, retryDelays.Length);
                 await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
             }
         }

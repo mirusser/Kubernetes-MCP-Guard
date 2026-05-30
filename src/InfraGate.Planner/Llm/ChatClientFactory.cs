@@ -31,38 +31,6 @@ internal sealed class ChatClientFactory(IOptions<PlannerOptions> options, ILogge
         };
     }
 
-    private IChatClient CreateAnthropicClient()
-    {
-        var apiKey = options.Value.LlmApiKey;
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            throw new InvalidOperationException(
-                $"LLM API key not configured. Set {PlannerConventions.EnvironmentVariables.LlmApiKey}.");
-        }
-
-        var model = string.IsNullOrWhiteSpace(options.Value.LlmModel)
-            ? PlannerConventions.DefaultLlmModel
-            : options.Value.LlmModel;
-
-        PlannerLogEvents.LogLlmProviderConfigured(
-            loggerFactory?.CreateLogger(nameof(ChatClientFactory)) ?? NullLogger.Instance,
-            "Anthropic",
-            model);
-
-        const string AnthropicApiBase = "https://api.anthropic.com";
-        var httpClient = new HttpClient
-        {
-            BaseAddress = new Uri(AnthropicApiBase),
-            DefaultRequestHeaders =
-            {
-                { "x-api-key", apiKey },
-                { "anthropic-version", "2023-06-01" },
-            },
-        };
-
-        return new AnthropicChatClient(httpClient, model, NullLoggerFactory.Instance);
-    }
-
     private IChatClient CreateOpenRouterClient()
     {
         var apiKey = options.Value.LlmApiKey;

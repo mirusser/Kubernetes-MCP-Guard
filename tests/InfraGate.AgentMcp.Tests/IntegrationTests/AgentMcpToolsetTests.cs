@@ -39,6 +39,7 @@ public sealed class AgentMcpToolsetTests
             null,
             CancellationToken.None);
 
+        // Justification: result.IsError is bool?; Assert.True handles null correctly.
         Assert.True(result.IsError != true);
         string text = Assert.Single(result.Content.OfType<TextContentBlock>()).Text;
         Assert.Equal(InProcessMcpServerFixture.ReadOnlyToolResponse, text);
@@ -55,6 +56,7 @@ public sealed class AgentMcpToolsetTests
             null,
             CancellationToken.None);
 
+        // Justification: result.IsError is bool?; Assert.True handles null correctly.
         Assert.True(result.IsError != true);
         string text = Assert.Single(result.Content.OfType<TextContentBlock>()).Text;
         Assert.Equal(InProcessMcpServerFixture.MutationToolResponse, text);

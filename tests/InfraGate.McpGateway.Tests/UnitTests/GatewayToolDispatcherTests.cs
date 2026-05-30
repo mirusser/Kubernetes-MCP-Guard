@@ -65,9 +65,11 @@ public sealed class GatewayToolDispatcherTests
         Assert.True(readOnlyTool.Annotations?.ReadOnlyHint);
 
         var proposePlan = Assert.Single(result.Tools, t => t.Name == McpGatewayConventions.ToolNames.ProposePlan);
+        // Justification: ReadOnlyHint is bool?; comparison with true handles null correctly.
         Assert.False(proposePlan.Annotations?.ReadOnlyHint == true);
 
         var applyApprovedPlan = Assert.Single(result.Tools, t => t.Name == McpGatewayConventions.ToolNames.ApplyApprovedPlan);
+        // Justification: ReadOnlyHint is bool?; comparison with true handles null correctly.
         Assert.False(applyApprovedPlan.Annotations?.ReadOnlyHint == true);
     }
 

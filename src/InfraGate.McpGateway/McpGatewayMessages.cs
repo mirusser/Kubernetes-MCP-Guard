@@ -28,10 +28,10 @@ internal static class McpGatewayMessages
         public static string RequiresSession(string toolName) =>
             $"Refused: '{toolName}' requires an authenticated session.";
 
-        public static string RefusedAuthenticatedSubjectRequired() =>
+        public const string RefusedAuthenticatedSubjectRequired =
             "Refused: apply approval requires an authenticated OAuth subject.";
 
-        public static string RefusedSameSubjectRequired() =>
+        public const string RefusedSameSubjectRequired =
             "Refused: apply approval requires the same authenticated subject that requested the plan.";
 
         public static string RequiresAuthenticatedSession(string toolName, string scope) =>

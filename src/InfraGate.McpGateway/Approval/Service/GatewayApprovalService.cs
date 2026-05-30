@@ -30,7 +30,7 @@ internal sealed class GatewayApprovalService(
         if (requester is null)
         {
             return ApprovalGateResult.Refused(
-                McpGatewayMessages.Authorization.RefusedAuthenticatedSubjectRequired(),
+                McpGatewayMessages.Authorization.RefusedAuthenticatedSubjectRequired,
                 McpGatewayConventions.ApprovalReasonCodes.AuthenticatedSubjectRequired);
         }
 
@@ -77,7 +77,7 @@ internal sealed class GatewayApprovalService(
         if (!grantedAuthz.IsAuthorized)
         {
             return ApprovalGateResult.Refused(
-                McpGatewayMessages.Authorization.RefusedSameSubjectRequired(),
+                McpGatewayMessages.Authorization.RefusedSameSubjectRequired,
                 McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired);
         }
 
@@ -120,7 +120,7 @@ internal sealed class GatewayApprovalService(
         if (!pendingAuthz.IsAuthorized)
         {
             return ApprovalGateResult.Refused(
-                McpGatewayMessages.Authorization.RefusedSameSubjectRequired(),
+                McpGatewayMessages.Authorization.RefusedSameSubjectRequired,
                 McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired);
         }
 

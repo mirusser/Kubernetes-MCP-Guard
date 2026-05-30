@@ -46,6 +46,7 @@ public sealed class ExecutorDedupeStoreTests
     {
         var store = new ExecutorDedupeStore();
 
-        store.Remove("plan-unknown");
+        var ex = Record.Exception(() => store.Remove("plan-unknown"));
+        Assert.Null(ex);
     }
 }

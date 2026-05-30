@@ -17,14 +17,11 @@ internal sealed class RegisteredPrompt
 
     internal void ValidateRequired(IReadOnlyDictionary<string, object?> arguments)
     {
-        List<string>? missing = null;
-        foreach (var v in RequiredVariables)
-        {
-            if (!arguments.ContainsKey(v))
-                (missing ??= []).Add(v);
-        }
+        var missing = RequiredVariables
+            .Where(v => !arguments.ContainsKey(v))
+            .ToList();
 
-        if (missing is not null)
+        if (missing.Count > 0)
             throw new ArgumentException(
                 $"Missing required template variables for '{Name}': {string.Join(", ", missing)}",
                 nameof(arguments));

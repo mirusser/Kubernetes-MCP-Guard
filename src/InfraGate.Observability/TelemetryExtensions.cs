@@ -25,7 +25,7 @@ public static class TelemetryExtensions
                 serviceVersion: options.ServiceVersion,
                 autoGenerateServiceInstanceId: true);
 
-        var otelBuilder = builder.Services.AddOpenTelemetry()
+        builder.Services.AddOpenTelemetry()
             .WithTracing(tracing =>
             {
                 tracing

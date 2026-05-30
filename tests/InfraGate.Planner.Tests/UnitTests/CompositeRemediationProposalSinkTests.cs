@@ -44,7 +44,8 @@ public sealed class CompositeRemediationProposalSinkTests
         var composite = new CompositeRemediationProposalSink([]);
         var batch = CreateBatch("cycle-1");
 
-        await composite.PublishAsync(batch, CancellationToken.None);
+        var ex = await Record.ExceptionAsync(() => composite.PublishAsync(batch, CancellationToken.None));
+        Assert.Null(ex);
     }
 
     [Fact]

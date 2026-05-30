@@ -35,7 +35,7 @@ public sealed class ToolCallingAgentFactoryOtelTests
 
         var (agent, _) = factory.Create("test", "instructions", [], 4);
 
-        Assert.IsAssignableFrom<AIAgent>(agent);
+        Assert.IsType<AIAgent>(agent, exactMatch: false);
         Assert.IsNotType<ChatClientAgent>(agent);
     }
 

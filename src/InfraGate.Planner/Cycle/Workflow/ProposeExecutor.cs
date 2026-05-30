@@ -63,71 +63,74 @@ internal sealed class ProposeExecutor(
                     [PlannerConventions.ToolArguments.OperationArguments] = decision.Arguments,
                 },
                 cancellationToken).ConfigureAwait(false);
-            string? planId = null;
-            if (callResult.Content is not null)
+
+            var planId = ExtractPlanIdFromResponse(callResult);
+            if (planId is null)
             {
-                foreach (var block in callResult.Content.OfType<TextContentBlock>())
-                {
-                    if (TryExtractPlanId(block.Text, out var extracted))
-                    {
-                        planId = extracted;
-                        break;
-                    }
-                }
+                PlannerLogEvents.LogProposePlanMissingPlanId(logger, report.AnomalyId);
+                return await RecordProposeFailureAsync(report, "missing_plan_id", null, null, cancellationToken)
+                    .ConfigureAwait(false);
             }
 
-            if (planId is not null)
-            {
-                if (auditOutbox is not null)
-                {
-                    await auditOutbox.AppendAsync(
-                        new PlannerAuditEntry(
-                            EventName: PlannerAuditEvents.ProposePlanSucceeded,
-                            Payload: new { operationType = decision.OperationType, arguments = decision.Arguments },
-                            AnomalyId: report.AnomalyId,
-                            PlanId: planId,
-                            ActorSubject: ServicePlannerSubject,
-                            Outcome: "succeeded"),
-                        cancellationToken).ConfigureAwait(false);
-                }
-                return planId;
-            }
-
-            proposeFailedCounter?.Add(1);
-            PlannerLogEvents.LogProposePlanMissingPlanId(logger, report.AnomalyId);
+            PlannerLogEvents.LogProposePlanSucceeded(logger, report.AnomalyId, planId);
             if (auditOutbox is not null)
             {
                 await auditOutbox.AppendAsync(
                     new PlannerAuditEntry(
-                        EventName: PlannerAuditEvents.ProposePlanFailed,
-                        Payload: new { reasonCode = "missing_plan_id" },
+                        EventName: PlannerAuditEvents.ProposePlanSucceeded,
+                        Payload: new { operationType = decision.OperationType, arguments = decision.Arguments },
                         AnomalyId: report.AnomalyId,
+                        PlanId: planId,
                         ActorSubject: ServicePlannerSubject,
-                        Outcome: "failed",
-                        Reason: "missing_plan_id"),
+                        Outcome: "succeeded"),
                     cancellationToken).ConfigureAwait(false);
             }
-            return null;
+            return planId;
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException)
         {
-            proposeFailedCounter?.Add(1);
             PlannerLogEvents.LogProposePlanFailed(logger, report.AnomalyId, ex);
-            if (auditOutbox is not null)
-            {
-                var statusCode = ex is HttpRequestException httpEx ? (int?)httpEx.StatusCode : null;
-                await auditOutbox.AppendAsync(
-                    new PlannerAuditEntry(
-                        EventName: PlannerAuditEvents.ProposePlanFailed,
-                        Payload: new { reasonCode = "gateway_error", errorClass = ex.GetType().Name, statusCode },
-                        AnomalyId: report.AnomalyId,
-                        ActorSubject: ServicePlannerSubject,
-                        Outcome: "failed",
-                        Reason: ex.GetType().Name),
-                    cancellationToken).ConfigureAwait(false);
-            }
-            return null;
+            var statusCode = ex is HttpRequestException httpEx ? (int?)httpEx.StatusCode : null;
+            return await RecordProposeFailureAsync(report, "gateway_error", ex.GetType().Name, statusCode, cancellationToken)
+                .ConfigureAwait(false);
         }
+    }
+
+    private static string? ExtractPlanIdFromResponse(CallToolResult callResult)
+    {
+        if (callResult.Content is null)
+            return null;
+
+        foreach (var block in callResult.Content.OfType<TextContentBlock>())
+        {
+            if (TryExtractPlanId(block.Text, out var extracted))
+                return extracted;
+        }
+
+        return null;
+    }
+
+    private async Task<string?> RecordProposeFailureAsync(
+        AnomalyReport report,
+        string reasonCode,
+        string? errorClass,
+        int? statusCode,
+        CancellationToken cancellationToken)
+    {
+        proposeFailedCounter?.Add(1);
+        if (auditOutbox is not null)
+        {
+            await auditOutbox.AppendAsync(
+                new PlannerAuditEntry(
+                    EventName: PlannerAuditEvents.ProposePlanFailed,
+                    Payload: new { reasonCode, errorClass, statusCode },
+                    AnomalyId: report.AnomalyId,
+                    ActorSubject: ServicePlannerSubject,
+                    Outcome: "failed",
+                    Reason: errorClass ?? reasonCode),
+                cancellationToken).ConfigureAwait(false);
+        }
+        return null;
     }
 
     private static bool TryExtractPlanId(string response, out string planId)
