@@ -1,6 +1,5 @@
 using System.ClientModel;
 using System.ClientModel.Primitives;
-using System.Diagnostics.Metrics;
 using InfraGate.AgentLlm;
 using InfraGate.Observer.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -9,7 +8,7 @@ using OpenAI.Chat;
 
 namespace InfraGate.Observer.Llm;
 
-internal sealed class ChatClientFactory(IOptions<ObserverOptions> options, Meter? meter = null, ILoggerFactory? loggerFactory = null) : IChatClientFactory
+internal sealed class ChatClientFactory(IOptions<ObserverOptions> options, ILoggerFactory? loggerFactory = null) : IChatClientFactory
 {
     private const string OpenRouterApiEndpoint = "https://openrouter.ai/api/v1";
 
@@ -58,8 +57,7 @@ internal sealed class ChatClientFactory(IOptions<ObserverOptions> options, Meter
             },
         };
 
-        var counter = ObserverMetrics.CreateLlmTokensCounter(meter);
-        return new AnthropicChatClient(httpClient, model, NullLoggerFactory.Instance, counter);
+        return new AnthropicChatClient(httpClient, model, NullLoggerFactory.Instance);
     }
 
     private IChatClient CreateOpenRouterClient()

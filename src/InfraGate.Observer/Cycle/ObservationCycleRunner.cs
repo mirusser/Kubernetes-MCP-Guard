@@ -241,6 +241,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         var workflow = builder
             .AddFanInBarrierEdge(parseExecutors, aggregate)
             .WithOutputFrom(aggregate)
+            .WithOpenTelemetry()
             .Build();
 
         return (workflow, () => agentGetCounts.Sum(f => f()));

@@ -1,6 +1,5 @@
 using System.ClientModel;
 using System.ClientModel.Primitives;
-using System.Diagnostics.Metrics;
 using InfraGate.AgentLlm;
 using InfraGate.Planner.Diagnostics;
 using Microsoft.Extensions.AI;
@@ -10,7 +9,7 @@ using OpenAI.Chat;
 
 namespace InfraGate.Planner.Llm;
 
-internal sealed class ChatClientFactory(IOptions<PlannerOptions> options, Meter? meter = null, ILoggerFactory? loggerFactory = null) : IChatClientFactory
+internal sealed class ChatClientFactory(IOptions<PlannerOptions> options, ILoggerFactory? loggerFactory = null) : IChatClientFactory
 {
     private const string OpenRouterApiEndpoint = "https://openrouter.ai/api/v1";
 
@@ -61,8 +60,7 @@ internal sealed class ChatClientFactory(IOptions<PlannerOptions> options, Meter?
             },
         };
 
-        var counter = PlannerMetrics.CreateLlmTokensCounter(meter);
-        return new AnthropicChatClient(httpClient, model, NullLoggerFactory.Instance, counter);
+        return new AnthropicChatClient(httpClient, model, NullLoggerFactory.Instance);
     }
 
     private IChatClient CreateOpenRouterClient()

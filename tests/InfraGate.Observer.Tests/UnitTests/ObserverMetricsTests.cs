@@ -45,14 +45,6 @@ public sealed class ObserverMetricsTests
     }
 
     [Fact]
-    public void CreateLlmTokensCounter_CreatesLongCounter()
-    {
-        using var meter = new Meter("test-meter");
-        var counter = ObserverMetrics.CreateLlmTokensCounter(meter);
-        Assert.NotNull(counter);
-    }
-
-    [Fact]
     public void CreateReportsEmittedCounter_CreatesLongCounter()
     {
         using var meter = new Meter("test-meter");
@@ -287,7 +279,6 @@ public sealed class ObserverMetricsTests
         var toolCallsCounter = ObserverMetrics.CreateToolCallsCounter();
         var disagreementCounter = ObserverMetrics.CreateSeverityDisagreementCounter();
         var handoffFailedCounter = ObserverMetrics.CreateHandoffFailedCounter();
-        var llmTokensCounter = ObserverMetrics.CreateLlmTokensCounter();
         var reportsCounter = ObserverMetrics.CreateReportsEmittedCounter();
         var snapshotErrorsCounter = ObserverMetrics.CreateSnapshotFetchErrorsCounter();
 
@@ -295,7 +286,6 @@ public sealed class ObserverMetricsTests
         Assert.NotNull(toolCallsCounter);
         Assert.NotNull(disagreementCounter);
         Assert.NotNull(handoffFailedCounter);
-        Assert.NotNull(llmTokensCounter);
         Assert.NotNull(reportsCounter);
         Assert.NotNull(snapshotErrorsCounter);
     }

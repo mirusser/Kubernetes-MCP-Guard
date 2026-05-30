@@ -36,6 +36,8 @@ public static class ObservabilityExtensions
             loggerConfig.WriteTo.File(new CompactJsonFormatter(), options.FilePath);
         }
 
+        loggerConfig.Enrich.With<TraceContextEnricher>();
+
         var logger = loggerConfig.CreateLogger();
         builder.Services.AddSerilog(logger, dispose: true);
 

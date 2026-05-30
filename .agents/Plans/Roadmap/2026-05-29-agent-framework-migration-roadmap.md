@@ -26,11 +26,13 @@ Based on the `loose-roadmap.md` and the current state of `k8s-toolkit`, this doc
 * **Replace Custom Calling Logic:** The agents now use `IAgentMcpToolset` for dynamically filtering tools based on `ReadOnlyHint`. We will map this abstraction directly into the Microsoft Agent Framework's plugin system to avoid manual serialization of tool calls.
 * **Build MCP Tool Providers:** Build an MCP Plugin/Tool-Provider for the agent framework that dynamically loads the `mcp:tools.readonly` scope for the `Observer` and the `mcp:tools.propose` scope for the `Planner`. The framework's LLM router will seamlessly decide when to invoke the MCP gateway without custom loop logic.
 
-## 4. Upgrading AI Observability and Telemetry
+## 4. Upgrading AI Observability and Telemetry ✅ Done (2026-05-30)
 *Maps to roadmap item: "Implementing AI observability practices, including usage tracking, cost monitoring, and output quality evaluation."*
 
 * **Adopt OpenTelemetry:** The current setup relies on manual `System.Diagnostics.Metrics`. The Microsoft Agent Framework is built with OpenTelemetry from the ground up.
 * **Integrate with Serilog Stack:** Hook the framework's native token usage tracking, trace graphs, and latency metrics directly into the existing `InfraGate.Observability` (Serilog) stack. This will provide deep, span-level visibility into exactly what the LLM is doing during an observation cycle.
+
+**Delivered:** `InfraGate.Observability` extended into the single telemetry seam: `AddInfraGateTelemetry` wires `TracerProvider`/`MeterProvider` with a `SerilogSpanProcessor` (span bridge) and `TraceContextEnricher` (log correlation). `ToolCallingAgentFactory` now calls `UseOpenTelemetry()` (auto-wires agent + chat spans + GenAI token/duration metrics on `Experimental.Microsoft.Agents.AI`). Both workflow build sites call `WithOpenTelemetry()` for executor spans on `Microsoft.Agents.AI.Workflows`. Both `Program.cs` files register the pipeline with their service names and custom meters. OTLP export is opt-in via `OTEL_EXPORTER_OTLP_ENDPOINT`. Dead `LlmTokensCounter` removed from `ObserverMetrics` and `PlannerMetrics`. ADR-0026 written.
 
 ## 5. Enforcing Framework-Level Guardrails
 *Maps to roadmap items: "Defining and maintaining guardrails to ensure reliable, secure, and compliant AI behavior." / "Establishing and monitoring controls for hallucinations..."*

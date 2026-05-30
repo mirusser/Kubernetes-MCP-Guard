@@ -168,6 +168,7 @@ internal sealed class BatchProcessor : BackgroundService
 
         var workflow = builder
             .WithOutputFrom([.. proposeExecs])
+            .WithOpenTelemetry()
             .Build();
 
         return (workflow, proposeExecs);

@@ -14,7 +14,7 @@ public sealed class ToolCallingAgentFactory(IChatClientFactory chatClientFactory
     /// iterations per request. Each tool in <paramref name="tools"/> is wrapped with a counting
     /// decorator so that every actual invocation increments the returned counter.
     /// </summary>
-    public (ChatClientAgent Agent, Func<int> GetToolCallCount) Create(
+    public (AIAgent Agent, Func<int> GetToolCallCount) Create(
         string name,
         string instructions,
         IReadOnlyList<AITool> tools,
@@ -45,7 +45,8 @@ public sealed class ToolCallingAgentFactory(IChatClientFactory chatClientFactory
             },
         };
 
-        var agent = new ChatClientAgent(chatClient, agentOptions);
+        AIAgent agent = new ChatClientAgent(chatClient, agentOptions);
+        agent = agent.AsBuilder().UseOpenTelemetry().Build();
 
         return (agent, () => Volatile.Read(ref count));
     }

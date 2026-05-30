@@ -46,6 +46,12 @@ builder.AddInfraGateObservability(opt =>
     opt.ConsoleToStandardError = false;
 });
 
+builder.AddInfraGateTelemetry(opt =>
+{
+    opt.ServiceName = "infragate-planner";
+    opt.MeterNames = [PlannerMetrics.MeterName];
+});
+
 ConfigureUrls(builder);
 
 var plannerOptions = builder.Configuration
@@ -81,7 +87,6 @@ builder.Services.AddSingleton<IChatClientFactory>(sp =>
 {
     return new ChatClientFactory(
         sp.GetRequiredService<IOptions<PlannerOptions>>(),
-        PlannerMetrics.Meter,
         sp.GetRequiredService<ILoggerFactory>());
 });
 builder.Services.AddSingleton<ToolCallingAgentFactory>();

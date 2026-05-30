@@ -50,6 +50,12 @@ builder.AddInfraGateObservability(opt =>
     opt.ConsoleToStandardError = false;
 });
 
+builder.AddInfraGateTelemetry(opt =>
+{
+    opt.ServiceName = "infragate-observer";
+    opt.MeterNames = [ObserverMetrics.MeterName];
+});
+
 ConfigureUrls(builder);
 
 var observerOptions = builder.Configuration
@@ -103,7 +109,6 @@ builder.Services.AddSingleton<IChatClientFactory>(sp =>
 {
     return new ChatClientFactory(
         sp.GetRequiredService<IOptions<ObserverOptions>>(),
-        ObserverMetrics.Meter,
         sp.GetRequiredService<ILoggerFactory>());
 });
 builder.Services.AddSingleton<IChatClient>(sp =>
