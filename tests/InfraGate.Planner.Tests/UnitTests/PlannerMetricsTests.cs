@@ -58,4 +58,18 @@ public sealed class PlannerMetricsTests
         Assert.StartsWith("infragate.planner.", PlannerMetrics.HandoffHttpFailedCounterName);
         Assert.StartsWith("infragate.planner.", PlannerMetrics.HandoffSinkFailedCounterName);
     }
+
+    [Fact]
+    public void CreateDecisionTimeoutCounter_NullMeter_UsesDefaultMeter()
+    {
+        var counter = PlannerMetrics.CreateDecisionTimeoutCounter(null);
+        Assert.NotNull(counter);
+    }
+
+    [Fact]
+    public void CreateProposeFailedCounter_NullMeter_UsesDefaultMeter()
+    {
+        var counter = PlannerMetrics.CreateProposeFailedCounter(null);
+        Assert.NotNull(counter);
+    }
 }

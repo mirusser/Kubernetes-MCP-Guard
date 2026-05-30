@@ -10,6 +10,9 @@ KUBECONFIG_FILE="$REPO_ROOT/.kube/mcp-nginx-demo.config"
 
 echo "=== Running All Tests (CI Parity) ==="
 
+echo "0. Verifying code formatting..."
+dotnet format "$REPO_ROOT/InfraGate.slnx" --verify-no-changes
+
 echo "1. Running Unit Tests..."
 dotnet test "$REPO_ROOT/InfraGate.slnx" --filter "Category!=Keycloak&Category!=SafetyE2E" --configuration Release
 

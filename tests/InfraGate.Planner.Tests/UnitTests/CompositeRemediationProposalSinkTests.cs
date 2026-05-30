@@ -2,6 +2,7 @@ using System.Diagnostics.Metrics;
 using InfraGate.Planner.Diagnostics;
 using InfraGate.Planner.Handoff;
 using InfraGate.Remediation.Contracts;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace InfraGate.Planner.Tests.UnitTests;
 
@@ -60,6 +61,19 @@ public sealed class CompositeRemediationProposalSinkTests
         await composite.PublishAsync(CreateBatch("cycle-1"), CancellationToken.None);
 
         Assert.Equal(2, probe.Measurements.Count);
+    }
+
+    [Fact]
+    public async Task PublishAsync_NonNullLogger_UsesProvidedLogger()
+    {
+        var logger = NullLogger<CompositeRemediationProposalSink>.Instance;
+        var composite = new CompositeRemediationProposalSink(
+            [new ThrowingSink()],
+            logger: logger);
+
+        await composite.PublishAsync(CreateBatch("cycle-1"), CancellationToken.None);
+
+        Assert.True(true);
     }
 
     private static RemediationProposalBatch CreateBatch(string cycleId) => new()

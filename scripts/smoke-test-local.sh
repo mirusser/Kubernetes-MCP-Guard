@@ -76,6 +76,9 @@ teardown() {
 }
 trap teardown EXIT
 
+echo "==> Verifying code formatting..."
+dotnet format "${REPO_ROOT}/InfraGate.slnx" --verify-no-changes
+
 echo "==> Generating run profile files (smoke-local) ..."
 mkdir -p "${REPO_ROOT}/deploy/generated"
 dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- generate smoke-local \

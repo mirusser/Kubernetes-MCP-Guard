@@ -269,7 +269,7 @@ public sealed class WorkflowExecutorTests
         listener.Start();
 
         var executor = new ValidateExecutor("validate-0", new ConcurrentDictionary<string, byte>(), new PlannerDedupeStore(), metrics, NullLogger.Instance);
-        
+
         // Handle once (should be accepted)
         await executor.HandleAsync(decisionCtx, context, CancellationToken.None);
         // Handle twice (should be dedupe blocked)
@@ -277,7 +277,7 @@ public sealed class WorkflowExecutorTests
 
         Assert.Single(context.SentMessages); // Only forwarded once
         Assert.Equal(2, recorded.Count);
-        
+
         var secondMeasurement = recorded[1];
         Assert.Equal(1L, secondMeasurement.Value);
         var tags = secondMeasurement.Tags.ToArray();
@@ -309,6 +309,121 @@ public sealed class WorkflowExecutorTests
 
         var audit = Assert.Single(auditOutbox.Entries);
         Assert.Equal(PlannerAuditEvents.ProposePlanSucceeded, audit.EventName);
+    }
+
+    [Fact]
+    public async Task ProposeExecutor_MissingPlanIdInResponse_DoesNotYieldProposal()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        var decision = new RemediationDecision("restart_deployment", new Dictionary<string, object?>(), null);
+        var decisionCtx = new DecisionContext(report, decision);
+
+        var mcpClient = new FakeAgentMcpToolset { ResponseText = """{"otherField":"value"}""" };
+        var context = new FakeWorkflowContext();
+
+        var executor = new ProposeExecutor("propose-0", mcpClient, new PlannerDedupeStore(), null, null, NullLogger.Instance);
+        await executor.HandleAsync(decisionCtx, context, CancellationToken.None);
+
+        Assert.Empty(context.YieldedOutputs);
+    }
+
+    [Fact]
+    public async Task ProposeExecutor_PlanIdInNestedContentObject_YieldsProposal()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        var decision = new RemediationDecision("restart_deployment", new Dictionary<string, object?>(), null);
+        var decisionCtx = new DecisionContext(report, decision);
+
+        var mcpClient = new FakeAgentMcpToolset { ResponseText = """{"content":{"planId":"plan-nested"}}""" };
+        var context = new FakeWorkflowContext();
+
+        var executor = new ProposeExecutor("propose-0", mcpClient, new PlannerDedupeStore(), null, null, NullLogger.Instance);
+        await executor.HandleAsync(decisionCtx, context, CancellationToken.None);
+
+        var output = Assert.Single(context.YieldedOutputs);
+        var proposal = Assert.IsType<RemediationProposal>(output);
+        Assert.Equal("plan-nested", proposal.PlanId);
+    }
+
+    [Fact]
+    public async Task ProposeExecutor_PlanIdInArray_YieldsProposal()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        var decision = new RemediationDecision("restart_deployment", new Dictionary<string, object?>(), null);
+        var decisionCtx = new DecisionContext(report, decision);
+
+        var mcpClient = new FakeAgentMcpToolset { ResponseText = """[{"planId":"plan-array"}]""" };
+        var context = new FakeWorkflowContext();
+
+        var executor = new ProposeExecutor("propose-0", mcpClient, new PlannerDedupeStore(), null, null, NullLogger.Instance);
+        await executor.HandleAsync(decisionCtx, context, CancellationToken.None);
+
+        var output = Assert.Single(context.YieldedOutputs);
+        var proposal = Assert.IsType<RemediationProposal>(output);
+        Assert.Equal("plan-array", proposal.PlanId);
+    }
+
+    [Fact]
+    public async Task ProposeExecutor_PlanIdInTextField_YieldsProposal()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        var decision = new RemediationDecision("restart_deployment", new Dictionary<string, object?>(), null);
+        var decisionCtx = new DecisionContext(report, decision);
+
+        var mcpClient = new FakeAgentMcpToolset
+        {
+            ResponseText = "{\"Text\":\"{\\\"planId\\\":\\\"plan-from-text\\\"}\"}",
+        };
+        var context = new FakeWorkflowContext();
+
+        var executor = new ProposeExecutor("propose-0", mcpClient, new PlannerDedupeStore(), null, null, NullLogger.Instance);
+        await executor.HandleAsync(decisionCtx, context, CancellationToken.None);
+
+        var output = Assert.Single(context.YieldedOutputs);
+        var proposal = Assert.IsType<RemediationProposal>(output);
+        Assert.Equal("plan-from-text", proposal.PlanId);
+    }
+
+    [Fact]
+    public async Task ProposeExecutor_PlanIdNestedInsideArrayInContent_YieldsProposal()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        var decision = new RemediationDecision("restart_deployment", new Dictionary<string, object?>(), null);
+        var decisionCtx = new DecisionContext(report, decision);
+
+        var mcpClient = new FakeAgentMcpToolset
+        {
+            ResponseText = """{"Content":[{"planId":"plan-from-content-array"}]}""",
+        };
+        var context = new FakeWorkflowContext();
+
+        var executor = new ProposeExecutor("propose-0", mcpClient, new PlannerDedupeStore(), null, null, NullLogger.Instance);
+        await executor.HandleAsync(decisionCtx, context, CancellationToken.None);
+
+        var output = Assert.Single(context.YieldedOutputs);
+        var proposal = Assert.IsType<RemediationProposal>(output);
+        Assert.Equal("plan-from-content-array", proposal.PlanId);
+    }
+
+    [Fact]
+    public async Task ProposeExecutor_PlanIdInContentUpperCase_YieldsProposal()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        var decision = new RemediationDecision("restart_deployment", new Dictionary<string, object?>(), null);
+        var decisionCtx = new DecisionContext(report, decision);
+
+        var mcpClient = new FakeAgentMcpToolset
+        {
+            ResponseText = """{"Content":[{"planId":"plan-from-content"}]}""",
+        };
+        var context = new FakeWorkflowContext();
+
+        var executor = new ProposeExecutor("propose-0", mcpClient, new PlannerDedupeStore(), null, null, NullLogger.Instance);
+        await executor.HandleAsync(decisionCtx, context, CancellationToken.None);
+
+        var output = Assert.Single(context.YieldedOutputs);
+        var proposal = Assert.IsType<RemediationProposal>(output);
+        Assert.Equal("plan-from-content", proposal.PlanId);
     }
 
     // ------------------------------------------------------------------ //

@@ -169,4 +169,18 @@ public sealed class PlannerOptionsTests
             PlannerConventions.MinMaxToolIterations,
             PlannerConventions.MaxMaxToolIterations);
     }
+
+    [Fact]
+    public void Validate_NonAiProviderWithApiKey_DoesNotThrow()
+    {
+        var options = new PlannerOptions
+        {
+            GatewayBaseUrl = "http://localhost:3001/mcp",
+            LlmProvider = "other-provider",
+            LlmApiKey = "test-key",
+        };
+
+        var ex = Record.Exception(() => options.Validate());
+        Assert.Null(ex);
+    }
 }

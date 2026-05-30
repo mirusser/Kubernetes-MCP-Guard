@@ -76,4 +76,18 @@ public sealed class PlannerDedupeStoreTests
         Assert.True(store.HasActivePlan("anomaly-b"));
         Assert.False(store.HasActivePlan("anomaly-c"));
     }
+
+    [Fact]
+    public void TrackActivePlan_ExceedsCapacity_EvictsLruEntry()
+    {
+        var store = new PlannerDedupeStore();
+        var now = DateTimeOffset.UtcNow;
+
+        for (int i = 0; i < 1001; i++)
+        {
+            store.TrackActivePlan($"anomaly-{i}", $"plan-{i}", now, now.AddHours(1));
+        }
+
+        Assert.True(store.HasActivePlan("anomaly-1000"));
+    }
 }

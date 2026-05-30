@@ -3,6 +3,7 @@ using InfraGate.AgentGuardrails;
 using Microsoft.Agents.AI;
 
 namespace InfraGate.AgentLlm.Tests.UnitTests;
+
 public sealed class ToolCallingAgentFactoryTests
 {
     private sealed class CapturingChatClient : IChatClient

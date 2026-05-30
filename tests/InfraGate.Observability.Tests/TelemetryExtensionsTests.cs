@@ -51,4 +51,21 @@ public sealed class TelemetryExtensionsTests
 
         Assert.NotNull(host.Services.GetService<MeterProvider>());
     }
+
+    [Fact]
+    public void AddInfraGateTelemetry_WithOtlpEndpoint_AddsExporters()
+    {
+        var builder = Host.CreateApplicationBuilder();
+        builder.AddInfraGateObservability(opt => opt.WriteToConsole = false);
+        builder.AddInfraGateTelemetry(opt =>
+        {
+            opt.ServiceName = "test-service";
+            opt.OtlpEndpoint = "http://localhost:4317";
+        });
+
+        using var host = builder.Build();
+
+        Assert.NotNull(host.Services.GetService<TracerProvider>());
+        Assert.NotNull(host.Services.GetService<MeterProvider>());
+    }
 }

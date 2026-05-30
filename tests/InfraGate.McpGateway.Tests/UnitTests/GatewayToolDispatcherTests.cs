@@ -84,7 +84,7 @@ public sealed class GatewayToolDispatcherTests
 
         Assert.Contains(result.Tools, t => t.Name == "get_allowed_namespaces");
         Assert.Contains(result.Tools, t => t.Name == McpGatewayConventions.ToolNames.GetPlanStatus);
-        
+
         Assert.DoesNotContain(result.Tools, t => t.Name == "request_apply_manifest");
         Assert.DoesNotContain(result.Tools, t => t.Name == McpGatewayConventions.ToolNames.ProposePlan);
         Assert.DoesNotContain(result.Tools, t => t.Name == McpGatewayConventions.ToolNames.ApplyApprovedPlan);
