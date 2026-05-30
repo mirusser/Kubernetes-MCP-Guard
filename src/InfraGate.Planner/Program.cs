@@ -10,7 +10,10 @@ using InfraGate.AuditOutbox;
 using InfraGate.AuditOutbox.Postgres;
 using InfraGate.Planner.Llm;
 using InfraGate.Planner.Mcp;
+using InfraGate.Prompts;
 using InfraGate.Observability;
+using System.Reflection;
+using System.Text;
 using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.AI;
@@ -82,6 +85,13 @@ builder.Services.AddSingleton<IChatClient>(sp =>
     var factory = sp.GetRequiredService<IChatClientFactory>();
     return factory.Create();
 });
+var plannerAssembly = typeof(BatchProcessor).Assembly;
+var plannerPromptTemplate = await LoadEmbeddedResourceAsync(
+    plannerAssembly, PlannerConventions.Prompts.SystemPromptResourceName).ConfigureAwait(false);
+builder.Services.AddInfraGatePromptLibrary(b => b.AddTemplate(
+    PlannerConventions.Prompts.SystemPromptTemplateName,
+    plannerPromptTemplate));
+
 builder.Services.AddSingleton<AnomalyBatchQueue>();
 builder.Services.AddSingleton<PlannerDedupeStore>();
 builder.Services.AddHttpClient(PlannerConventions.HttpClients.ExecutorHandoff)
@@ -184,6 +194,14 @@ static void ConfigureUrls(WebApplicationBuilder builder)
     {
         builder.WebHost.UseUrls(PlannerConventions.DefaultUrl);
     }
+}
+
+static async Task<string> LoadEmbeddedResourceAsync(Assembly assembly, string resourceName, CancellationToken cancellationToken = default)
+{
+    using var stream = assembly.GetManifestResourceStream(resourceName)
+        ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found.");
+    using var reader = new StreamReader(stream, Encoding.UTF8);
+    return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
 }
 
 static async Task ConnectPlannerMcpClientAsync(WebApplication app)

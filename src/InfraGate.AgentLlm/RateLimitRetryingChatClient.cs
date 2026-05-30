@@ -9,7 +9,7 @@ public sealed class RateLimitRetryingChatClient(
     TimeSpan[] retryDelays,
     ILogger<RateLimitRetryingChatClient>? logger = null) : IChatClient
 {
-    private static readonly TimeSpan[] DefaultRetryDelays =
+    private static readonly TimeSpan[] defaultRetryDelays =
     [
         TimeSpan.FromSeconds(5),
         TimeSpan.FromSeconds(20),
@@ -19,7 +19,7 @@ public sealed class RateLimitRetryingChatClient(
     private readonly ILogger resolvedLogger = logger ?? NullLogger<RateLimitRetryingChatClient>.Instance;
 
     public RateLimitRetryingChatClient(IChatClient inner, ILogger<RateLimitRetryingChatClient>? logger = null)
-        : this(inner, DefaultRetryDelays, logger) { }
+        : this(inner, defaultRetryDelays, logger) { }
 
     public async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
@@ -32,7 +32,7 @@ public sealed class RateLimitRetryingChatClient(
         }
 
         var totalDelay = TimeSpan.Zero;
-        for (var attempt = 0; attempt <= retryDelays.Length; attempt++)
+        for (int attempt = 0; attempt <= retryDelays.Length; attempt++)
         {
             try
             {

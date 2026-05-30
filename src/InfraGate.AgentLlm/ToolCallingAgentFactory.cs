@@ -18,7 +18,8 @@ public sealed class ToolCallingAgentFactory(IChatClientFactory chatClientFactory
         string name,
         string instructions,
         IReadOnlyList<AITool> tools,
-        int maxToolIterations)
+        int maxToolIterations,
+        ChatResponseFormat? responseFormat = null)
     {
         var count = 0;
 
@@ -33,7 +34,18 @@ public sealed class ToolCallingAgentFactory(IChatClientFactory chatClientFactory
             .UseFunctionInvocation(configure: c => c.MaximumIterationsPerRequest = maxToolIterations)
             .Build();
 
-        var agent = new ChatClientAgent(chatClient, instructions, name, tools: countedTools);
+        var agentOptions = new ChatClientAgentOptions
+        {
+            Name = name,
+            ChatOptions = new ChatOptions
+            {
+                Instructions = instructions,
+                Tools = countedTools,
+                ResponseFormat = responseFormat,
+            },
+        };
+
+        var agent = new ChatClientAgent(chatClient, agentOptions);
 
         return (agent, () => Volatile.Read(ref count));
     }

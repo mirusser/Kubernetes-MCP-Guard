@@ -1,12 +1,11 @@
 using System.Diagnostics.Metrics;
-using System.Reflection;
-using System.Text;
 using InfraGate.AgentLlm;
 using InfraGate.Planner.Audit;
 using InfraGate.Planner.Cycle.Workflow;
 using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
 using InfraGate.Planner.Mcp;
+using InfraGate.Prompts;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 
@@ -22,7 +21,9 @@ internal sealed class BatchProcessor : BackgroundService
     private readonly ILogger<BatchProcessor> logger;
     private readonly PlannerDedupeStore dedupeStore;
     private readonly IPlannerAuditOutbox? auditOutbox;
-    private readonly Lazy<string> systemPrompt;
+    private readonly IPromptLibrary promptLibrary;
+    private static readonly IReadOnlyDictionary<string, object?> emptyPromptArgs =
+        new Dictionary<string, object?>(0, StringComparer.Ordinal);
     private readonly Counter<long>? invalidOperationCounter;
     private readonly Counter<long>? invalidArgumentsCounter;
     private readonly Counter<long>? timeoutCounter;
@@ -35,6 +36,7 @@ internal sealed class BatchProcessor : BackgroundService
         IPlannerMcpClient mcpClient,
         IRemediationProposalSink proposalSink,
         ILogger<BatchProcessor> logger,
+        IPromptLibrary promptLibrary,
         PlannerDedupeStore? dedupeStore = null,
         Meter? meter = null,
         IPlannerAuditOutbox? auditOutbox = null)
@@ -45,9 +47,9 @@ internal sealed class BatchProcessor : BackgroundService
         this.mcpClient = mcpClient;
         this.proposalSink = proposalSink;
         this.logger = logger;
+        this.promptLibrary = promptLibrary;
         this.dedupeStore = dedupeStore ?? new PlannerDedupeStore();
         this.auditOutbox = auditOutbox;
-        systemPrompt = new Lazy<string>(LoadSystemPrompt);
         invalidOperationCounter = PlannerMetrics.CreateDecisionInvalidOperationCounter(meter);
         invalidArgumentsCounter = PlannerMetrics.CreateDecisionInvalidArgumentsCounter(meter);
         timeoutCounter = PlannerMetrics.CreateDecisionTimeoutCounter(meter);
@@ -65,7 +67,12 @@ internal sealed class BatchProcessor : BackgroundService
 
         if (batch.Reports.Count == 0) return;
 
-        var (workflow, _) = BuildWorkflow(opts, batch, tools);
+        var systemPrompt = await promptLibrary.RenderAsync(
+            PlannerConventions.Prompts.SystemPromptTemplateName,
+            emptyPromptArgs,
+            batchCts.Token).ConfigureAwait(false);
+
+        var (workflow, _) = BuildWorkflow(opts, batch, tools, systemPrompt);
 
         var run = await InProcessExecution
             .RunAsync<AnomalyHandoffBatch>(workflow, batch, cancellationToken: batchCts.Token)
@@ -122,7 +129,8 @@ internal sealed class BatchProcessor : BackgroundService
     private (Microsoft.Agents.AI.Workflows.Workflow Workflow, IReadOnlyList<ExecutorBinding> ProposeExecutors) BuildWorkflow(
         PlannerOptions opts,
         AnomalyHandoffBatch batch,
-        IReadOnlyList<AITool> tools)
+        IReadOnlyList<AITool> tools,
+        string systemPrompt)
     {
         var batchOperationKeys = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
         var filterIds = batch.Reports.Select((_, i) => $"filter-{i}").ToArray();
@@ -134,11 +142,11 @@ internal sealed class BatchProcessor : BackgroundService
         var validateExecs = new List<ExecutorBinding>(batch.Reports.Count);
         var proposeExecs = new List<ExecutorBinding>(batch.Reports.Count);
 
-        for (var i = 0; i < batch.Reports.Count; i++)
+        for (int i = 0; i < batch.Reports.Count; i++)
         {
             filterExecs.Add(new FilterExecutor(filterIds[i], dedupeStore, auditOutbox, logger));
             dedupeExecs.Add(new DedupeGateExecutor($"dedupe-{i}", dedupeStore, auditOutbox, logger));
-            decideExecs.Add(new DecideExecutor($"decide-{i}", agentFactory, systemPrompt.Value, tools,
+            decideExecs.Add(new DecideExecutor($"decide-{i}", agentFactory, systemPrompt, tools,
                 opts.MaxToolIterations, opts.AnomalyWallClockCapSeconds, timeoutCounter, logger));
             validateExecs.Add(new ValidateExecutor($"validate-{i}", batchOperationKeys, dedupeStore,
                 invalidOperationCounter, invalidArgumentsCounter, logger));
@@ -163,19 +171,6 @@ internal sealed class BatchProcessor : BackgroundService
             .Build();
 
         return (workflow, proposeExecs);
-    }
-
-    private static string LoadSystemPrompt()
-    {
-        var assembly = Assembly.GetExecutingAssembly();
-        using var stream = assembly.GetManifestResourceStream(PlannerConventions.Prompts.SystemPromptResourceName);
-        if (stream is null)
-        {
-            throw new InvalidOperationException(
-                $"Embedded resource '{PlannerConventions.Prompts.SystemPromptResourceName}' not found.");
-        }
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-        return reader.ReadToEnd();
     }
 
     [SendsMessage(typeof(AnomalyReport))]

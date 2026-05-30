@@ -5,6 +5,7 @@
     <Project Path="src/InfraGate.AuditOutbox/InfraGate.AuditOutbox.csproj" />
     <Project Path="src/InfraGate.AuditOutbox.Postgres/InfraGate.AuditOutbox.Postgres.csproj" />
     <Project Path="src/InfraGate.AgentLlm/InfraGate.AgentLlm.csproj" />
+    <Project Path="src/InfraGate.Prompts/InfraGate.Prompts.csproj" />
     <Project Path="src/InfraGate.ClientCredentials/InfraGate.ClientCredentials.csproj" />
     <Project Path="src/InfraGate.DownstreamAuth/InfraGate.DownstreamAuth.csproj" />
     <Project Path="src/InfraGate.Observer.Contracts/InfraGate.Observer.Contracts.csproj" />
@@ -22,6 +23,7 @@
     <Project Path="src/InfraGate.Executor/InfraGate.Executor.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/InfraGate.Prompts.Tests/InfraGate.Prompts.Tests.csproj" />
     <Project Path="tests/InfraGate.AgentLlm.Tests/InfraGate.AgentLlm.Tests.csproj" />
     <Project Path="tests/InfraGate.AuditOutbox.Tests/InfraGate.AuditOutbox.Tests.csproj" />
     <Project Path="tests/InfraGate.ClientCredentials.Tests/InfraGate.ClientCredentials.Tests.csproj" />

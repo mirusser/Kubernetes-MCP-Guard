@@ -64,6 +64,7 @@ internal static class PlannerConventions
     public static class Prompts
     {
         public const string SystemPromptResourceName = "InfraGate.Planner.Prompts.PlannerSystemPrompt.md";
+        public const string SystemPromptTemplateName = "planner-system-prompt";
     }
 
     public static class Llm

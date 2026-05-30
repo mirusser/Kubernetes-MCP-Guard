@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.AI;
+using InfraGate.Prompts;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.AspNetCore;
@@ -141,6 +142,16 @@ public sealed class ObserverGatewayIntegrationTests
             secondFixedCycle.Reports.Select(report => report.AnomalyId).Order(StringComparer.Ordinal));
     }
 
+    private static IPromptLibrary BuildTestPromptLibrary()
+    {
+        var services = new ServiceCollection();
+        services.AddInfraGatePromptLibrary(b => b.AddTemplate(
+            ObserverConventions.Prompts.SystemPromptTemplateName,
+            "observer prompt for {{namespace}} with {{maxToolIterations}} iterations",
+            ["namespace", "maxToolIterations"]));
+        return services.BuildServiceProvider().GetRequiredService<IPromptLibrary>();
+    }
+
     private static ObservationCycleRunner CreateRunner(
         IObserverMcpClient mcpClient,
         IAnomalyHandoffSink sink,
@@ -154,7 +165,7 @@ public sealed class ObserverGatewayIntegrationTests
         return new ObservationCycleRunner(
             optionsMonitor,
             new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, ObserverMetrics.Meter),
-            new SystemPromptProvider(),
+            BuildTestPromptLibrary(),
             new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
             mcpClient,

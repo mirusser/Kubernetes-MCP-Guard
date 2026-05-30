@@ -94,4 +94,12 @@ internal static class ObserverConventions
             GetK8sEndpoints,
         };
     }
+
+    public static class Prompts
+    {
+        public const string SystemPromptResourceName = "InfraGate.Observer.Prompts.ObserverSystemPrompt.md";
+        public const string SystemPromptTemplateName = "observer-system-prompt";
+        public const string NamespaceArgumentName = "namespace";
+        public const string MaxToolIterationsArgumentName = "maxToolIterations";
+    }
 }

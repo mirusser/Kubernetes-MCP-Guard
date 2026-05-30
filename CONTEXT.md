@@ -198,6 +198,14 @@ _Avoid_: Session store, connection pool
 A server-to-client MCP `notifications/resources/updated` message sent when an **Approval Challenge** is approved, carrying the plan status resource URI so the AI agent's host can read the updated status and retry execution without manual prompting.
 _Avoid_: Push event, callback
 
+**Prompt Library**:
+A shared module exposing a single interface (`IPromptLibrary`) that loads named prompt-template assets and renders them with typed, validated arguments using Semantic Kernel as a renderer.
+_Avoid_: Ad-hoc prompt loader, manual string replacement
+
+**Prompt Template**:
+A structured asset (e.g., Handlebars) containing LLM instructions and placeholders, rendered by the **Prompt Library** before being passed to an agent.
+_Avoid_: Static markdown file, unvalidated string template
+
 ### Anomaly Observation
 
 **Anomaly Observer**:

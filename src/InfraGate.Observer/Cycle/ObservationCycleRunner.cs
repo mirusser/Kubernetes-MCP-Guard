@@ -6,7 +6,7 @@ using InfraGate.Observer.Classification;
 using InfraGate.Observer.Cycle.Workflow;
 using InfraGate.Observer.Diagnostics;
 using InfraGate.Observer.Mcp;
-using InfraGate.Observer.Prompts;
+using InfraGate.Prompts;
 using InfraGate.Observer.Snapshot;
 using InfraGate.Observer.State;
 using Microsoft.Agents.AI.Workflows;
@@ -16,9 +16,34 @@ namespace InfraGate.Observer.Cycle;
 
 internal sealed class ObservationCycleRunner : IObservationCycleRunner
 {
+    // Wrapper DTO for the LLM response format — prevents the model from emitting bare null instead of [].
+    // AnomalyParseExecutor.ExtractJsonArray finds the '[' inside this object, so no parser changes needed.
+    private sealed class AnomalyBatchOutput
+    {
+        public List<AnomalyOutputItem> Anomalies { get; init; } = [];
+    }
+
+    private sealed class AnomalyOutputItem
+    {
+        public string? Kind { get; init; }
+        public string? Severity { get; init; }
+        public string? Summary { get; init; }
+        public AnomalyTargetOutput? Target { get; init; }
+    }
+
+    private sealed class AnomalyTargetOutput
+    {
+        public string? Kind { get; init; }
+        public string? Namespace { get; init; }
+        public string? Name { get; init; }
+    }
+
+    private static readonly ChatResponseFormat observerResponseFormat =
+        ChatResponseFormat.ForJsonSchema<AnomalyBatchOutput>();
+
     private readonly IOptionsMonitor<ObserverOptions> optionsMonitor;
     private readonly ISnapshotFetcher snapshotFetcher;
-    private readonly ISystemPromptProvider systemPromptProvider;
+    private readonly IPromptLibrary promptLibrary;
     private readonly ToolCallingAgentFactory agentFactory;
     private readonly ISeverityClassifier severityClassifier;
     private readonly IObserverMcpClient mcpClient;
@@ -35,7 +60,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
     public ObservationCycleRunner( // NOSONAR:S107 — DI constructor; all params are required services.
         IOptionsMonitor<ObserverOptions> optionsMonitor,
         ISnapshotFetcher snapshotFetcher,
-        ISystemPromptProvider systemPromptProvider,
+        IPromptLibrary promptLibrary,
         ToolCallingAgentFactory agentFactory,
         ISeverityClassifier severityClassifier,
         IObserverMcpClient mcpClient,
@@ -47,7 +72,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
     {
         this.optionsMonitor = optionsMonitor;
         this.snapshotFetcher = snapshotFetcher;
-        this.systemPromptProvider = systemPromptProvider;
+        this.promptLibrary = promptLibrary;
         this.agentFactory = agentFactory;
         this.severityClassifier = severityClassifier;
         this.mcpClient = mcpClient;
@@ -65,7 +90,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
 
     public async Task<CycleResult> RunAsync(CancellationToken shutdownToken)
     {
-        var cycleId = Guid.NewGuid().ToString("D");
+        string cycleId = Guid.NewGuid().ToString("D");
         using var _ = LogContext.PushProperty("CycleId", cycleId);
 
         var opts = optionsMonitor.CurrentValue;
@@ -83,7 +108,20 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         var tools = await mcpClient.GetReadOnlyToolsAsync(cycleCts.Token).ConfigureAwait(false);
         var input = new CycleWorkflowInput(cycleId, opts.MaxToolIterations);
 
-        var (workflow, getToolCallCounts) = BuildWorkflow(opts, cycleId, tools, stopwatch);
+        var renderedPrompts = new Dictionary<string, string>(opts.AllowedNamespaces.Count, StringComparer.Ordinal);
+        foreach (var ns in opts.AllowedNamespaces)
+        {
+            renderedPrompts[ns] = await promptLibrary.RenderAsync(
+                ObserverConventions.Prompts.SystemPromptTemplateName,
+                new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    [ObserverConventions.Prompts.NamespaceArgumentName] = ns,
+                    [ObserverConventions.Prompts.MaxToolIterationsArgumentName] = opts.MaxToolIterations,
+                },
+                cycleCts.Token).ConfigureAwait(false);
+        }
+
+        var (workflow, getToolCallCounts) = BuildWorkflow(opts, cycleId, tools, stopwatch, renderedPrompts);
 
         try
         {
@@ -113,8 +151,8 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         catch (OperationCanceledException)
         {
             stopwatch.Stop();
-            var isTruncated = true;
-            var totalToolCalls = getToolCallCounts();
+            bool isTruncated = true;
+            int totalToolCalls = getToolCallCounts();
 
             if (shutdownToken.IsCancellationRequested)
                 ObserverLogEvents.LogCycleCancelled(logger);
@@ -143,7 +181,8 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         ObserverOptions opts,
         string cycleId,
         IReadOnlyList<AITool> tools,
-        Stopwatch stopwatch)
+        Stopwatch stopwatch,
+        IReadOnlyDictionary<string, string> renderedPrompts)
     {
         var namespaces = opts.AllowedNamespaces;
         var cycleInput = new CycleInputPassthroughExecutor();
@@ -154,12 +193,12 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         var agentExecutors = new List<ExecutorBinding>(namespaces.Count);
         var parseExecutors = new List<ExecutorBinding>(namespaces.Count);
 
-        for (var i = 0; i < namespaces.Count; i++)
+        for (int i = 0; i < namespaces.Count; i++)
         {
-            var ns = namespaces[i];
-            var systemPrompt = systemPromptProvider.Get(ns, opts.MaxToolIterations);
+            string ns = namespaces[i];
+            string systemPrompt = renderedPrompts[ns];
 
-            var (agent, getCount) = agentFactory.Create($"observer-{ns}", systemPrompt, tools, opts.MaxToolIterations);
+            var (agent, getCount) = agentFactory.Create($"observer-{ns}", systemPrompt, tools, opts.MaxToolIterations, observerResponseFormat);
             var agentBinding = agent.BindAsExecutor(new AIAgentHostOptions { ForwardIncomingMessages = false });
 
             ExecutorBinding snap = new SnapshotExecutor($"snapshot-{i}", ns, snapshotFetcher, logger);
@@ -192,7 +231,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         var builder = new WorkflowBuilder(cycleInput)
             .AddFanOutEdge(cycleInput, snapExecutors);
 
-        for (var i = 0; i < namespaces.Count; i++)
+        for (int i = 0; i < namespaces.Count; i++)
         {
             builder = builder
                 .AddEdge(snapExecutors[i], agentExecutors[i])

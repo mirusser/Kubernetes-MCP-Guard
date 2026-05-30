@@ -1,8 +1,9 @@
 using InfraGate.AgentLlm;
 using InfraGate.Observer.Classification;
 using InfraGate.Observer.Cycle;
-using InfraGate.Observer.Prompts;
 using InfraGate.Observer.State;
+using InfraGate.Prompts;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace InfraGate.Observer.Tests.UnitTests;
@@ -10,6 +11,16 @@ namespace InfraGate.Observer.Tests.UnitTests;
 public sealed class ObservationCycleRunnerTests
 {
     private static readonly List<string> DefaultNamespaces = new() { "default" };
+
+    private static IPromptLibrary BuildTestPromptLibrary()
+    {
+        var services = new ServiceCollection();
+        services.AddInfraGatePromptLibrary(b => b.AddTemplate(
+            ObserverConventions.Prompts.SystemPromptTemplateName,
+            "observer prompt for {{namespace}} with {{maxToolIterations}} max iterations",
+            [ObserverConventions.Prompts.NamespaceArgumentName, ObserverConventions.Prompts.MaxToolIterationsArgumentName]));
+        return services.BuildServiceProvider().GetRequiredService<IPromptLibrary>();
+    }
 
     private static ObserverOptions DefaultOptions()
     {
@@ -41,9 +52,7 @@ public sealed class ObservationCycleRunnerTests
                 "default", "{}", "{}", "{}", "{}", "{}", "{}",
                 DateTimeOffset.UtcNow)));
 
-        var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
-        systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>())
-            .Returns("system prompt");
+        var promptLibrary = BuildTestPromptLibrary();
 
         var chatClientFactory = new FixtureChatClient(_ =>
             new ChatResponse(new ChatMessage(ChatRole.Assistant, llmResponseJson)));
@@ -62,7 +71,7 @@ public sealed class ObservationCycleRunnerTests
         return new ObservationCycleRunner(
             optionsMonitor,
             snapshotFetcher,
-            systemPromptProvider,
+            promptLibrary,
             new ToolCallingAgentFactory(chatClientFactory),
             severityClassifier,
             mcpClient,
@@ -252,8 +261,7 @@ public sealed class ObservationCycleRunnerTests
                 return new SnapshotDocument("default", "{}", "{}", "{}", "{}", "{}", "{}", DateTimeOffset.UtcNow);
             });
 
-        var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
-        systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("prompt");
+        var promptLibrary = BuildTestPromptLibrary();
 
         var chatClientFactory = new FixtureChatClient(ValidLlmJson());
         var mcpClient = Substitute.For<IObserverMcpClient>();
@@ -263,7 +271,7 @@ public sealed class ObservationCycleRunnerTests
         var runner = new ObservationCycleRunner(
             optionsMonitor,
             snapshotFetcher,
-            systemPromptProvider,
+            promptLibrary,
             new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
             mcpClient,
@@ -379,8 +387,7 @@ public sealed class ObservationCycleRunnerTests
                 "default", "{}", "{}", "{}", "{}", "{}", "{}",
                 DateTimeOffset.UtcNow)));
 
-        var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
-        systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("prompt");
+        var promptLibrary = BuildTestPromptLibrary();
 
         // First LLM call returns a native function call; second returns the final JSON array.
         var llmCallCount = 0;
@@ -405,7 +412,7 @@ public sealed class ObservationCycleRunnerTests
         var runner = new ObservationCycleRunner(
             optionsMonitor,
             snapshotFetcher,
-            systemPromptProvider,
+            promptLibrary,
             new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
             mcpClient,
@@ -435,8 +442,7 @@ public sealed class ObservationCycleRunnerTests
                 "default", "{}", "{}", "{}", "{}", "{}", "{}",
                 DateTimeOffset.UtcNow)));
 
-        var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
-        systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("prompt");
+        var promptLibrary = BuildTestPromptLibrary();
 
         // LLM always requests a tool call → FunctionInvokingChatClient capped at 2 invocations.
         var chatClientFactory = new FixtureChatClient(_ =>
@@ -452,7 +458,7 @@ public sealed class ObservationCycleRunnerTests
         var runner = new ObservationCycleRunner(
             optionsMonitor,
             snapshotFetcher,
-            systemPromptProvider,
+            promptLibrary,
             new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
             mcpClient,
@@ -482,8 +488,7 @@ public sealed class ObservationCycleRunnerTests
             .Returns<Task<SnapshotDocument>>(_ =>
                 Task.FromException<SnapshotDocument>(new HttpRequestException("Gateway unreachable")));
 
-        var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
-        systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("prompt");
+        var promptLibrary = BuildTestPromptLibrary();
 
         // LLM returns empty JSON array for the empty snapshot.
         var chatClientFactory = new FixtureChatClient("[]");
@@ -494,7 +499,7 @@ public sealed class ObservationCycleRunnerTests
         var runner = new ObservationCycleRunner(
             optionsMonitor,
             snapshotFetcher,
-            systemPromptProvider,
+            promptLibrary,
             new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
             mcpClient,
@@ -577,8 +582,7 @@ public sealed class ObservationCycleRunnerTests
                 return new SnapshotDocument("default", "{}", "{}", "{}", "{}", "{}", "{}", DateTimeOffset.UtcNow);
             });
 
-        var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
-        systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("prompt");
+        var promptLibrary = BuildTestPromptLibrary();
 
         var chatClientFactory = new FixtureChatClient(json);
         var mcpClient = Substitute.For<IObserverMcpClient>();
@@ -588,7 +592,7 @@ public sealed class ObservationCycleRunnerTests
         var truncatedRunner = new ObservationCycleRunner(
             optionsMonitor,
             snapshotFetcher,
-            systemPromptProvider,
+            promptLibrary,
             new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
             mcpClient,
@@ -650,8 +654,7 @@ public sealed class ObservationCycleRunnerTests
                 "default", "{}", "{}", "{}", "{}", "{}", "{}",
                 DateTimeOffset.UtcNow)));
 
-        var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
-        systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("system prompt");
+        var promptLibrary = BuildTestPromptLibrary();
 
         var chatClientFactory = new FixtureChatClient(_ =>
             new ChatResponse(new ChatMessage(ChatRole.Assistant, llmResponseJson)));
@@ -665,7 +668,7 @@ public sealed class ObservationCycleRunnerTests
         return new ObservationCycleRunner(
             optionsMonitor,
             snapshotFetcher,
-            systemPromptProvider,
+            promptLibrary,
             new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
             mcpClient,
@@ -729,8 +732,7 @@ public sealed class ObservationCycleRunnerTests
                 return new SnapshotDocument("default", "{}", "{}", "{}", "{}", "{}", "{}", DateTimeOffset.UtcNow);
             });
 
-        var systemPromptProvider = Substitute.For<ISystemPromptProvider>();
-        systemPromptProvider.Get(Arg.Any<string>(), Arg.Any<int>()).Returns("prompt");
+        var promptLibrary = BuildTestPromptLibrary();
 
         var chatClientFactory = new FixtureChatClient(ValidLlmJson());
         var mcpClient = Substitute.For<IObserverMcpClient>();
@@ -740,7 +742,7 @@ public sealed class ObservationCycleRunnerTests
         var runner = new ObservationCycleRunner(
             optionsMonitor,
             snapshotFetcher,
-            systemPromptProvider,
+            promptLibrary,
             new ToolCallingAgentFactory(chatClientFactory),
             new SeverityClassifier(),
             mcpClient,

@@ -12,7 +12,8 @@ using InfraGate.AuditOutbox;
 using InfraGate.AuditOutbox.Postgres;
 using InfraGate.Observer.Llm;
 using InfraGate.Observer.Mcp;
-using InfraGate.Observer.Prompts;
+using System.Reflection;
+using InfraGate.Prompts;
 using InfraGate.Observer.Snapshot;
 using InfraGate.Observer.State;
 using InfraGate.Observability;
@@ -86,7 +87,13 @@ builder.Services.AddSingleton<ISnapshotFetcher>(sp =>
         sp.GetRequiredService<ILogger<SnapshotFetcher>>(),
         ObserverMetrics.Meter);
 });
-builder.Services.AddSingleton<ISystemPromptProvider, SystemPromptProvider>();
+var observerAssembly = typeof(ObservationCycleRunner).Assembly;
+var observerPromptTemplate = await LoadEmbeddedResourceAsync(
+    observerAssembly, ObserverConventions.Prompts.SystemPromptResourceName).ConfigureAwait(false);
+builder.Services.AddInfraGatePromptLibrary(b => b.AddTemplate(
+    ObserverConventions.Prompts.SystemPromptTemplateName,
+    observerPromptTemplate,
+    [ObserverConventions.Prompts.NamespaceArgumentName, ObserverConventions.Prompts.MaxToolIterationsArgumentName]));
 builder.Services.AddSingleton<ISeverityClassifier, SeverityClassifier>();
 builder.Services.AddSingleton<IChatClientFactory>(sp =>
 {
@@ -107,7 +114,7 @@ builder.Services.AddSingleton<IObservationCycleRunner>(sp =>
     return new ObservationCycleRunner(
         sp.GetRequiredService<IOptionsMonitor<ObserverOptions>>(),
         sp.GetRequiredService<ISnapshotFetcher>(),
-        sp.GetRequiredService<ISystemPromptProvider>(),
+        sp.GetRequiredService<IPromptLibrary>(),
         sp.GetRequiredService<ToolCallingAgentFactory>(),
         sp.GetRequiredService<ISeverityClassifier>(),
         sp.GetRequiredService<IObserverMcpClient>(),
@@ -186,6 +193,14 @@ static void ConfigureUrls(WebApplicationBuilder builder)
     {
         builder.WebHost.UseUrls(ObserverConventions.DefaultUrl);
     }
+}
+
+static async Task<string> LoadEmbeddedResourceAsync(Assembly assembly, string resourceName, CancellationToken cancellationToken = default)
+{
+    using var stream = assembly.GetManifestResourceStream(resourceName)
+        ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found.");
+    using var reader = new StreamReader(stream, Encoding.UTF8);
+    return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
 }
 
 static async Task ConnectObserverMcpClientAsync(WebApplication app)

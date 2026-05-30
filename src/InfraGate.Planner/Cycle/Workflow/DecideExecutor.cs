@@ -18,7 +18,8 @@ internal sealed class DecideExecutor(
     Counter<long>? timeoutCounter,
     ILogger logger) : Executor<AnomalyReport>(id)
 {
-    private static readonly JsonSerializerOptions AnomalyJsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions anomalyJsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly ChatResponseFormat decisionResponseFormat = ChatResponseFormat.ForJsonSchema<LlmDecisionOutput>();
 
     public override async ValueTask HandleAsync(
         AnomalyReport message,
@@ -50,11 +51,11 @@ internal sealed class DecideExecutor(
 
     private async Task<RemediationDecision?> DecideCoreAsync(AnomalyReport message, CancellationToken cancellationToken)
     {
-        var anomalyJson = JsonSerializer.Serialize(message, AnomalyJsonOptions);
-        var (agent, _) = agentFactory.Create($"planner-{message.AnomalyId[..8]}", systemPrompt, tools, maxToolIterations);
+        string anomalyJson = JsonSerializer.Serialize(message, anomalyJsonOptions);
+        var (agent, _) = agentFactory.Create($"planner-{message.AnomalyId[..8]}", systemPrompt, tools, maxToolIterations, decisionResponseFormat);
 
         var response = await agent.RunAsync(anomalyJson, cancellationToken: cancellationToken).ConfigureAwait(false);
-        var responseText = response.Text ?? string.Empty;
+        string responseText = response.Text ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(responseText)) return null;
         return ParseDecision(message, responseText);
@@ -64,7 +65,7 @@ internal sealed class DecideExecutor(
     {
         logger.LogDebug("LLM raw response for anomaly {AnomalyId}: {ResponseText}", message.AnomalyId, responseText);
 
-        var json = ExtractJsonObject(responseText);
+        string? json = ExtractJsonObject(responseText);
         if (json is null) return null;
 
         LlmDecisionOutput? output;

@@ -18,7 +18,7 @@ Based on the `loose-roadmap.md` and the current state of `k8s-toolkit`, this doc
 *Maps to roadmap item: "Developing and maintaining structured prompt libraries for AI agents supporting tasks across the SDLC."*
 
 * **Transition Static Prompts:** Move away from relying entirely on static markdown files (e.g., `Prompts/ObserverSystemPrompt.md`).
-* **Adopt Framework Templates:** Transition these into the framework's structured prompt templates (similar to Semantic Kernel's semantic functions). This treats prompts as configuration assets that can take templated arguments (like `SnapshotDocument` or `AnomalyHandoffBatch`), making continuous tuning and versioning much easier.
+* **Adopt Framework Templates:** Transition these into a unified **Prompt Library** (`IPromptLibrary`) backed by Semantic Kernel's Handlebars template renderer (the Microsoft Agent Framework lacks native template support). This treats prompts as configuration assets that take templated, validated arguments, making continuous tuning and versioning much easier.
 
 ## 3. Integrating MCP Tools natively into the Framework
 *Maps to roadmap item: "Integrating AI agents with enterprise tools..."*

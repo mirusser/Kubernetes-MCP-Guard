@@ -10,7 +10,7 @@
 - `ObservationCycleLoop` (an `IHostedService`) ticks on a configurable cadence (default 60s) and orchestrates one **Observation Cycle** per tick.
 - Each cycle builds a per-namespace **workflow graph** via `ObservationCycleRunner.BuildWorkflow` using `Microsoft.Agents.AI.Workflows.WorkflowBuilder`. The graph fans out from a `CycleInputPassthroughExecutor` to N per-namespace chains, each running:
   1. `SnapshotExecutor` — calls `ISnapshotFetcher` to collect a deterministic baseline (`SnapshotDocument`) from the gateway's read-only tools.
-  2. `ChatClientAgent` (via `ToolCallingAgentFactory`) — sends the snapshot to the LLM with the system prompt from `Prompts/ObserverSystemPrompt.md`; bounded follow-up tool calls (max 8 per cycle).
+  2. `ChatClientAgent` (via `ToolCallingAgentFactory`) — sends the snapshot to the LLM with the system prompt rendered from `Prompts/ObserverSystemPrompt.md` via the shared `IPromptLibrary`; bounded follow-up tool calls (max 8 per cycle).
   3. `AnomalyParseExecutor` — parses the LLM output into `AnomalyReport[]`, applies `ISeverityClassifier` (rules-derived severity wins; LLM disagreements logged + counted).
 - All namespace chains fan-in to `CycleAggregateExecutor`, which applies `IAnomalyDedupeStore` suppression and publishes the final `AnomalyReport[]` batch through `IAnomalyHandoffSink`.
 - Cycle-level telemetry: wall-clock cap (20s default), tool-iteration cap (8), and metrics via `System.Diagnostics.Metrics` (`Meter("InfraGate.Observer", "1.0")`).

@@ -14,9 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
-      <_Parameter1>InfraGate.AgentLlm.Tests</_Parameter1>
-    </AssemblyAttribute>
+    <InternalsVisibleTo Include="InfraGate.AgentLlm.Tests" />
   </ItemGroup>
 
 </Project>

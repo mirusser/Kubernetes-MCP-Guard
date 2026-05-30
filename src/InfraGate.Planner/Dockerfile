@@ -11,6 +11,7 @@ COPY src/InfraGate.AuditOutbox/InfraGate.AuditOutbox.csproj src/InfraGate.AuditO
 COPY src/InfraGate.AuditOutbox.Postgres/InfraGate.AuditOutbox.Postgres.csproj src/InfraGate.AuditOutbox.Postgres/
 COPY src/InfraGate.Observability/InfraGate.Observability.csproj src/InfraGate.Observability/
 COPY src/InfraGate.RuntimeSafety/InfraGate.RuntimeSafety.csproj src/InfraGate.RuntimeSafety/
+COPY src/InfraGate.Prompts/InfraGate.Prompts.csproj src/InfraGate.Prompts/
 COPY src/InfraGate.Planner/InfraGate.Planner.csproj src/InfraGate.Planner/
 RUN dotnet restore src/InfraGate.Planner/InfraGate.Planner.csproj
 
@@ -22,6 +23,7 @@ COPY src/InfraGate.AuditOutbox/ src/InfraGate.AuditOutbox/
 COPY src/InfraGate.AuditOutbox.Postgres/ src/InfraGate.AuditOutbox.Postgres/
 COPY src/InfraGate.Observability/ src/InfraGate.Observability/
 COPY src/InfraGate.RuntimeSafety/ src/InfraGate.RuntimeSafety/
+COPY src/InfraGate.Prompts/ src/InfraGate.Prompts/
 COPY src/InfraGate.Planner/ src/InfraGate.Planner/
 COPY src/Shared/ src/Shared/
 RUN dotnet publish src/InfraGate.Planner/InfraGate.Planner.csproj \

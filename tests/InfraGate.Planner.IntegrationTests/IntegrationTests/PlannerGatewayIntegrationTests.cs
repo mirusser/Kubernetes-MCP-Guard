@@ -9,7 +9,9 @@ using System.Net;
 using System.Text.Json;
 using InfraGate.AgentLlm;
 using InfraGate.ClientCredentials;
+using InfraGate.Planner.Cycle;
 using InfraGate.Planner.Diagnostics;
+using InfraGate.Prompts;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -130,6 +132,15 @@ public sealed class PlannerGatewayIntegrationTests
 
     // --- helpers ---
 
+    private static IPromptLibrary BuildTestPromptLibrary()
+    {
+        var services = new ServiceCollection();
+        services.AddInfraGatePromptLibrary(b => b.AddTemplate(
+            PlannerConventions.Prompts.SystemPromptTemplateName,
+            "planner test prompt"));
+        return services.BuildServiceProvider().GetRequiredService<IPromptLibrary>();
+    }
+
     private static BatchProcessor CreateProcessor(
         IPlannerMcpClient mcpClient,
         FixtureChatClient chatClientFactory,
@@ -152,6 +163,7 @@ public sealed class PlannerGatewayIntegrationTests
             mcpClient,
             sink,
             NullLogger<BatchProcessor>.Instance,
+            BuildTestPromptLibrary(),
             dedupeStore);
     }
 
