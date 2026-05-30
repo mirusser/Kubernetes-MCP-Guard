@@ -21,9 +21,9 @@ Our Dockerfiles now use an initial Alpine `filter` stage to copy the entire repo
 ```dockerfile
 FROM alpine:3.21 AS filter
 WORKDIR /src
-COPY . .
+COPY src/ src/
 RUN mkdir /out && \
-    find . -name '*.csproj' | tar -cf - -T - | tar -xf - -C /out
+    find src -name '*.csproj' | tar -cf - -T - | tar -xf - -C /out
 ```
 
 The subsequent build stage then copies these isolated project files for the `dotnet restore` step, and finally copies the remaining `src/` content for the actual build:

@@ -1,8 +1,8 @@
 FROM alpine:3.21 AS filter
 WORKDIR /src
-COPY . .
+COPY src/ src/
 RUN mkdir /out && \
-    find . -name '*.csproj' | tar -cf - -T - | tar -xf - -C /out
+    find src -name '*.csproj' | tar -cf - -T - | tar -xf - -C /out
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
