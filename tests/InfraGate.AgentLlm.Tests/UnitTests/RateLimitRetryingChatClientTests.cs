@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace InfraGate.AgentLlm.Tests.UnitTests;
 
 public sealed class RateLimitRetryingChatClientTests
@@ -99,6 +101,64 @@ public sealed class RateLimitRetryingChatClientTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             sut.GetResponseAsync([new ChatMessage(ChatRole.User, "hi")], cancellationToken: cts.Token));
+    }
+
+    [Fact]
+    public async Task GetResponseAsync_WithRealLogger_DoesNotThrow()
+    {
+        var inner = new FakeChatClient();
+        inner.Enqueue(Task.FromResult(SuccessResult));
+
+        var logger = NullLogger<RateLimitRetryingChatClient>.Instance;
+        var sut = new RateLimitRetryingChatClient(inner, [TimeSpan.Zero, TimeSpan.Zero], logger);
+
+        var result = await sut.GetResponseAsync([new ChatMessage(ChatRole.User, "hi")]);
+
+        Assert.Same(SuccessResult, result);
+    }
+
+    [Fact]
+    public async Task GetResponseAsync_ResponseWithNullText_ReturnsNullText()
+    {
+        var responseWithNullText = new ChatResponse(new ChatMessage(ChatRole.Assistant, (string?)null));
+        var inner = new FakeChatClient();
+        inner.Enqueue(Task.FromResult(responseWithNullText));
+
+        var sut = new RateLimitRetryingChatClient(inner, [TimeSpan.Zero]);
+
+        var result = await sut.GetResponseAsync([new ChatMessage(ChatRole.User, "hi")]);
+
+        Assert.Same(responseWithNullText, result);
+    }
+
+    [Fact]
+    public async Task GetResponseAsync_429WithRealLogger_RetriesAndLogs()
+    {
+        var inner = new FakeChatClient();
+        inner.Enqueue(Task.FromException<ChatResponse>(Make429()));
+        inner.Enqueue(Task.FromResult(SuccessResult));
+
+        var logger = NullLogger<RateLimitRetryingChatClient>.Instance;
+        var sut = new RateLimitRetryingChatClient(inner, [TimeSpan.Zero], logger);
+
+        var result = await sut.GetResponseAsync([new ChatMessage(ChatRole.User, "hi")]);
+
+        Assert.Same(SuccessResult, result);
+        Assert.Equal(2, inner.CallCount);
+    }
+
+    [Fact]
+    public async Task GetResponseAsync_MessageWithNullText_DoesNotThrow()
+    {
+        var inner = new FakeChatClient();
+        inner.Enqueue(Task.FromResult(SuccessResult));
+
+        var sut = new RateLimitRetryingChatClient(inner, [TimeSpan.Zero]);
+
+        var result = await sut.GetResponseAsync(
+            [new ChatMessage(ChatRole.User, (string?)null)], cancellationToken: CancellationToken.None);
+
+        Assert.Same(SuccessResult, result);
     }
 
     // ── Fakes ────────────────────────────────────────────────────────────

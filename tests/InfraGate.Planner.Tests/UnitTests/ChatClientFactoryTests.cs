@@ -1,5 +1,6 @@
 using InfraGate.AgentLlm;
 using InfraGate.Planner.Llm;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace InfraGate.Planner.Tests.UnitTests;
@@ -114,6 +115,41 @@ public sealed class ChatClientFactoryTests
         var factory = new ChatClientFactory(options);
 
         Assert.Throws<InvalidOperationException>(() => factory.Create());
+    }
+
+    [Fact]
+    public void Create_OpenRouterProvider_WithLoggerFactory_FormsClient()
+    {
+        var options = Substitute.For<IOptions<PlannerOptions>>();
+        options.Value.Returns(new PlannerOptions
+        {
+            GatewayBaseUrl = "http://localhost:3001/mcp",
+            LlmProvider = PlannerConventions.LlmProviders.OpenRouter,
+            LlmApiKey = "test-key",
+        });
+
+        var factory = new ChatClientFactory(options, NullLoggerFactory.Instance);
+        var client = factory.Create();
+
+        Assert.IsType<RateLimitRetryingChatClient>(client);
+    }
+
+    [Fact]
+    public void Create_OpenRouterProvider_WithCustomModel_FormsClient()
+    {
+        var options = Substitute.For<IOptions<PlannerOptions>>();
+        options.Value.Returns(new PlannerOptions
+        {
+            GatewayBaseUrl = "http://localhost:3001/mcp",
+            LlmProvider = PlannerConventions.LlmProviders.OpenRouter,
+            LlmModel = "custom-model",
+            LlmApiKey = "test-key",
+        });
+
+        var factory = new ChatClientFactory(options, NullLoggerFactory.Instance);
+        var client = factory.Create();
+
+        Assert.IsType<RateLimitRetryingChatClient>(client);
     }
 
     [Fact]

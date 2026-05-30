@@ -143,6 +143,128 @@ public sealed class WorkflowExecutorTests
         Assert.IsType<DecisionContext>(forwarded);
     }
 
+    [Fact]
+    public async Task DecideExecutor_ResponseWithoutBraces_NoDecisionForwarded()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        var chatClient = new FixtureChatClient("just some text without JSON braces");
+        var context = new FakeWorkflowContext();
+        var agentFactory = new ToolCallingAgentFactory(chatClient);
+
+        var executor = new DecideExecutor(
+            "decide-1", agentFactory, "system prompt", [],
+            4, 30, null, NullLogger.Instance);
+
+        await executor.HandleAsync(report, context, CancellationToken.None);
+
+        Assert.Empty(context.SentMessages);
+    }
+
+    [Fact]
+    public async Task DecideExecutor_InvalidJson_NoDecisionForwarded()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        var chatClient = new FixtureChatClient("{ invalid json here }");
+        var context = new FakeWorkflowContext();
+        var agentFactory = new ToolCallingAgentFactory(chatClient);
+
+        var executor = new DecideExecutor(
+            "decide-2", agentFactory, "system prompt", [],
+            4, 30, null, NullLogger.Instance);
+
+        await executor.HandleAsync(report, context, CancellationToken.None);
+
+        Assert.Empty(context.SentMessages);
+    }
+
+    [Fact]
+    public async Task DecideExecutor_MissingOperationType_NoDecisionForwarded()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        var chatClient = new FixtureChatClient("""{"arguments": {"name": "test"}}""");
+        var context = new FakeWorkflowContext();
+        var agentFactory = new ToolCallingAgentFactory(chatClient);
+
+        var executor = new DecideExecutor(
+            "decide-3", agentFactory, "system prompt", [],
+            4, 30, null, NullLogger.Instance);
+
+        await executor.HandleAsync(report, context, CancellationToken.None);
+
+        Assert.Empty(context.SentMessages);
+    }
+
+    [Fact]
+    public async Task DecideExecutor_ArgumentsWithBooleanValue_ConvertsCorrectly()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        var chatClient = new FixtureChatClient("""
+        {
+          "operationType": "restart_deployment",
+          "arguments": { "name": "test", "force": true, "dryRun": false }
+        }
+        """);
+        var context = new FakeWorkflowContext();
+        var agentFactory = new ToolCallingAgentFactory(chatClient);
+
+        var executor = new DecideExecutor(
+            "decide-4", agentFactory, "system prompt", [],
+            4, 30, null, NullLogger.Instance);
+
+        await executor.HandleAsync(report, context, CancellationToken.None);
+
+        var forwarded = Assert.Single(context.SentMessages);
+        var decisionCtx = Assert.IsType<DecisionContext>(forwarded);
+        Assert.True((bool?)decisionCtx.Decision.Arguments["force"]);
+        Assert.False((bool?)decisionCtx.Decision.Arguments["dryRun"]);
+    }
+
+    [Fact]
+    public async Task DecideExecutor_ArgumentsWithNullValue_ConvertsCorrectly()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        var chatClient = new FixtureChatClient("""
+        {
+          "operationType": "restart_deployment",
+          "arguments": { "name": "test", "optionalField": null }
+        }
+        """);
+        var context = new FakeWorkflowContext();
+        var agentFactory = new ToolCallingAgentFactory(chatClient);
+
+        var executor = new DecideExecutor(
+            "decide-5", agentFactory, "system prompt", [],
+            4, 30, null, NullLogger.Instance);
+
+        await executor.HandleAsync(report, context, CancellationToken.None);
+
+        var forwarded = Assert.Single(context.SentMessages);
+        Assert.IsType<DecisionContext>(forwarded);
+    }
+
+    [Fact]
+    public async Task DecideExecutor_ArgumentsWithLargeInteger_ConvertsToLong()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        var chatClient = new FixtureChatClient("""
+        {
+          "operationType": "restart_deployment",
+          "arguments": { "name": "test", "replicas": 5000000000 }
+        }
+        """);
+        var context = new FakeWorkflowContext();
+        var agentFactory = new ToolCallingAgentFactory(chatClient);
+
+        var executor = new DecideExecutor(
+            "decide-6", agentFactory, "system prompt", [],
+            4, 30, null, NullLogger.Instance);
+
+        await executor.HandleAsync(report, context, CancellationToken.None);
+
+        var forwarded = Assert.Single(context.SentMessages);
+        Assert.IsType<DecisionContext>(forwarded);
+    }
+
     // ------------------------------------------------------------------ //
     // ValidateExecutor
     // ------------------------------------------------------------------ //
@@ -283,6 +405,46 @@ public sealed class WorkflowExecutorTests
         var tags = secondMeasurement.Tags.ToArray();
         Assert.Equal(AgentGuardrailConventions.Outcomes.Rejected, tags.First(t => t.Key == AgentGuardrailConventions.Tags.GuardrailOutcome).Value);
         Assert.Equal(AgentGuardrailConventions.Reasons.DedupeInBatch, tags.First(t => t.Key == AgentGuardrailConventions.Tags.GuardrailReason).Value);
+    }
+
+    [Fact]
+    public async Task ValidateExecutor_NullGuardrailMetrics_DoesNotThrow()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        var decision = new RemediationDecision("restart_deployment",
+            new Dictionary<string, object?> { ["name"] = "nginx", ["namespace"] = "default" }, null);
+        var decisionCtx = new DecisionContext(report, decision);
+        var context = new FakeWorkflowContext();
+
+        var executor = new ValidateExecutor("validate-null", new ConcurrentDictionary<string, byte>(),
+            new PlannerDedupeStore(), guardrailMetrics: null, NullLogger.Instance);
+
+        await executor.HandleAsync(decisionCtx, context, CancellationToken.None);
+
+        Assert.Single(context.SentMessages);
+    }
+
+    [Fact]
+    public async Task ValidateExecutor_SetDeploymentImageValid_ForwardsDecision()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        var decision = new RemediationDecision("set_deployment_image",
+            new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["name"] = "nginx",
+                ["namespace"] = "default",
+                ["container"] = "nginx",
+                ["image"] = "nginx:2.0",
+            }, null);
+        var decisionCtx = new DecisionContext(report, decision);
+        var context = new FakeWorkflowContext();
+
+        var executor = new ValidateExecutor("validate-sdi", new ConcurrentDictionary<string, byte>(),
+            new PlannerDedupeStore(), guardrailMetrics: null, NullLogger.Instance);
+
+        await executor.HandleAsync(decisionCtx, context, CancellationToken.None);
+
+        Assert.Single(context.SentMessages);
     }
 
     // ------------------------------------------------------------------ //

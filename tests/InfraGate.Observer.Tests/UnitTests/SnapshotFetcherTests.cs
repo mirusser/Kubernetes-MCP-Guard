@@ -116,4 +116,63 @@ public sealed class SnapshotFetcherTests
         Assert.Equal(6, mcpClient.CallCount);
         Assert.True(mcpClient.WasCancelled);
     }
+
+    [Fact]
+    public async Task FetchAsync_ToolReturnsError_RecordsNullInSnapshot()
+    {
+        var mcpClient = new TestAgentMcpToolset
+        {
+            CallToolHandler = name =>
+            {
+                if (name == ObserverConventions.ToolNames.GetK8sPods)
+                {
+                    return Task.FromResult(new CallToolResult { IsError = true });
+                }
+                return Task.FromResult(OkResult("{}"));
+            }
+        };
+
+        using var meter = new Meter("test-meter-tool-error");
+        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, meter);
+        var snapshot = await fetcher.FetchAsync("test-ns", CancellationToken.None);
+
+        Assert.Equal("test-ns", snapshot.Namespace);
+        Assert.Null(snapshot.PodsJson);
+        Assert.NotNull(snapshot.StatusJson);
+    }
+
+    [Fact]
+    public async Task FetchAsync_ToolReturnsEmptyText_RecordsNullInSnapshot()
+    {
+        var mcpClient = new TestAgentMcpToolset
+        {
+            CallToolHandler = name =>
+            {
+                if (name == ObserverConventions.ToolNames.GetK8sPods)
+                {
+                    return Task.FromResult(OkResult(""));
+                }
+                return Task.FromResult(OkResult("{}"));
+            }
+        };
+
+        using var meter = new Meter("test-meter-empty-text");
+        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, meter);
+        var snapshot = await fetcher.FetchAsync("test-ns", CancellationToken.None);
+
+        Assert.Equal("test-ns", snapshot.Namespace);
+        Assert.Null(snapshot.PodsJson);
+    }
+
+    [Fact]
+    public async Task FetchAsync_NullMeter_DoesNotThrow()
+    {
+        var mcpClient = new TestAgentMcpToolset();
+
+        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, meter: null);
+        var snapshot = await fetcher.FetchAsync("test-ns", CancellationToken.None);
+
+        Assert.Equal("test-ns", snapshot.Namespace);
+        Assert.NotNull(snapshot.StatusJson);
+    }
 }
