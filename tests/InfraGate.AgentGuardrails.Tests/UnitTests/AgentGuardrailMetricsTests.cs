@@ -94,4 +94,26 @@ public sealed class AgentGuardrailMetricsTests
         Assert.Equal("guardrail.reason", AgentGuardrailConventions.Tags.GuardrailReason);
         Assert.Equal("guardrail.outcome", AgentGuardrailConventions.Tags.GuardrailOutcome);
     }
+
+    [Fact]
+    public void RecordToolBlocked_NullMeterOverride_UsesDefaultMeter()
+    {
+        var sut = new AgentGuardrailMetrics(null);
+
+        var recorded = new List<Measurement<long>>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == AgentGuardrailConventions.ToolCallBlockedCounterName)
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+            recorded.Add(new Measurement<long>(value, tags)));
+        listener.Start();
+
+        sut.RecordToolBlocked("observer-ns1", "propose_plan", AgentGuardrailConventions.Reasons.ToolNotAllowed);
+
+        Assert.Single(recorded);
+        Assert.Equal(1L, recorded[0].Value);
+    }
 }
