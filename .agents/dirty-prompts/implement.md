@@ -15,3 +15,6 @@ run @.agents/skills/run-local-sonarqube/SKILL.md then after it generates raport 
 
 
 run @scripts/coverage.sh , wait for report to ge generated and extened code coverage based on that report (mostly focus on integration tests) use @.agents/skills/writing-tests/SKILL.md and @.agents/skills/jetbrains-refactor/SKILL.md where applicable. Don't use mocks libraries (like NSubstitue or Moqu or smiliar) if applicable use TestContainers.
+
+
+agent-framework (repo: https://github.com/microsoft/agent-framework, local clone: ~/OtherRepos/agent-framework/) 
