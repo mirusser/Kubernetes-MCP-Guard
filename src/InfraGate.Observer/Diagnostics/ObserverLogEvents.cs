@@ -158,6 +158,11 @@ internal static partial class ObserverLogEvents
         Message = "observer.handoff.http_backpressure: planner returned 429")]
     public static partial void LogHandoffHttpBackpressure(ILogger logger);
 
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "observer.handoff.a2a_failed errorClass={ErrorClass}")]
+    public static partial void LogHandoffA2AFailed(ILogger logger, string errorClass, Exception ex);
+
     // ── MCP calls ───────────────────────────────────────────────
 
     [LoggerMessage(

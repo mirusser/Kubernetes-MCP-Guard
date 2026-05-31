@@ -66,6 +66,9 @@ internal static class ObserverConventions
         public const string OpenRouter = "OPENROUTER";
     }
 
+    // A2A agent name used when the Observer constructs an AIAgent against the Planner's A2A endpoint
+    public const string A2AHandoffAgentName = "observer-to-planner";
+
     public static class HttpClients
     {
         public const string PlannerHandoff = "PlannerHandoff";

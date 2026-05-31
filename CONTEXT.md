@@ -261,7 +261,7 @@ The machine identity the **Anomaly Observer** uses to authenticate to the gatewa
 _Avoid_: Requester, Approver, Gateway Service Identity, user token passthrough
 
 **Anomaly Handoff**:
-The act of the **Anomaly Observer** publishing one or more **Anomaly Reports** to the **Remediation Planner**. The contract is `AnomalyHandoffBatch` (defined by the v1 **Anomaly Observer** implementation). The v1 transport is HTTPS POST from `HttpAnomalyHandoffSink` to the **Remediation Planner**'s `/handoff/anomalies` endpoint, authenticated by **Observer Service Identity** bearer.
+The act of the **Anomaly Observer** publishing one or more **Anomaly Reports** to the **Remediation Planner**. The contract is `AnomalyHandoffBatch` (defined by the v1 **Anomaly Observer** implementation). The transport uses the Agent-to-Agent (A2A) protocol via `A2AAnomalyHandoffSink` to the **Remediation Planner**'s `/a2a/planner` endpoint, authenticated by **Observer Service Identity** bearer.
 _Avoid_: Plan Envelope, Approval Notification, Approval Grant, Audit Spine event
 
 **Dedupe Key**:

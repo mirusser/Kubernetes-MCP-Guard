@@ -7,7 +7,7 @@
 ## Runtime Flow
 
 - `Program.cs` wires Serilog, `InfraGate.RuntimeSafety`, `InfraGate.ClientCredentials`, the Planner MCP client, and the `Microsoft.Extensions.AI` chat client.
-- `POST /handoff/anomalies` accepts `AnomalyHandoffBatch` payloads from the Observer and queues them for asynchronous processing.
+- A2A endpoint `/a2a/planner` accepts messages containing `AnomalyHandoffBatch` payloads from the Observer and queues them for asynchronous processing.
 - `BatchProcessor` dequeues `AnomalyHandoffBatch` payloads and builds a per-anomaly **workflow graph** using `Microsoft.Agents.AI.Workflows.WorkflowBuilder`. The graph fans out from a `BatchIntakePassthroughExecutor` to N per-anomaly chains, each running five executors in sequence:
   1. `FilterExecutor` — drops resolved reports and unsupported `AnomalyKind`s; emits `proposal.skipped` audit for non-resolved drops.
   2. `DedupeGateExecutor` — skips anomalies with an already-active tracked plan; emits `proposal.skipped` audit.

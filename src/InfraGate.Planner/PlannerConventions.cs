@@ -13,7 +13,10 @@ internal static class PlannerConventions
     public const string DefaultLlmModel = "claude-sonnet-4-6";
     public const string DefaultOpenRouterLlmModel = "deepseek/deepseek-v4-flash:free";
     public const string HealthEndpointPath = "/health";
-    public const string HandoffAnomaliesEndpointPath = "/handoff/anomalies";
+
+    // A2A endpoint replacing the legacy /handoff/anomalies HTTP POST
+    public const string A2AHandoffEndpointPath = "/a2a/planner";
+    public const string A2AHandoffAgentName = "planner-agent";
 
     public const int DefaultAnomalyWallClockCapSeconds = 30;
     public const int MinAnomalyWallClockCapSeconds = 5;

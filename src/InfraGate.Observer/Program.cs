@@ -1,5 +1,6 @@
 using System.Diagnostics.Metrics;
 using System.Reflection;
+using A2A;
 using InfraGate.AgentGuardrails;
 using InfraGate.AgentLlm;
 using InfraGate.AgentMcp;
@@ -175,8 +176,12 @@ builder.Services.AddSingleton<IAnomalyHandoffSink>(sp =>
     {
         var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
         var httpClient = httpClientFactory.CreateClient(ObserverConventions.HttpClients.PlannerHandoff);
-        var httpLogger = sp.GetRequiredService<ILogger<HttpAnomalyHandoffSink>>();
-        sinks.Add(new HttpAnomalyHandoffSink(httpClient, options.PlannerHandoffUrl, httpLogger, sp.GetService<IObserverAuditOutbox>()));
+        var a2aLogger = sp.GetRequiredService<ILogger<A2AAnomalyHandoffSink>>();
+#pragma warning disable MEAI001 // Experimental A2A preview package — accepted per plan
+        var a2aAgent = new A2AClient(new Uri(options.PlannerHandoffUrl), httpClient)
+            .AsAIAgent(name: ObserverConventions.A2AHandoffAgentName);
+#pragma warning restore MEAI001
+        sinks.Add(new A2AAnomalyHandoffSink(a2aAgent, a2aLogger, sp.GetService<IObserverAuditOutbox>()));
     }
 
     var logger = sp.GetRequiredService<ILogger<CompositeAnomalyHandoffSink>>();

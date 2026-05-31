@@ -1,3 +1,4 @@
+using A2A;
 using InfraGate.Planner;
 using InfraGate.Planner.Audit;
 using InfraGate.Planner.Cycle;
@@ -165,6 +166,20 @@ if (!string.IsNullOrWhiteSpace(auditConnectionString))
 builder.Services.AddSingleton<BatchProcessor>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BatchProcessor>());
 
+builder.Services.AddSingleton<PlannerHandoffAgentHandler>();
+#pragma warning disable MEAI001 // Experimental A2A preview package — accepted per plan
+builder.Services.AddKeyedSingleton<A2AServer>(PlannerConventions.A2AHandoffAgentName, (sp, _) =>
+{
+    var handler = sp.GetRequiredService<PlannerHandoffAgentHandler>();
+    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+    return new A2AServer(
+        handler,
+        new InMemoryTaskStore(),
+        new ChannelEventNotifier(),
+        loggerFactory.CreateLogger<A2AServer>());
+});
+#pragma warning restore MEAI001
+
 var jwtAuthority = builder.Configuration[PlannerConventions.EnvironmentVariables.OAuthAuthority] ?? string.Empty;
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -199,7 +214,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapPlannerHealthEndpoint();
-app.MapPlannerHandoffEndpoint();
+#pragma warning disable MEAI001 // Experimental A2A preview package — accepted per plan
+app.MapA2AHttpJson(PlannerConventions.A2AHandoffAgentName, PlannerConventions.A2AHandoffEndpointPath)
+   .RequireAuthorization(PlannerConventions.Policies.ObserverSender);
+#pragma warning restore MEAI001
 app.Use(async (context, next) =>
 {
     if (context.Request.Path == "/")

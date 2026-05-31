@@ -81,7 +81,7 @@ flowchart TB
 
     subgraph PlannerProc["Planner"]
         direction TB
-        PIn["/handoff/anomalies<br/>azp=infra-gate-observer"]
+        PIn["/a2a/planner<br/>azp=infra-gate-observer"]
         PBatch["BatchProcessor<br/>LLM + argument validation"]
         PMcp["PlannerMcpClient<br/>readonly + propose_plan"]
         POut["RemediationProposalSink"]

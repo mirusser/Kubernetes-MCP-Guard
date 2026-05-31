@@ -19,6 +19,9 @@ internal static partial class PlannerLogEvents
     [LoggerMessage(Level = LogLevel.Information, Message = "Handoff batch received: cycleId={CycleId} reports={ReportCount}")]
     public static partial void LogHandoffBatchReceived(ILogger logger, string cycleId, int reportCount);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "planner.handoff.backpressure: batch queue full, dropped cycleId={CycleId}")]
+    public static partial void LogHandoffBatchBackpressure(ILogger logger, string cycleId);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Planner rejected remediation decision for anomaly {AnomalyId}: unsupported operation {OperationType}")]
     public static partial void LogDecisionInvalidOperation(ILogger logger, string anomalyId, string operationType);
 

@@ -2,7 +2,7 @@
 
 This document visualizes the detection, processing, and handoff flow between the autonomous `InfraGate.Observer` service and the analytical `InfraGate.Planner` service.
 
-This document describes the **current** HTTP-based handoff architecture.
+This document describes the **current** Agent-to-Agent (A2A) handoff architecture.
 
 ## Object Flow
 
@@ -23,7 +23,7 @@ flowchart TD
     obsAgent --> rawAnomaly
     rawAnomaly -->|Severity & Parse| parsedAnomaly
     parsedAnomaly -->|Dedupe Store| handoffBatch
-    handoffBatch -->|HTTP POST| queue
+    handoffBatch -->|A2A Protocol| queue
     queue -->|Filter & Dedupe| planAgent
     planAgent -->|Propose Tool| proposal
     
@@ -61,7 +61,7 @@ flowchart LR
     obsClassify --> obsDedupe
     obsDedupe --> obsSink
     
-    obsSink -->|HTTP POST| planQueue
+    obsSink -->|A2A Protocol| planQueue
     
     planQueue --> planBatch
     planBatch --> planDedupe
@@ -130,7 +130,7 @@ sequenceDiagram
         Obs->>Obs: Parse, Classify Severity, Dedupe
         Obs->>Obs: Log to Observer Audit Outbox
         opt If anomalies are active/resolved
-            Obs->>Plan: HTTP POST /handoff/anomalies (JWT Bearer)
+            Obs->>Plan: A2A Protocol /a2a/planner (JWT Bearer)
         end
     end
 
@@ -170,7 +170,7 @@ sequenceDiagram
 3. The store sees this exact anomaly was reported 1 minute ago, which is within the `DedupeSuppressionWindow`.
 4. The anomaly is suppressed.
 5. The suppressed report is logged to the Observer Audit Outbox.
-6. No HTTP POST is made to the Planner.
+6. No A2A handoff message is sent to the Planner.
 
 ### Resolved Anomaly
 1. Observer detects zero anomalies.

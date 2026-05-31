@@ -68,7 +68,7 @@ profiles:
       cycleWallClockCapSeconds: "120"
       maxToolIterations: "8"
       fileSinkRoot: /data/observer/findings
-      plannerHandoffUrl: http://planner:3004/handoff/anomalies
+      plannerHandoffUrl: http://planner:3004/a2a/planner
       auditConnectionString: "Host=postgres;Port=5432;Database=infra-gate;Username=infra-gate;Password=infra-gate-dev-password"
       observerHostPath: ../../.mcp-observer/findings
       allowedNamespaces:
@@ -131,7 +131,7 @@ profiles:
       cycleWallClockCapSeconds: "120"
       maxToolIterations: "8"
       fileSinkRoot: .mcp-observer/findings
-      plannerHandoffUrl: http://127.0.0.1:3004/handoff/anomalies
+      plannerHandoffUrl: http://127.0.0.1:3004/a2a/planner
       allowedNamespaces:
         - mcp-nginx-demo
     planner:
