@@ -11,11 +11,12 @@
 - `BatchProcessor` dequeues `AnomalyHandoffBatch` payloads and builds a per-anomaly **workflow graph** using `Microsoft.Agents.AI.Workflows.WorkflowBuilder`. The graph fans out from a `BatchIntakePassthroughExecutor` to N per-anomaly chains, each running five executors in sequence:
   1. `FilterExecutor` — drops resolved reports and unsupported `AnomalyKind`s; emits `proposal.skipped` audit for non-resolved drops.
   2. `DedupeGateExecutor` — skips anomalies with an already-active tracked plan; emits `proposal.skipped` audit.
-  3. `DecideExecutor` — asks the LLM (via `ToolCallingAgentFactory`, using a system prompt rendered by `IPromptLibrary`) for a bounded remediation decision with a per-anomaly wall-clock cap. Returns `null` on timeout or unparseable output.
+  3. `DecideExecutor` — asks the LLM (via `ToolCallingAgentFactory`, using a system prompt rendered by `IPromptLibrary`) for a bounded remediation decision with a per-anomaly wall-clock cap. Returns `null` on timeout or unparseable output. If `IObserverChannel` is registered, the agent also has access to the `ask_observer_to_inspect` AI function for live K8s data (**Reverse Context Requests**).
   4. `ValidateExecutor` — checks the operation type against the v1 allow-list, normalises arguments via `OperationArgumentValidator`, and deduplicates within-batch operation keys.
   5. `ProposeExecutor` — calls `propose_plan` via the MCP client; on success emits `propose_plan.succeeded` audit and yields a `RemediationProposal` as workflow output.
 - Successful proposals are emitted as `RemediationProposalBatch` payloads through `IRemediationProposalSink`: logging is always on, JSON file output is opt-in, and HTTP handoff to the Executor is enabled when configured.
 - The Planner may inspect the cluster through the gateway's read-only tools, but it never calls execution tools.
+- If `INFRA_GATE_PLANNER_OBSERVER_BASE_URL` is set, the Planner sends **Plan Progress Notifications** back to the Observer (`/a2a/observer`) at key milestones (`Analyzing`, `PlanProposed`, `NoAction`, `Failed`) via `IObserverChannel`. Progress sends are fire-and-forget; failure is logged as a warning and never aborts planning. See [ADR-0028](../../docs/adr/0028-a2a-bidirectional-observer-planner-channel.md).
 
 ## Guardrails
 

@@ -80,6 +80,8 @@ internal static class ExecutorConventions
         public const string Planner = "infra-gate-planner";
     }
 
+    // "PlannerSender" means the Planner is the caller — the Executor is the receiver.
+    // The Observer also defines a PlannerSender policy with the same semantics (Planner→Observer inbound).
     public static class Policies
     {
         public const string PlannerSender = "PlannerSender";

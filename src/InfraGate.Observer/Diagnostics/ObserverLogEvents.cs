@@ -163,6 +163,21 @@ internal static partial class ObserverLogEvents
         Message = "observer.handoff.a2a_failed errorClass={ErrorClass}")]
     public static partial void LogHandoffA2AFailed(ILogger logger, string errorClass, Exception ex);
 
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "observer.inbound.unknown_intent intent={Intent}")]
+    public static partial void LogInboundUnknownIntent(ILogger logger, string intent);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "observer.inbound.tool_denied toolName={ToolName}")]
+    public static partial void LogInboundToolDenied(ILogger logger, string toolName);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "observer.inbound.tool_call_failed toolName={ToolName}")]
+    public static partial void LogInboundToolCallFailed(ILogger logger, string toolName, Exception ex);
+
     // ── MCP calls ───────────────────────────────────────────────
 
     [LoggerMessage(

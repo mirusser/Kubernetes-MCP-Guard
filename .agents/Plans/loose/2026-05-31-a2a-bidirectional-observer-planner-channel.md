@@ -96,8 +96,8 @@ ArgumentsJson; }`; and a `ToolResponsePayload { bool IsError; string ResultJson;
 constants (`Analyzing`, `PlanProposed`, `NoAction`, `Failed`) live next to it.
 
 **Acceptance criteria:**
-- [ ] Envelope + payloads compile in `InfraGate.Observer.Contracts` and round-trip through `System.Text.Json`.
-- [ ] Stage values are constants (no magic strings), per repo `code-standards`.
+- [x] Envelope + payloads compile in `InfraGate.Observer.Contracts` and round-trip through `System.Text.Json`.
+- [x] Stage values are constants (no magic strings), per repo `code-standards`.
 
 **Verification:** `dotnet build src/InfraGate.Observer.Contracts`; a serialization round-trip unit test.
 **Dependencies:** None.
@@ -113,9 +113,9 @@ A2AInboundEndpointPath)` (e.g. `/a2a/observer`). Add JWT bearer + a `PlannerSend
 (`azp == infra-gate-planner`), mirroring the Planner's `ObserverSender`. Unknown `Intent` → graceful error.
 
 **Acceptance criteria:**
-- [ ] Observer exposes the A2A endpoint; a `progress` envelope produces one `handoff.progress` audit entry tagged with `CycleId`/`Stage`.
-- [ ] Requests without a valid `infra-gate-planner` token are rejected (401/403).
-- [ ] Unknown intent returns a clean error, not an unhandled exception.
+- [x] Observer exposes the A2A endpoint; a `progress` envelope produces one `handoff.progress` audit entry tagged with `CycleId`/`Stage`.
+- [x] Requests without a valid `infra-gate-planner` token are rejected (401/403).
+- [x] Unknown intent returns a clean error, not an unhandled exception.
 
 **Verification:** `dotnet test tests/InfraGate.Observer.Tests/` (handler unit tests + auth policy test).
 **Dependencies:** Task 1.
@@ -132,9 +132,9 @@ token's `azp`/audience must satisfy the Observer's `PlannerSender` policy (Keycl
 Risks).
 
 **Acceptance criteria:**
-- [ ] `IObserverChannel.SendProgressAsync(...)` delivers a well-formed `progress` envelope to the Observer endpoint with a bearer token.
-- [ ] Delivery failure is swallowed-and-logged (warning + metric), never thrown to the caller.
-- [ ] No-op/disabled when `ObserverBaseUrl` is unset (parity with the optional-sink pattern).
+- [x] `IObserverChannel.SendProgressAsync(...)` delivers a well-formed `progress` envelope to the Observer endpoint with a bearer token.
+- [x] Delivery failure is swallowed-and-logged (warning + metric), never thrown to the caller.
+- [x] No-op/disabled when `ObserverBaseUrl` is unset (parity with the optional-sink pattern).
 
 **Verification:** `dotnet test tests/InfraGate.Planner.Tests/` (channel unit test with a fake agent/transport).
 **Dependencies:** Task 1. (Parallelizable with Task 2 once the contract is fixed.)
@@ -148,9 +148,9 @@ Risks).
 `batch.CycleId` (already present). Progress sends must not block or fail batch processing.
 
 **Acceptance criteria:**
-- [ ] A processed batch emits the ordered sequence `Analyzing` → (`PlanProposed` | `NoAction`) for its `CycleId`.
-- [ ] A batch whose processing throws emits `Failed`.
-- [ ] The remediation path is unchanged; a failing progress send does not abort processing (unit test asserts this).
+- [x] A processed batch emits the ordered sequence `Analyzing` → (`PlanProposed` | `NoAction`) for its `CycleId`.
+- [x] A batch whose processing throws emits `Failed`.
+- [x] The remediation path is unchanged; a failing progress send does not abort processing (unit test asserts this).
 
 **Verification:** `dotnet test tests/InfraGate.Planner.Tests/` (BatchProcessor test with a fake `IObserverChannel`).
 **Dependencies:** Tasks 2, 3.
@@ -158,7 +158,7 @@ Risks).
 **Estimated scope:** Medium.
 
 ### Checkpoint A: Progress trace end-to-end
-- [ ] `dotnet build` clean; `dotnet test tests/InfraGate.Planner.Tests/ tests/InfraGate.Observer.Tests/` green.
+- [x] `dotnet build` clean; `dotnet test tests/InfraGate.Planner.Tests/ tests/InfraGate.Observer.Tests/` green.
 - [ ] Manual E2E (both services + Keycloak up): one discovered anomaly yields, in the **Observer Audit Outbox**, `handoff.progress: Analyzing` → `handoff.progress: PlanProposed` for the matching `CycleId`.
 - [ ] Killing the Planner mid-plan leaves the Observer healthy; a progress send to a down Observer logs a warning and planning still completes.
 - [ ] Review with human before starting Phase 2.
@@ -172,8 +172,8 @@ against the Observer's existing allowed-tools set (`AgentGuardrailPolicy`); if a
 `IsError` with a reason (and audit `handoff.tool_denied`). Audit accepted calls (`handoff.tool_served`).
 
 **Acceptance criteria:**
-- [ ] An allowed read-only tool request returns the tool result; a disallowed tool is rejected without execution.
-- [ ] Both outcomes are audited; the read-only whitelist is enforced server-side (defence in depth).
+- [x] An allowed read-only tool request returns the tool result; a disallowed tool is rejected without execution.
+- [x] Both outcomes are audited; the read-only whitelist is enforced server-side (defence in depth).
 
 **Verification:** `dotnet test tests/InfraGate.Observer.Tests/` (allowed + denied cases with a fake toolset).
 **Dependencies:** Task 2.
@@ -187,9 +187,9 @@ against the Observer's existing allowed-tools set (`AgentGuardrailPolicy`); if a
 Keep it deterministic plumbing; the model chooses when to call it.
 
 **Acceptance criteria:**
-- [ ] The Planner agent has a callable tool that round-trips a read-only request to the Observer and returns the result.
-- [ ] The tool surfaces Observer-side denials/errors as tool errors (no crash).
-- [ ] A `DecideExecutor` test shows the tool is offered and its result is usable by the agent.
+- [x] The Planner agent has a callable tool that round-trips a read-only request to the Observer and returns the result.
+- [x] The tool surfaces Observer-side denials/errors as tool errors (no crash).
+- [x] A `DecideExecutor` test shows the tool is offered and its result is usable by the agent.
 
 **Verification:** `dotnet test tests/InfraGate.Planner.Tests/` (tool + DecideExecutor wiring).
 **Dependencies:** Tasks 3, 5.
@@ -202,8 +202,8 @@ Keep it deterministic plumbing; the model chooses when to call it.
 and to prefer proposing `NoAction` over guessing.
 
 **Acceptance criteria:**
-- [ ] Prompt documents the tool and when to use it; existing prompt tests/snapshots updated.
-- [ ] No regression in the deterministic `propose_plan` path.
+- [x] Prompt documents the tool and when to use it; existing prompt tests/snapshots updated.
+- [x] No regression in the deterministic `propose_plan` path.
 
 **Verification:** `dotnet test tests/InfraGate.Planner.Tests/`; manual transcript review.
 **Dependencies:** Task 6.
@@ -211,7 +211,7 @@ and to prefer proposing `NoAction` over guessing.
 **Estimated scope:** Small.
 
 ### Checkpoint B: Question/answer end-to-end
-- [ ] `dotnet test` green for both services.
+- [x] `dotnet test` green for both services (0 failures, full suite).
 - [ ] Manual E2E: a low-context anomaly causes the Planner to call `ask_observer_to_inspect`; the Observer runs the read-only tool and answers; the Planner incorporates it. Observer Audit Outbox shows `handoff.tool_served`.
 - [ ] A request for a non-whitelisted tool is denied and audited (`handoff.tool_denied`).
 
@@ -225,7 +225,7 @@ questions). Add `CONTEXT.md` glossary terms: **Plan Progress Notification**, **R
 calls; read-only whitelist on reverse requests).
 
 **Acceptance criteria:**
-- [ ] Flow doc + READMEs reflect reality; `CONTEXT.md` defines the three terms; ADR 0028 committed.
+- [x] Flow doc + READMEs reflect reality; `CONTEXT.md` defines the three terms; ADR 0028 committed.
 
 **Verification:** docs review; links resolve; glossary terms used consistently in code/comments.
 **Dependencies:** Tasks 4, 6.
@@ -233,10 +233,10 @@ calls; read-only whitelist on reverse requests).
 **Estimated scope:** Small.
 
 ### Checkpoint: Complete
-- [ ] All acceptance criteria met; full Planner + Observer test suites green.
-- [ ] Observer→Planner handoff unchanged; Planner→Observer progress + questions working and audited.
-- [ ] Read-only whitelist enforced on reverse requests; auth enforced both directions.
-- [ ] Ready for review.
+- [x] All acceptance criteria met; full Planner + Observer test suites green.
+- [x] Observer→Planner handoff unchanged; Planner→Observer progress + questions working and audited.
+- [x] Read-only whitelist enforced on reverse requests; auth enforced both directions.
+- [x] Ready for review.
 
 ## Risks and Mitigations
 

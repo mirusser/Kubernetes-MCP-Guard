@@ -36,6 +36,7 @@ builder.Configuration.AddInfraGateEnvironmentVariables(mappings =>
     mappings.Map(PlannerConventions.EnvironmentVariables.LlmApiKey, PlannerConventions.ConfigurationKeys.LlmApiKey);
     mappings.Map(PlannerConventions.EnvironmentVariables.FileSinkRoot, PlannerConventions.ConfigurationKeys.FileSinkRoot);
     mappings.Map(PlannerConventions.EnvironmentVariables.AuditConnectionString, PlannerConventions.ConfigurationKeys.AuditConnectionString);
+    mappings.Map(PlannerConventions.EnvironmentVariables.ObserverBaseUrl, PlannerConventions.ConfigurationKeys.ObserverBaseUrl);
     RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
 });
 
@@ -125,6 +126,9 @@ builder.Services.AddSingleton<PlannerDedupeStore>();
 builder.Services.AddHttpClient(PlannerConventions.HttpClients.ExecutorHandoff)
     .AddClientCredentialsBearerHandler();
 
+builder.Services.AddHttpClient(PlannerConventions.HttpClients.ObserverRequest)
+    .AddClientCredentialsBearerHandler();
+
 builder.Services.AddSingleton<LoggingRemediationProposalSink>();
 builder.Services.AddSingleton<IRemediationProposalSink>(sp =>
 {
@@ -161,6 +165,20 @@ if (!string.IsNullOrWhiteSpace(auditConnectionString))
     await PostgresAuditOutboxMigrationRunner.ApplyAsync(
         auditDataSource, AuditOutboxConventions.Streams.Planner, migrationsDir, CancellationToken.None).ConfigureAwait(false);
     builder.Services.AddPlannerAuditOutbox(auditDataSource);
+}
+
+if (!string.IsNullOrEmpty(plannerOptions.ObserverBaseUrl))
+{
+    builder.Services.AddSingleton<IObserverChannel>(sp =>
+    {
+        var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+        var httpClient = httpClientFactory.CreateClient(PlannerConventions.HttpClients.ObserverRequest);
+#pragma warning disable MEAI001 // Experimental A2A preview package — accepted per plan
+        var agent = new A2AClient(new Uri(plannerOptions.ObserverBaseUrl), httpClient)
+            .AsAIAgent(name: PlannerConventions.A2AObserverAgentName);
+#pragma warning restore MEAI001
+        return new ObserverChannel(agent, sp.GetRequiredService<ILogger<ObserverChannel>>());
+    });
 }
 
 builder.Services.AddSingleton<BatchProcessor>();

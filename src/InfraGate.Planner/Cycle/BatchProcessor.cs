@@ -5,6 +5,8 @@ using InfraGate.Planner.Audit;
 using InfraGate.Planner.Cycle.Workflow;
 using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
+using InfraGate.Planner.Handoff;
+using InfraGate.Planner.Llm;
 using InfraGate.AgentMcp;
 using InfraGate.Prompts;
 using Microsoft.Agents.AI.Workflows;
@@ -29,6 +31,7 @@ internal sealed class BatchProcessor : BackgroundService
     private readonly Counter<long>? proposeFailedCounter;
     private readonly AgentGuardrailPolicy? guardrailPolicy;
     private readonly AgentGuardrailMetrics? guardrailMetrics;
+    private readonly IObserverChannel? observerChannel;
 
     public BatchProcessor( // NOSONAR:S107 — orchestrator dependencies are explicit production seams.
         IOptionsMonitor<PlannerOptions> optionsMonitor,
@@ -42,7 +45,8 @@ internal sealed class BatchProcessor : BackgroundService
         Meter? meter = null,
         IPlannerAuditOutbox? auditOutbox = null,
         AgentGuardrailPolicy? guardrailPolicy = null,
-        AgentGuardrailMetrics? guardrailMetrics = null)
+        AgentGuardrailMetrics? guardrailMetrics = null,
+        IObserverChannel? observerChannel = null)
     {
         this.optionsMonitor = optionsMonitor;
         this.queue = queue;
@@ -57,10 +61,13 @@ internal sealed class BatchProcessor : BackgroundService
         proposeFailedCounter = PlannerMetrics.CreateProposeFailedCounter(meter);
         this.guardrailPolicy = guardrailPolicy;
         this.guardrailMetrics = guardrailMetrics;
+        this.observerChannel = observerChannel;
     }
 
     internal async Task ProcessBatchAsync(AnomalyHandoffBatch batch, CancellationToken shutdownToken)
     {
+        await SendProgressSafeAsync(batch.CycleId, PlanProgressStage.Analyzing, shutdownToken).ConfigureAwait(false);
+
         var opts = optionsMonitor.CurrentValue;
         using var batchCts = CancellationTokenSource.CreateLinkedTokenSource(shutdownToken);
         batchCts.CancelAfter(TimeSpan.FromSeconds(opts.BatchWallClockCapSeconds));
@@ -68,14 +75,22 @@ internal sealed class BatchProcessor : BackgroundService
         // Throws OCE immediately if shutdown CT was already cancelled.
         var tools = await mcpClient.GetAgentToolsAsync(batchCts.Token).ConfigureAwait(false);
 
-        if (batch.Reports.Count == 0) return;
+        if (batch.Reports.Count == 0)
+        {
+            await SendProgressSafeAsync(batch.CycleId, PlanProgressStage.NoAction, shutdownToken).ConfigureAwait(false);
+            return;
+        }
 
         var systemPrompt = await promptLibrary.RenderAsync(
             PlannerConventions.Prompts.SystemPromptTemplateName,
             emptyPromptArgs,
             batchCts.Token).ConfigureAwait(false);
 
-        var (workflow, _) = BuildWorkflow(opts, batch, tools, systemPrompt);
+        IReadOnlyList<AITool> agentTools = observerChannel is null
+            ? tools
+            : [.. tools, AskObserverTool.Create(observerChannel, batch.CycleId)];
+
+        var (workflow, _) = BuildWorkflow(opts, batch, agentTools, systemPrompt);
 
         var run = await InProcessExecution
             .RunAsync<AnomalyHandoffBatch>(workflow, batch, cancellationToken: batchCts.Token)
@@ -103,7 +118,25 @@ internal sealed class BatchProcessor : BackgroundService
                     shutdownToken).ConfigureAwait(false);
 
                 PlannerLogEvents.LogHandoffPublished(logger, batch.CycleId, proposals.Count);
+                await SendProgressSafeAsync(batch.CycleId, PlanProgressStage.PlanProposed, shutdownToken, proposalCount: proposals.Count).ConfigureAwait(false);
             }
+            else
+            {
+                await SendProgressSafeAsync(batch.CycleId, PlanProgressStage.NoAction, shutdownToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async Task SendProgressSafeAsync(string cycleId, string stage, CancellationToken cancellationToken, string? detail = null, int? proposalCount = null)
+    {
+        if (observerChannel is null) return;
+        try
+        {
+            await observerChannel.SendProgressAsync(cycleId, stage, detail, proposalCount, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            PlannerLogEvents.LogProgressSendFailed(logger, cycleId, stage, ex);
         }
     }
 
@@ -124,6 +157,7 @@ internal sealed class BatchProcessor : BackgroundService
                 catch (Exception ex)
                 {
                     PlannerLogEvents.LogBatchProcessingFailed(logger, batch.CycleId, ex);
+                    await SendProgressSafeAsync(batch.CycleId, PlanProgressStage.Failed, stoppingToken, detail: ex.Message).ConfigureAwait(false);
                 }
             }
         }

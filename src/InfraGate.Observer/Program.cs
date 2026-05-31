@@ -2,6 +2,7 @@ using System.Diagnostics.Metrics;
 using System.Reflection;
 using A2A;
 using InfraGate.AgentGuardrails;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using InfraGate.AgentLlm;
 using InfraGate.AgentMcp;
 using InfraGate.AuditOutbox;
@@ -22,6 +23,7 @@ using InfraGate.Prompts;
 using InfraGate.RuntimeSafety;
 using ModelContextProtocol.Protocol;
 using Npgsql;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -86,6 +88,34 @@ builder.Services.AddClientCredentialsTokenProvider(authOptions);
 
 builder.Services.AddHttpClient(ObserverConventions.HttpClients.PlannerHandoff)
     .AddClientCredentialsBearerHandler();
+
+var jwtAuthority = builder.Configuration[ObserverConventions.EnvironmentVariables.OAuthAuthority] ?? string.Empty;
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.Authority = jwtAuthority;
+        options.MapInboundClaims = false;
+        options.RequireHttpsMetadata = false;
+
+        options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+        {
+            ValidateAudience = true,
+            ValidAudiences =
+            [
+                ObserverConventions.ServiceClients.Planner,
+                builder.Configuration[ObserverConventions.EnvironmentVariables.ClientId] ?? ObserverConventions.DefaultClientId,
+                "account" // Standard Keycloak token audience
+            ]
+        };
+    });
+
+builder.Services
+    .AddAuthorizationBuilder()
+    .AddPolicy(ObserverConventions.Policies.PlannerSender, policy =>
+        policy
+            .RequireAuthenticatedUser()
+            .RequireClaim(ObserverConventions.Claims.AuthorizedParty, ObserverConventions.ServiceClients.Planner));
 
 builder.Services.AddInfraGateAgentMcp(new AgentMcpOptions
 {
@@ -188,6 +218,20 @@ builder.Services.AddSingleton<IAnomalyHandoffSink>(sp =>
     return new CompositeAnomalyHandoffSink(sinks, logger);
 });
 
+builder.Services.AddSingleton<ObserverInboundAgentHandler>();
+#pragma warning disable MEAI001 // Experimental A2A preview package — accepted per plan
+builder.Services.AddKeyedSingleton<A2AServer>(ObserverConventions.A2AInboundAgentName, (sp, _) =>
+{
+    var handler = sp.GetRequiredService<ObserverInboundAgentHandler>();
+    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+    return new A2AServer(
+        handler,
+        new InMemoryTaskStore(),
+        new ChannelEventNotifier(),
+        loggerFactory.CreateLogger<A2AServer>());
+});
+#pragma warning restore MEAI001
+
 string? auditConnectionString = builder.Configuration[ObserverConventions.ConfigurationKeys.AuditConnectionString];
 if (!string.IsNullOrWhiteSpace(auditConnectionString))
 {
@@ -202,8 +246,15 @@ var app = builder.Build();
 
 await ConnectObserverMcpClientAsync(app).ConfigureAwait(false);
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapObserverHealthEndpoint();
 app.MapObserverObserveNowEndpoint();
+#pragma warning disable MEAI001 // Experimental A2A preview package — accepted per plan
+app.MapA2AHttpJson(ObserverConventions.A2AInboundAgentName, ObserverConventions.A2AInboundEndpointPath)
+   .RequireAuthorization(ObserverConventions.Policies.PlannerSender);
+#pragma warning restore MEAI001
 app.Use(async (context, next) =>
 {
     if (context.Request.Path == "/")

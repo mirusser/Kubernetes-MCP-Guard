@@ -69,6 +69,28 @@ internal static class ObserverConventions
     // A2A agent name used when the Observer constructs an AIAgent against the Planner's A2A endpoint
     public const string A2AHandoffAgentName = "observer-to-planner";
 
+    // A2A server hosted by the Observer for inbound Planner→Observer messages
+    public const string A2AInboundAgentName = "observer-inbound";
+    public const string A2AInboundEndpointPath = "/a2a/observer";
+
+    public static class Claims
+    {
+        public const string AuthorizedParty = "azp";
+    }
+
+    public static class ServiceClients
+    {
+        public const string Planner = "infra-gate-planner";
+    }
+
+    // "PlannerSender" means the Planner is the caller — the Observer is the receiver.
+    // The Executor also defines a PlannerSender policy with the same semantics (Planner→Executor inbound).
+    // Each lives in its own service; there is no cross-service collision.
+    public static class Policies
+    {
+        public const string PlannerSender = "PlannerSender";
+    }
+
     public static class HttpClients
     {
         public const string PlannerHandoff = "PlannerHandoff";

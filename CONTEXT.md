@@ -264,6 +264,18 @@ _Avoid_: Requester, Approver, Gateway Service Identity, user token passthrough
 The act of the **Anomaly Observer** publishing one or more **Anomaly Reports** to the **Remediation Planner**. The contract is `AnomalyHandoffBatch` (defined by the v1 **Anomaly Observer** implementation). The transport uses the Agent-to-Agent (A2A) protocol via `A2AAnomalyHandoffSink` to the **Remediation Planner**'s `/a2a/planner` endpoint, authenticated by **Observer Service Identity** bearer.
 _Avoid_: Plan Envelope, Approval Notification, Approval Grant, Audit Spine event
 
+**Plan Progress Notification**:
+A one-way A2A call the **Remediation Planner** makes to the **Observer Inbound Channel** to report its current planning state for a given `CycleId`. Stages are `Analyzing` (on dequeue), `PlanProposed` (after `propose_plan` succeeds), `NoAction` (empty or no-proposals batch), and `Failed` (on unhandled exception). Each notification is recorded in the **Observer Audit Outbox** as `handoff.progress`. Progress sends are fire-and-forget: a failure is logged as a warning and never aborts planning.
+_Avoid_: webhook push, SSE notification, status callback, progress event
+
+**Reverse Context Request**:
+A request the **Remediation Planner**'s LLM agent sends to the **Observer Inbound Channel** (via the `ask_observer_to_inspect` AI function) when it needs current cluster state before proposing a plan. The Observer executes the named read-only MCP tool against the gateway, enforces the server-side allowed-tools whitelist (`AgentGuardrailPolicy`), and returns the result or a denial. Allowed calls are audited as `handoff.tool_served`; denied calls as `handoff.tool_denied`.
+_Avoid_: reverse handoff, Observer tool proxy, push notification, agent tool call
+
+**Observer Inbound Channel**:
+The A2A server the **Anomaly Observer** hosts at `/a2a/observer` to receive inbound messages from the **Remediation Planner**. A single `ObserverInboundAgentHandler` dispatches on the envelope `Intent` field: `"progress"` → **Plan Progress Notification**; `"tool-request"` → **Reverse Context Request**. Protected by JWT Bearer + `PlannerSender` authorization policy (`azp == infra-gate-planner`).
+_Avoid_: Observer A2A proxy, planner webhook, reverse subscription
+
 **Dedupe Key**:
 The tuple `(AnomalyKind, ResourceKind, Namespace, Name)` that uniquely identifies an anomaly for deduplication purposes. Two **Anomaly Reports** with the same **Dedupe Key** are considered the same underlying anomaly regardless of which **Observation Cycle** produced them.
 _Avoid_: Anomaly Report primary key, resource identity

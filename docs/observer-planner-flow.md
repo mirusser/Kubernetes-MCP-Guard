@@ -2,7 +2,14 @@
 
 This document visualizes the detection, processing, and handoff flow between the autonomous `InfraGate.Observer` service and the analytical `InfraGate.Planner` service.
 
-This document describes the **current** Agent-to-Agent (A2A) handoff architecture.
+This document describes the **current** bidirectional Agent-to-Agent (A2A) channel architecture.
+
+## Channel Overview
+
+The Observer and Planner communicate over two A2A channels:
+
+1. **Observer → Planner (handoff)**: the Observer POSTs an `AnomalyHandoffBatch` to the Planner's A2A endpoint (`/a2a/planner`). This is the original direction and is unchanged.
+2. **Planner → Observer (progress + questions)**: the Planner calls back to the Observer's A2A endpoint (`/a2a/observer`) to deliver **Plan Progress Notifications** and to ask **Reverse Context Requests** (read-only K8s tool calls via `ask_observer_to_inspect`). The Observer is the A2A server; the Planner is the A2A client.
 
 ## Object Flow
 
@@ -29,6 +36,10 @@ flowchart TD
     
     parsedAnomaly -.->|Audit| auditObs[Observer Audit Outbox]
     handoffBatch -.->|Audit| auditPlan[Planner Audit Outbox]
+
+    planAgent -->|A2A: progress| obsInbound[Observer Inbound Handler]
+    planAgent -->|A2A: tool-request| obsInbound
+    obsInbound -.->|Audit| auditObs
 ```
 
 ## Ownership
@@ -140,13 +151,25 @@ sequenceDiagram
     
     loop Background Batch Processor
         Plan->>Plan: Dequeue Batch
+        Plan->>Obs: A2A /a2a/observer — progress: Analyzing
+        Obs->>Obs: Log handoff.progress to Audit Outbox
         Plan->>Plan: Filter out resolved anomalies
         Plan->>Plan: Dedupe Gate (check for active plans)
         Plan->>Gateway: LLM evaluates anomaly + context tools
+        opt LLM calls ask_observer_to_inspect
+            Plan->>Obs: A2A /a2a/observer — tool-request
+            Obs->>Gateway: Read-only MCP tool (whitelist-gated)
+            Obs-->>Plan: ToolResponsePayload
+            Obs->>Obs: Log handoff.tool_served / tool_denied
+        end
         Plan->>Plan: Validate remediation strategy
         Plan->>Gateway: Call propose_plan MCP tool
         Plan->>Plan: Log to Planner Audit Outbox
         Plan->>Exec: HTTP POST RemediationProposalBatch
+        Plan->>Obs: A2A /a2a/observer — progress: PlanProposed | NoAction
+        opt Processing exception
+            Plan->>Obs: A2A /a2a/observer — progress: Failed
+        end
     end
 ```
 

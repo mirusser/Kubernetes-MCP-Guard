@@ -18,6 +18,9 @@ internal static class PlannerConventions
     public const string A2AHandoffEndpointPath = "/a2a/planner";
     public const string A2AHandoffAgentName = "planner-agent";
 
+    // A2A agent name used when the Planner constructs an AIAgent against the Observer's inbound A2A endpoint
+    public const string A2AObserverAgentName = "planner-to-observer";
+
     public const int DefaultAnomalyWallClockCapSeconds = 30;
     public const int MinAnomalyWallClockCapSeconds = 5;
     public const int MaxAnomalyWallClockCapSeconds = 120;
@@ -35,6 +38,7 @@ internal static class PlannerConventions
         public const string AspNetCoreUrls = "ASPNETCORE_URLS";
         public const string GatewayBaseUrl = "INFRA_GATE_PLANNER_GATEWAY_BASE_URL";
         public const string ExecutorHandoffUrl = "INFRA_GATE_PLANNER_EXECUTOR_HANDOFF_URL";
+        public const string ObserverBaseUrl = "INFRA_GATE_PLANNER_OBSERVER_BASE_URL";
         public const string AnomalyWallClockCapSeconds = "INFRA_GATE_PLANNER_ANOMALY_WALL_CLOCK_CAP_SECONDS";
         public const string BatchWallClockCapSeconds = "INFRA_GATE_PLANNER_BATCH_WALL_CLOCK_CAP_SECONDS";
         public const string MaxToolIterations = "INFRA_GATE_PLANNER_MAX_TOOL_ITERATIONS";
@@ -54,6 +58,7 @@ internal static class PlannerConventions
         public const string Planner = "InfraGate:Planner";
         public const string GatewayBaseUrl = "InfraGate:Planner:GatewayBaseUrl";
         public const string ExecutorHandoffUrl = "InfraGate:Planner:ExecutorHandoffUrl";
+        public const string ObserverBaseUrl = "InfraGate:Planner:ObserverBaseUrl";
         public const string AnomalyWallClockCapSeconds = "InfraGate:Planner:AnomalyWallClockCapSeconds";
         public const string BatchWallClockCapSeconds = "InfraGate:Planner:BatchWallClockCapSeconds";
         public const string MaxToolIterations = "InfraGate:Planner:MaxToolIterations";
@@ -168,5 +173,6 @@ internal static class PlannerConventions
     public static class HttpClients
     {
         public const string ExecutorHandoff = "ExecutorHandoff";
+        public const string ObserverRequest = "ObserverRequest";
     }
 }
