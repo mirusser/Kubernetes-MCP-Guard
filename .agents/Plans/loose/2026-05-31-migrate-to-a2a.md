@@ -142,6 +142,20 @@ Two design choices (decided after a feasibility pass against official docs + sou
   ```
 - **Packages/versions:** preview accepted; pin `1.8.0-preview.260528.1`. Planner: `Microsoft.Agents.AI.Hosting.A2A.AspNetCore`. Observer: `Microsoft.Agents.AI.A2A` (+ optional explicit `A2A`).
 
+## Implementation Notes (post-implementation)
+
+Discoveries made during implementation that deviate from or refine the plan above:
+
+- **`AddA2AServer(string)` requires a keyed `AIAgent` — bypassed.** The `services.AddA2AServer(string agentName)` overload calls `sp.GetRequiredKeyedService<AIAgent>(agentName)` internally before invoking `CreateA2AServer`. Since we have no `AIAgent` to register (the whole point is a custom handler), this overload cannot be used. Instead, the `A2AServer` is constructed directly and registered as a keyed singleton — `MapA2AHttpJson` only resolves `GetKeyedService<A2AServer>(agentName)`, so registration still works. See `Program.cs` in `InfraGate.Planner`.
+
+- **`A2AAnomalyHandoffSink` takes `AIAgent` (not `HttpClient`).** The plan described constructing `new A2AClient(uri, httpClient).AsAIAgent()` inside the sink. In practice, that construction was moved to `Program.cs` and the sink takes the resulting `AIAgent` directly. This keeps the sink testable with a plain fake subclass — no stub HTTP handler or A2A JSON-RPC knowledge required in tests.
+
+- **`#pragma warning disable MEAI001` required throughout.** All A2A API surface (`IAgentHandler`, `AgentEventQueue`, `RequestContext`, `A2AServer`, `MapA2AHttpJson`, `A2AClient.AsAIAgent`) carries `[Experimental(DiagnosticIds.Experiments.AIResponseContinuations)]`. Suppressions are placed only at the two use sites in `Program.cs` files, and inside the handler itself.
+
+- **`AgentEventQueue.Complete(null)` closes the queue.** After `ExecuteAsync` returns, callers must call `eventQueue.Complete(null)` to signal the end of the async-enumerable stream — the `await foreach` on the queue blocks until this is called. Tests that drain the queue follow the same `ExecuteAsync → Complete → await readerTask` pattern used by the framework's own tests.
+
+- **`FakeA2AAgent` override signatures must match base defaults exactly.** The Meziantou analyzer (MA0061) enforces that overriding methods do not omit default parameter values that the abstract base declares. All optional parameters (`AgentSession? session = null`, `AgentRunOptions? options = null`, `CancellationToken cancellationToken = default`) must be re-declared in overrides.
+
 ## Verification Notes (sources)
 - A2A hosting (`AddA2AServer`, `MapA2AHttpJson`, custom `IAgentHandler`, in-memory store warning): https://learn.microsoft.com/agent-framework/hosting/agent-to-agent
 - A2A client (direct config, `A2AClient.AsAIAgent`, `A2AClientOptions`): https://learn.microsoft.com/agent-framework/agents/providers/agent-to-agent
