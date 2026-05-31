@@ -366,6 +366,98 @@ public sealed class AppSettingsRendererTests
         Assert.False(doc.RootElement.GetProperty("InfraGate").TryGetProperty("Executor", out _));
     }
 
+    [Fact]
+    public void Render_WithRuntimeMode_WritesRuntimeSection()
+    {
+        var profile = CreateMinimalProfile() with { RuntimeMode = "mcp-stdio" };
+
+        string result = AppSettingsRenderer.Render("config.yaml", profile);
+
+        using var doc = JsonDocument.Parse(result);
+        JsonElement runtime = doc.RootElement.GetProperty("InfraGate").GetProperty("Runtime");
+        Assert.Equal("mcp-stdio", runtime.GetProperty("Environment").GetString());
+    }
+
+    [Fact]
+    public void Render_WithGatewayValues_WritesGatewaySection()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            Gateway = new GatewayProfile("http://localhost:3001", "InfraGate.McpServer.dll", "/audit")
+        };
+
+        string result = AppSettingsRenderer.Render("config.yaml", profile);
+
+        using var doc = JsonDocument.Parse(result);
+        JsonElement gateway = doc.RootElement.GetProperty("InfraGate").GetProperty("Gateway");
+        Assert.Equal("http://localhost:3001", gateway.GetProperty("AspNetCoreUrls").GetString());
+        Assert.Equal("InfraGate.McpServer.dll", gateway.GetProperty("DownstreamAssembly").GetString());
+        Assert.Equal("/audit", gateway.GetProperty("GuardAuditRoot").GetString());
+    }
+
+    [Fact]
+    public void Render_WithAuthValues_WritesAuthSection()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            IdentityProvider = new IdentityProviderProfile(null, "http://auth:8080", null, "gateway", "openid", "true")
+        };
+
+        string result = AppSettingsRenderer.Render("config.yaml", profile);
+
+        using var doc = JsonDocument.Parse(result);
+        JsonElement auth = doc.RootElement.GetProperty("InfraGate").GetProperty("Auth");
+        Assert.Equal("http://auth:8080", auth.GetProperty("OAuthAuthority").GetString());
+        Assert.Equal("gateway", auth.GetProperty("OAuthResource").GetString());
+        Assert.Equal("openid", auth.GetProperty("OAuthScope").GetString());
+    }
+
+    [Fact]
+    public void Render_RunMigrationsOnStartupOnly_WritesPostgresWithMigrations()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            GenericApprovalCore = new GenericApprovalCoreProfile("/data", null, true)
+        };
+
+        string result = AppSettingsRenderer.Render("config.yaml", profile);
+
+        using var doc = JsonDocument.Parse(result);
+        JsonElement approval = doc.RootElement.GetProperty("InfraGate").GetProperty("Approval");
+        JsonElement postgres = approval.GetProperty("Postgres");
+        Assert.True(postgres.GetProperty("RunMigrationsOnStartup").GetBoolean());
+        Assert.False(postgres.TryGetProperty("ConnectionString", out _));
+    }
+
+    [Fact]
+    public void Render_NullObserver_OmitsObserverSection()
+    {
+        var profile = CreateMinimalProfile() with { Observer = null };
+
+        string result = AppSettingsRenderer.Render("config.yaml", profile);
+
+        using var doc = JsonDocument.Parse(result);
+        Assert.False(doc.RootElement.GetProperty("InfraGate").TryGetProperty("Observer", out _));
+    }
+
+    [Fact]
+    public void Render_ObserverWithAllowedNamespaces_WritesAllowedNamespacesArray()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            Observer = new ObserverProfile(
+                "http://observer:3002",
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                ["ns1", "ns2"])
+        };
+
+        string result = AppSettingsRenderer.Render("config.yaml", profile);
+
+        using var doc = JsonDocument.Parse(result);
+        JsonElement observer = doc.RootElement.GetProperty("InfraGate").GetProperty("Observer");
+        Assert.Equal(2, observer.GetProperty("AllowedNamespaces").GetArrayLength());
+    }
+
     private static RunProfile CreateMinimalProfile() =>
 
         new(

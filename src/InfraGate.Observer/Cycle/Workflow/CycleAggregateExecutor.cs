@@ -7,7 +7,7 @@ using Microsoft.Agents.AI.Workflows;
 namespace InfraGate.Observer.Cycle.Workflow;
 
 [YieldsOutput(typeof(CycleResult))]
-internal sealed class CycleAggregateExecutor(
+internal sealed class CycleAggregateExecutor( // NOSONAR:S107 — DI constructor; all params are required services.
     string id,
     int suppressionWindow,
     int resolutionThreshold,
@@ -22,14 +22,14 @@ internal sealed class CycleAggregateExecutor(
     Counter<long>? reportsEmittedCounter,
     Histogram<double>? cycleDurationHistogram) : Executor<NamespaceParseResult>(id)
 {
-    private readonly List<NamespaceParseResult> _results = [];
+    private readonly List<NamespaceParseResult> results = [];
 
     public override ValueTask HandleAsync(
         NamespaceParseResult message,
         IWorkflowContext context,
         CancellationToken cancellationToken = default)
     {
-        _results.Add(message);
+        results.Add(message);
         return default;
     }
 
@@ -37,10 +37,10 @@ internal sealed class CycleAggregateExecutor(
         IWorkflowContext context,
         CancellationToken cancellationToken = default)
     {
-        var cycleId = _results.Count > 0 ? _results[0].CycleId : Guid.NewGuid().ToString("D");
-        var allReports = _results.SelectMany(r => r.Reports).ToList();
-        var totalToolCalls = _results.Sum(r => r.ToolCallsUsed);
-        var totalDisagreements = _results.Sum(r => r.SeverityDisagreements);
+        var cycleId = results.Count > 0 ? results[0].CycleId : Guid.NewGuid().ToString("D");
+        var allReports = results.SelectMany(r => r.Reports).ToList();
+        var totalToolCalls = results.Sum(r => r.ToolCallsUsed);
+        var totalDisagreements = results.Sum(r => r.SeverityDisagreements);
 
         toolCallsCounter?.Add(totalToolCalls);
 
@@ -118,57 +118,57 @@ internal sealed class CycleAggregateExecutor(
         foreach (var report in detectedReports)
         {
             await auditOutbox!.AppendAsync(new ObserverAuditEntry(
-                EventName: ObserverAuditEvents.AnomalyDetected,
-                Payload: new
-                {
-                    report.AnomalyId,
-                    kind = report.Kind.ToString("G"),
-                    severity = report.Severity.ToString("G"),
-                    target = $"{report.Target.Kind}/{report.Target.Namespace}/{report.Target.Name}",
-                    report.Summary,
-                },
-                ActorSubject: "service:observer",
-                CycleId: cycleId,
-                AnomalyId: report.AnomalyId,
-                DedupeKey: DedupeKeyString(report),
-                Outcome: report.Status == AnomalyStatus.Resolved ? "resolved" : "active"),
+                    EventName: ObserverAuditEvents.AnomalyDetected,
+                    Payload: new
+                    {
+                        report.AnomalyId,
+                        kind = report.Kind.ToString("G"),
+                        severity = report.Severity.ToString("G"),
+                        target = $"{report.Target.Kind}/{report.Target.Namespace}/{report.Target.Name}",
+                        report.Summary,
+                    },
+                    ActorSubject: "service:observer",
+                    CycleId: cycleId,
+                    AnomalyId: report.AnomalyId,
+                    DedupeKey: DedupeKeyString(report),
+                    Outcome: report.Status == AnomalyStatus.Resolved ? "resolved" : "active"),
                 cancellationToken).ConfigureAwait(false);
         }
 
         foreach (var report in suppressedReports)
         {
             await auditOutbox!.AppendAsync(new ObserverAuditEntry(
-                EventName: ObserverAuditEvents.AnomalySuppressed,
-                Payload: new
-                {
-                    report.AnomalyId,
-                    kind = report.Kind.ToString("G"),
-                    severity = report.Severity.ToString("G"),
-                    target = $"{report.Target.Kind}/{report.Target.Namespace}/{report.Target.Name}",
-                },
-                ActorSubject: "service:observer",
-                CycleId: cycleId,
-                AnomalyId: report.AnomalyId,
-                DedupeKey: DedupeKeyString(report),
-                Outcome: "suppressed"),
+                    EventName: ObserverAuditEvents.AnomalySuppressed,
+                    Payload: new
+                    {
+                        report.AnomalyId,
+                        kind = report.Kind.ToString("G"),
+                        severity = report.Severity.ToString("G"),
+                        target = $"{report.Target.Kind}/{report.Target.Namespace}/{report.Target.Name}",
+                    },
+                    ActorSubject: "service:observer",
+                    CycleId: cycleId,
+                    AnomalyId: report.AnomalyId,
+                    DedupeKey: DedupeKeyString(report),
+                    Outcome: "suppressed"),
                 cancellationToken).ConfigureAwait(false);
         }
 
         foreach (var report in resolvedReports)
         {
             await auditOutbox!.AppendAsync(new ObserverAuditEntry(
-                EventName: ObserverAuditEvents.AnomalyResolved,
-                Payload: new
-                {
-                    report.AnomalyId,
-                    kind = report.Kind.ToString("G"),
-                    target = $"{report.Target.Kind}/{report.Target.Namespace}/{report.Target.Name}",
-                },
-                ActorSubject: "service:observer",
-                CycleId: cycleId,
-                AnomalyId: report.AnomalyId,
-                DedupeKey: DedupeKeyString(report),
-                Outcome: "resolved"),
+                    EventName: ObserverAuditEvents.AnomalyResolved,
+                    Payload: new
+                    {
+                        report.AnomalyId,
+                        kind = report.Kind.ToString("G"),
+                        target = $"{report.Target.Kind}/{report.Target.Namespace}/{report.Target.Name}",
+                    },
+                    ActorSubject: "service:observer",
+                    CycleId: cycleId,
+                    AnomalyId: report.AnomalyId,
+                    DedupeKey: DedupeKeyString(report),
+                    Outcome: "resolved"),
                 cancellationToken).ConfigureAwait(false);
         }
     }

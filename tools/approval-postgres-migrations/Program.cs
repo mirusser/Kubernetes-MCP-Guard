@@ -16,8 +16,8 @@ for (int i = 0; i < args.Length; i++)
         connectionString = args[i + 1];
         break;
     }
-}
 
+}
 if (string.IsNullOrWhiteSpace(connectionString))
 {
     await Console.Error.WriteLineAsync("--connection-string is required.").ConfigureAwait(false);

@@ -26,6 +26,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         public List<AnomalyOutputItem> Anomalies { get; init; } = [];
     }
 
+#pragma warning disable S1144
     private sealed class AnomalyOutputItem
     {
         public string? Kind { get; init; }
@@ -40,6 +41,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         public string? Namespace { get; init; }
         public string? Name { get; init; }
     }
+#pragma warning restore S1144
 
     private static readonly ChatResponseFormat observerResponseFormat =
         ChatResponseFormat.ForJsonSchema<AnomalyBatchOutput>();
@@ -204,7 +206,8 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
             string ns = namespaces[i];
             string systemPrompt = renderedPrompts[ns];
 
-            var (agent, getCount) = agentFactory.Create($"observer-{ns}", systemPrompt, tools, opts.MaxToolIterations, observerResponseFormat, guardrailPolicy);
+            var (agent, getCount) = agentFactory.Create($"observer-{ns}", systemPrompt, tools, opts.MaxToolIterations,
+                observerResponseFormat, guardrailPolicy);
             var agentBinding = agent.BindAsExecutor(new AIAgentHostOptions { ForwardIncomingMessages = false });
 
             ExecutorBinding snap = new SnapshotExecutor($"snapshot-{i}", ns, snapshotFetcher, logger);
@@ -271,6 +274,4 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
             CycleWorkflowInput message, IWorkflowContext context, CancellationToken cancellationToken = default)
             => ValueTask.FromResult(message);
     }
-
-
 }

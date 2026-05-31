@@ -11,7 +11,7 @@ using ModelContextProtocol.Protocol;
 
 namespace InfraGate.McpGateway;
 
-internal sealed class GatewayToolDispatcher(
+internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor; all params are required services.
     DownstreamToolRegistry registry,
     GuardedToolRunner guardedRunner,
     IDomainAdapter domainAdapter,
@@ -91,7 +91,8 @@ internal sealed class GatewayToolDispatcher(
         var synthesizedScopes = ToolScopeCatalog.GetSynthesizedScopes(toolName);
         if (synthesizedScopes is not null)
         {
-            var scopeResult = await scopeGuard.RequireAnyScopeAsync(toolName, synthesizedScopes.ToArray()).ConfigureAwait(false);
+            var scopeResult = await scopeGuard.RequireAnyScopeAsync(toolName, synthesizedScopes.ToArray())
+                .ConfigureAwait(false);
             if (scopeResult is not null)
             {
                 return scopeResult;
@@ -204,7 +205,7 @@ internal sealed class GatewayToolDispatcher(
         if (!planResult.Succeeded || planResult.Envelope is null)
         {
             return await HandlePlanBuildFailureAsync(
-                toolName, mutationToolName, args, identity, planResult, requestHasFindings, ct)
+                    toolName, mutationToolName, args, identity, planResult, requestHasFindings, ct)
                 .ConfigureAwait(false);
         }
 
@@ -379,8 +380,7 @@ internal sealed class GatewayToolDispatcher(
             }
 
             await Task.Delay(delay, TimeProvider.System, ct).ConfigureAwait(false);
-        }
-        while (true);
+        } while (true);
 
         var json = PlanStatusResponse.Serialize(planId, result.Status, timedOut);
 

@@ -62,6 +62,75 @@ public sealed class McpGatewayOptionsTests
     }
 
     [Fact]
+    public void FromEnvironment_WithSmtpHostOnly_ConfiguresSmtpWithDefaultPort()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
+            (McpGatewayConventions.EnvironmentVariables.SmtpHost, "mailpit"));
+
+        var options = McpGatewayOptions.FromEnvironment();
+
+        Assert.NotNull(options.Smtp);
+        Assert.Equal("mailpit", options.Smtp.Host);
+        Assert.Equal(25, options.Smtp.Port);
+        Assert.True(options.Smtp.EnableSsl);
+    }
+
+    [Fact]
+    public void FromEnvironment_WithSmtpFromOnly_ConfiguresSmtp()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
+            (McpGatewayConventions.EnvironmentVariables.SmtpFrom, "infragate@example.local"));
+
+        var options = McpGatewayOptions.FromEnvironment();
+
+        Assert.NotNull(options.Smtp);
+        Assert.Equal("infragate@example.local", options.Smtp.FromAddress);
+    }
+
+    [Fact]
+    public void FromEnvironment_WithSmtpPort_ConfiguresSmtpWithCustomPort()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
+            (McpGatewayConventions.EnvironmentVariables.SmtpHost, "mailpit"),
+            (McpGatewayConventions.EnvironmentVariables.SmtpFrom, "infragate@example.local"),
+            (McpGatewayConventions.EnvironmentVariables.SmtpPort, "2525"));
+
+        var options = McpGatewayOptions.FromEnvironment();
+
+        Assert.NotNull(options.Smtp);
+        Assert.Equal(2525, options.Smtp.Port);
+    }
+
+    [Fact]
+    public void FromEnvironment_WithSmtpHostAndUser_CreatesSmtpOptions()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
+            (McpGatewayConventions.EnvironmentVariables.SmtpHost, "mailpit"),
+            (McpGatewayConventions.EnvironmentVariables.SmtpFrom, "infragate@example.local"),
+            (McpGatewayConventions.EnvironmentVariables.SmtpUser, "user"));
+
+        var options = McpGatewayOptions.FromEnvironment();
+
+        Assert.NotNull(options.Smtp);
+        Assert.Equal("user", options.Smtp.Username);
+    }
+
+    [Fact]
+    public void FromEnvironment_NoSmtpHostOrFrom_LeavesSmtpNull()
+    {
+        using var environment = EnvironmentVariableScope.Set(
+            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority));
+
+        var options = McpGatewayOptions.FromEnvironment();
+
+        Assert.Null(options.Smtp);
+    }
+
+    [Fact]
     public void FromEnvironment_UsesInfraGateEnvironmentOverStandardEnvironment()
     {
         using var environment = EnvironmentVariableScope.Set(

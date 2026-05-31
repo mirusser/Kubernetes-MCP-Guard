@@ -39,8 +39,7 @@ public sealed class AgentMcpToolsetTests
             null,
             CancellationToken.None);
 
-        // Justification: result.IsError is bool?; Assert.True handles null correctly.
-        Assert.True(result.IsError != true);
+        Assert.True(result.IsError is not true);
         string text = Assert.Single(result.Content.OfType<TextContentBlock>()).Text;
         Assert.Equal(InProcessMcpServerFixture.ReadOnlyToolResponse, text);
     }
@@ -56,8 +55,7 @@ public sealed class AgentMcpToolsetTests
             null,
             CancellationToken.None);
 
-        // Justification: result.IsError is bool?; Assert.True handles null correctly.
-        Assert.True(result.IsError != true);
+        Assert.True(result.IsError is not true);
         string text = Assert.Single(result.Content.OfType<TextContentBlock>()).Text;
         Assert.Equal(InProcessMcpServerFixture.MutationToolResponse, text);
     }
@@ -80,8 +78,7 @@ public sealed class AgentMcpToolsetTests
         var options = new AgentMcpOptions { GatewayBaseUrl = "http://localhost:9999/mcp" };
         var toolset = new AgentMcpToolset(options, new StubTokenProvider(), NullLoggerFactory.Instance);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => toolset.GetAgentToolsAsync(CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => toolset.GetAgentToolsAsync(CancellationToken.None));
     }
 
     [Fact]

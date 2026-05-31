@@ -10,7 +10,7 @@ using InfraGate.McpGateway.Notifications;
 
 namespace InfraGate.McpGateway;
 
-internal sealed class GatewayApprovalService(
+internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor; all params are required services.
     IApprovalPlanWorkflow approvalPlans,
     IApprovalChallengeWorkflow approvalChallenges,
     IApprovalAuditOutbox auditOutbox,
@@ -21,7 +21,6 @@ internal sealed class GatewayApprovalService(
     IApprovalNotificationDispatcher notificationDispatcher,
     ILogger<GatewayApprovalService> logger) : IGatewayApprovalService
 {
-
     public async Task<ApprovalGateResult> EnsureApprovedOrCreateChallengeAsync(
         string planId,
         CancellationToken cancellationToken)
@@ -37,7 +36,8 @@ internal sealed class GatewayApprovalService(
         var granted = await approvalPlans.GetGrantedPlanAsync(planId, cancellationToken).ConfigureAwait(false);
         if (granted.IsGranted && granted.Envelope is not null && granted.Grant is not null)
         {
-            return await GetGrantedApprovalResultAsync(planId, granted.Envelope, requester, cancellationToken).ConfigureAwait(false);
+            return await GetGrantedApprovalResultAsync(planId, granted.Envelope, requester, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         if (!granted.IsGranted && granted.GrantExists)
@@ -173,7 +173,9 @@ internal sealed class GatewayApprovalService(
         }
 
         var remainingWindow = pending.Envelope.ValidUntilUtc - now;
-        var effectiveTtl = remainingWindow < options.ApprovalChallengeTtl ? remainingWindow : options.ApprovalChallengeTtl;
+        var effectiveTtl = remainingWindow < options.ApprovalChallengeTtl
+            ? remainingWindow
+            : options.ApprovalChallengeTtl;
 
         var challenge = await approvalChallenges.CreateChallengeAsync(
             planId,
@@ -267,7 +269,8 @@ internal sealed class GatewayApprovalService(
         string challengeId,
         CancellationToken cancellationToken)
     {
-        var challenge = await approvalChallenges.GetChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
+        var challenge = await approvalChallenges.GetChallengeAsync(challengeId, cancellationToken)
+            .ConfigureAwait(false);
         if (challenge is null)
         {
             return new ApprovalDecisionResult(
@@ -335,7 +338,8 @@ internal sealed class GatewayApprovalService(
         string challengeId,
         CancellationToken cancellationToken)
     {
-        var challenge = await approvalChallenges.GetChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
+        var challenge = await approvalChallenges.GetChallengeAsync(challengeId, cancellationToken)
+            .ConfigureAwait(false);
         if (challenge is null)
         {
             return new ApprovalDecisionResult(
@@ -439,7 +443,8 @@ internal sealed class GatewayApprovalService(
             return approverError;
         }
 
-        var pending = await approvalPlans.GetPendingPlanAsync(challenge.PlanId, cancellationToken).ConfigureAwait(false);
+        var pending = await approvalPlans.GetPendingPlanAsync(challenge.PlanId, cancellationToken)
+            .ConfigureAwait(false);
         var pendingError = await ValidatePendingPlanStateAsync(challenge, pending, approver!.Subject, cancellationToken)
             .ConfigureAwait(false);
         if (pendingError is not null)
@@ -549,7 +554,8 @@ internal sealed class GatewayApprovalService(
                 pending.ReasonCode ?? ApprovalConventions.ResultReasonCodes.PlanNotPending);
         }
 
-        if (IsActorAuthorizedForChallengeOutcome(pending.Envelope.ApprovalPolicy, challenge.RequesterSubject, actor.Subject))
+        if (IsActorAuthorizedForChallengeOutcome(pending.Envelope.ApprovalPolicy, challenge.RequesterSubject,
+                actor.Subject))
         {
             return null;
         }
@@ -595,18 +601,22 @@ internal sealed class GatewayApprovalService(
         if (!SameDigest(challenge.IntentDigest, pending.Envelope.IntentDigest) ||
             !SameDigest(challenge.ReviewDigest, pending.Envelope.ReviewDigest))
         {
-            await WriteChallengeRejectedAuditAsync(challenge, approverSubject, McpGatewayMessages.Approval.DigestBindingChanged, ct).ConfigureAwait(false);
+            await WriteChallengeRejectedAuditAsync(challenge, approverSubject,
+                McpGatewayMessages.Approval.DigestBindingChanged, ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
-                McpGatewayMessages.Approval.DigestBindingChanged, ApprovalConventions.ResultReasonCodes.DigestChanged, challenge);
+                McpGatewayMessages.Approval.DigestBindingChanged, ApprovalConventions.ResultReasonCodes.DigestChanged,
+                challenge);
         }
 
         if (!FixedTimeStringComparer.Equals(challenge.PendingPlanHash, pending.Hash))
         {
-            await WriteChallengeRejectedAuditAsync(challenge, approverSubject, McpGatewayMessages.Approval.PendingPlanChanged, ct).ConfigureAwait(false);
+            await WriteChallengeRejectedAuditAsync(challenge, approverSubject,
+                McpGatewayMessages.Approval.PendingPlanChanged, ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
-                McpGatewayMessages.Approval.PendingPlanChanged, ApprovalConventions.ResultReasonCodes.PendingPlanChanged, challenge);
+                McpGatewayMessages.Approval.PendingPlanChanged,
+                ApprovalConventions.ResultReasonCodes.PendingPlanChanged, challenge);
         }
 
         return null;
@@ -636,10 +646,12 @@ internal sealed class GatewayApprovalService(
 
         if (!decoded.HasReviewEvidence)
         {
-            await WriteChallengeRejectedAuditAsync(challenge, approverSubject, McpGatewayMessages.Approval.MissingEvidence(challenge.PlanId), ct).ConfigureAwait(false);
+            await WriteChallengeRejectedAuditAsync(challenge, approverSubject,
+                McpGatewayMessages.Approval.MissingEvidence(challenge.PlanId), ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
-                McpGatewayMessages.Approval.MissingEvidence(challenge.PlanId), ApprovalConventions.ResultReasonCodes.MissingReviewEvidence, challenge, decoded);
+                McpGatewayMessages.Approval.MissingEvidence(challenge.PlanId),
+                ApprovalConventions.ResultReasonCodes.MissingReviewEvidence, challenge, decoded);
         }
 
         return ChallengeValidation.Valid(challenge, decoded);
@@ -810,7 +822,8 @@ internal sealed class GatewayApprovalService(
 
         foreach (var claim in user.FindAll(GatewayAuthConventions.Claims.Groups))
         {
-            foreach (string group in claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            foreach (string group in claim.Value.Split(' ',
+                         StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
                 groups.Add(group);
                 groups.Add(group.TrimStart('/'));

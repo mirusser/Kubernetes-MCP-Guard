@@ -9,7 +9,7 @@ using Microsoft.Extensions.AI;
 namespace InfraGate.Planner.Cycle.Workflow;
 
 [SendsMessage(typeof(DecisionContext))]
-internal sealed class DecideExecutor(
+internal sealed class DecideExecutor( // NOSONAR:S107 — DI constructor; all params are required services.
     string id,
     ToolCallingAgentFactory agentFactory,
     string systemPrompt,
@@ -21,7 +21,9 @@ internal sealed class DecideExecutor(
     AgentGuardrailPolicy? guardrailPolicy = null) : Executor<AnomalyReport>(id)
 {
     private static readonly JsonSerializerOptions anomalyJsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly ChatResponseFormat decisionResponseFormat = ChatResponseFormat.ForJsonSchema<LlmDecisionOutput>();
+
+    private static readonly ChatResponseFormat decisionResponseFormat =
+        ChatResponseFormat.ForJsonSchema<LlmDecisionOutput>();
 
     public override async ValueTask HandleAsync(
         AnomalyReport message,
@@ -54,7 +56,8 @@ internal sealed class DecideExecutor(
     private async Task<RemediationDecision?> DecideCoreAsync(AnomalyReport message, CancellationToken cancellationToken)
     {
         string anomalyJson = JsonSerializer.Serialize(message, anomalyJsonOptions);
-        var (agent, _) = agentFactory.Create($"planner-{message.AnomalyId[..8]}", systemPrompt, tools, maxToolIterations, decisionResponseFormat, guardrailPolicy);
+        var (agent, _) = agentFactory.Create($"planner-{message.AnomalyId[..8]}", systemPrompt, tools,
+            maxToolIterations, decisionResponseFormat, guardrailPolicy);
 
         var response = await agent.RunAsync(anomalyJson, cancellationToken: cancellationToken).ConfigureAwait(false);
         string responseText = response.Text ?? string.Empty;

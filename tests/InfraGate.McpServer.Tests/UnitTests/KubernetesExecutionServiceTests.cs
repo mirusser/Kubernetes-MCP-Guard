@@ -130,6 +130,72 @@ public sealed class KubernetesExecutionServiceTests
                 image: nginx:1.27-alpine
         """;
 
+    [Fact]
+    public async Task ExecuteDeleteManifestAsync_DisallowedNamespace_ReturnsValidationError()
+    {
+        await using var api = new TestKubernetesApi(_ => throw new InvalidOperationException("should not call k8s"));
+        var service = CreateService(api);
+
+        var result = await service.ExecuteDeleteManifestAsync("disallowed", SafeDeploymentManifest, CancellationToken.None);
+
+        Assert.Contains("disallowed", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteScaleDeploymentAsync_DisallowedNamespace_ReturnsValidationError()
+    {
+        await using var api = new TestKubernetesApi(_ => throw new InvalidOperationException("should not call k8s"));
+        var service = CreateService(api);
+
+        var result = await service.ExecuteScaleDeploymentAsync("disallowed", "app", 3, CancellationToken.None);
+
+        Assert.Contains("disallowed", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteRestartDeploymentAsync_DisallowedNamespace_ReturnsValidationError()
+    {
+        await using var api = new TestKubernetesApi(_ => throw new InvalidOperationException("should not call k8s"));
+        var service = CreateService(api);
+
+        var result = await service.ExecuteRestartDeploymentAsync("disallowed", "app", CancellationToken.None);
+
+        Assert.Contains("disallowed", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteSetDeploymentImageAsync_DisallowedNamespace_ReturnsValidationError()
+    {
+        await using var api = new TestKubernetesApi(_ => throw new InvalidOperationException("should not call k8s"));
+        var service = CreateService(api);
+
+        var result = await service.ExecuteSetDeploymentImageAsync("disallowed", "app", "container", "image:v2", CancellationToken.None);
+
+        Assert.Contains("disallowed", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteDeleteManifestAsync_InvalidManifest_ReturnsParseError()
+    {
+        await using var api = new TestKubernetesApi(_ => throw new InvalidOperationException("should not call k8s"));
+        var service = CreateService(api);
+
+        var result = await service.ExecuteDeleteManifestAsync(DemoNamespace, "bad-yaml", CancellationToken.None);
+
+        Assert.DoesNotContain("should not call", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteApplyManifestAsync_DisallowedNamespace_ReturnsValidationError()
+    {
+        await using var api = new TestKubernetesApi(_ => throw new InvalidOperationException("should not call k8s"));
+        var service = CreateService(api);
+
+        var result = await service.ExecuteApplyManifestAsync("disallowed", SafeDeploymentManifest, CancellationToken.None);
+
+        Assert.Contains("disallowed", result, StringComparison.Ordinal);
+    }
+
     private static string SafeDeploymentResponse() =>
         """
         {
