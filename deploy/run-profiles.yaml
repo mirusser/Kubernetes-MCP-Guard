@@ -62,13 +62,14 @@ profiles:
       clientId: infra-gate-observer
       clientSecret: observer-secret
       scope: mcp:tools.readonly
-      llmProvider: anthropic
-      llmModel: claude-sonnet-4-6
+      llmProvider: openrouter
+      llmModel: openrouter/free
       cycleCadenceSeconds: "60"
       cycleWallClockCapSeconds: "120"
       maxToolIterations: "8"
       fileSinkRoot: /data/observer/findings
       plannerHandoffUrl: http://planner:3004/handoff/anomalies
+      auditConnectionString: "Host=postgres;Port=5432;Database=infra-gate;Username=infra-gate;Password=infra-gate-dev-password"
       observerHostPath: ../../.mcp-observer/findings
       allowedNamespaces:
         - mcp-nginx-demo
@@ -81,8 +82,8 @@ profiles:
       clientSecret: planner-secret
       oauthAuthority: http://keycloak:8080/realms/infra-gate
       scope: mcp:tools.propose mcp:tools.readonly
-      llmProvider: anthropic
-      llmModel: claude-sonnet-4-6
+      llmProvider: openrouter
+      llmModel: openrouter/free
       maxToolIterations: "4"
       fileSinkRoot: /data/planner/proposals
       plannerHostPath: ../../.mcp-remediation/proposals
@@ -124,8 +125,8 @@ profiles:
       clientId: infra-gate-observer
       clientSecret: observer-secret
       scope: mcp:tools.readonly
-      llmProvider: anthropic
-      llmModel: claude-sonnet-4-6
+      llmProvider: openrouter
+      llmModel: openrouter/free
       cycleCadenceSeconds: "60"
       cycleWallClockCapSeconds: "120"
       maxToolIterations: "8"
@@ -142,8 +143,8 @@ profiles:
       clientSecret: planner-secret
       oauthAuthority: http://127.0.0.1:3010/realms/infra-gate
       scope: mcp:tools.propose mcp:tools.readonly
-      llmProvider: anthropic
-      llmModel: claude-sonnet-4-6
+      llmProvider: openrouter
+      llmModel: openrouter/free
       maxToolIterations: "4"
       fileSinkRoot: .mcp-planner/proposals
     executor:

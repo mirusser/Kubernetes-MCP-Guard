@@ -184,6 +184,55 @@ public sealed class OperationArgumentValidatorTests
         Assert.False(OperationArgumentValidator.TryNormalize(decision, out _));
     }
 
+    [Fact]
+    public void TryNormalize_SetDeploymentImage_MissingName_ReturnsFalse()
+    {
+        var decision = new RemediationDecision(
+            PlannerConventions.OperationTypes.SetDeploymentImage,
+            new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                [PlannerConventions.ToolArguments.Namespace] = "mcp-nginx-demo",
+                [PlannerConventions.ToolArguments.Container] = "nginx",
+                [PlannerConventions.ToolArguments.Image] = "nginx:1.25",
+            },
+            Reasoning: null);
+
+        Assert.False(OperationArgumentValidator.TryNormalize(decision, out _));
+    }
+
+    [Fact]
+    public void TryNormalize_SetDeploymentImage_BlankNamespace_ReturnsFalse()
+    {
+        var decision = new RemediationDecision(
+            PlannerConventions.OperationTypes.SetDeploymentImage,
+            new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                [PlannerConventions.ToolArguments.Name] = "nginx-demo",
+                [PlannerConventions.ToolArguments.Namespace] = "",
+                [PlannerConventions.ToolArguments.Container] = "nginx",
+                [PlannerConventions.ToolArguments.Image] = "nginx:1.25",
+            },
+            Reasoning: null);
+
+        Assert.False(OperationArgumentValidator.TryNormalize(decision, out _));
+    }
+
+    [Fact]
+    public void TryNormalize_SetDeploymentImage_MissingContainer_ReturnsFalse()
+    {
+        var decision = new RemediationDecision(
+            PlannerConventions.OperationTypes.SetDeploymentImage,
+            new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                [PlannerConventions.ToolArguments.Name] = "nginx-demo",
+                [PlannerConventions.ToolArguments.Namespace] = "mcp-nginx-demo",
+                [PlannerConventions.ToolArguments.Image] = "nginx:1.25",
+            },
+            Reasoning: null);
+
+        Assert.False(OperationArgumentValidator.TryNormalize(decision, out _));
+    }
+
     // ── unknown operation ──────────────────────────────────────────────────────
 
     [Fact]

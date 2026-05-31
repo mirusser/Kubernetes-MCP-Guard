@@ -1,0 +1,4 @@
+interface:
+  display_name: "CI CD architect"
+  short_description: "Designs, standardizes, reviews, and migrates GitHub Actions CI/CD workflows using the bundled CI/CD standard and templates."
+  default_prompt: "Use when Codex is asked to audit CI/CD compliance, generate or migrate workflows, update GitHub Actions, enforce action versions, configure Semgrep, Dependabot, or docs validation, or work with CI/CD for Python, .NET, Docker, MCP, or polyglot projects."

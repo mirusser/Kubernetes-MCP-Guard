@@ -13,10 +13,10 @@ namespace InfraGate.KubernetesAdapter.Execution;
 
 public sealed class KubernetesPlanExecutor(
     IToolCaller toolCaller,
-    IApprovalAuditPublisher? auditPublisher = null) : IDomainPlanExecutor
+    IApprovalAuditOutbox? auditOutbox = null) : IDomainPlanExecutor
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private readonly IApprovalAuditPublisher auditPublisher = auditPublisher ?? NoOpApprovalAuditPublisher.Instance;
+    private readonly IApprovalAuditOutbox auditOutbox = auditOutbox ?? NullApprovalAuditOutbox.Instance;
 
     public async Task<DomainPlanExecutionResult> CheckPreExecutionAsync(PlanEnvelope envelope, CancellationToken ct)
     {
@@ -41,9 +41,10 @@ public sealed class KubernetesPlanExecutor(
         {
             return DomainPlanExecutionResult.Blocked(
                 policyBlock.Message,
-                new PlanAudit(
+                new ApprovalAuditEntry(
                     ApprovalConventions.AuditEvents.ApplyDenied,
-                    new ApplyDeniedPayload(plan.Id, policyBlock.Message)),
+                    new ApplyDeniedPayload(plan.Id, policyBlock.Message),
+                    PlanId: plan.Id),
                 policyBlock.ReasonCode);
         }
 
@@ -54,8 +55,8 @@ public sealed class KubernetesPlanExecutor(
             return DomainPlanExecutionResult.Blocked(dryRunBlock.Message, audit, dryRunBlock.ReasonCode);
         }
 
-        await auditPublisher.PublishAsync(
-            new PlanAudit(
+        await auditOutbox.AppendAsync(
+            new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.PreExecutionChecked,
                 new PreExecutionCheckedPayload(
                     plan.Id,
@@ -66,7 +67,8 @@ public sealed class KubernetesPlanExecutor(
                             payload.Namespace,
                             FormatObjects(payload),
                             plan.Envelope.FreshnessPolicy.Checks.Select(check => check.Type).ToArray()),
-                        JsonOptions))),
+                        JsonOptions)),
+                PlanId: plan.Id),
             ct).ConfigureAwait(false);
 
         return DomainPlanExecutionResult.Success("Pre-execution checks passed.", payload.Namespace);
@@ -83,8 +85,8 @@ public sealed class KubernetesPlanExecutor(
         var plan = decodeResult.Plan;
         var payload = plan.Payload;
 
-        await auditPublisher.PublishAsync(
-            new PlanAudit(
+        await auditOutbox.AppendAsync(
+            new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ExecutionStarted,
                 new ExecutionStartedPayload(
                     plan.Id,
@@ -95,7 +97,8 @@ public sealed class KubernetesPlanExecutor(
                             payload.Namespace,
                             FormatObjects(payload),
                             payload.Parameters),
-                        JsonOptions))),
+                        JsonOptions)),
+                PlanId: plan.Id),
             ct).ConfigureAwait(false);
 
         return await DispatchAsync(plan.Operation, payload, ct).ConfigureAwait(false);
@@ -333,7 +336,7 @@ public sealed class KubernetesPlanExecutor(
     private static bool IsUnsupportedOperationMessage(string message) =>
         message.StartsWith("Unsupported operation ", StringComparison.Ordinal);
 
-    private static PlanAudit DryRunFailedAudit(KubernetesPlan plan, string message, KubernetesPlanPayload payload) =>
+    private static ApprovalAuditEntry DryRunFailedAudit(KubernetesPlan plan, string message, KubernetesPlanPayload payload) =>
         new(
             ApprovalConventions.AuditEvents.DryRunFailed,
             new InfraGate.Approvals.AuditPayloads.DryRunFailedPayload(
@@ -342,19 +345,29 @@ public sealed class KubernetesPlanExecutor(
                 plan.Operation,
                 payload.Namespace,
                 payload.Objects.Select(obj => $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}").ToArray(),
-                message));
+                message),
+            PlanId: plan.Id);
 
-    private static PlanAudit ApplyDriftDetectedAudit(KubernetesPlan plan, string message, KubernetesPlanPayload payload) =>
+    private static ApprovalAuditEntry ApplyDriftDetectedAudit(KubernetesPlan plan, string message, KubernetesPlanPayload payload) =>
         new(
             ApprovalConventions.AuditEvents.ApplyDriftDetected,
             new InfraGate.Approvals.AuditPayloads.ApplyDriftDetectedPayload(
                 plan.Id,
                 plan.Operation,
                 payload.Namespace,
-                message));
+                message),
+            PlanId: plan.Id);
 
     private static string[] FormatObjects(KubernetesPlanPayload payload) =>
         payload.Objects.Select(obj => $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}").ToArray();
 
     private sealed record class ResultFailure(string Message, string ReasonCode);
+
+    private sealed class NullApprovalAuditOutbox : IApprovalAuditOutbox
+    {
+        public static readonly NullApprovalAuditOutbox Instance = new();
+
+        public Task<long> AppendAsync(ApprovalAuditEntry entry, CancellationToken cancellationToken) =>
+            Task.FromResult(0L);
+    }
 }

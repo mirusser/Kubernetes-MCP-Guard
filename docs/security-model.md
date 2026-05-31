@@ -65,7 +65,7 @@ Echoed manifest blocks are redacted to `[redacted: inspect the pending plan file
 
 Guardrail audit entries are written to `.mcp-guardrails/audit.jsonl` by default, configurable through `INFRA_GATE_GUARD_AUDIT_ROOT`. Entries include `toolName`, `direction`, `action` (`warn`, `warn_redact`, or `redact_manifest`), `categories`, `planId`, `subject`, and `authenticationType`.
 
-Approval audit is separate and is persisted in PostgreSQL `approvals.audit_events`.
+Approval audit is separate and is persisted in PostgreSQL `approvals.audit_outbox`.
 
 ### 2.4 MCP Tool Annotations
 

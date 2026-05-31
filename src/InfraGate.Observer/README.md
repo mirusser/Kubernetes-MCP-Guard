@@ -8,11 +8,18 @@
 
 - `Program.cs` wires Serilog, `InfraGate.RuntimeSafety` mode detection, `InfraGate.ClientCredentials` OAuth token acquisition, and the `Microsoft.Extensions.AI` `IChatClient` for the chosen LLM provider.
 - `ObservationCycleLoop` (an `IHostedService`) ticks on a configurable cadence (default 60s) and orchestrates one **Observation Cycle** per tick.
-- Each cycle calls `ISnapshotFetcher` to collect a deterministic baseline (`SnapshotDocument`) from the gateway's read-only tools, then sends it to the LLM with the system prompt from `Prompts/ObserverSystemPrompt.md`.
-- The LLM proposes anomalies with bounded follow-up tool calls (max 8 per cycle). Proposed anomalies pass through `ISeverityClassifier` — rules-derived severity is the source of truth; LLM disagreements are logged + counted but do not change emitted `Severity`.
-- `IAnomalyDedupeStore` suppresses repeat reports within a suppression window (default 5 cycles) and emits `Resolved` reports after an anomaly is absent for a resolution threshold (default 2 cycles).
-- Final `AnomalyReport[]` batches are published through `IAnomalyHandoffSink` (logging sink always on; JSON file sink and HTTP Planner handoff opt-in).
+- Each cycle builds a per-namespace **workflow graph** via `ObservationCycleRunner.BuildWorkflow` using `Microsoft.Agents.AI.Workflows.WorkflowBuilder`. The graph fans out from a `CycleInputPassthroughExecutor` to N per-namespace chains, each running:
+  1. `SnapshotExecutor` — calls `ISnapshotFetcher` to collect a deterministic baseline (`SnapshotDocument`) from the gateway's read-only tools.
+  2. `ChatClientAgent` (via `ToolCallingAgentFactory`) — sends the snapshot to the LLM with the system prompt rendered from `Prompts/ObserverSystemPrompt.md` via the shared `IPromptLibrary`; bounded follow-up tool calls (max 8 per cycle).
+  3. `AnomalyParseExecutor` — parses the LLM output into `AnomalyReport[]`, applies `ISeverityClassifier` (rules-derived severity wins; LLM disagreements logged + counted).
+- All namespace chains fan-in to `CycleAggregateExecutor`, which applies `IAnomalyDedupeStore` suppression and publishes the final `AnomalyReport[]` batch through `IAnomalyHandoffSink`.
 - Cycle-level telemetry: wall-clock cap (20s default), tool-iteration cap (8), and metrics via `System.Diagnostics.Metrics` (`Meter("InfraGate.Observer", "1.0")`).
+
+## Guardrails
+
+The Observer agent is protected by a **tool-call guardrail** from `InfraGate.AgentGuardrails`. At agent construction, `ToolCallingAgentFactory` composes a framework function-invocation middleware (`UseToolCallGuardrail`) that enforces an explicit allow-list of the 8 read-only tool names from `ObserverConventions.ToolNames`. Any tool call outside this allow-list is blocked, not executed, and recorded as a `tool_call.blocked` guardrail metric. The guardrail is defense-in-depth — the McpGateway remains the ultimate runtime control, and §3's `ReadOnlyHint` filtering already limits the toolset at selection time.
+
+The `InfraGate.AgentGuardrails` meter is registered in the Observer's telemetry pipeline and exports through the existing Serilog span bridge / opt-in OTLP.
 
 ## Important Contracts
 
@@ -20,15 +27,35 @@
 - **Severity** — three-level rules-derived classification: `High` (service zero endpoints, deployment totally unavailable, all pods in critical condition), `Medium` (partial deployment unavailability, single pod in critical condition with healthy siblings, sustained warning events), `Low` (single pod restart, pending pod within grace, one-off warning events).
 - **AnomalyStatus** — `Active | Resolved` (v1). No `Persistent` or `Flapping` statuses.
 - **AnomalyId** — stable 12-char hex hash of `(Kind, ApiVersion, Kind, Namespace, Name)`. Stable across cycles for the same underlying anomaly.
-- **Tool whitelist** — the Observer only calls the gateway's 8 read-only tools (`get_allowed_namespaces`, `get_k8s_status`, `get_k8s_events`, `get_k8s_pods`, `describe_k8s_resource`, `get_k8s_deployments`, `get_k8s_services`, `get_k8s_endpoints`). Any call to a mutation tool throws `InvalidOperationException` before HTTP.
+- **Read-Only Scope** — the Observer connects to the gateway with a read-only scope, meaning the Gateway filters the tools to strictly those marked with `ReadOnlyHint`. Any hallucinated call to a mutation tool is rejected by the Gateway.
 - The Observer is a peer MCP client (not embedded in the gateway). It never calls mutation tools, never produces Plan Envelopes or Approval Grants, and never writes through `IApprovalAuditPublisher`.
 - Optional HTTP handoff posts `AnomalyHandoffBatch` payloads to the Remediation Planner's `/handoff/anomalies` endpoint.
-- LLM provider is configurable via env vars; default is Anthropic (`claude-sonnet-4-6`). `INFRA_GATE_OBSERVER_LLM_API_KEY` is required when the LLM phase is active.
+- LLM provider is configurable via env vars. Supported provider: `openrouter` (OpenAI-compatible). `INFRA_GATE_OBSERVER_LLM_API_KEY` is required. Configuring `ANTHROPIC` as the provider throws `InvalidOperationException` at startup — use OpenRouter instead.
 - `POST /observe-now` triggers a synchronous on-demand cycle (30s HTTP timeout) without resetting the scheduled tick. Concurrent calls serialise via a shared semaphore.
 
 ## Settings
 
 Runtime environment variables, defaults, examples, and production guidance are documented in [docs/configuration.md](../../docs/configuration.md).
+
+## Audit Stream
+
+`ObserverAuditOutbox` writes a tamper-evident hash chain to `observer.audit_outbox` (ADR-0020). The Observer's Audit Stream is independent of the Approval Authority's Audit Spine — it does not produce Audit Spine events and does not reference `InfraGate.Approvals` (enforced by architecture tests in `tests/InfraGate.Observer.Tests/UnitTests/Architecture/`).
+
+Five audit-worthy events are defined in `ObserverAuditEvents`:
+
+| Event name | When emitted |
+|---|---|
+| `anomaly.detected` | Anomaly passes the suppression-window check and will be reported |
+| `anomaly.suppressed` | Anomaly is observed but suppressed by the Suppression Window |
+| `anomaly.resolved` | Anomaly is absent for the resolution threshold; `resolved` report emitted |
+| `handoff.published` | Successful POST to the Planner's `/handoff/anomalies` endpoint |
+| `handoff.failed` | Non-2xx or exception from the Planner handoff sink |
+
+All emit uses the `AppendAsync(entry, ct)` convenience overload — Observer audit writes are not part of a larger state-mutation transaction.
+
+The `observer` schema is created on startup by `PostgresAuditOutboxMigrationRunner` reading `Migrations/0001-initial-observer-audit.sql`. Connection string: `INFRA_GATE_OBSERVER_AUDIT_CONNECTION_STRING`.
+
+See [InfraGate.AuditOutbox.Postgres README](../InfraGate.AuditOutbox.Postgres/README.md) for the chain-verification SQL recipe and cross-stream forensic query.
 
 ## Verification
 

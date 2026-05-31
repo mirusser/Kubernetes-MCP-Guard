@@ -1,0 +1,31 @@
+static class InfraGate.AuditOutbox.AuditOutboxConventions
+  const Int32 LockCategory
+  static Dictionary<String, Object> BuildCanonicalInputObject(AuditOutboxRow row)
+  static Int32 StreamLockKey(String schemaName)
+static class InfraGate.AuditOutbox.AuditOutboxConventions+ColumnNames
+  const String ActorClientId
+  const String ActorSubject
+  const String AuditSequence
+  const String EventHash
+  const String EventName
+  const String LastPublishError
+  const String OccurredAtUtc
+  const String Outcome
+  const String PayloadJsonText
+  const String PreviousEventHash
+  const String PublishAttempts
+  const String PublishedAtUtc
+  const String Reason
+static class InfraGate.AuditOutbox.AuditOutboxConventions+Streams
+  const String Approvals
+  const String Observer
+  const String Planner
+record class InfraGate.AuditOutbox.AuditOutboxRow
+  String ActorClientId { get; set; }
+  String ActorSubject { get; set; }
+  IReadOnlyDictionary<String, Object> CorrelationColumns { get; set; }
+  String EventName { get; set; }
+  DateTimeOffset OccurredAtUtc { get; set; }
+  String Outcome { get; set; }
+  String PayloadJsonText { get; set; }
+  String Reason { get; set; }

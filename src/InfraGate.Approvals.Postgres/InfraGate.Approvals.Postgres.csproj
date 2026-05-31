@@ -15,6 +15,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\InfraGate.Approvals\InfraGate.Approvals.csproj" />
+    <ProjectReference Include="..\InfraGate.AuditOutbox\InfraGate.AuditOutbox.csproj" />
+    <ProjectReference Include="..\InfraGate.AuditOutbox.Postgres\InfraGate.AuditOutbox.Postgres.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="InfraGate.Approvals.Postgres.Tests" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,4 +29,7 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Shared\CanonicalJson.cs" Link="CanonicalJson.cs" />
+  </ItemGroup>
 </Project>

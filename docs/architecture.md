@@ -32,7 +32,7 @@ flowchart TB
     end
 
     subgraph GenericCore["Generic Approval Core"]
-        Approvals["InfraGate.Approvals (PostgreSQL)<br/>approvals.plan_envelopes, approval_challenges,<br/>approval_grants, audit_events"]
+        Approvals["InfraGate.Approvals (PostgreSQL)<br/>approvals.plan_envelopes, approval_challenges,<br/>approval_grants, audit_outbox"]
         Persistence["InfraGate.Approvals.Postgres<br/>Npgsql + Dapper"]
         Approvals --> Persistence
     end
@@ -370,13 +370,13 @@ flowchart LR
     Guard -->|"suspicious input"| GuardAudit[".mcp-guardrails/audit.jsonl"]
     Sanitizer -->|"suspicious or redacted output"| GuardAudit
 
-    Plan["request_* plan"] --> PlanAudit["approvals.audit_events<br/>plan.created"]
-    Challenge["approval challenge"] --> ChallengeAudit["approvals.audit_events<br/>challenge.*"]
+    Plan["request_* plan"] --> PlanAudit["approvals.audit_outbox<br/>plan.created"]
+    Challenge["approval challenge"] --> ChallengeAudit["approvals.audit_outbox<br/>challenge.*"]
     Approve["approve / deny / expire / reject"] --> ChallengeAudit
-    Apply["execute_approved_plan"] --> ApplyAudit["approvals.audit_events<br/>execution.succeeded / execution.blocked / execution.failed"]
+    Apply["execute_approved_plan"] --> ApplyAudit["approvals.audit_outbox<br/>execution.succeeded / execution.blocked / execution.failed"]
 ```
 
-Guardrail audit and approval audit are separate. Guardrail audit records model-visible prompt-injection findings and response redaction actions to `.mcp-guardrails/audit.jsonl`. Approval audit records plan, challenge, approval, denial, expiry, hash mismatch, and apply events in the `approvals.audit_events` PostgreSQL table.
+Guardrail audit and approval audit are separate. Guardrail audit records model-visible prompt-injection findings and response redaction actions to `.mcp-guardrails/audit.jsonl`. Approval audit records plan, challenge, approval, denial, expiry, hash mismatch, and apply events in the `approvals.audit_outbox` PostgreSQL table.
 
 ## Image And Registry Layout
 

@@ -15,7 +15,6 @@ internal static class ObserverMetrics
     internal const string HandoffFailedCounterName = "infragate.observer.handoff.failed";
     internal const string HandoffHttpFailedCounterName = "infragate.observer.handoff.http_failed";
     internal const string HandoffHttpBackpressureCounterName = "infragate.observer.handoff.http_backpressure";
-    internal const string LlmTokensCounterName = "infragate.observer.llm.tokens";
     internal const string ReportsEmittedCounterName = "infragate.observer.reports.emitted";
     internal const string SnapshotFetchErrorsCounterName = "infragate.observer.snapshot.fetch_errors";
 
@@ -70,11 +69,6 @@ internal static class ObserverMetrics
     internal static Counter<long> CreateHandoffHttpBackpressureCounter(Meter? meter = null)
     {
         return (meter ?? Meter).CreateCounter<long>(HandoffHttpBackpressureCounterName);
-    }
-
-    internal static Counter<long> CreateLlmTokensCounter(Meter? meter = null)
-    {
-        return (meter ?? Meter).CreateCounter<long>(LlmTokensCounterName);
     }
 
     internal static Counter<long> CreateReportsEmittedCounter(Meter? meter = null)

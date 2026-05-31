@@ -11,6 +11,7 @@ internal static class PlannerConventions
     public const string DefaultOAuthScope = "mcp:tools.propose mcp:tools.readonly";
     public const string DefaultUrl = LoopbackHttpScheme + UriSchemeSeparator + LoopbackHost + ":" + DefaultPort;
     public const string DefaultLlmModel = "claude-sonnet-4-6";
+    public const string DefaultOpenRouterLlmModel = "deepseek/deepseek-v4-flash:free";
     public const string HealthEndpointPath = "/health";
     public const string HandoffAnomaliesEndpointPath = "/handoff/anomalies";
 
@@ -42,6 +43,7 @@ internal static class PlannerConventions
         public const string OAuthAuthority = "INFRA_GATE_PLANNER_OAUTH_AUTHORITY";
         public const string OAuthScope = "INFRA_GATE_PLANNER_OAUTH_SCOPE";
         public const string FileSinkRoot = "INFRA_GATE_PLANNER_FILE_SINK_ROOT";
+        public const string AuditConnectionString = "INFRA_GATE_PLANNER_AUDIT_CONNECTION_STRING";
     }
 
     public static class ConfigurationKeys
@@ -56,11 +58,13 @@ internal static class PlannerConventions
         public const string LlmModel = "InfraGate:Planner:LlmModel";
         public const string LlmApiKey = "InfraGate:Planner:LlmApiKey";
         public const string FileSinkRoot = "InfraGate:Planner:FileSink:Root";
+        public const string AuditConnectionString = "InfraGate:Planner:AuditConnectionString";
     }
 
     public static class Prompts
     {
         public const string SystemPromptResourceName = "InfraGate.Planner.Prompts.PlannerSystemPrompt.md";
+        public const string SystemPromptTemplateName = "planner-system-prompt";
     }
 
     public static class Llm
@@ -75,6 +79,7 @@ internal static class PlannerConventions
         public const string Google = "GOOGLE";
         public const string Azure = "AZURE";
         public const string Ollama = "OLLAMA";
+        public const string OpenRouter = "OPENROUTER";
     }
 
     public static class OperationTypes
@@ -123,30 +128,6 @@ internal static class PlannerConventions
         public const string GetK8sServices = "get_k8s_services";
         public const string GetK8sEndpoints = "get_k8s_endpoints";
 
-        public static readonly IReadOnlySet<string> ReadOnlyToolNames = new HashSet<string>(StringComparer.Ordinal)
-        {
-            GetAllowedNamespaces,
-            GetK8sStatus,
-            GetK8sEvents,
-            GetK8sPods,
-            DescribeK8sResource,
-            GetK8sDeployments,
-            GetK8sServices,
-            GetK8sEndpoints,
-        };
-
-        public static readonly IReadOnlySet<string> AllowedToolNames = new HashSet<string>(StringComparer.Ordinal)
-        {
-            ProposePlan,
-            GetAllowedNamespaces,
-            GetK8sStatus,
-            GetK8sEvents,
-            GetK8sPods,
-            DescribeK8sResource,
-            GetK8sDeployments,
-            GetK8sServices,
-            GetK8sEndpoints,
-        };
     }
 
     public static class Claims

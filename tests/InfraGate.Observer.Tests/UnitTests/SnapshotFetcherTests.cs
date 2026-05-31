@@ -6,6 +6,11 @@ namespace InfraGate.Observer.Tests.UnitTests;
 
 public sealed class SnapshotFetcherTests
 {
+    private static CallToolResult OkResult(string text) => new()
+    {
+        Content = [new TextContentBlock { Text = text }]
+    };
+
     [Fact]
     public async Task FetchAsync_PartialFailure_IncrementsSnapshotFetchErrorsCounter()
     {
@@ -26,19 +31,17 @@ public sealed class SnapshotFetcherTests
             });
         listener.Start();
 
-        var mcpClient = Substitute.For<IObserverMcpClient>();
-        mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sStatus, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
-        mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sEvents, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
-        mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sPods, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("timeout"));
-        mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sDeployments, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
-        mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sServices, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
-        mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sEndpoints, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+        var mcpClient = new TestAgentMcpToolset
+        {
+            CallToolHandler = name =>
+            {
+                if (name == ObserverConventions.ToolNames.GetK8sPods)
+                {
+                    throw new InvalidOperationException("timeout");
+                }
+                return Task.FromResult(OkResult("{}"));
+            }
+        };
 
         var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, meter);
         await fetcher.FetchAsync("test-ns", CancellationToken.None);
@@ -49,14 +52,14 @@ public sealed class SnapshotFetcherTests
         Assert.NotEqual(default, toolTag);
         Assert.Equal(ObserverConventions.ToolNames.GetK8sPods, toolTag.Value);
     }
+
     [Fact]
     public async Task FetchAsync_ReturnsSnapshotDocument()
     {
-        var mcpClient = Substitute.For<IObserverMcpClient>();
-        mcpClient.GetToolResultAsync(Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+        var mcpClient = new TestAgentMcpToolset();
 
-        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance);
+        using var meter = new Meter("test-meter-returns-snapshot");
+        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, meter);
         var snapshot = await fetcher.FetchAsync("test-ns", CancellationToken.None);
 
         Assert.Equal("test-ns", snapshot.Namespace);
@@ -67,30 +70,26 @@ public sealed class SnapshotFetcherTests
         Assert.NotNull(snapshot.ServicesJson);
         Assert.NotNull(snapshot.EndpointsJson);
 
-        await mcpClient.Received(6).GetToolResultAsync(
-            Arg.Any<string>(),
-            Arg.Any<IReadOnlyDictionary<string, object?>?>(),
-            Arg.Any<CancellationToken>());
+        Assert.Equal(6, mcpClient.CallCount);
     }
 
     [Fact]
     public async Task FetchAsync_PartialFailure_ReturnsPartialSnapshot()
     {
-        var mcpClient = Substitute.For<IObserverMcpClient>();
-        mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sStatus, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
-        mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sEvents, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
-        mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sPods, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("timeout"));
-        mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sDeployments, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
-        mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sServices, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
-        mcpClient.GetToolResultAsync(ObserverConventions.ToolNames.GetK8sEndpoints, Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+        var mcpClient = new TestAgentMcpToolset
+        {
+            CallToolHandler = name =>
+            {
+                if (name == ObserverConventions.ToolNames.GetK8sPods)
+                {
+                    throw new InvalidOperationException("timeout");
+                }
+                return Task.FromResult(OkResult("{}"));
+            }
+        };
 
-        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance);
+        using var meter = new Meter("test-meter-partial-snapshot");
+        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, meter);
         var snapshot = await fetcher.FetchAsync("test-ns", CancellationToken.None);
 
         Assert.Equal("test-ns", snapshot.Namespace);
@@ -98,29 +97,82 @@ public sealed class SnapshotFetcherTests
         Assert.Null(snapshot.PodsJson);
         Assert.NotNull(snapshot.EventsJson);
 
-        await mcpClient.Received(6).GetToolResultAsync(
-            Arg.Any<string>(),
-            Arg.Any<IReadOnlyDictionary<string, object?>?>(),
-            Arg.Any<CancellationToken>());
+        Assert.Equal(6, mcpClient.CallCount);
     }
 
     [Fact]
     public async Task FetchAsync_CancelledTokenPropagatesToMcpClient()
     {
-        var mcpClient = Substitute.For<IObserverMcpClient>();
-        mcpClient.GetToolResultAsync(Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, object?>?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{}"));
+        var mcpClient = new TestAgentMcpToolset();
 
-        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance);
+        using var meter = new Meter("test-meter-cancelled-token");
+        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, meter);
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
         var snapshot = await fetcher.FetchAsync("test-ns", cts.Token);
 
         Assert.Equal("test-ns", snapshot.Namespace);
-        await mcpClient.Received(6).GetToolResultAsync(
-            Arg.Any<string>(),
-            Arg.Any<IReadOnlyDictionary<string, object?>?>(),
-            Arg.Is<CancellationToken>(t => t.IsCancellationRequested));
+        Assert.Equal(6, mcpClient.CallCount);
+        Assert.True(mcpClient.WasCancelled);
+    }
+
+    [Fact]
+    public async Task FetchAsync_ToolReturnsError_RecordsNullInSnapshot()
+    {
+        var mcpClient = new TestAgentMcpToolset
+        {
+            CallToolHandler = name =>
+            {
+                if (name == ObserverConventions.ToolNames.GetK8sPods)
+                {
+                    return Task.FromResult(new CallToolResult { IsError = true });
+                }
+                return Task.FromResult(OkResult("{}"));
+            }
+        };
+
+        using var meter = new Meter("test-meter-tool-error");
+        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, meter);
+        var snapshot = await fetcher.FetchAsync("test-ns", CancellationToken.None);
+
+        Assert.Equal("test-ns", snapshot.Namespace);
+        Assert.Null(snapshot.PodsJson);
+        Assert.NotNull(snapshot.StatusJson);
+    }
+
+    [Fact]
+    public async Task FetchAsync_ToolReturnsEmptyText_RecordsNullInSnapshot()
+    {
+        var mcpClient = new TestAgentMcpToolset
+        {
+            CallToolHandler = name =>
+            {
+                if (name == ObserverConventions.ToolNames.GetK8sPods)
+                {
+                    return Task.FromResult(OkResult(""));
+                }
+                return Task.FromResult(OkResult("{}"));
+            }
+        };
+
+        using var meter = new Meter("test-meter-empty-text");
+        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, meter);
+        var snapshot = await fetcher.FetchAsync("test-ns", CancellationToken.None);
+
+        Assert.Equal("test-ns", snapshot.Namespace);
+        Assert.Null(snapshot.PodsJson);
+    }
+
+    [Fact]
+    public async Task FetchAsync_NullMeter_DoesNotThrow()
+    {
+        var mcpClient = new TestAgentMcpToolset();
+
+        var fetcher = new SnapshotFetcher(mcpClient, NullLogger<SnapshotFetcher>.Instance, meter: null);
+        var snapshot = await fetcher.FetchAsync("test-ns", CancellationToken.None);
+
+        Assert.Equal("test-ns", snapshot.Namespace);
+        Assert.NotNull(snapshot.StatusJson);
     }
 }

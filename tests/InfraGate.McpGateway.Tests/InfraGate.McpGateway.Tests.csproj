@@ -33,4 +33,7 @@
     <ProjectReference Include="..\..\src\InfraGate.McpGateway\InfraGate.McpGateway.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\..\src\Shared\CanonicalJson.cs" Link="CanonicalJson.cs" />
+  </ItemGroup>
 </Project>

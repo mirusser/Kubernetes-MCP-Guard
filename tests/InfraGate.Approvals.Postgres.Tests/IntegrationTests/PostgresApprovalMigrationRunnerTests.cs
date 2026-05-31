@@ -8,7 +8,7 @@ namespace InfraGate.Approvals.Postgres.Tests.IntegrationTests;
 [Trait("Category", "Postgres")]
 public sealed class PostgresApprovalMigrationRunnerTests : IAsyncLifetime
 {
-    private const string PostgresImage = "postgres:17-alpine";
+
 
     private static readonly string[] ExpectedTables =
     [
@@ -16,7 +16,7 @@ public sealed class PostgresApprovalMigrationRunnerTests : IAsyncLifetime
         "approval_access_codes",
         "approval_challenges",
         "approval_grants",
-        "audit_events",
+        "audit_outbox",
         "challenge_outcomes",
         "execution_attempts",
         "execution_outcomes",
@@ -29,7 +29,7 @@ public sealed class PostgresApprovalMigrationRunnerTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        container = new PostgreSqlBuilder(PostgresImage)
+        container = new PostgreSqlBuilder(TestContainersConstants.PostgresImage)
             .Build();
 
         await container.StartAsync();

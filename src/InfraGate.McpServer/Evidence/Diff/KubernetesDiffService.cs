@@ -1,17 +1,12 @@
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using InfraGate.Approvals;
-using InfraGate.Approvals.Plan;
-using InfraGate.KubernetesAdapter;
-using InfraGate.KubernetesAdapter.Evidence;
-using InfraGate.KubernetesAdapter.PlanBuilding;
+using InfraGate.McpServer.Models;
 using k8s;
 using k8s.Autorest;
 
 namespace InfraGate.McpServer.Diff;
 
-// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 internal static class KubernetesDiffService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -188,29 +183,29 @@ internal static class KubernetesDiffService
     {
         if (liveJson is null && proposedJson is not null)
         {
-            return ApprovalConventions.DiffChangeTypes.Create;
+            return KubernetesConventions.DiffChangeTypes.Create;
         }
 
         if (liveJson is not null && proposedJson is null)
         {
-            return ApprovalConventions.DiffChangeTypes.Delete;
+            return KubernetesConventions.DiffChangeTypes.Delete;
         }
 
         if (SameJson(liveJson, proposedJson))
         {
-            return ApprovalConventions.DiffChangeTypes.NoOp;
+            return KubernetesConventions.DiffChangeTypes.NoOp;
         }
 
-        return ApprovalConventions.DiffChangeTypes.Update;
+        return KubernetesConventions.DiffChangeTypes.Update;
     }
 
     private static string Summary(KubernetesObjectRef obj, string changeType)
     {
         return changeType switch
         {
-            ApprovalConventions.DiffChangeTypes.Create => $"{FormatObjectRef(obj)} will be created.",
-            ApprovalConventions.DiffChangeTypes.Update => $"{FormatObjectRef(obj)} will be updated.",
-            ApprovalConventions.DiffChangeTypes.Delete => $"{FormatObjectRef(obj)} will be deleted.",
+            KubernetesConventions.DiffChangeTypes.Create => $"{FormatObjectRef(obj)} will be created.",
+            KubernetesConventions.DiffChangeTypes.Update => $"{FormatObjectRef(obj)} will be updated.",
+            KubernetesConventions.DiffChangeTypes.Delete => $"{FormatObjectRef(obj)} will be deleted.",
             _ => $"{FormatObjectRef(obj)} has no normalized changes."
         };
     }

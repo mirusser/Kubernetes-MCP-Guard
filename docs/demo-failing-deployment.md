@@ -87,11 +87,11 @@ Re-run the read-only tools from Step 2:
 
 Two JSONL streams record the demo. Both live under volumes mounted by `deploy/local-oauth/compose.yaml` and `deploy/local-oauth/compose.release.yaml`.
 
-### Server-side (`approvals.audit_events`)
+### Server-side (`approvals.audit_outbox`)
 
 Records the plan lifecycle: `plan.created`, `challenge.created`, `challenge.approved`, `grant.issued`, `execution.succeeded` (and on a tampered plan, `execution.blocked`).
 
-Approval audit events are queryable from the `approvals.audit_events` PostgreSQL table. Example query: `SELECT event_name, occurred_at_utc, payload_json_text FROM approvals.audit_events WHERE plan_id = '<PlanId>' ORDER BY audit_sequence;`
+Approval audit events are queryable from the `approvals.audit_outbox` PostgreSQL table. Example query: `SELECT event_name, occurred_at_utc, payload_json_text FROM approvals.audit_outbox WHERE plan_id = '<PlanId>' ORDER BY audit_sequence;`
 
 ### Gateway-side (`.mcp-guardrails/audit.jsonl`)
 

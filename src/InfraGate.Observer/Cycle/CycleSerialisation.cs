@@ -1,5 +1,7 @@
 namespace InfraGate.Observer.Cycle;
 
+// Ensures that only one cycle is running at a time,
+// preventing overlapping runs if the LLM takes longer than the interval.
 internal sealed class CycleSerialisation : IDisposable
 {
     private readonly SemaphoreSlim semaphore = new(1, 1);

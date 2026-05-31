@@ -1,13 +1,9 @@
-using InfraGate.Approvals;
-using InfraGate.Approvals.Plan;
 using InfraGate.DownstreamAuth;
-using InfraGate.KubernetesAdapter;
-using InfraGate.KubernetesAdapter.PlanBuilding;
+using InfraGate.McpServer.Models;
 using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpServer;
 
-// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 internal static class KubernetesConventions
 {
     public static void RegisterInfraGateEnvVarMappings(InfraGateEnvVarMappings mappings)
@@ -15,7 +11,6 @@ internal static class KubernetesConventions
         ArgumentNullException.ThrowIfNull(mappings);
         mappings.Map(EnvironmentVariables.KubeConfig, ConfigurationKeys.KubeConfig);
         mappings.Map(EnvironmentVariables.UseInClusterConfig, ConfigurationKeys.UseInClusterConfig);
-        mappings.Map(EnvironmentVariables.ApprovalRoot, ConfigurationKeys.ApprovalRoot);
         mappings.Map(EnvironmentVariables.AllowedNamespaces, ConfigurationKeys.AllowedNamespaces);
         mappings.Map(EnvironmentVariables.LogPath, ConfigurationKeys.LogPath);
         RegisterDownstreamAuthMappings(mappings);
@@ -45,7 +40,6 @@ internal static class KubernetesConventions
     {
         public const string KubeConfig = "KUBECONFIG";
         public const string UseInClusterConfig = "K8S_MCP_USE_IN_CLUSTER";
-        public const string ApprovalRoot = ApprovalConventions.EnvironmentVariables.ApprovalRoot;
         public const string AllowedNamespaces = "K8S_MCP_ALLOWED_NAMESPACES";
         public const string LogPath = "K8S_MCP_LOG_PATH";
     }
@@ -53,10 +47,39 @@ internal static class KubernetesConventions
     public static class ConfigurationKeys
     {
         public const string AllowedNamespaces = "InfraGate:Kubernetes:AllowedNamespaces";
-        public const string ApprovalRoot = "InfraGate:Approval:Root";
         public const string KubeConfig = "InfraGate:Kubernetes:KubeConfig";
         public const string LogPath = "InfraGate:Kubernetes:LogPath";
         public const string UseInClusterConfig = "InfraGate:Kubernetes:UseInClusterConfig";
+    }
+
+    public static class DiffChangeTypes
+    {
+        public const string Create = "create";
+        public const string Update = "update";
+        public const string Delete = "delete";
+        public const string NoOp = "no-op";
+    }
+
+    public static class DateTimeFormats
+    {
+        public const string RoundTrip = "O";
+    }
+
+    public static class PolicyCodes
+    {
+        public const string DeploymentPrivilegedContainer = "DEPLOYMENT_PRIVILEGED_CONTAINER";
+        public const string DeploymentHostNamespace = "DEPLOYMENT_HOST_NAMESPACE";
+        public const string DeploymentHostPath = "DEPLOYMENT_HOST_PATH";
+        public const string DeploymentAddedCapabilities = "DEPLOYMENT_ADDED_CAPABILITIES";
+        public const string ImageLatestTag = "IMAGE_LATEST_TAG";
+        public const string ServiceLoadBalancer = "SERVICE_LOAD_BALANCER";
+        public const string ServiceNodePort = "SERVICE_NODE_PORT";
+    }
+
+    public static class ExecutionMessages
+    {
+        public const string PolicyRefusal = "Apply refused by policy:";
+        public const string ApplySuccess = "Applied";
     }
 
     public static class MutationOperations
@@ -78,7 +101,6 @@ internal static class KubernetesConventions
         public const string NoDrift = "ok";
     }
 
-    // Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
     public static class KubernetesApi
     {
         public const string DryRunAll = "All";
@@ -139,7 +161,6 @@ internal static class KubernetesConventions
         public const string DoesNotExist = "DoesNotExist";
     }
 
-    // Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
     public static class KubernetesResources
     {
         public const string AppsV1 = "apps/v1";

@@ -114,6 +114,11 @@ internal static partial class ObserverLogEvents
         Message = "Failed to parse LLM output as JSON array for namespace {Namespace}")]
     public static partial void LogJsonParseFailed(ILogger logger, string @namespace, Exception ex);
 
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "LLM returned unparseable or non-JSON tool call format. Will fallback to parsing as anomaly report.")]
+    public static partial void LogLlmNonJsonToolCall(ILogger logger, Exception ex);
+
     // ── Handoff ─────────────────────────────────────────────────
 
     [LoggerMessage(
@@ -152,4 +157,28 @@ internal static partial class ObserverLogEvents
         Level = LogLevel.Warning,
         Message = "observer.handoff.http_backpressure: planner returned 429")]
     public static partial void LogHandoffHttpBackpressure(ILogger logger);
+
+    // ── MCP calls ───────────────────────────────────────────────
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "observer.mcp.tool_error toolName={ToolName}: server returned isError=true; treating result as unavailable")]
+    public static partial void LogMcpToolError(ILogger logger, string toolName);
+
+    // ── LLM calls ───────────────────────────────────────────────
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "observer.llm.provider provider={Provider} model={Model}")]
+    public static partial void LogLlmProviderConfigured(ILogger logger, string provider, string model);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "observer.llm.call namespace={Namespace} iteration={Iteration}")]
+    public static partial void LogLlmCallStarting(ILogger logger, string @namespace, int iteration);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "observer.llm.call_done namespace={Namespace} iteration={Iteration} durationMs={DurationMs}")]
+    public static partial void LogLlmCallCompleted(ILogger logger, string @namespace, int iteration, long durationMs);
 }

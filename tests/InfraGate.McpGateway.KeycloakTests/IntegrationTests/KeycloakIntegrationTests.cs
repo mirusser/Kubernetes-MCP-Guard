@@ -973,7 +973,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                 services.AddSingleton<GuardedToolRunner>();
                 services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
                 services.AddSingleton<ApprovalStore>();
-                services.AddSingleton<IApprovalAuditPublisher>(sp => sp.GetRequiredService<ApprovalStore>());
+                services.AddSingleton<IApprovalAuditOutbox>(sp => sp.GetRequiredService<ApprovalStore>());
                 services.AddSingleton<IApprovalPlanWorkflow>(sp => sp.GetRequiredService<ApprovalStore>());
                 services.AddSingleton<InMemoryApprovalChallengeWorkflow>();
                 services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<InMemoryApprovalChallengeWorkflow>());

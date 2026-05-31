@@ -1,4 +1,5 @@
 using System.Diagnostics.Metrics;
+using InfraGate.Observer.Audit;
 using InfraGate.Observer.Diagnostics;
 
 namespace InfraGate.Observer.Handoff;
@@ -7,6 +8,7 @@ internal sealed class HttpAnomalyHandoffSink : IAnomalyHandoffSink
 {
     private readonly HttpClient httpClient;
     private readonly string plannerHandoffUrl;
+    private readonly IObserverAuditOutbox? auditOutbox;
     private readonly ILogger<HttpAnomalyHandoffSink> logger;
     private readonly Counter<long> httpFailedCounter;
     private readonly Counter<long> httpBackpressureCounter;
@@ -15,6 +17,7 @@ internal sealed class HttpAnomalyHandoffSink : IAnomalyHandoffSink
         HttpClient httpClient,
         string plannerHandoffUrl,
         ILogger<HttpAnomalyHandoffSink> logger,
+        IObserverAuditOutbox? auditOutbox = null,
         Meter? meter = null)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
@@ -23,6 +26,7 @@ internal sealed class HttpAnomalyHandoffSink : IAnomalyHandoffSink
 
         this.httpClient = httpClient;
         this.plannerHandoffUrl = plannerHandoffUrl;
+        this.auditOutbox = auditOutbox;
         this.logger = logger;
         this.httpFailedCounter = ObserverMetrics.CreateHandoffHttpFailedCounter(meter);
         this.httpBackpressureCounter = ObserverMetrics.CreateHandoffHttpBackpressureCounter(meter);
@@ -50,6 +54,52 @@ internal sealed class HttpAnomalyHandoffSink : IAnomalyHandoffSink
         {
             ObserverLogEvents.LogHandoffHttpFailed(logger, (int)response.StatusCode);
             httpFailedCounter.Add(1);
+
+            if (auditOutbox is not null)
+            {
+                await EmitHandoffFailedAsync(batch, (int)response.StatusCode, null, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        if (auditOutbox is not null)
+        {
+            await EmitHandoffPublishedAsync(batch, cancellationToken).ConfigureAwait(false);
         }
     }
+
+    private Task EmitHandoffPublishedAsync(AnomalyHandoffBatch batch, CancellationToken cancellationToken) =>
+        auditOutbox!.AppendAsync(new ObserverAuditEntry(
+            EventName: ObserverAuditEvents.HandoffPublished,
+            Payload: new
+            {
+                batchSize = batch.Reports.Count,
+                anomalyIds = batch.Reports.Select(r => r.AnomalyId).ToArray(),
+                sinkType = "http",
+            },
+            ActorSubject: "service:observer",
+            CycleId: batch.CycleId,
+            Outcome: "published"),
+        cancellationToken);
+
+    private Task EmitHandoffFailedAsync(
+        AnomalyHandoffBatch batch,
+        int? statusCode,
+        string? errorClass,
+        CancellationToken cancellationToken) =>
+        auditOutbox!.AppendAsync(new ObserverAuditEntry(
+            EventName: ObserverAuditEvents.HandoffFailed,
+            Payload: new
+            {
+                batchSize = batch.Reports.Count,
+                statusCode,
+                errorClass,
+                sinkType = "http",
+            },
+            ActorSubject: "service:observer",
+            CycleId: batch.CycleId,
+            Outcome: "failed"),
+        cancellationToken);
 }

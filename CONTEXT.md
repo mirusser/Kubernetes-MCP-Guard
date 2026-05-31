@@ -186,6 +186,10 @@ _Avoid_: Adapter audit schema
 Domain-specific audit data attached to an **Audit Spine** event under an adapter-owned payload slot.
 _Avoid_: Generic audit fields
 
+**Audit Stream**:
+The per-component, append-only audit record for one runtime component (currently **Approval Authority**, **Anomaly Observer**, **Remediation Planner**), written transactionally with the state change it describes. Each **Audit Stream** carries its own tamper-evident hash chain over its own rows and outbox-shape state fields so rows can later be published to an external sink without schema rewrites. Streams are correlated across components by IDs (`plan_id`, `anomaly_id`, `challenge_id`, `grant_id`, `cycle_id`) — not by a shared hash chain. The **Generic Approval Core** owns the **Approval Authority** stream; **Anomaly Observer** and **Remediation Planner** each own their own stream.
+_Avoid_: **Audit Trail** (currently scoped to approval-lifecycle only), **Adapter Audit Payload** (the domain-specific JSON inside one event), unified ledger across components
+
 **Notification Registry**:
 The in-memory mapping from active MCP session identifiers to their notification targets and from plan URIs to subscribed session sets, used to route **Approval Notifications** back to the right AI agent sessions.
 _Avoid_: Session store, connection pool
@@ -193,6 +197,34 @@ _Avoid_: Session store, connection pool
 **Approval Notification**:
 A server-to-client MCP `notifications/resources/updated` message sent when an **Approval Challenge** is approved, carrying the plan status resource URI so the AI agent's host can read the updated status and retry execution without manual prompting.
 _Avoid_: Push event, callback
+
+**Prompt Library**:
+A shared module exposing a single interface (`IPromptLibrary`) that loads named prompt-template assets and renders them with typed, validated arguments using Semantic Kernel as a renderer.
+_Avoid_: Ad-hoc prompt loader, manual string replacement
+
+**Prompt Template**:
+A structured asset (e.g., Handlebars) containing LLM instructions and placeholders, rendered by the **Prompt Library** before being passed to an agent.
+_Avoid_: Static markdown file, unvalidated string template
+
+**Agent MCP Toolset**:
+The shared `IAgentMcpToolset` abstraction in `InfraGate.AgentMcp` used by AI agents (Observer, Planner) to connect to the MCP Gateway. It enforces visibility filtering based on `ReadOnlyHint` annotations and abstracts the connection lifecycle.
+_Avoid_: McpClient, direct gateway transport
+
+
+### Guardrails
+
+**Tool-Call Guardrail**:
+A framework function-invocation middleware (`AIAgentBuilder.Use(...)`) in `InfraGate.AgentGuardrails` that enforces an explicit, caller-declared tool-name allow-list at invocation time. Every agent tool call must be in the allow-list; disallowed calls are blocked, metered, and not executed. Owned by the guardrail module and composed into the shared `ToolCallingAgentFactory` seam so both Observer and Planner agents get it.
+_Avoid_: ReadOnlyHint filtering, Gateway tool-permission check
+
+**Guardrail Metric**:
+A consolidated `Counter<long>` on the `InfraGate.AgentGuardrails` meter that records every guardrail outcome — tool blocks at the agent layer and decision rejections at the workflow layer — with a reason tag (`tool_not_allowed`, `invalid_operation`, `invalid_arguments`, `dedupe_in_batch`). The two formerly bespoke Planner counters (`infragate.planner.decision.invalid_operation`, `infragate.planner.decision.invalid_arguments`) were removed in favour of this single reason-tagged counter.
+_Avoid_: PlannerMetrics, ObserverMetrics, ad-hoc counter
+
+**Hallucination Rate**:
+The decision-layer ratio `rejected{reason=invalid_operation,invalid_arguments} / (accepted+rejected)` computed from the **Guardrail Metric**. The `dedupe_in_batch` reason is excluded from the numerator because it represents an operational drop, not a hallucination. The tool-block rate uses `tool_call.blocked` divided by the allowed-call span count from §4's per-function spans.
+_Avoid_: Agent error rate, task failure rate
+
 
 ### Anomaly Observation
 
@@ -316,6 +348,14 @@ _Avoid_: Planner Service Identity, Approver, Requester, Gateway Service Identity
 - An **Audit Spine** defines the generic lifecycle events in an **Audit Trail**
 - An **Adapter Audit Payload** may be attached to an **Audit Spine** event
 - Grant validation proof belongs to pre-execution gate audit events, not to `execution.started`
+- An **Audit Stream** is owned by exactly one runtime component
+- Three runtime components currently own an **Audit Stream**: the **Approval Authority**, the **Anomaly Observer**, and the **Remediation Planner**
+- An **Audit Stream** carries its own tamper-evident hash chain over its own rows
+- An **Audit Stream** is correlated to other **Audit Streams** by IDs, not by a shared hash chain
+- An **Audit Stream** is written transactionally with the state mutation it describes, when one exists
+- The **Approval Authority**'s **Audit Stream** is the persistent representation of the **Audit Trail**
+- The **Anomaly Observer**'s **Audit Stream** does not extend the **Audit Spine** and does not produce **Audit Spine** events
+- The **Remediation Planner**'s **Audit Stream** does not extend the **Audit Spine** and does not produce **Audit Spine** events
 - An **Authorization Check** is separate from an **Approval Policy**
 - An **Authorization Check** may gate creation of a **Plan Envelope** or creation of an **Execution Attempt**
 - A **Domain Policy Check** is separate from an **Approval Policy** and an **Authorization Check**

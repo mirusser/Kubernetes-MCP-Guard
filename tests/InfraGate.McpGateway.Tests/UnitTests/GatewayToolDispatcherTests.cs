@@ -55,6 +55,41 @@ public sealed class GatewayToolDispatcherTests
     }
 
     [Fact]
+    public async Task ListToolsAsync_ReadOnlyHint_ExposedOnReadOnlyTools()
+    {
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+
+        var result = await context.Dispatcher.ListToolsAsync(new ListToolsRequestParams(), CancellationToken.None);
+
+        var readOnlyTool = Assert.Single(result.Tools, t => t.Name == "get_allowed_namespaces");
+        Assert.True(readOnlyTool.Annotations?.ReadOnlyHint);
+
+        var proposePlan = Assert.Single(result.Tools, t => t.Name == McpGatewayConventions.ToolNames.ProposePlan);
+        Assert.True(proposePlan.Annotations?.ReadOnlyHint is not true);
+
+        var applyApprovedPlan =
+            Assert.Single(result.Tools, t => t.Name == McpGatewayConventions.ToolNames.ApplyApprovedPlan);
+        Assert.True(applyApprovedPlan.Annotations?.ReadOnlyHint is not true);
+    }
+
+    [Fact]
+    public async Task ListToolsAsync_ScopeFiltering_FiltersToolsVisibleToUser()
+    {
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            httpScope: GatewayAuthConventions.DefaultReadOnlyOAuthScope);
+
+        var result = await context.Dispatcher.ListToolsAsync(new ListToolsRequestParams(), CancellationToken.None);
+
+        Assert.Contains(result.Tools, t => t.Name == "get_allowed_namespaces");
+        Assert.Contains(result.Tools, t => t.Name == McpGatewayConventions.ToolNames.GetPlanStatus);
+
+        Assert.DoesNotContain(result.Tools, t => t.Name == "request_apply_manifest");
+        Assert.DoesNotContain(result.Tools, t => t.Name == McpGatewayConventions.ToolNames.ProposePlan);
+        Assert.DoesNotContain(result.Tools, t => t.Name == McpGatewayConventions.ToolNames.ApplyApprovedPlan);
+    }
+
+    [Fact]
     public async Task CallToolAsync_GetPlanStatus_MissingPlanId_ReturnsError()
     {
         var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
@@ -67,7 +102,8 @@ public sealed class GatewayToolDispatcherTests
             CancellationToken.None);
 
         Assert.True(result.IsError);
-        Assert.Equal(McpGatewayMessages.ArgumentValidation.MissingPlanId, Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+        Assert.Equal(McpGatewayMessages.ArgumentValidation.MissingPlanId,
+            Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
     }
 
     [Fact]
@@ -83,7 +119,8 @@ public sealed class GatewayToolDispatcherTests
             CancellationToken.None);
 
         Assert.True(result.IsError);
-        Assert.Equal(McpGatewayMessages.ArgumentValidation.MissingPlanId, Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+        Assert.Equal(McpGatewayMessages.ArgumentValidation.MissingPlanId,
+            Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
     }
 
     [Fact]
@@ -130,7 +167,8 @@ public sealed class GatewayToolDispatcherTests
 
         var result = await CallWaitForPlanApprovalAsync(context, envelope.Id, timeoutSeconds: 1);
 
-        AssertPlanStatusJson(result, envelope.Id, ApprovalConventions.PlanStatusValues.ApprovalRequired, timedOut: true);
+        AssertPlanStatusJson(result, envelope.Id, ApprovalConventions.PlanStatusValues.ApprovalRequired,
+            timedOut: true);
     }
 
     [Fact]
@@ -279,7 +317,8 @@ public sealed class GatewayToolDispatcherTests
             CancellationToken.None);
 
         Assert.True(result.IsError);
-        Assert.Equal(McpGatewayMessages.ToolRouting.DestructiveToolRequiresRequest("apply_manifest"), Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+        Assert.Equal(McpGatewayMessages.ToolRouting.DestructiveToolRequiresRequest("apply_manifest"),
+            Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
         Assert.Empty(context.Downstream.Calls);
     }
 
@@ -458,7 +497,8 @@ public sealed class GatewayToolDispatcherTests
         string audit = context.Workflow.GetAuditEventsJson();
 
         Assert.True(result.IsError);
-        Assert.Equal(McpGatewayMessages.Approval.PlanExecutionFailed(envelope.Id, "downstream mutation failed"), Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
+        Assert.Equal(McpGatewayMessages.Approval.PlanExecutionFailed(envelope.Id, "downstream mutation failed"),
+            Assert.Single(result.Content.OfType<TextContentBlock>()).Text);
         Assert.Contains($@"""eventName"": ""{ApprovalConventions.AuditEvents.ApplyFailed}""", audit);
         Assert.False(context.Workflow.IsApplied(envelope.Id));
     }
@@ -543,7 +583,8 @@ public sealed class GatewayToolDispatcherTests
             CancellationToken.None);
 
         Assert.True(result.IsError);
-        Assert.Contains(GatewayAuthConventions.DefaultOAuthScope, result.Content.OfType<TextContentBlock>().Single().Text);
+        Assert.Contains(GatewayAuthConventions.DefaultOAuthScope,
+            result.Content.OfType<TextContentBlock>().Single().Text);
 
         var auditEvent = Assert.Single(context.GuardrailAudit.Events);
         Assert.Equal("request_scale_deployment", auditEvent.ToolName);
@@ -627,7 +668,8 @@ public sealed class GatewayToolDispatcherTests
         var pending = await context.Workflow.GetPendingPlanAsync(plan.Id, CancellationToken.None);
         Assert.True(pending.IsPending);
         Assert.Equal(ApprovalConventions.ApprovalPolicyTypes.OperatorApproval, pending.Envelope?.ApprovalPolicy.Type);
-        Assert.Equal("kubernetes-operators", pending.Envelope?.ApprovalPolicy.Parameters?[ApprovalConventions.ApprovalPolicyParameters.OperatorGroup]);
+        Assert.Equal("kubernetes-operators",
+            pending.Envelope?.ApprovalPolicy.Parameters?[ApprovalConventions.ApprovalPolicyParameters.OperatorGroup]);
         Assert.Single(context.EmailSender.Sent);
         Assert.Contains("ops@example.com", context.EmailSender.Sent[0].ToAddress);
 
@@ -635,7 +677,8 @@ public sealed class GatewayToolDispatcherTests
         using var document = JsonDocument.Parse(text);
         Assert.Equal(plan.Id, document.RootElement.GetProperty("planId").GetString());
         Assert.True(document.RootElement.GetProperty("accessCodeSent").GetBoolean());
-        Assert.Equal("/approvals/code", new Uri(document.RootElement.GetProperty("approvalUrl").GetString()!).AbsolutePath);
+        Assert.Equal("/approvals/code",
+            new Uri(document.RootElement.GetProperty("approvalUrl").GetString()!).AbsolutePath);
     }
 
     [Fact]
@@ -958,7 +1001,8 @@ public sealed class GatewayToolDispatcherTests
         public Task<DomainPlanExecutionResult> CheckPreExecutionAsync(PlanEnvelope envelope, CancellationToken ct)
         {
             PreExecutionCalls.Add(envelope.Id);
-            return Task.FromResult(preExecutionResult ?? DomainPlanExecutionResult.Success("Pre-execution checks passed.", null));
+            return Task.FromResult(preExecutionResult ??
+                                   DomainPlanExecutionResult.Success("Pre-execution checks passed.", null));
         }
 
         public Task<DomainPlanExecutionResult> ExecuteAsync(PlanEnvelope envelope, CancellationToken ct)

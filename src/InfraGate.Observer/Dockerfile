@@ -1,22 +1,18 @@
+FROM alpine:3.21 AS filter
+WORKDIR /src
+COPY src/ src/
+RUN mkdir /out && \
+    find src -name '*.csproj' | tar -cf - -T - | tar -xf - -C /out
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
 
 COPY Directory.Build.props .
 COPY .editorconfig .
-COPY src/InfraGate.AgentLlm/InfraGate.AgentLlm.csproj src/InfraGate.AgentLlm/
-COPY src/InfraGate.Observer.Contracts/InfraGate.Observer.Contracts.csproj src/InfraGate.Observer.Contracts/
-COPY src/InfraGate.ClientCredentials/InfraGate.ClientCredentials.csproj src/InfraGate.ClientCredentials/
-COPY src/InfraGate.Observability/InfraGate.Observability.csproj src/InfraGate.Observability/
-COPY src/InfraGate.RuntimeSafety/InfraGate.RuntimeSafety.csproj src/InfraGate.RuntimeSafety/
-COPY src/InfraGate.Observer/InfraGate.Observer.csproj src/InfraGate.Observer/
+COPY --from=filter /out/src/ ./src/
 RUN dotnet restore src/InfraGate.Observer/InfraGate.Observer.csproj
 
-COPY src/InfraGate.AgentLlm/ src/InfraGate.AgentLlm/
-COPY src/InfraGate.Observer.Contracts/ src/InfraGate.Observer.Contracts/
-COPY src/InfraGate.ClientCredentials/ src/InfraGate.ClientCredentials/
-COPY src/InfraGate.Observability/ src/InfraGate.Observability/
-COPY src/InfraGate.RuntimeSafety/ src/InfraGate.RuntimeSafety/
-COPY src/InfraGate.Observer/ src/InfraGate.Observer/
+COPY src/ src/
 RUN dotnet publish src/InfraGate.Observer/InfraGate.Observer.csproj \
     --configuration Release \
     --output /app/observer \

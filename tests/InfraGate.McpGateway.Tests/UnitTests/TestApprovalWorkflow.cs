@@ -1,5 +1,7 @@
-using System.Text.Json;
 using InfraGate.Approvals;
+using InfraGate;
+using System.Text.Json;
+
 using InfraGate.Approvals.Plan;
 using InfraGate.Approvals.Challenge;
 using InfraGate.Approvals.Grant;
@@ -14,7 +16,7 @@ internal sealed class TestApprovalWorkflow :
     IApprovalPlanWorkflow,
     IApprovalChallengeWorkflow,
     IApprovalExecutionWorkflow,
-    IApprovalAuditPublisher
+    IApprovalAuditOutbox
 {
     private static readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -35,8 +37,8 @@ internal sealed class TestApprovalWorkflow :
         string targetNamespace,
         CancellationToken cancellationToken)
     {
-        var json = ApprovalCanonicalJson.Serialize(envelope);
-        var hash = ApprovalCanonicalJson.ComputeSha256Hex(json);
+        var json = CanonicalJson.Serialize(envelope);
+        var hash = CanonicalJson.ComputeSha256Hex(json);
         plans[envelope.Id] = new PlanRecord(envelope, targetNamespace, hash);
         AppendAudit(ApprovalConventions.AuditEvents.PlanRequested,
             new PlanRequestedPayload(envelope.Id, envelope.Operation, targetNamespace, hash,
@@ -192,7 +194,7 @@ internal sealed class TestApprovalWorkflow :
     public Task<ApprovalChallenge> RecordChallengeOutcomeAsync(
         ApprovalChallenge challenge,
         ChallengeOutcome outcome,
-        PlanAudit audit,
+        ApprovalAuditEntry entry,
         CancellationToken cancellationToken)
     {
         var updated = challenge with
@@ -203,7 +205,7 @@ internal sealed class TestApprovalWorkflow :
             Outcome = outcome
         };
         challenges[challenge.Id] = updated;
-        AppendAudit(audit.EventName, audit.Payload);
+        AppendAudit(entry.EventName, entry.Payload);
         return Task.FromResult(updated);
     }
 
@@ -236,10 +238,10 @@ internal sealed class TestApprovalWorkflow :
         ExecutionAttempt attempt,
         string message,
         string? reasonCode,
-        PlanAudit audit,
+        ApprovalAuditEntry entry,
         CancellationToken cancellationToken)
     {
-        AppendAudit(audit.EventName, audit.Payload);
+        AppendAudit(entry.EventName, entry.Payload);
         return Task.CompletedTask;
     }
 
@@ -247,10 +249,10 @@ internal sealed class TestApprovalWorkflow :
         ExecutionAttempt attempt,
         string message,
         string? reasonCode,
-        PlanAudit audit,
+        ApprovalAuditEntry entry,
         CancellationToken cancellationToken)
     {
-        AppendAudit(audit.EventName, audit.Payload);
+        AppendAudit(entry.EventName, entry.Payload);
         return Task.CompletedTask;
     }
 
@@ -259,19 +261,11 @@ internal sealed class TestApprovalWorkflow :
         ApprovalGrant grant,
         string targetNamespace,
         string message,
-        PlanAudit audit,
+        ApprovalAuditEntry entry,
         CancellationToken cancellationToken)
     {
         appliedPlans.Add(attempt.PlanId);
-        AppendAudit(audit.EventName, audit.Payload);
-        return Task.CompletedTask;
-    }
-
-    // ── IApprovalAuditPublisher ───────────────────────────────────────────────
-
-    public Task PublishAsync(PlanAudit audit, CancellationToken cancellationToken)
-    {
-        AppendAudit(audit.EventName, audit.Payload);
+        AppendAudit(entry.EventName, entry.Payload);
         return Task.CompletedTask;
     }
 
@@ -352,6 +346,14 @@ internal sealed class TestApprovalWorkflow :
 
     public string GetAuditEventsJson() =>
         string.Join(Environment.NewLine, auditLines);
+
+    // ── IApprovalAuditOutbox ──────────────────────────────────────────────────
+
+    public Task<long> AppendAsync(ApprovalAuditEntry entry, CancellationToken cancellationToken)
+    {
+        AppendAudit(entry.EventName, entry.Payload);
+        return Task.FromResult(0L);
+    }
 
     // ── Private helpers ───────────────────────────────────────────────────────
 

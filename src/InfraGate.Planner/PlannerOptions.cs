@@ -19,10 +19,10 @@ public sealed record class PlannerOptions
             throw new InvalidOperationException("GatewayBaseUrl must be configured.");
         }
 
-        if (IsAnthropicProvider() && string.IsNullOrWhiteSpace(LlmApiKey))
+        if ((IsAnthropicProvider() || IsOpenRouterProvider()) && string.IsNullOrWhiteSpace(LlmApiKey))
         {
             throw new InvalidOperationException(
-                $"LlmApiKey must be configured for Anthropic. Set {PlannerConventions.EnvironmentVariables.LlmApiKey}.");
+                $"LlmApiKey must be configured for {LlmProvider} provider. Set {PlannerConventions.EnvironmentVariables.LlmApiKey}.");
         }
 
         if (AnomalyWallClockCapSeconds < PlannerConventions.MinAnomalyWallClockCapSeconds ||
@@ -51,5 +51,10 @@ public sealed record class PlannerOptions
     {
         return string.IsNullOrWhiteSpace(LlmProvider) ||
             LlmProvider.Equals(PlannerConventions.LlmProviders.Anthropic, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsOpenRouterProvider()
+    {
+        return LlmProvider.Equals(PlannerConventions.LlmProviders.OpenRouter, StringComparison.OrdinalIgnoreCase);
     }
 }

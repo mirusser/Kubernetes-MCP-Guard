@@ -27,24 +27,6 @@ public sealed class PlannerConventionsTests
     }
 
     [Fact]
-    public void AllowedToolNames_ContainsProposePlan()
-    {
-        Assert.Contains(PlannerConventions.ToolNames.ProposePlan, PlannerConventions.ToolNames.AllowedToolNames);
-    }
-
-    [Fact]
-    public void ReadOnlyToolNames_DoesNotContainProposePlan()
-    {
-        Assert.DoesNotContain(PlannerConventions.ToolNames.ProposePlan, PlannerConventions.ToolNames.ReadOnlyToolNames);
-    }
-
-    [Fact]
-    public void ReadOnlyToolNames_ContainsEightTools()
-    {
-        Assert.Equal(8, PlannerConventions.ToolNames.ReadOnlyToolNames.Count);
-    }
-
-    [Fact]
     public void AllowedOperationTypes_ContainsRestartScaleSetImage()
     {
         Assert.Contains(PlannerConventions.OperationTypes.RestartDeployment, PlannerConventions.OperationTypes.AllowedOperationTypes);
@@ -155,6 +137,13 @@ public sealed class PlannerConventionsTests
         Assert.Equal("GOOGLE", PlannerConventions.LlmProviders.Google);
         Assert.Equal("AZURE", PlannerConventions.LlmProviders.Azure);
         Assert.Equal("OLLAMA", PlannerConventions.LlmProviders.Ollama);
+        Assert.Equal("OPENROUTER", PlannerConventions.LlmProviders.OpenRouter);
+    }
+
+    [Fact]
+    public void DefaultOpenRouterLlmModel_IsPinned()
+    {
+        Assert.Equal("deepseek/deepseek-v4-flash:free", PlannerConventions.DefaultOpenRouterLlmModel);
     }
 
     [Fact]
@@ -175,12 +164,6 @@ public sealed class PlannerConventionsTests
         Assert.Equal("get_k8s_deployments", PlannerConventions.ToolNames.GetK8sDeployments);
         Assert.Equal("get_k8s_services", PlannerConventions.ToolNames.GetK8sServices);
         Assert.Equal("get_k8s_endpoints", PlannerConventions.ToolNames.GetK8sEndpoints);
-    }
-
-    [Fact]
-    public void AllowedToolNames_ContainsNineEntries()
-    {
-        Assert.Equal(9, PlannerConventions.ToolNames.AllowedToolNames.Count);
     }
 
     [Fact]

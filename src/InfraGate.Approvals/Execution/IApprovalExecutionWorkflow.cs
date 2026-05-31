@@ -14,14 +14,14 @@ public interface IApprovalExecutionWorkflow
         ExecutionAttempt attempt,
         string message,
         string? reasonCode,
-        PlanAudit audit,
+        ApprovalAuditEntry entry,
         CancellationToken cancellationToken);
 
     Task RecordExecutionFailedAsync(
         ExecutionAttempt attempt,
         string message,
         string? reasonCode,
-        PlanAudit audit,
+        ApprovalAuditEntry entry,
         CancellationToken cancellationToken);
 
     Task RecordExecutionSucceededAsync(
@@ -29,6 +29,6 @@ public interface IApprovalExecutionWorkflow
         ApprovalGrant grant,
         string targetNamespace,
         string message,
-        PlanAudit audit,
+        ApprovalAuditEntry entry,
         CancellationToken cancellationToken);
 }

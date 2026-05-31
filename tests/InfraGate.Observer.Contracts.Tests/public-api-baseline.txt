@@ -31,6 +31,7 @@ class InfraGate.Observer.Contracts.AnomalyObserverConventions
   const Int32 DefaultDedupeResolutionThreshold
   const Int32 DefaultDedupeSuppressionWindow
   const String DefaultLlmModel
+  const String DefaultOpenRouterLlmModel
   const Int32 MaxCadenceSeconds
   const Int32 MaxDedupeResolutionThreshold
   const Int32 MaxDedupeSuppressionWindow

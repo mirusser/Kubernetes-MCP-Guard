@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Http;
-using InfraGate.KubernetesAdapter.PlanBuilding;
+using InfraGate.McpServer.Models;
 using InfraGate.McpServer;
 using k8s;
 using k8s.Autorest;
@@ -169,8 +169,7 @@ public sealed class KubernetesManagerHelpersTests
     public void ValidateNamespace_NullOrWhitespace_ReturnsRequiredMessage(string? namespaceName)
     {
         var options = new KubernetesMcpOptions(
-            AllowedNamespaces: new HashSet<string>(["default"]),
-            ApprovalRoot: "/tmp/approvals");
+            AllowedNamespaces: new HashSet<string>(["default"]));
 
         var result = KubernetesManagerHelpers.ValidateNamespace(options, namespaceName!);
 
@@ -181,8 +180,7 @@ public sealed class KubernetesManagerHelpersTests
     public void ValidateNamespace_DisallowedNamespace_ReturnsNotAllowedMessage()
     {
         var options = new KubernetesMcpOptions(
-            AllowedNamespaces: new HashSet<string>(["production"]),
-            ApprovalRoot: "/tmp/approvals");
+            AllowedNamespaces: new HashSet<string>(["production"]));
 
         var result = KubernetesManagerHelpers.ValidateNamespace(options, "staging");
 
@@ -195,8 +193,7 @@ public sealed class KubernetesManagerHelpersTests
     public void ValidateNamespace_AllowedNamespace_ReturnsNull()
     {
         var options = new KubernetesMcpOptions(
-            AllowedNamespaces: new HashSet<string>(["production"]),
-            ApprovalRoot: "/tmp/approvals");
+            AllowedNamespaces: new HashSet<string>(["production"]));
 
         var result = KubernetesManagerHelpers.ValidateNamespace(options, "production");
 

@@ -1,14 +1,14 @@
 # 🛡️ Kubernetes MCP Guard
 
-**A reference implementation for safe AI-driven Kubernetes remediation.**  
+**Human-approved, AI-driven Kubernetes remediation through a guarded MCP gateway.**
 
-> **Safe remediation, by design:**  
->  
+> **Remediation, by design:**
+>
 > Observer detects anomalies.  
 > Planner proposes an evidence-backed plan.  
 > Human reviewer approves out-of-band.  
 > Executor runs only the approved digest-bound plan.  
-> Everything is auditable.
+> Everything is auditable.  
 
 </br>
 
@@ -331,6 +331,7 @@ Use specific release tags for stable demos. The `:dev` tag tracks the developmen
 - [src/InfraGate.Observer/README.md](src/InfraGate.Observer/README.md): LLM-driven anomaly observer.
 - [src/InfraGate.Planner/README.md](src/InfraGate.Planner/README.md): LLM-driven remediation planner.
 - [src/InfraGate.Executor/README.md](src/InfraGate.Executor/README.md): deterministic remediation executor.
+- [src/InfraGate.AgentGuardrails/README.md](src/InfraGate.AgentGuardrails/README.md): tool-call guardrail middleware and hallucination-rate metric.
 
 ## ⚖️ Boundaries And Non-Goals
 

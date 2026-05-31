@@ -17,4 +17,5 @@ internal sealed record class ObserverProfile(
     string? FileSinkRoot,
     string? PlannerHandoffUrl,
     string? ObserverHostPath,
+    string? AuditConnectionString,
     IReadOnlyList<string>? AllowedNamespaces);

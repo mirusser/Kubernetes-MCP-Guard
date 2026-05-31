@@ -1,44 +1,74 @@
-using InfraGate.Observer.Prompts;
+using System.Reflection;
+using System.Text;
+using InfraGate.Observer.Cycle;
+using InfraGate.Prompts;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace InfraGate.Observer.Tests.UnitTests;
 
 public sealed class SystemPromptProviderTests
 {
-    [Fact]
-    public void Get_SubstitutesNamespacePlaceholder()
+    private static async Task<IPromptLibrary> BuildObserverLibraryAsync()
     {
-        var provider = new SystemPromptProvider();
-        var prompt = provider.Get("mcp-nginx-demo", 8);
+        var assembly = typeof(ObservationCycleRunner).Assembly;
+        using var stream = assembly.GetManifestResourceStream(ObserverConventions.Prompts.SystemPromptResourceName)
+            ?? throw new InvalidOperationException("Embedded resource not found.");
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        var templateText = await reader.ReadToEndAsync().ConfigureAwait(false);
 
-        Assert.DoesNotContain("{NAMESPACE}", prompt, StringComparison.Ordinal);
+        var services = new ServiceCollection();
+        services.AddInfraGatePromptLibrary(b => b.AddTemplate(
+            ObserverConventions.Prompts.SystemPromptTemplateName,
+            templateText,
+            [ObserverConventions.Prompts.NamespaceArgumentName, ObserverConventions.Prompts.MaxToolIterationsArgumentName]));
+
+        return services.BuildServiceProvider().GetRequiredService<IPromptLibrary>();
+    }
+
+    private static Dictionary<string, object?> DefaultArgs(string ns = "default", int maxIter = 8) =>
+        new(StringComparer.Ordinal) { ["namespace"] = ns, ["maxToolIterations"] = maxIter };
+
+    [Fact]
+    public async Task RenderAsync_SubstitutesNamespacePlaceholder()
+    {
+        var library = await BuildObserverLibraryAsync();
+        var prompt = await library.RenderAsync(
+            ObserverConventions.Prompts.SystemPromptTemplateName,
+            new Dictionary<string, object?>(StringComparer.Ordinal) { [ObserverConventions.Prompts.NamespaceArgumentName] = "mcp-nginx-demo", [ObserverConventions.Prompts.MaxToolIterationsArgumentName] = 8 });
+
+        Assert.DoesNotContain("{{namespace}}", prompt, StringComparison.Ordinal);
         Assert.Contains("mcp-nginx-demo", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Get_SubstitutesMaxToolIterationsPlaceholder()
+    public async Task RenderAsync_SubstitutesMaxToolIterationsPlaceholder()
     {
-        var provider = new SystemPromptProvider();
-        var prompt = provider.Get("test-ns", 3);
+        var library = await BuildObserverLibraryAsync();
+        var prompt = await library.RenderAsync(
+            ObserverConventions.Prompts.SystemPromptTemplateName,
+            new Dictionary<string, object?>(StringComparer.Ordinal) { [ObserverConventions.Prompts.NamespaceArgumentName] = "test-ns", [ObserverConventions.Prompts.MaxToolIterationsArgumentName] = 3 });
 
-        Assert.DoesNotContain("{MAX_TOOL_ITERATIONS}", prompt, StringComparison.Ordinal);
-        Assert.Contains("3 tool calls", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{maxToolIterations}}", prompt, StringComparison.Ordinal);
+        Assert.Contains("3", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Get_KnownPlaceholdersAreReplaced()
+    public async Task RenderAsync_NoUnresolvedPlaceholders()
     {
-        var provider = new SystemPromptProvider();
-        var prompt = provider.Get("default", 8);
+        var library = await BuildObserverLibraryAsync();
+        var prompt = await library.RenderAsync(
+            ObserverConventions.Prompts.SystemPromptTemplateName, DefaultArgs());
 
-        Assert.DoesNotContain("{NAMESPACE}", prompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("{MAX_TOOL_ITERATIONS}", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{namespace}}", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{maxToolIterations}}", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Get_ForbidsMutationToolNames()
+    public async Task RenderAsync_ForbidsMutationToolNames()
     {
-        var provider = new SystemPromptProvider();
-        var prompt = provider.Get("default", 8);
+        var library = await BuildObserverLibraryAsync();
+        var prompt = await library.RenderAsync(
+            ObserverConventions.Prompts.SystemPromptTemplateName, DefaultArgs());
 
         Assert.Contains("request_", prompt, StringComparison.Ordinal);
         Assert.Contains("execute_", prompt, StringComparison.Ordinal);
@@ -50,10 +80,11 @@ public sealed class SystemPromptProviderTests
     }
 
     [Fact]
-    public void Get_ContainsAllFourAnomalyKinds()
+    public async Task RenderAsync_ContainsAllFourAnomalyKinds()
     {
-        var provider = new SystemPromptProvider();
-        var prompt = provider.Get("default", 8);
+        var library = await BuildObserverLibraryAsync();
+        var prompt = await library.RenderAsync(
+            ObserverConventions.Prompts.SystemPromptTemplateName, DefaultArgs());
 
         Assert.Contains("PodUnhealthy", prompt, StringComparison.Ordinal);
         Assert.Contains("DeploymentUnavailable", prompt, StringComparison.Ordinal);
@@ -62,33 +93,45 @@ public sealed class SystemPromptProviderTests
     }
 
     [Fact]
-    public void Get_ContainsAllReadOnlyTools()
+    public async Task RenderAsync_ContainsAllReadOnlyTools()
     {
-        var provider = new SystemPromptProvider();
-        var prompt = provider.Get("default", 8);
+        var library = await BuildObserverLibraryAsync();
+        var prompt = await library.RenderAsync(
+            ObserverConventions.Prompts.SystemPromptTemplateName, DefaultArgs());
 
-        foreach (var toolName in ObserverConventions.ToolNames.ReadOnlyToolNames)
+        string[] readOnlyToolNames =
+        [
+            ObserverConventions.ToolNames.GetAllowedNamespaces,
+            ObserverConventions.ToolNames.GetK8sStatus,
+            ObserverConventions.ToolNames.GetK8sEvents,
+            ObserverConventions.ToolNames.GetK8sPods,
+            ObserverConventions.ToolNames.DescribeK8sResource,
+            ObserverConventions.ToolNames.GetK8sDeployments,
+            ObserverConventions.ToolNames.GetK8sServices,
+            ObserverConventions.ToolNames.GetK8sEndpoints,
+        ];
+        foreach (var toolName in readOnlyToolNames)
         {
             Assert.Contains(toolName, prompt, StringComparison.Ordinal);
         }
     }
 
     [Fact]
-    public void Get_IsDeterministicForSameInput()
+    public async Task RenderAsync_IsDeterministicForSameInput()
     {
-        var provider = new SystemPromptProvider();
-        var first = provider.Get("ns1", 5);
-        var second = provider.Get("ns1", 5);
+        var library = await BuildObserverLibraryAsync();
+        var first = await library.RenderAsync(ObserverConventions.Prompts.SystemPromptTemplateName, DefaultArgs("ns1", 5));
+        var second = await library.RenderAsync(ObserverConventions.Prompts.SystemPromptTemplateName, DefaultArgs("ns1", 5));
 
         Assert.Equal(first, second, StringComparer.Ordinal);
     }
 
     [Fact]
-    public void Get_DifferentNamespacesProduceDifferentOutput()
+    public async Task RenderAsync_DifferentNamespacesProduceDifferentOutput()
     {
-        var provider = new SystemPromptProvider();
-        var first = provider.Get("ns-a", 5);
-        var second = provider.Get("ns-b", 5);
+        var library = await BuildObserverLibraryAsync();
+        var first = await library.RenderAsync(ObserverConventions.Prompts.SystemPromptTemplateName, DefaultArgs("ns-a", 5));
+        var second = await library.RenderAsync(ObserverConventions.Prompts.SystemPromptTemplateName, DefaultArgs("ns-b", 5));
 
         Assert.NotEqual(first, second, StringComparer.Ordinal);
     }

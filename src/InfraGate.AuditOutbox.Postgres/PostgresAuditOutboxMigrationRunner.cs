@@ -1,0 +1,187 @@
+using System.Security.Cryptography;
+using System.Text;
+using Dapper;
+using Npgsql;
+
+namespace InfraGate.AuditOutbox.Postgres;
+
+public static class PostgresAuditOutboxMigrationRunner
+{
+    private const string MigrationsSearchPattern = "*.sql";
+    private const string MigrationLockPrefix = "audit_outbox_migration:";
+
+    public static async Task ApplyAsync(
+        NpgsqlDataSource dataSource,
+        string schemaName,
+        string migrationsDirectory,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(dataSource);
+        ArgumentException.ThrowIfNullOrWhiteSpace(schemaName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(migrationsDirectory);
+
+        ValidateSchemaName(schemaName);
+
+        if (!Directory.Exists(migrationsDirectory))
+        {
+            throw new InvalidOperationException(
+                $"AuditOutbox PostgreSQL migrations directory '{migrationsDirectory}' does not exist.");
+        }
+
+        var migrations = Directory
+            .EnumerateFiles(migrationsDirectory, MigrationsSearchPattern)
+            .Order(StringComparer.Ordinal)
+            .Select(MigrationFile.Read)
+            .ToArray();
+
+        var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using (connection.ConfigureAwait(false))
+        {
+            long lockKey = MigrationLockKey(schemaName);
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                "SELECT pg_advisory_lock(@LockKey)",
+                new { LockKey = lockKey },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            try
+            {
+                foreach (var migration in migrations)
+                {
+                    await ApplyMigrationAsync(connection, schemaName, migration, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    "SELECT pg_advisory_unlock(@LockKey)",
+                    new { LockKey = lockKey },
+                    cancellationToken: cancellationToken)).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static async Task ApplyMigrationAsync(
+        NpgsqlConnection connection,
+        string schemaName,
+        MigrationFile migration,
+        CancellationToken cancellationToken)
+    {
+        string? appliedChecksum = await TryGetAppliedChecksumAsync(
+            connection, schemaName, migration.FileName, cancellationToken).ConfigureAwait(false);
+
+        if (appliedChecksum is not null)
+        {
+            if (!string.Equals(appliedChecksum, migration.ChecksumSha256, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"AuditOutbox PostgreSQL migration '{migration.FileName}' checksum changed after it was applied.");
+            }
+
+            return;
+        }
+
+        var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await using (transaction.ConfigureAwait(false))
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                migration.Sql,
+                transaction: transaction,
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                GetInsertMigrationSql(schemaName),
+                new { migration.FileName, migration.ChecksumSha256 },
+                transaction,
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task<string?> TryGetAppliedChecksumAsync(
+        NpgsqlConnection connection,
+        string schemaName,
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        bool tableExists = await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = @SchemaName
+                  AND table_name = 'schema_migrations'
+            )
+            """,
+            new { SchemaName = schemaName },
+            cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        if (!tableExists)
+        {
+            return null;
+        }
+
+        return await connection.QuerySingleOrDefaultAsync<string?>(new CommandDefinition(
+            GetSelectChecksumSql(schemaName),
+            new { FileName = fileName },
+            cancellationToken: cancellationToken)).ConfigureAwait(false);
+    }
+
+    // Stable migration lock key derived from schema name to avoid collisions across schemas.
+    private static long MigrationLockKey(string schemaName)
+    {
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(MigrationLockPrefix + schemaName));
+        return BitConverter.ToInt64(hash, 0);
+    }
+
+    private static void ValidateSchemaName(string schema)
+    {
+        if (schema.Length == 0 || !char.IsLetter(schema[0]) && schema[0] != '_')
+        {
+            throw new ArgumentException(
+                $"Schema name '{schema}' is not a valid PostgreSQL identifier.", nameof(schema));
+        }
+
+        for (int i = 1; i < schema.Length; i++)
+        {
+            if (!char.IsLetterOrDigit(schema[i]) && schema[i] != '_')
+            {
+                throw new ArgumentException(
+                    $"Schema name '{schema}' is not a valid PostgreSQL identifier.", nameof(schema));
+            }
+        }
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> InsertMigrationSqlCache = new(StringComparer.Ordinal);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> SelectChecksumSqlCache = new(StringComparer.Ordinal);
+
+    private static string GetInsertMigrationSql(string schema) =>
+        InsertMigrationSqlCache.GetOrAdd(
+            schema,
+            static s => $"""
+                INSERT INTO {s}.schema_migrations (filename, checksum_sha256)
+                VALUES (@FileName, @ChecksumSha256)
+                """);
+
+    private static string GetSelectChecksumSql(string schema) =>
+        SelectChecksumSqlCache.GetOrAdd(
+            schema,
+            static s => $"""
+                SELECT checksum_sha256
+                FROM {s}.schema_migrations
+                WHERE filename = @FileName
+                """);
+
+    private sealed record class MigrationFile(string FileName, string Sql, string ChecksumSha256)
+    {
+        public static MigrationFile Read(string path)
+        {
+            var bytes = File.ReadAllBytes(path);
+            string checksum = Convert.ToHexString(SHA256.HashData(bytes)).ToUpperInvariant();
+            string sql = Encoding.UTF8.GetString(bytes);
+            return new MigrationFile(Path.GetFileName(path), sql, checksum);
+        }
+    }
+}

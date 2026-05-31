@@ -36,6 +36,6 @@ public interface IApprovalChallengeWorkflow
     Task<ApprovalChallenge> RecordChallengeOutcomeAsync(
         ApprovalChallenge challenge,
         ChallengeOutcome outcome,
-        PlanAudit audit,
+        ApprovalAuditEntry entry,
         CancellationToken cancellationToken);
 }

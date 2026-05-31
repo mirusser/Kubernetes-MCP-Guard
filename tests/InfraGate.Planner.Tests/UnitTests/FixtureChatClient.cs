@@ -1,8 +1,9 @@
+using InfraGate.AgentLlm;
 using Microsoft.Extensions.AI;
 
 namespace InfraGate.Planner.Tests.UnitTests;
 
-internal sealed class FixtureChatClient : IChatClient
+internal sealed class FixtureChatClient : IChatClient, IChatClientFactory
 {
     private readonly Func<IEnumerable<ChatMessage>, CancellationToken, Task<ChatResponse>> responseFactory;
 
@@ -21,11 +22,18 @@ internal sealed class FixtureChatClient : IChatClient
         this.responseFactory = responseFactory;
     }
 
+    // IChatClientFactory — returns itself so the workflow reuses this fixture.
+    public IChatClient Create() => this;
+
+    /// <summary>The options from the most recent <see cref="GetResponseAsync"/> call.</summary>
+    public ChatOptions? LastOptions { get; private set; }
+
     public Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        LastOptions = options;
         return responseFactory(messages, cancellationToken);
     }
 
@@ -37,12 +45,7 @@ internal sealed class FixtureChatClient : IChatClient
         throw new NotSupportedException();
     }
 
-    public void Dispose()
-    {
-    }
+    public void Dispose() { }
 
-    object? IChatClient.GetService(Type serviceType, object? serviceKey)
-    {
-        return null;
-    }
+    object? IChatClient.GetService(Type serviceType, object? serviceKey) => null;
 }

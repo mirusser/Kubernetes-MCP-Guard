@@ -1,12 +1,13 @@
 using InfraGate.AgentLlm;
 using InfraGate.Observer.Llm;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace InfraGate.Observer.Tests.UnitTests;
 
 public sealed class ChatClientFactoryTests
 {
     [Fact]
-    public void Create_DefaultProvider_ReturnsChatClient()
+    public void Create_DefaultProvider_ThrowsInvalidOperationException()
     {
         var options = Substitute.For<IOptions<ObserverOptions>>();
         options.Value.Returns(new ObserverOptions
@@ -17,17 +18,15 @@ public sealed class ChatClientFactoryTests
         });
 
         var factory = new ChatClientFactory(options);
-        var client = factory.Create();
 
-        Assert.NotNull(client);
-        Assert.IsType<AnthropicChatClient>(client);
+        Assert.Throws<InvalidOperationException>(() => factory.Create());
     }
 
     [Theory]
     [InlineData("anthropic")]
     [InlineData("Anthropic")]
     [InlineData("ANTHROPIC")]
-    public void Create_AnthropicProvider_ReturnsAnthropicChatClient(string provider)
+    public void Create_AnthropicProvider_ThrowsInvalidOperationException(string provider)
     {
         var options = Substitute.For<IOptions<ObserverOptions>>();
         options.Value.Returns(new ObserverOptions
@@ -38,14 +37,15 @@ public sealed class ChatClientFactoryTests
         });
 
         var factory = new ChatClientFactory(options);
-        var client = factory.Create();
 
-        Assert.IsType<AnthropicChatClient>(client);
+        var ex = Assert.Throws<InvalidOperationException>(() => factory.Create());
+        Assert.Contains("OpenRouter", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Create_MissingApiKey_ThrowsInvalidOperationException()
+    public void Create_AnthropicProvider_MissingApiKey_StillThrowsGuardException()
     {
+        // The Anthropic guard fires before the API key check.
         var options = Substitute.For<IOptions<ObserverOptions>>();
         options.Value.Returns(new ObserverOptions
         {
@@ -55,7 +55,8 @@ public sealed class ChatClientFactoryTests
 
         var factory = new ChatClientFactory(options);
 
-        Assert.Throws<InvalidOperationException>(() => factory.Create());
+        var ex = Assert.Throws<InvalidOperationException>(() => factory.Create());
+        Assert.Contains("OpenRouter", ex.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -78,17 +79,66 @@ public sealed class ChatClientFactoryTests
     }
 
     [Fact]
-    public void Create_UnknownProvider_ThrowsInvalidOperationException()
+    public void Create_OpenRouterProvider_ReturnsRateLimitRetryingChatClient()
     {
         var options = Substitute.For<IOptions<ObserverOptions>>();
         options.Value.Returns(new ObserverOptions
         {
-            LlmProvider = "mythical-ai",
+            LlmProvider = ObserverConventions.LlmProviders.OpenRouter,
             LlmApiKey = "test-key",
+        });
+
+        var factory = new ChatClientFactory(options);
+        var client = factory.Create();
+
+        Assert.IsType<RateLimitRetryingChatClient>(client);
+    }
+
+    [Fact]
+    public void Create_OpenRouterProvider_MissingApiKey_ThrowsInvalidOperationException()
+    {
+        var options = Substitute.For<IOptions<ObserverOptions>>();
+        options.Value.Returns(new ObserverOptions
+        {
+            LlmProvider = ObserverConventions.LlmProviders.OpenRouter,
+            LlmApiKey = "",
         });
 
         var factory = new ChatClientFactory(options);
 
         Assert.Throws<InvalidOperationException>(() => factory.Create());
+    }
+
+    [Fact]
+    public void Create_OpenRouterProvider_WithCustomModel_FormsClient()
+    {
+        var options = Substitute.For<IOptions<ObserverOptions>>();
+        options.Value.Returns(new ObserverOptions
+        {
+            LlmProvider = ObserverConventions.LlmProviders.OpenRouter,
+            LlmModel = "my-custom-model",
+            LlmApiKey = "test-key",
+        });
+
+        var factory = new ChatClientFactory(options, NullLoggerFactory.Instance);
+        var client = factory.Create();
+
+        Assert.IsType<RateLimitRetryingChatClient>(client);
+    }
+
+    [Fact]
+    public void Create_OpenRouterProvider_WithLoggerFactory_FormsClient()
+    {
+        var options = Substitute.For<IOptions<ObserverOptions>>();
+        options.Value.Returns(new ObserverOptions
+        {
+            LlmProvider = ObserverConventions.LlmProviders.OpenRouter,
+            LlmApiKey = "test-key",
+        });
+
+        var factory = new ChatClientFactory(options, NullLoggerFactory.Instance);
+        var client = factory.Create();
+
+        Assert.IsType<RateLimitRetryingChatClient>(client);
     }
 }

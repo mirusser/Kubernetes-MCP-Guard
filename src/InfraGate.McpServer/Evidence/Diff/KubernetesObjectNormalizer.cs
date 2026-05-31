@@ -4,7 +4,6 @@ using YamlDotNet.Serialization;
 
 namespace InfraGate.McpServer.Diff;
 
-// Justification: K8s is the canonical industry abbreviation for Kubernetes (not K8S). S101 is a false positive here.
 internal static class KubernetesObjectNormalizer
 {
     private const string LastAppliedConfigurationAnnotation = "kubectl.kubernetes.io/last-applied-configuration";

@@ -1,20 +1,26 @@
 using System.Diagnostics.Metrics;
+using System.Reflection;
+using InfraGate.AgentGuardrails;
+using InfraGate.AgentLlm;
+using InfraGate.AgentMcp;
+using InfraGate.AuditOutbox;
+using InfraGate.AuditOutbox.Postgres;
 using InfraGate.ClientCredentials;
+using InfraGate.Observability;
 using InfraGate.Observer;
+using InfraGate.Observer.Audit;
 using InfraGate.Observer.Classification;
 using InfraGate.Observer.Cycle;
 using InfraGate.Observer.Diagnostics;
 using InfraGate.Observer.Endpoints;
 using InfraGate.Observer.Handoff;
-using InfraGate.AgentLlm;
 using InfraGate.Observer.Llm;
-using InfraGate.Observer.Mcp;
-using InfraGate.Observer.Prompts;
 using InfraGate.Observer.Snapshot;
 using InfraGate.Observer.State;
-using InfraGate.Observability;
+using InfraGate.Prompts;
 using InfraGate.RuntimeSafety;
-using Microsoft.Extensions.Configuration;
+using ModelContextProtocol.Protocol;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,6 +38,7 @@ builder.Configuration.AddInfraGateEnvironmentVariables(mappings =>
     mappings.Map(ObserverConventions.EnvironmentVariables.DedupeResolutionThreshold, ObserverConventions.ConfigurationKeys.DedupeResolutionThreshold);
     mappings.Map(ObserverConventions.EnvironmentVariables.FileSinkRoot, ObserverConventions.ConfigurationKeys.FileSinkRoot);
     mappings.Map(ObserverConventions.EnvironmentVariables.PlannerHandoffUrl, ObserverConventions.ConfigurationKeys.PlannerHandoffUrl);
+    mappings.Map(ObserverConventions.EnvironmentVariables.AuditConnectionString, ObserverConventions.ConfigurationKeys.AuditConnectionString);
     RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
 });
 
@@ -42,6 +49,12 @@ builder.AddInfraGateObservability(opt =>
 {
     opt.WriteToConsole = true;
     opt.ConsoleToStandardError = false;
+});
+
+builder.AddInfraGateTelemetry(opt =>
+{
+    opt.ServiceName = "infragate-observer";
+    opt.MeterNames = [ObserverMetrics.MeterName, AgentGuardrailConventions.MeterName];
 });
 
 ConfigureUrls(builder);
@@ -73,21 +86,31 @@ builder.Services.AddClientCredentialsTokenProvider(authOptions);
 builder.Services.AddHttpClient(ObserverConventions.HttpClients.PlannerHandoff)
     .AddClientCredentialsBearerHandler();
 
-builder.Services.AddSingleton<IObserverMcpClient, ObserverMcpClient>();
+builder.Services.AddInfraGateAgentMcp(new AgentMcpOptions
+{
+    GatewayBaseUrl = observerOptions.GatewayBaseUrl,
+    ClientName = ObserverConventions.DefaultClientId,
+});
 builder.Services.AddSingleton<ISnapshotFetcher>(sp =>
 {
     return new SnapshotFetcher(
-        sp.GetRequiredService<IObserverMcpClient>(),
+        sp.GetRequiredService<IAgentMcpToolset>(),
         sp.GetRequiredService<ILogger<SnapshotFetcher>>(),
         ObserverMetrics.Meter);
 });
-builder.Services.AddSingleton<ISystemPromptProvider, SystemPromptProvider>();
+var observerAssembly = typeof(ObservationCycleRunner).Assembly;
+var observerPromptTemplate = await LoadEmbeddedResourceAsync(
+    observerAssembly, ObserverConventions.Prompts.SystemPromptResourceName).ConfigureAwait(false);
+builder.Services.AddInfraGatePromptLibrary(b => b.AddTemplate(
+    ObserverConventions.Prompts.SystemPromptTemplateName,
+    observerPromptTemplate,
+    [ObserverConventions.Prompts.NamespaceArgumentName, ObserverConventions.Prompts.MaxToolIterationsArgumentName]));
 builder.Services.AddSingleton<ISeverityClassifier, SeverityClassifier>();
 builder.Services.AddSingleton<IChatClientFactory>(sp =>
 {
     return new ChatClientFactory(
         sp.GetRequiredService<IOptions<ObserverOptions>>(),
-        ObserverMetrics.Meter);
+        sp.GetRequiredService<ILoggerFactory>());
 });
 builder.Services.AddSingleton<IChatClient>(sp =>
 {
@@ -95,19 +118,38 @@ builder.Services.AddSingleton<IChatClient>(sp =>
     return factory.Create();
 });
 builder.Services.AddSingleton<IAnomalyDedupeStore, AnomalyDedupeStore>();
+builder.Services.AddSingleton<ToolCallingAgentFactory>();
+builder.Services.AddAgentGuardrails();
+builder.Services.AddSingleton(_ =>
+{
+    var allowedTools = new HashSet<string>(StringComparer.Ordinal)
+    {
+        ObserverConventions.ToolNames.GetAllowedNamespaces,
+        ObserverConventions.ToolNames.GetK8sStatus,
+        ObserverConventions.ToolNames.GetK8sEvents,
+        ObserverConventions.ToolNames.GetK8sPods,
+        ObserverConventions.ToolNames.DescribeK8sResource,
+        ObserverConventions.ToolNames.GetK8sDeployments,
+        ObserverConventions.ToolNames.GetK8sServices,
+        ObserverConventions.ToolNames.GetK8sEndpoints,
+    };
+    return new AgentGuardrailPolicy(allowedTools);
+});
 builder.Services.AddSingleton<IObservationCycleRunner>(sp =>
 {
     return new ObservationCycleRunner(
         sp.GetRequiredService<IOptionsMonitor<ObserverOptions>>(),
         sp.GetRequiredService<ISnapshotFetcher>(),
-        sp.GetRequiredService<ISystemPromptProvider>(),
-        sp.GetRequiredService<IChatClient>(),
+        sp.GetRequiredService<IPromptLibrary>(),
+        sp.GetRequiredService<ToolCallingAgentFactory>(),
         sp.GetRequiredService<ISeverityClassifier>(),
-        sp.GetRequiredService<IObserverMcpClient>(),
+        sp.GetRequiredService<IAgentMcpToolset>(),
         sp.GetRequiredService<IAnomalyDedupeStore>(),
         sp.GetRequiredService<IAnomalyHandoffSink>(),
         sp.GetRequiredService<ILogger<ObservationCycleRunner>>(),
-        ObserverMetrics.Meter);
+        ObserverMetrics.Meter,
+        sp.GetService<IObserverAuditOutbox>(),
+        sp.GetService<AgentGuardrailPolicy>());
 });
 builder.Services.AddSingleton<CycleSerialisation>();
 builder.Services.AddHostedService<ObservationCycleLoop>();
@@ -134,12 +176,22 @@ builder.Services.AddSingleton<IAnomalyHandoffSink>(sp =>
         var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
         var httpClient = httpClientFactory.CreateClient(ObserverConventions.HttpClients.PlannerHandoff);
         var httpLogger = sp.GetRequiredService<ILogger<HttpAnomalyHandoffSink>>();
-        sinks.Add(new HttpAnomalyHandoffSink(httpClient, options.PlannerHandoffUrl, httpLogger));
+        sinks.Add(new HttpAnomalyHandoffSink(httpClient, options.PlannerHandoffUrl, httpLogger, sp.GetService<IObserverAuditOutbox>()));
     }
 
     var logger = sp.GetRequiredService<ILogger<CompositeAnomalyHandoffSink>>();
     return new CompositeAnomalyHandoffSink(sinks, logger);
 });
+
+string? auditConnectionString = builder.Configuration[ObserverConventions.ConfigurationKeys.AuditConnectionString];
+if (!string.IsNullOrWhiteSpace(auditConnectionString))
+{
+    var auditDataSource = NpgsqlDataSource.Create(auditConnectionString);
+    string migrationsDir = Path.Combine(AppContext.BaseDirectory, "Migrations");
+    await PostgresAuditOutboxMigrationRunner.ApplyAsync(
+        auditDataSource, AuditOutboxConventions.Streams.Observer, migrationsDir, CancellationToken.None).ConfigureAwait(false);
+    builder.Services.AddObserverAuditOutbox(auditDataSource);
+}
 
 var app = builder.Build();
 
@@ -170,21 +222,32 @@ static void ConfigureUrls(WebApplicationBuilder builder)
     }
 }
 
+static async Task<string> LoadEmbeddedResourceAsync(Assembly assembly, string resourceName, CancellationToken cancellationToken = default)
+{
+    using var stream = assembly.GetManifestResourceStream(resourceName)
+        ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found.");
+    using var reader = new StreamReader(stream, Encoding.UTF8);
+    return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+}
+
 static async Task ConnectObserverMcpClientAsync(WebApplication app)
 {
     var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
     var logger = loggerFactory.CreateLogger("InfraGate.Observer.Startup");
-    var mcpClient = app.Services.GetRequiredService<IObserverMcpClient>();
+    var mcpClient = app.Services.GetRequiredService<IAgentMcpToolset>();
     var configuration = app.Services.GetRequiredService<IConfiguration>();
 
     try
     {
         await mcpClient.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
 
-        var allowedNsResponse = await mcpClient.GetToolResultAsync(
+        var nsResult = await mcpClient.CallToolAsync(
             ObserverConventions.ToolNames.GetAllowedNamespaces,
             null,
             CancellationToken.None).ConfigureAwait(false);
+        string allowedNsResponse = nsResult.IsError != true
+            ? string.Join(Environment.NewLine, nsResult.Content.OfType<TextContentBlock>().Select(c => c.Text))
+            : string.Empty;
 
         ObserverLogEvents.LogStartupConnected(
             logger,

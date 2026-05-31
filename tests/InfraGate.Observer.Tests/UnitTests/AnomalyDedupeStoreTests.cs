@@ -47,7 +47,7 @@ public sealed class AnomalyDedupeStoreTests
         var report = CreateReport(AnomalyKind.PodUnhealthy, "Pod", "default", "crash-pod");
         var detectedAt = DateTimeOffset.UtcNow;
 
-        var (emitted, resolved) = store.ProcessReports(
+        var (emitted, resolved, suppressed) = store.ProcessReports(
             Guid.NewGuid().ToString("D"),
             new[] { report },
             suppressionWindowCycles: 5,
@@ -57,6 +57,7 @@ public sealed class AnomalyDedupeStoreTests
         Assert.Single(emitted);
         Assert.Equal(report.AnomalyId, emitted[0].AnomalyId);
         Assert.Empty(resolved);
+        Assert.Empty(suppressed);
     }
 
     [Fact]
@@ -88,18 +89,19 @@ public sealed class AnomalyDedupeStoreTests
         const int window = 5;
 
         // Cycle 1: first occurrence → emitted
-        var (firstEmitted, _) = store.ProcessReports(
+        var (firstEmitted, _, firstSuppressed) = store.ProcessReports(
             Guid.NewGuid().ToString("D"),
             new[] { report },
             suppressionWindowCycles: window,
             resolutionAbsenceThreshold: 2,
             detectedAt);
         Assert.Single(firstEmitted);
+        Assert.Empty(firstSuppressed);
 
         // Cycles 2-5: within suppression window → suppressed
         for (var i = 0; i < window - 1; i++)
         {
-            var (emitted, _) = store.ProcessReports(
+            var (emitted, _, cycleSuppressed) = store.ProcessReports(
                 Guid.NewGuid().ToString("D"),
                 new[] { report },
                 suppressionWindowCycles: window,
@@ -107,6 +109,7 @@ public sealed class AnomalyDedupeStoreTests
                 detectedAt);
 
             Assert.Empty(emitted);
+            Assert.Single(cycleSuppressed);
         }
     }
 
@@ -124,7 +127,7 @@ public sealed class AnomalyDedupeStoreTests
         // Cycles 2-3: suppressed (window = 3, so cycles 1-3 inclusive)
         for (var i = 0; i < window - 1; i++)
         {
-            var (emitted, _) = store.ProcessReports(
+            var (emitted, _, _) = store.ProcessReports(
                 Guid.NewGuid().ToString("D"),
                 new[] { report },
                 window,
@@ -134,7 +137,7 @@ public sealed class AnomalyDedupeStoreTests
         }
 
         // Cycle 4: outside window → re-emitted
-        var (fourthEmitted, _) = store.ProcessReports("c4", new[] { report }, window, 2, detectedAt);
+        var (fourthEmitted, _, _) = store.ProcessReports("c4", new[] { report }, window, 2, detectedAt);
         Assert.Single(fourthEmitted);
     }
 
@@ -160,6 +163,26 @@ public sealed class AnomalyDedupeStoreTests
         Assert.Empty(c5.Emitted);
         Assert.Single(c6.Emitted);
         Assert.All(new[] { c1, c2, c3, c4, c5, c6 }, cycle => Assert.Empty(cycle.Resolved));
+        Assert.Empty(c1.Suppressed);
+        Assert.Single(c2.Suppressed);
+        Assert.Single(c3.Suppressed);
+        Assert.Single(c4.Suppressed);
+        Assert.Single(c5.Suppressed);
+        Assert.Empty(c6.Suppressed);
+    }
+
+    [Fact]
+    public void ProcessReports_SuppressedReport_HasSameAnomalyId()
+    {
+        var store = new AnomalyDedupeStore();
+        var report = CreateReport(AnomalyKind.PodUnhealthy, "Pod", "default", "crash-pod");
+        var detectedAt = DateTimeOffset.UtcNow;
+
+        store.ProcessReports("c1", new[] { report }, 5, 2, detectedAt);
+        var (_, _, suppressed) = store.ProcessReports("c2", new[] { report }, 5, 2, detectedAt);
+
+        Assert.Single(suppressed);
+        Assert.Equal(report.AnomalyId, suppressed[0].AnomalyId);
     }
 
     // ── Resolution emission ───────────────────────────────────────
@@ -172,17 +195,17 @@ public sealed class AnomalyDedupeStoreTests
         var detectedAt = DateTimeOffset.UtcNow;
 
         // Cycle 1: anomaly detected
-        var (firstEmitted, firstResolved) = store.ProcessReports("c1", new[] { report }, 5, 2, detectedAt);
+        var (firstEmitted, firstResolved, _) = store.ProcessReports("c1", new[] { report }, 5, 2, detectedAt);
         Assert.Single(firstEmitted);
         Assert.Empty(firstResolved);
 
         // Cycle 2: absent (no reports for this key) — one cycle absent
-        var (c2Emitted, c2Resolved) = store.ProcessReports("c2", Array.Empty<AnomalyReport>(), 5, 2, detectedAt);
+        var (c2Emitted, c2Resolved, _) = store.ProcessReports("c2", Array.Empty<AnomalyReport>(), 5, 2, detectedAt);
         Assert.Empty(c2Emitted);
         Assert.Empty(c2Resolved); // not yet 2 cycles absent
 
         // Cycle 3: still absent — second cycle → resolved
-        var (c3Emitted, c3Resolved) = store.ProcessReports("c3", Array.Empty<AnomalyReport>(), 5, 2, detectedAt);
+        var (c3Emitted, c3Resolved, _) = store.ProcessReports("c3", Array.Empty<AnomalyReport>(), 5, 2, detectedAt);
         Assert.Empty(c3Emitted);
         Assert.Single(c3Resolved);
         Assert.Equal(AnomalyStatus.Resolved, c3Resolved[0].Status);
@@ -223,13 +246,13 @@ public sealed class AnomalyDedupeStoreTests
         store.ProcessReports("c2", Array.Empty<AnomalyReport>(), 5, 2, detectedAt);
 
         // Cycle 3: reappears — resets LastSeenCycle
-        var (c3Emitted, c3Resolved) = store.ProcessReports("c3", new[] { report }, 5, 2, detectedAt);
+        var (c3Emitted, c3Resolved, _) = store.ProcessReports("c3", new[] { report }, 5, 2, detectedAt);
         Assert.Empty(c3Emitted); // still suppressed (within window)
         Assert.Empty(c3Resolved); // not resolved since it reappeared
 
         // Cycles 4-5: absent again → should need 2 more cycles
         store.ProcessReports("c4", Array.Empty<AnomalyReport>(), 5, 2, detectedAt);
-        var (c5Emitted, c5Resolved) = store.ProcessReports("c5", Array.Empty<AnomalyReport>(), 5, 2, detectedAt);
+        var (c5Emitted, c5Resolved, _) = store.ProcessReports("c5", Array.Empty<AnomalyReport>(), 5, 2, detectedAt);
         Assert.Empty(c5Emitted);
         Assert.Single(c5Resolved); // now 2 cycles absent since re-appearance
     }
@@ -245,7 +268,7 @@ public sealed class AnomalyDedupeStoreTests
         var detectedAt = DateTimeOffset.UtcNow;
 
         // Both first seen → both emitted
-        var (emitted, _) = store.ProcessReports(
+        var (emitted, _, _) = store.ProcessReports(
             "c1",
             new[] { podReport, deploymentReport },
             5, 2, detectedAt);
@@ -253,7 +276,7 @@ public sealed class AnomalyDedupeStoreTests
         Assert.Equal(2, emitted.Count);
 
         // Next cycle: pod suppresses, deployment absent
-        var (c2Emitted, _) = store.ProcessReports(
+        var (c2Emitted, _, _) = store.ProcessReports(
             "c2",
             new[] { podReport }, // only pod seen, deployment absent
             5, 2, detectedAt);
@@ -269,7 +292,7 @@ public sealed class AnomalyDedupeStoreTests
         var ns2Report = CreateReport(AnomalyKind.PodUnhealthy, "Pod", "ns2", "pod-a");
         var detectedAt = DateTimeOffset.UtcNow;
 
-        var (emitted, _) = store.ProcessReports("c1", new[] { ns1Report, ns2Report }, 5, 2, detectedAt);
+        var (emitted, _, _) = store.ProcessReports("c1", new[] { ns1Report, ns2Report }, 5, 2, detectedAt);
         Assert.Equal(2, emitted.Count);
         Assert.NotEqual(emitted[0].AnomalyId, emitted[1].AnomalyId);
     }
@@ -282,13 +305,14 @@ public sealed class AnomalyDedupeStoreTests
         var store = new AnomalyDedupeStore();
         var detectedAt = DateTimeOffset.UtcNow;
 
-        var (emitted, resolved) = store.ProcessReports(
+        var (emitted, resolved, suppressed) = store.ProcessReports(
             "c1",
             Array.Empty<AnomalyReport>(),
             5, 2, detectedAt);
 
         Assert.Empty(emitted);
         Assert.Empty(resolved);
+        Assert.Empty(suppressed);
     }
 
     // ── Concurrent access ───────────────────────────────────────
@@ -335,7 +359,7 @@ public sealed class AnomalyDedupeStoreTests
         // Window = 2 means first occurrence at cycle 1, suppressed at cycle 2, re-emit at cycle 3
         store.ProcessReports("c2", new[] { report }, 2, 2, detectedAt); // suppressed
         var updatedReport = CreateReport(AnomalyKind.PodUnhealthy, "Pod", "default", "crash-pod", severity: Severity.High);
-        var (emitted, _) = store.ProcessReports("c3", new[] { updatedReport }, 2, 2, detectedAt);
+        var (emitted, _, _) = store.ProcessReports("c3", new[] { updatedReport }, 2, 2, detectedAt);
 
         Assert.Single(emitted);
         Assert.Equal(Severity.High, emitted[0].Severity);

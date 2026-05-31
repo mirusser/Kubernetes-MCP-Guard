@@ -4,6 +4,7 @@ using InfraGate.Approvals.Challenge;
 using InfraGate.Approvals.Grant;
 using InfraGate.Approvals.Execution;
 using InfraGate.Approvals.Audit;
+using InfraGate.Approvals.AuditPayloads;
 using InfraGate.Approvals.PreExecution;
 
 namespace InfraGate.Safety.E2E.Tests;
@@ -17,13 +18,13 @@ public sealed class InMemoryApprovalChallengeWorkflow : IApprovalChallengeWorkfl
     private readonly Dictionary<string, ApprovalChallenge> challenges = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ApprovalGrant> grants = new(StringComparer.Ordinal);
     private readonly HashSet<string> appliedPlans = new(StringComparer.Ordinal);
-    private readonly IApprovalAuditPublisher auditPublisher;
+    private readonly IApprovalAuditOutbox? auditOutbox;
     private readonly ApprovalStore? approvalStore;
 
-    public InMemoryApprovalChallengeWorkflow(IApprovalAuditPublisher? auditPublisher = null)
+    public InMemoryApprovalChallengeWorkflow(IApprovalAuditOutbox? auditOutbox = null)
     {
-        this.auditPublisher = auditPublisher ?? NoOpApprovalAuditPublisher.Instance;
-        this.approvalStore = auditPublisher as ApprovalStore;
+        this.auditOutbox = auditOutbox;
+        this.approvalStore = auditOutbox as ApprovalStore;
     }
 
     // ── IApprovalChallengeWorkflow ────────────────────────────────────────────
@@ -124,31 +125,41 @@ public sealed class InMemoryApprovalChallengeWorkflow : IApprovalChallengeWorkfl
             await System.IO.File.WriteAllTextAsync(path, json, cancellationToken).ConfigureAwait(false);
         }
 
-        await auditPublisher.PublishAsync(
-            new PlanAudit(
-                ApprovalConventions.AuditEvents.ApprovalChallengeApproved,
-                new InfraGate.Approvals.AuditPayloads.ApprovalChallengeApprovedPayload(
-                    challenge.Id,
-                    challenge.PlanId,
-                    challenge.PendingPlanHash,
-                    challenge.RequesterSubject,
-                    approverSubject,
-                    now)),
-            cancellationToken).ConfigureAwait(false);
+        if (auditOutbox is not null)
+        {
+            await auditOutbox.AppendAsync(
+                new ApprovalAuditEntry(
+                    ApprovalConventions.AuditEvents.ApprovalChallengeApproved,
+                    new ApprovalChallengeApprovedPayload(
+                        challenge.Id,
+                        challenge.PlanId,
+                        challenge.PendingPlanHash,
+                        challenge.RequesterSubject,
+                        approverSubject,
+                        now),
+                    PlanId: challenge.PlanId,
+                    ChallengeId: challenge.Id,
+                    ActorSubject: approverSubject),
+                cancellationToken).ConfigureAwait(false);
 
-        await auditPublisher.PublishAsync(
-            new PlanAudit(
-                ApprovalConventions.AuditEvents.GrantIssued,
-                new InfraGate.Approvals.AuditPayloads.ApprovalGrantIssuedPayload(
-                    grant.PlanId,
-                    grant.Id,
-                    grant.SourceChallengeId,
-                    grant.RequesterSubject,
-                    grant.ApproverSubject,
-                    grant.IntentDigest,
-                    grant.ReviewDigest,
-                    grant.ExpiresAtUtc)),
-            cancellationToken).ConfigureAwait(false);
+            await auditOutbox.AppendAsync(
+                new ApprovalAuditEntry(
+                    ApprovalConventions.AuditEvents.GrantIssued,
+                    new ApprovalGrantIssuedPayload(
+                        grant.PlanId,
+                        grant.Id,
+                        grant.SourceChallengeId,
+                        grant.RequesterSubject,
+                        grant.ApproverSubject,
+                        grant.IntentDigest,
+                        grant.ReviewDigest,
+                        grant.ExpiresAtUtc),
+                    PlanId: grant.PlanId,
+                    ChallengeId: challenge.Id,
+                    GrantId: grant.Id,
+                    ActorSubject: approverSubject),
+                cancellationToken).ConfigureAwait(false);
+        }
 
         return grant;
     }
@@ -156,7 +167,7 @@ public sealed class InMemoryApprovalChallengeWorkflow : IApprovalChallengeWorkfl
     public async Task<ApprovalChallenge> RecordChallengeOutcomeAsync(
         ApprovalChallenge challenge,
         ChallengeOutcome outcome,
-        PlanAudit audit,
+        ApprovalAuditEntry entry,
         CancellationToken cancellationToken)
     {
         var updated = challenge with
@@ -167,7 +178,8 @@ public sealed class InMemoryApprovalChallengeWorkflow : IApprovalChallengeWorkfl
             Outcome = outcome
         };
         challenges[challenge.Id] = updated;
-        await auditPublisher.PublishAsync(audit, cancellationToken).ConfigureAwait(false);
+        if (auditOutbox is not null)
+            await auditOutbox.AppendAsync(entry, cancellationToken).ConfigureAwait(false);
         return updated;
     }
 
@@ -186,28 +198,34 @@ public sealed class InMemoryApprovalChallengeWorkflow : IApprovalChallengeWorkfl
         return Task.FromResult(BeginExecutionAttemptResult.Started(attempt));
     }
 
-    public Task RecordExecutionBlockedAsync(
+    public async Task RecordExecutionBlockedAsync(
         ExecutionAttempt attempt,
         string message,
         string? reasonCode,
-        PlanAudit audit,
-        CancellationToken cancellationToken) =>
-        auditPublisher.PublishAsync(audit, cancellationToken);
+        ApprovalAuditEntry entry,
+        CancellationToken cancellationToken)
+    {
+        if (auditOutbox is not null)
+            await auditOutbox.AppendAsync(entry, cancellationToken).ConfigureAwait(false);
+    }
 
-    public Task RecordExecutionFailedAsync(
+    public async Task RecordExecutionFailedAsync(
         ExecutionAttempt attempt,
         string message,
         string? reasonCode,
-        PlanAudit audit,
-        CancellationToken cancellationToken) =>
-        auditPublisher.PublishAsync(audit, cancellationToken);
+        ApprovalAuditEntry entry,
+        CancellationToken cancellationToken)
+    {
+        if (auditOutbox is not null)
+            await auditOutbox.AppendAsync(entry, cancellationToken).ConfigureAwait(false);
+    }
 
     public async Task RecordExecutionSucceededAsync(
         ExecutionAttempt attempt,
         ApprovalGrant grant,
         string targetNamespace,
         string message,
-        PlanAudit audit,
+        ApprovalAuditEntry entry,
         CancellationToken cancellationToken)
     {
         appliedPlans.Add(attempt.PlanId);
@@ -216,7 +234,8 @@ public sealed class InMemoryApprovalChallengeWorkflow : IApprovalChallengeWorkfl
             var path = approvalStore.GetAppliedPath(attempt.PlanId);
             await System.IO.File.WriteAllTextAsync(path, "{}", cancellationToken).ConfigureAwait(false);
         }
-        await auditPublisher.PublishAsync(audit, cancellationToken).ConfigureAwait(false);
+        if (auditOutbox is not null)
+            await auditOutbox.AppendAsync(entry, cancellationToken).ConfigureAwait(false);
     }
 
     // ── Convenience methods for E2E tests ─────────────────────────────────────

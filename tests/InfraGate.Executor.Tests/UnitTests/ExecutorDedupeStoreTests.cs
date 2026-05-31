@@ -46,6 +46,20 @@ public sealed class ExecutorDedupeStoreTests
     {
         var store = new ExecutorDedupeStore();
 
-        store.Remove("plan-unknown");
+        var ex = Record.Exception(() => store.Remove("plan-unknown"));
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public void TryTrack_ExceedsCapacity_EvictsLruAndAllowsNewEntry()
+    {
+        var store = new ExecutorDedupeStore();
+
+        for (int i = 0; i < 1001; i++)
+        {
+            Assert.True(store.TryTrack($"plan-{i}"));
+        }
+
+        Assert.True(store.TryTrack("plan-1001"));
     }
 }

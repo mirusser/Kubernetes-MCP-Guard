@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
@@ -26,9 +26,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\InfraGate.Approvals\InfraGate.Approvals.csproj" />
-    <ProjectReference Include="..\..\src\InfraGate.DownstreamAuth\InfraGate.DownstreamAuth.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.McpServer\InfraGate.McpServer.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\..\src\Shared\CanonicalJson.cs" Link="CanonicalJson.cs" />
+  </ItemGroup>
 </Project>

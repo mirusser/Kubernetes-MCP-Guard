@@ -1,29 +1,16 @@
 using InfraGate.Observer.Diagnostics;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 namespace InfraGate.Observer.Cycle;
 
-internal sealed class ObservationCycleLoop : IHostedService, IDisposable
+internal sealed class ObservationCycleLoop(
+    IOptionsMonitor<ObserverOptions> options,
+    IObservationCycleRunner cycleRunner,
+    CycleSerialisation cycleSerialisation,
+    ILogger<ObservationCycleLoop> logger)
+    : IHostedService, IDisposable
 {
-    private readonly IOptionsMonitor<ObserverOptions> options;
-    private readonly IObservationCycleRunner cycleRunner;
-    private readonly CycleSerialisation cycleSerialisation;
-    private readonly ILogger<ObservationCycleLoop> logger;
     private Timer? timer;
     private CancellationTokenSource? shutdownCts;
-
-    public ObservationCycleLoop(
-        IOptionsMonitor<ObserverOptions> options,
-        IObservationCycleRunner cycleRunner,
-        CycleSerialisation cycleSerialisation,
-        ILogger<ObservationCycleLoop> logger)
-    {
-        this.options = options;
-        this.cycleRunner = cycleRunner;
-        this.cycleSerialisation = cycleSerialisation;
-        this.logger = logger;
-    }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {

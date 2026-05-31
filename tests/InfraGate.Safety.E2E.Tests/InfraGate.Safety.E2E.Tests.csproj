@@ -9,6 +9,9 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.18.0" />
     <PackageReference Include="Testcontainers.Keycloak" Version="4.12.0" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.12.0" />
+    <PackageReference Include="Npgsql" Version="10.0.2" />
+    <PackageReference Include="Dapper" Version="2.1.79" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.8" />
     <PackageReference Include="ModelContextProtocol" Version="1.3.0" />
     <PackageReference Include="coverlet.collector" Version="10.0.1">
@@ -31,6 +34,15 @@
     <Content Include="..\TestData\keycloak\infra-gate-realm.json" Link="TestData\infra-gate-realm.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="..\..\src\InfraGate.Approvals.Postgres\Migrations\*.sql" Link="Fixtures\CrossStream\Approvals\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\src\InfraGate.Observer\Migrations\0001-initial-observer-audit.sql" Link="Fixtures\CrossStream\Observer\0001-initial-observer-audit.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\src\InfraGate.Planner\Migrations\0001-initial-planner-audit.sql" Link="Fixtures\CrossStream\Planner\0001-initial-planner-audit.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
@@ -38,6 +50,10 @@
     <ProjectReference Include="..\..\src\InfraGate.McpGateway\InfraGate.McpGateway.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.McpGateway.Auth\InfraGate.McpGateway.Auth.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.McpServer\InfraGate.McpServer.csproj" />
+    <ProjectReference Include="..\..\src\InfraGate.AuditOutbox.Postgres\InfraGate.AuditOutbox.Postgres.csproj" />
+    <ProjectReference Include="..\..\src\InfraGate.AuditOutbox\InfraGate.AuditOutbox.csproj" />
+    <ProjectReference Include="..\..\src\InfraGate.Observer\InfraGate.Observer.csproj" />
+    <ProjectReference Include="..\..\src\InfraGate.Planner\InfraGate.Planner.csproj" />
   </ItemGroup>
 
 </Project>

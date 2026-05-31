@@ -25,11 +25,11 @@ You may only use these read-only tools:
 
 ## Analysis Workflow
 
-1. Call get_k8s_status and get_k8s_events for the namespace `{NAMESPACE}`.
+1. Call get_k8s_status and get_k8s_events for the namespace `{{namespace}}`.
 2. If the status reveals potential issues, call get_k8s_pods, get_k8s_deployments, get_k8s_services, and get_k8s_endpoints.
 3. Use describe_k8s_resource to deep-dive into any resource that looks suspicious.
-4. You may make at most {MAX_TOOL_ITERATIONS} tool calls total (including the initial fetch). Stop early if you have sufficient evidence.
-5. Do not call any tool for a namespace other than `{NAMESPACE}`.
+4. You may make at most {{maxToolIterations}} tool calls total (including the initial fetch). Stop early if you have sufficient evidence.
+5. Do not call any tool for a namespace other than `{{namespace}}`.
 
 ## Severity Classification Guidelines
 

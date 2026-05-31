@@ -11,14 +11,14 @@ using ModelContextProtocol.Protocol;
 
 namespace InfraGate.McpGateway;
 
-internal sealed class GatewayToolDispatcher(
+internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor; all params are required services.
     DownstreamToolRegistry registry,
     GuardedToolRunner guardedRunner,
     IDomainAdapter domainAdapter,
     IGatewayApprovalService approvals,
     IApprovalPlanWorkflow approvalPlans,
     IApprovalExecutionWorkflow approvalExecution,
-    IApprovalAuditPublisher auditPublisher,
+    IApprovalAuditOutbox auditOutbox,
     IApprovalPreExecutionGate preExecutionGate,
     IProposePlanHandler proposePlanHandler,
     ISubscriptionRegistry subscriptionRegistry,
@@ -64,6 +64,14 @@ internal sealed class GatewayToolDispatcher(
         tools.Add(ToolDefinitionFactory.CreateProposePlanTool());
         tools.Add(ToolDefinitionFactory.CreateWaitForPlanApprovalTool());
 
+        var user = httpContextAccessor.HttpContext?.User;
+        if (user is not null)
+        {
+            tools = tools
+                .Where(t => ToolScopeCatalog.IsVisibleTo(t.Name, t.Annotations?.ReadOnlyHint == true, user))
+                .ToList();
+        }
+
         return new ListToolsResult { Tools = tools };
     }
 
@@ -80,68 +88,40 @@ internal sealed class GatewayToolDispatcher(
     {
         string toolName = request.Name;
 
-        if (toolName.Equals(McpGatewayConventions.ToolNames.ApplyApprovedPlan, StringComparison.Ordinal))
+        var synthesizedScopes = ToolScopeCatalog.GetSynthesizedScopes(toolName);
+        if (synthesizedScopes is not null)
         {
-            var scopeResult = await scopeGuard.RequireAnyScopeAsync(
-                toolName,
-                McpGatewayConventions.ToolScopeRequirements.MutationScope,
-                McpGatewayConventions.ToolScopeRequirements.ExecuteScope).ConfigureAwait(false);
+            var scopeResult = await scopeGuard.RequireAnyScopeAsync(toolName, synthesizedScopes.ToArray())
+                .ConfigureAwait(false);
             if (scopeResult is not null)
             {
                 return scopeResult;
             }
 
-            return await HandleApplyApprovedPlanAsync(request, ct).ConfigureAwait(false);
-        }
-
-        if (toolName.Equals(McpGatewayConventions.ToolNames.GetPlanStatus, StringComparison.Ordinal))
-        {
-            var scopeResult = await scopeGuard.RequireMutationScopeAsync(toolName).ConfigureAwait(false);
-            if (scopeResult is not null)
+            if (toolName.Equals(McpGatewayConventions.ToolNames.ApplyApprovedPlan, StringComparison.Ordinal))
             {
-                return scopeResult;
+                return await HandleApplyApprovedPlanAsync(request, ct).ConfigureAwait(false);
             }
 
-            return await HandleGetPlanStatusAsync(request, ct).ConfigureAwait(false);
-        }
-
-        if (toolName.Equals(McpGatewayConventions.ToolNames.WaitForPlanApproval, StringComparison.Ordinal))
-        {
-            var scopeResult = await scopeGuard.RequireAnyScopeAsync(
-                toolName,
-                McpGatewayConventions.ToolScopeRequirements.MutationScope,
-                McpGatewayConventions.ToolScopeRequirements.ExecuteScope).ConfigureAwait(false);
-            if (scopeResult is not null)
+            if (toolName.Equals(McpGatewayConventions.ToolNames.GetPlanStatus, StringComparison.Ordinal))
             {
-                return scopeResult;
+                return await HandleGetPlanStatusAsync(request, ct).ConfigureAwait(false);
             }
 
-            return await HandleWaitForPlanApprovalAsync(request, ct).ConfigureAwait(false);
-        }
-
-        if (toolName.Equals(McpGatewayConventions.ToolNames.ProposePlan, StringComparison.Ordinal))
-        {
-            var scopeResult = await scopeGuard.RequireAnyScopeAsync(
-                toolName,
-                McpGatewayConventions.ToolScopeRequirements.MutationScope,
-                McpGatewayConventions.ToolScopeRequirements.ProposeScope).ConfigureAwait(false);
-            if (scopeResult is not null)
+            if (toolName.Equals(McpGatewayConventions.ToolNames.WaitForPlanApproval, StringComparison.Ordinal))
             {
-                return scopeResult;
+                return await HandleWaitForPlanApprovalAsync(request, ct).ConfigureAwait(false);
             }
 
-            return await HandleProposePlanAsync(request, ct).ConfigureAwait(false);
-        }
-
-        if (toolName.StartsWith(McpGatewayConventions.ToolNames.RequestToolPrefix, StringComparison.Ordinal))
-        {
-            var scopeResult = await scopeGuard.RequireMutationScopeAsync(toolName).ConfigureAwait(false);
-            if (scopeResult is not null)
+            if (toolName.Equals(McpGatewayConventions.ToolNames.ProposePlan, StringComparison.Ordinal))
             {
-                return scopeResult;
+                return await HandleProposePlanAsync(request, ct).ConfigureAwait(false);
             }
 
-            return await HandleRequestMutationAsync(toolName, request, ct).ConfigureAwait(false);
+            if (toolName.StartsWith(McpGatewayConventions.ToolNames.RequestToolPrefix, StringComparison.Ordinal))
+            {
+                return await HandleRequestMutationAsync(toolName, request, ct).ConfigureAwait(false);
+            }
         }
 
         return await DispatchDownstreamToolAsync(toolName, request, ct).ConfigureAwait(false);
@@ -181,7 +161,8 @@ internal sealed class GatewayToolDispatcher(
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        var scopeResult = await scopeGuard.RequireAnyToolScopeAsync(toolName).ConfigureAwait(false);
+        var scopes = ToolScopeCatalog.GetRequiredScopes(toolName, hasReadOnlyHint: true);
+        var scopeResult = await scopeGuard.RequireAnyScopeAsync(toolName, scopes.ToArray()).ConfigureAwait(false);
         if (scopeResult is not null)
         {
             return scopeResult;
@@ -224,7 +205,7 @@ internal sealed class GatewayToolDispatcher(
         if (!planResult.Succeeded || planResult.Envelope is null)
         {
             return await HandlePlanBuildFailureAsync(
-                toolName, mutationToolName, args, identity, planResult, requestHasFindings, ct)
+                    toolName, mutationToolName, args, identity, planResult, requestHasFindings, ct)
                 .ConfigureAwait(false);
         }
 
@@ -268,7 +249,7 @@ internal sealed class GatewayToolDispatcher(
 
         if (planResult.Audit is { } audit)
         {
-            await WritePlanAuditAsync(audit, mutationToolName, ct).ConfigureAwait(false);
+            await WriteAuditEntryAsync(audit, mutationToolName, ct).ConfigureAwait(false);
         }
 
         var sanitized = await guardedRunner.SanitizeAndAuditResponseAsync(toolName, args, planResult.Message, ct)
@@ -314,9 +295,10 @@ internal sealed class GatewayToolDispatcher(
         var preExecution = await preExecutionGate.EvaluateAsync(planId, domainAdapter, ct).ConfigureAwait(false);
         if (!preExecution.IsPassed || preExecution.Envelope is null || preExecution.Grant is null)
         {
-            var audit = preExecution.Audit ?? new PlanAudit(
+            var audit = preExecution.Audit ?? new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ApplyDenied,
-                new ApplyDeniedPayload(planId, preExecution.Message));
+                new ApplyDeniedPayload(planId, preExecution.Message),
+                PlanId: planId);
             await approvalExecution.RecordExecutionBlockedAsync(
                 beginExecution.Attempt,
                 preExecution.Message,
@@ -398,8 +380,7 @@ internal sealed class GatewayToolDispatcher(
             }
 
             await Task.Delay(delay, TimeProvider.System, ct).ConfigureAwait(false);
-        }
-        while (true);
+        } while (true);
 
         var json = PlanStatusResponse.Serialize(planId, result.Status, timedOut);
 
@@ -460,12 +441,13 @@ internal sealed class GatewayToolDispatcher(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             var message = McpGatewayMessages.Approval.PlanExecutionFailed(planId, ex.Message);
-            var audit = new PlanAudit(
+            var audit = new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ApplyFailed,
                 new ApplyFailedPayload(
                     planId,
                     envelope.Operation,
-                    message));
+                    message),
+                PlanId: planId);
             await approvalExecution.RecordExecutionFailedAsync(
                 attempt,
                 message,
@@ -480,9 +462,10 @@ internal sealed class GatewayToolDispatcher(
 
         if (!executeResult.IsSuccessful)
         {
-            var audit = executeResult.Audit ?? new PlanAudit(
+            var audit = executeResult.Audit ?? new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ApplyFailed,
-                new ApplyFailedPayload(planId, envelope.Operation, executeResult.Message));
+                new ApplyFailedPayload(planId, envelope.Operation, executeResult.Message),
+                PlanId: planId);
             await approvalExecution.RecordExecutionFailedAsync(
                 attempt,
                 executeResult.Message,
@@ -499,9 +482,11 @@ internal sealed class GatewayToolDispatcher(
             grant,
             targetNamespace,
             executeResult.Message,
-            new PlanAudit(
+            new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.PlanApplied,
-                new PlanAppliedPayload(envelope.Id, envelope.Operation, targetNamespace, grant.ReviewDigest.Value)),
+                new PlanAppliedPayload(envelope.Id, envelope.Operation, targetNamespace, grant.ReviewDigest.Value),
+                PlanId: envelope.Id,
+                GrantId: grant.Id),
             ct).ConfigureAwait(false);
 
         return new CallToolResult
@@ -513,17 +498,17 @@ internal sealed class GatewayToolDispatcher(
     private static bool IsTerminalWaitStatus(PlanStatus status) =>
         status is PlanStatus.NotFound or PlanStatus.Approved or PlanStatus.Applied or PlanStatus.Expired;
 
-    private async Task WritePlanAuditAsync(PlanAudit audit, string context, CancellationToken ct)
+    private async Task WriteAuditEntryAsync(ApprovalAuditEntry entry, string context, CancellationToken ct)
     {
         try
         {
-            await auditPublisher.PublishAsync(audit, ct).ConfigureAwait(false);
+            await auditOutbox.AppendAsync(entry, ct).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex,
                 "Failed to write audit event {EventName} for {Context}.",
-                audit.EventName,
+                entry.EventName,
                 context);
         }
     }

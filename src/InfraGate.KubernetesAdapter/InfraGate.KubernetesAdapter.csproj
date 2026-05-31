@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="InfraGate.KubernetesAdapter.Tests" />
     <InternalsVisibleTo Include="InfraGate.McpGateway.Tests" />
     <InternalsVisibleTo Include="InfraGate.McpGateway.KeycloakTests" />
     <InternalsVisibleTo Include="InfraGate.McpServer.Tests" />

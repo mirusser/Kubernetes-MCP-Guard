@@ -11,6 +11,8 @@ Defaults below come from the current source code and workflows. Paths shown as `
 | `INFRA_GATE_ENVIRONMENT` | All runtime components | No | `Development` when no environment variable is set; Docker images set `Production` | `Production` | InfraGate runtime mode. Valid values are `Development` and `Production`. Overrides `DOTNET_ENVIRONMENT` and `ASPNETCORE_ENVIRONMENT`. | Set `Production` for shared or real deployments. Invalid values fail startup. |
 | `DOTNET_ENVIRONMENT` | All runtime components | No | Used only when `INFRA_GATE_ENVIRONMENT` is unset | `Production` | Standard .NET environment fallback. `Development` means development; all other values are treated as production-like. | Prefer `INFRA_GATE_ENVIRONMENT` for explicit InfraGate behavior. |
 | `ASPNETCORE_ENVIRONMENT` | ASP.NET components, fallback for server mode parsing | No | Used only when the two variables above are unset | `Production` | ASP.NET Core environment fallback. `Development` means development; all other values are treated as production-like. | Prefer `INFRA_GATE_ENVIRONMENT` for explicit InfraGate behavior. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | All runtime components | No | Unset | `http://localhost:4317` | Enables OTLP export for traces and metrics. If unset, only the Serilog bridge is active. | Use an authenticated OTLP collector. |
+| `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` | `InfraGate.Observer`, `InfraGate.Planner` | No | `false` | `true` | Set to `true` to include prompt/response content in spans. | **Off by default** — do not enable in production without a data-handling review. |
 
 ## McpServer
 
@@ -34,9 +36,9 @@ The Anomaly Observer listens on port `3003` by default and polls the MCP gateway
 | `INFRA_GATE_OBSERVER_MAX_TOOL_ITERATIONS` | `InfraGate.Observer` | No | `8` | `8` | Maximum LLM tool-call iterations per cycle. | Bounds agentic loops independent of clock time. |
 | `INFRA_GATE_OBSERVER_GATEWAY_BASE_URL` | `InfraGate.Observer` | Yes | None | `http://127.0.0.1:3001/mcp` | Base URL of the MCP gateway HTTP endpoint. | Must be reachable from the Observer process. |
 | `INFRA_GATE_OBSERVER_ALLOWED_NAMESPACES` | `InfraGate.Observer` | No | Unset | `mcp-nginx-demo` | Comma-separated namespace allow-list for snapshot fetching. | Align with gateway namespace allowlist. |
-| `INFRA_GATE_OBSERVER_LLM_PROVIDER` | `InfraGate.Observer` | No | `anthropic` | `anthropic` | LLM provider for anomaly detection. Supported: `anthropic`. Others (`openai`, `google`, `azure`, `ollama`) are reserved for future implementation. | Use a provider supported by `Microsoft.Extensions.AI`. |
-| `INFRA_GATE_OBSERVER_LLM_MODEL` | `InfraGate.Observer` | No | `claude-sonnet-4-6` | `claude-sonnet-4-6` | LLM model name. Applies when `INFRA_GATE_OBSERVER_LLM_PROVIDER` is set. | Model selection affects token cost and detection quality. |
-| `INFRA_GATE_OBSERVER_LLM_API_KEY` | `InfraGate.Observer` | Yes for Anthropic | None | (secret) | LLM provider API key. Never logged. Required when the Anthropic provider is active. | Use a secret manager in production; env var is development-only. Never commit generated files containing this value. |
+| `INFRA_GATE_OBSERVER_LLM_PROVIDER` | `InfraGate.Observer` | No | `openrouter` | `openrouter` | LLM provider for anomaly detection. Supported: `openrouter` (default), `anthropic`. Others (`openai`, `google`, `azure`, `ollama`) are reserved for future implementation. | Use `openrouter` to route via OpenRouter (OpenAI-compatible endpoint, e.g. free DeepSeek models). `anthropic` lacks native function calling and throws at runtime. |
+| `INFRA_GATE_OBSERVER_LLM_MODEL` | `InfraGate.Observer` | No | Provider default | `claude-sonnet-4-6` | LLM model name. Default is `claude-sonnet-4-6` for Anthropic; `deepseek/deepseek-v4-flash:free` for OpenRouter. | Model selection affects token cost and detection quality. |
+| `INFRA_GATE_OBSERVER_LLM_API_KEY` | `InfraGate.Observer` | Yes | None | (secret) | LLM provider API key. Never logged. Required for Anthropic and OpenRouter providers. | Use a secret manager in production; env var is development-only. Never commit generated files containing this value. |
 | `INFRA_GATE_OBSERVER_CLIENT_ID` | `InfraGate.Observer` | No | `infra-gate-observer` | `infra-gate-observer` | OAuth client ID for the Observer service account. | Register this client with the IdP and grant `mcp:tools.readonly` scope. |
 | `INFRA_GATE_OBSERVER_CLIENT_SECRET` | `InfraGate.Observer` | Yes | None | (secret) | OAuth client secret for client_credentials flow. | Use a secret manager in production; env var is development-only. |
 | `INFRA_GATE_OBSERVER_OAUTH_AUTHORITY` | `InfraGate.Observer` | Yes | None | `http://keycloak:8080/realms/infra-gate` | OAuth/OIDC authority used for client_credentials token discovery. | Match the gateway's issuer. |
@@ -49,6 +51,7 @@ The Anomaly Observer listens on port `3003` by default and polls the MCP gateway
 | `INFRA_GATE_OBSERVER_BIND_ADDRESS` | Compose | No | `127.0.0.1` | `127.0.0.1` | Host bind address for the Observer container port. | Keep loopback unless a reverse proxy or private network boundary is configured. |
 | `INFRA_GATE_OBSERVER_BIND_PORT` | Compose | No | `3003` | `3003` | Host port mapped to the Observer container. | Avoid exposing publicly; this is an operational control endpoint. |
 | `INFRA_GATE_OBSERVER_HOST_PATH` | Compose / Run Profiles | No | Repo-root `.mcp-observer/findings` when generated by `scripts/generate-env.sh` | `./.mcp-observer/findings` | Host path mounted to the Observer JSON finding sink directory. | Use protected durable storage when enabled; otherwise leave the file sink unset. |
+| `INFRA_GATE_OBSERVER_AUDIT_CONNECTION_STRING` | `InfraGate.Observer` | No | Unset | `Host=postgres;Port=5432;Database=infra-gate;Username=infra-gate;Password=(secret)` | PostgreSQL connection string for the Observer audit outbox. | Use a least-privilege role with insert-only access to the `audit_outbox` table. Required for end-to-end audit tracing. |
 
 ### On-Demand Observation Trigger
 
@@ -61,7 +64,7 @@ The Observer exposes `POST /observe-now` for manual on-demand cycle triggering:
 
 ## InfraGate.Planner
 
-The Remediation Planner listens on port `3004` by default, accepts `POST /handoff/anomalies`, and proposes approval-pending plans through the gateway. Its v1 operation menu is `restart_deployment` and `scale_deployment`. Direct runtime configuration is under `InfraGate:Planner`; generated env files and local Compose use the `INFRA_GATE_PLANNER_*` prefix.
+The Remediation Planner listens on port `3004` by default, accepts `POST /handoff/anomalies`, and proposes approval-pending plans through the gateway. Its v1 operation menu is `restart_deployment`, `scale_deployment`, and `set_deployment_image`. Direct runtime configuration is under `InfraGate:Planner`; generated env files and local Compose use the `INFRA_GATE_PLANNER_*` prefix.
 
 | Variable | Component | Required | Default | Example | Description | Production guidance |
 | --- | --- | :---: | --- | --- | --- | --- |
@@ -71,9 +74,9 @@ The Remediation Planner listens on port `3004` by default, accepts `POST /handof
 | `INFRA_GATE_PLANNER_ANOMALY_WALL_CLOCK_CAP_SECONDS` | `InfraGate.Planner` | No | `30` | `30` | Per-anomaly decision cap covering LLM reasoning and plan proposal. Bounds: 5–120. | Keep bounded to control LLM cost and avoid tying up batch processing. |
 | `INFRA_GATE_PLANNER_BATCH_WALL_CLOCK_CAP_SECONDS` | `InfraGate.Planner` | No | `300` | `300` | Per-batch processing cap. Proposals completed before the cap are still published. Bounds: 30–900. | Keep below operational alert windows; high values can delay later batches. |
 | `INFRA_GATE_PLANNER_MAX_TOOL_ITERATIONS` | `InfraGate.Planner` | No | `4` | `4` | Maximum read-only inspection tool calls the LLM may request per anomaly. Bounds: 1–10. | Lower values reduce cost and blast radius; raise only with measured need. |
-| `INFRA_GATE_PLANNER_LLM_PROVIDER` | `InfraGate.Planner` | No | `anthropic` | `anthropic` | LLM provider for remediation decisions. The current implemented provider is Anthropic; other parsed provider names are future wiring points. | Use a provider explicitly supported by the deployed binary. |
-| `INFRA_GATE_PLANNER_LLM_MODEL` | `InfraGate.Planner` | No | `claude-sonnet-4-6` | `claude-sonnet-4-6` | LLM model name used by the Planner chat client. | Model choice affects cost and remediation quality. Validate prompt behavior before changing. |
-| `INFRA_GATE_PLANNER_LLM_API_KEY` | `InfraGate.Planner` | Yes for Anthropic | None | (secret) | API key for the configured LLM provider. | Use a secret manager in production; env var is development-only. Never commit generated files containing this value. |
+| `INFRA_GATE_PLANNER_LLM_PROVIDER` | `InfraGate.Planner` | No | `openrouter` | `openrouter` | LLM provider for remediation decisions. Supported: `openrouter` (default), `anthropic`. Others (`openai`, `google`, `azure`, `ollama`) are reserved for future implementation. | Use `openrouter` to route via OpenRouter (OpenAI-compatible endpoint, e.g. free DeepSeek models). `anthropic` lacks native function calling and throws at runtime. |
+| `INFRA_GATE_PLANNER_LLM_MODEL` | `InfraGate.Planner` | No | Provider default | `claude-sonnet-4-6` | LLM model name. Default is `claude-sonnet-4-6` for Anthropic; `deepseek/deepseek-v4-flash:free` for OpenRouter. | Model choice affects cost and remediation quality. Validate prompt behavior before changing. |
+| `INFRA_GATE_PLANNER_LLM_API_KEY` | `InfraGate.Planner` | Yes | None | (secret) | API key for the configured LLM provider. Required for Anthropic and OpenRouter. | Use a secret manager in production; env var is development-only. Never commit generated files containing this value. |
 | `INFRA_GATE_PLANNER_CLIENT_ID` | `InfraGate.Planner` | No | `infra-gate-planner` | `infra-gate-planner` | OAuth client id for the Planner service account. | Register a dedicated confidential client and grant only `mcp:tools.propose` plus `mcp:tools.readonly`. |
 | `INFRA_GATE_PLANNER_CLIENT_SECRET` | `InfraGate.Planner` | Yes | None | (secret) | OAuth client secret for Planner client_credentials flow. | Use a secret manager in production; rotate independently from Observer and Executor secrets. |
 | `INFRA_GATE_PLANNER_OAUTH_AUTHORITY` | `InfraGate.Planner` | Yes | None | `http://keycloak:8080/realms/infra-gate` | OAuth/OIDC authority used for client_credentials token acquisition and inbound Observer JWT validation. | Use the same issuer trusted by the gateway; use HTTPS outside local development. |
@@ -84,6 +87,7 @@ The Remediation Planner listens on port `3004` by default, accepts `POST /handof
 | `INFRA_GATE_PLANNER_BIND_ADDRESS` | Compose | No | `127.0.0.1` | `127.0.0.1` | Host bind address for the Planner container port. | Keep loopback unless a reverse proxy or private network boundary is configured. |
 | `INFRA_GATE_PLANNER_BIND_PORT` | Compose | No | `3004` | `3004` | Host port mapped to the Planner container. | Avoid exposing publicly; this is an internal handoff endpoint. |
 | `INFRA_GATE_PLANNER_HOST_PATH` | Compose / Run Profiles | No | Repo-root `.mcp-remediation/proposals` when generated by `scripts/generate-env.sh` | `./.mcp-remediation/proposals` | Host path mounted to the Planner JSON proposal sink directory. | Use protected durable storage when enabled; otherwise leave the file sink unset. |
+| `INFRA_GATE_PLANNER_AUDIT_CONNECTION_STRING` | `InfraGate.Planner` | No | Unset | `Host=postgres;Port=5432;Database=infra-gate;Username=infra-gate;Password=(secret)` | PostgreSQL connection string for the Planner audit outbox. | Use a least-privilege role with insert-only access to the `audit_outbox` table. Required for end-to-end audit tracing. |
 
 ## InfraGate.Executor
 

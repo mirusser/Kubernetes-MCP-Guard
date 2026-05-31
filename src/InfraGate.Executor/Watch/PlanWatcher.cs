@@ -182,7 +182,7 @@ internal sealed class PlanWatcher : BackgroundService
         ExecutorLogEvents.LogExecuteSucceeded(logger, planId);
     }
 
-    private static bool TryParseWaitResult(string response, out string status, out bool timedOut)
+    internal static bool TryParseWaitResult(string response, out string status, out bool timedOut)
     {
         status = string.Empty;
         timedOut = false;
@@ -198,7 +198,7 @@ internal sealed class PlanWatcher : BackgroundService
         }
     }
 
-    private static bool TryFindWaitResult(JsonElement element, ref string status, ref bool timedOut)
+    internal static bool TryFindWaitResult(JsonElement element, ref string status, ref bool timedOut)
     {
         return element.ValueKind switch
         {
@@ -208,7 +208,7 @@ internal sealed class PlanWatcher : BackgroundService
         };
     }
 
-    private static bool TryFindWaitResultInObject(JsonElement element, ref string status, ref bool timedOut)
+    internal static bool TryFindWaitResultInObject(JsonElement element, ref string status, ref bool timedOut)
     {
         if (TryReadWaitStatus(element, ref status, ref timedOut))
         {
@@ -226,7 +226,7 @@ internal sealed class PlanWatcher : BackgroundService
         return false;
     }
 
-    private static bool TryReadWaitStatus(JsonElement element, ref string status, ref bool timedOut)
+    internal static bool TryReadWaitStatus(JsonElement element, ref string status, ref bool timedOut)
     {
         if (!element.TryGetProperty("status", out var statusEl) ||
             statusEl.ValueKind != JsonValueKind.String)
@@ -240,7 +240,7 @@ internal sealed class PlanWatcher : BackgroundService
         return true;
     }
 
-    private static bool TryFindWaitResultInValue(JsonElement value, ref string status, ref bool timedOut)
+    internal static bool TryFindWaitResultInValue(JsonElement value, ref string status, ref bool timedOut)
     {
         if (value.ValueKind == JsonValueKind.String)
         {
@@ -251,7 +251,7 @@ internal sealed class PlanWatcher : BackgroundService
             TryFindWaitResult(value, ref status, ref timedOut);
     }
 
-    private static bool TryFindWaitResultInJsonString(string? text, ref string status, ref bool timedOut)
+    internal static bool TryFindWaitResultInJsonString(string? text, ref string status, ref bool timedOut)
     {
         if (string.IsNullOrWhiteSpace(text) || !text.Contains('"', StringComparison.Ordinal))
         {
@@ -269,7 +269,7 @@ internal sealed class PlanWatcher : BackgroundService
         }
     }
 
-    private static bool TryFindWaitResultInArray(JsonElement element, ref string status, ref bool timedOut)
+    internal static bool TryFindWaitResultInArray(JsonElement element, ref string status, ref bool timedOut)
     {
         foreach (var item in element.EnumerateArray())
         {
@@ -282,7 +282,7 @@ internal sealed class PlanWatcher : BackgroundService
         return false;
     }
 
-    private static bool IsErrorResponse(string response)
+    internal static bool IsErrorResponse(string response)
     {
         try
         {

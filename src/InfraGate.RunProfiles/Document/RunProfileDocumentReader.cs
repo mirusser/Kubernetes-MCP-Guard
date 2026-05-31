@@ -149,6 +149,7 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.LlmProvider,
                 RunProfileConventions.YamlKeys.MaxToolIterations,
                 RunProfileConventions.YamlKeys.OAuthAuthority,
+                RunProfileConventions.YamlKeys.ObserverAuditConnectionString,
                 RunProfileConventions.YamlKeys.ObserverHostPath,
                 RunProfileConventions.YamlKeys.PlannerHandoffUrl,
                 RunProfileConventions.YamlKeys.Scope,
@@ -483,6 +484,7 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.FileSinkRoot),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.PlannerHandoffUrl),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ObserverHostPath),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ObserverAuditConnectionString),
             GetOptionalScalarSequence(mapping, RunProfileConventions.YamlKeys.AllowedNamespaces));
     }
 

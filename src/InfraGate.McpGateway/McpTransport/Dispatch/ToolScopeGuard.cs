@@ -8,38 +8,6 @@ internal sealed class ToolScopeGuard(
     IGuardrailAuditStore auditStore,
     ILogger<ToolScopeGuard> logger) : IToolScopeGuard
 {
-    public async Task<CallToolResult?> RequireAnyToolScopeAsync(string toolName)
-    {
-        var user = httpContextAccessor.HttpContext?.User;
-        if (user is null)
-        {
-            return ErrorResult(
-                McpGatewayMessages.Authorization.RequiresSession(toolName));
-        }
-
-        return await RequireAnyScopeAsync(
-            toolName,
-            McpGatewayConventions.ToolScopeRequirements.MutationScope,
-            McpGatewayConventions.ToolScopeRequirements.ReadOnlyScope).ConfigureAwait(false);
-    }
-
-    public async Task<CallToolResult?> RequireMutationScopeAsync(string toolName)
-    {
-        var user = httpContextAccessor.HttpContext?.User;
-        if (user is null)
-        {
-            return ErrorResult(
-                McpGatewayMessages.Authorization.RequiresAuthenticatedSession(toolName, McpGatewayConventions.ToolScopeRequirements.MutationScope));
-        }
-
-        if (!GatewayAuthentication.HasRequiredScope(user, McpGatewayConventions.ToolScopeRequirements.MutationScope))
-        {
-            return await DenyAndAuditAsync(toolName, McpGatewayConventions.ToolScopeRequirements.MutationScope).ConfigureAwait(false);
-        }
-
-        return null;
-    }
-
     public async Task<CallToolResult?> RequireAnyScopeAsync(string toolName, params string[] requiredScopes)
     {
         var user = httpContextAccessor.HttpContext?.User;

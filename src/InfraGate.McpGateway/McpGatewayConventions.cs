@@ -7,38 +7,6 @@ namespace InfraGate.McpGateway;
 
 internal static class McpGatewayConventions
 {
-    public static void RegisterInfraGateEnvVarMappings(InfraGateEnvVarMappings mappings)
-    {
-        ArgumentNullException.ThrowIfNull(mappings);
-        mappings.Map(EnvironmentVariables.AspNetCoreUrls, ConfigurationKeys.AspNetCoreUrls);
-        mappings.Map(EnvironmentVariables.DownstreamAssembly, ConfigurationKeys.DownstreamAssembly);
-        mappings.Map(EnvironmentVariables.DownstreamProject, ConfigurationKeys.DownstreamProject);
-        mappings.Map(EnvironmentVariables.GuardAuditRoot, ConfigurationKeys.GuardAuditRoot);
-        mappings.Map(EnvironmentVariables.ApprovalBaseUrl, ConfigurationKeys.ApprovalBaseUrl);
-        mappings.Map(EnvironmentVariables.ApprovalChallengeTtlSeconds, ConfigurationKeys.ApprovalChallengeTtlSeconds);
-        mappings.Map(EnvironmentVariables.OperatorGroup, ConfigurationKeys.OperatorGroup);
-        mappings.Map(EnvironmentVariables.OperatorEmail, ConfigurationKeys.OperatorEmail);
-        mappings.Map(EnvironmentVariables.SmtpHost, ConfigurationKeys.SmtpHost);
-        mappings.Map(EnvironmentVariables.SmtpPort, ConfigurationKeys.SmtpPort);
-        mappings.Map(EnvironmentVariables.SmtpFrom, ConfigurationKeys.SmtpFrom);
-        mappings.Map(EnvironmentVariables.SmtpUser, ConfigurationKeys.SmtpUser);
-        mappings.Map(EnvironmentVariables.SmtpPassword, ConfigurationKeys.SmtpPassword);
-        mappings.Map(EnvironmentVariables.SmtpEnableSsl, ConfigurationKeys.SmtpEnableSsl);
-        RegisterDownstreamAuthMappings(mappings);
-    }
-
-    private static void RegisterDownstreamAuthMappings(InfraGateEnvVarMappings mappings)
-    {
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Required, DownstreamAuthConventions.ConfigurationKeys.Required);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Authority, DownstreamAuthConventions.ConfigurationKeys.Authority);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.MetadataAddress, DownstreamAuthConventions.ConfigurationKeys.MetadataAddress);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata, DownstreamAuthConventions.ConfigurationKeys.RequireHttpsMetadata);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Audience, DownstreamAuthConventions.ConfigurationKeys.Audience);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Scope, DownstreamAuthConventions.ConfigurationKeys.Scope);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.GatewayClientId, DownstreamAuthConventions.ConfigurationKeys.GatewayClientId);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.GatewayClientSecret, DownstreamAuthConventions.ConfigurationKeys.GatewayClientSecret);
-    }
-
     private const string LoopbackHttpScheme = "http";
     private const string LoopbackHost = "127.0.0.1";
     private const string UriSchemeSeparator = "://";
@@ -56,7 +24,10 @@ internal static class McpGatewayConventions
         public const string ApprovalBaseUrl = "InfraGate:Approval:BaseUrl";
         public const string ApprovalChallengeTtlSeconds = "InfraGate:Approval:ChallengeTtlSeconds";
         public const string ApprovalPostgresConnectionString = "InfraGate:Approval:Postgres:ConnectionString";
-        public const string ApprovalPostgresRunMigrationsOnStartup = "InfraGate:Approval:Postgres:RunMigrationsOnStartup";
+
+        public const string ApprovalPostgresRunMigrationsOnStartup =
+            "InfraGate:Approval:Postgres:RunMigrationsOnStartup";
+
         public const string ApprovalRoot = "InfraGate:Approval:Root";
         public const string AspNetCoreUrls = "InfraGate:Gateway:AspNetCoreUrls";
         public const string DownstreamAssembly = "InfraGate:Gateway:DownstreamAssembly";
@@ -89,6 +60,46 @@ internal static class McpGatewayConventions
         public const string SmtpUser = "INFRA_GATE_GATEWAY_SMTP_USER";
         public const string SmtpPassword = "INFRA_GATE_GATEWAY_SMTP_PASSWORD";
         public const string SmtpEnableSsl = "INFRA_GATE_GATEWAY_SMTP_ENABLE_SSL";
+    }
+
+    public static void RegisterInfraGateEnvVarMappings(InfraGateEnvVarMappings mappings)
+    {
+        ArgumentNullException.ThrowIfNull(mappings);
+        mappings.Map(EnvironmentVariables.AspNetCoreUrls, ConfigurationKeys.AspNetCoreUrls);
+        mappings.Map(EnvironmentVariables.DownstreamAssembly, ConfigurationKeys.DownstreamAssembly);
+        mappings.Map(EnvironmentVariables.DownstreamProject, ConfigurationKeys.DownstreamProject);
+        mappings.Map(EnvironmentVariables.GuardAuditRoot, ConfigurationKeys.GuardAuditRoot);
+        mappings.Map(EnvironmentVariables.ApprovalBaseUrl, ConfigurationKeys.ApprovalBaseUrl);
+        mappings.Map(EnvironmentVariables.ApprovalChallengeTtlSeconds, ConfigurationKeys.ApprovalChallengeTtlSeconds);
+        mappings.Map(EnvironmentVariables.OperatorGroup, ConfigurationKeys.OperatorGroup);
+        mappings.Map(EnvironmentVariables.OperatorEmail, ConfigurationKeys.OperatorEmail);
+        mappings.Map(EnvironmentVariables.SmtpHost, ConfigurationKeys.SmtpHost);
+        mappings.Map(EnvironmentVariables.SmtpPort, ConfigurationKeys.SmtpPort);
+        mappings.Map(EnvironmentVariables.SmtpFrom, ConfigurationKeys.SmtpFrom);
+        mappings.Map(EnvironmentVariables.SmtpUser, ConfigurationKeys.SmtpUser);
+        mappings.Map(EnvironmentVariables.SmtpPassword, ConfigurationKeys.SmtpPassword);
+        mappings.Map(EnvironmentVariables.SmtpEnableSsl, ConfigurationKeys.SmtpEnableSsl);
+        RegisterDownstreamAuthMappings(mappings);
+    }
+
+    private static void RegisterDownstreamAuthMappings(InfraGateEnvVarMappings mappings)
+    {
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Required,
+            DownstreamAuthConventions.ConfigurationKeys.Required);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Authority,
+            DownstreamAuthConventions.ConfigurationKeys.Authority);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.MetadataAddress,
+            DownstreamAuthConventions.ConfigurationKeys.MetadataAddress);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata,
+            DownstreamAuthConventions.ConfigurationKeys.RequireHttpsMetadata);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Audience,
+            DownstreamAuthConventions.ConfigurationKeys.Audience);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Scope,
+            DownstreamAuthConventions.ConfigurationKeys.Scope);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.GatewayClientId,
+            DownstreamAuthConventions.ConfigurationKeys.GatewayClientId);
+        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.GatewayClientSecret,
+            DownstreamAuthConventions.ConfigurationKeys.GatewayClientSecret);
     }
 
     public static class Paths

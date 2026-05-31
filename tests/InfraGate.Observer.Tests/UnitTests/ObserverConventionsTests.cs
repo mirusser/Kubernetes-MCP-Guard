@@ -81,6 +81,17 @@ public sealed class ObserverConventionsTests
     }
 
     [Fact]
+    public void LlmProviders_ArePinned()
+    {
+        Assert.Equal("ANTHROPIC", ObserverConventions.LlmProviders.Anthropic);
+        Assert.Equal("OPENAI", ObserverConventions.LlmProviders.OpenAI);
+        Assert.Equal("GOOGLE", ObserverConventions.LlmProviders.Google);
+        Assert.Equal("AZURE", ObserverConventions.LlmProviders.Azure);
+        Assert.Equal("OLLAMA", ObserverConventions.LlmProviders.Ollama);
+        Assert.Equal("OPENROUTER", ObserverConventions.LlmProviders.OpenRouter);
+    }
+
+    [Fact]
     public void HttpClients_PlannerHandoff_IsPinned()
     {
         Assert.Equal("PlannerHandoff", ObserverConventions.HttpClients.PlannerHandoff);
@@ -99,34 +110,4 @@ public sealed class ObserverConventionsTests
         Assert.Equal("get_k8s_endpoints", ObserverConventions.ToolNames.GetK8sEndpoints);
     }
 
-    [Fact]
-    public void ReadOnlyToolNames_ContainsExpectedCount()
-    {
-        Assert.Equal(8, ObserverConventions.ToolNames.ReadOnlyToolNames.Count);
-    }
-
-    [Fact]
-    public void ReadOnlyToolNames_ContainsAllDeclaredTools()
-    {
-        var toolNames = ObserverConventions.ToolNames.ReadOnlyToolNames;
-
-        Assert.Contains(ObserverConventions.ToolNames.GetAllowedNamespaces, toolNames);
-        Assert.Contains(ObserverConventions.ToolNames.GetK8sStatus, toolNames);
-        Assert.Contains(ObserverConventions.ToolNames.GetK8sEvents, toolNames);
-        Assert.Contains(ObserverConventions.ToolNames.GetK8sPods, toolNames);
-        Assert.Contains(ObserverConventions.ToolNames.DescribeK8sResource, toolNames);
-        Assert.Contains(ObserverConventions.ToolNames.GetK8sDeployments, toolNames);
-        Assert.Contains(ObserverConventions.ToolNames.GetK8sServices, toolNames);
-        Assert.Contains(ObserverConventions.ToolNames.GetK8sEndpoints, toolNames);
-    }
-
-    [Fact]
-    public void ReadOnlyToolNames_ExcludesMutationTools()
-    {
-        var toolNames = ObserverConventions.ToolNames.ReadOnlyToolNames;
-
-        Assert.DoesNotContain("request_scale_deployment", toolNames);
-        Assert.DoesNotContain("execute_approved_plan", toolNames);
-        Assert.DoesNotContain("apply_manifest", toolNames);
-    }
 }

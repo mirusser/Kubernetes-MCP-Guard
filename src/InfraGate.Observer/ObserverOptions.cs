@@ -14,6 +14,7 @@ public sealed record class ObserverOptions
     public int DedupeResolutionThreshold { get; init; } = AnomalyObserverConventions.DefaultDedupeResolutionThreshold;
     public string FileSinkRoot { get; init; } = string.Empty;
     public string PlannerHandoffUrl { get; init; } = string.Empty;
+    public string AuditConnectionString { get; init; } = string.Empty;
 
     public void Validate()
     {

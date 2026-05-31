@@ -115,12 +115,27 @@ When `.codegraph/` is present, prefer these tools over file reads and grep:
 
 Use doc reads for rationale, flow diagrams, and ADR decisions that codegraph cannot answer.
 
+## Agent Memory
+
+Use agentmemory **exclusively via MCP tools** — never via curl or direct HTTP to the REST API:
+
+- `memory_save` — persist a fact, pattern, architecture decision, bug, or workflow rule
+- `memory_recall` — retrieve memories by query
+- `memory_smart_search` — semantic + graph search across all memories
+- `memory_sessions` — list known sessions
+- `memory_lesson_save` — save a lesson learned (maps to `workflow` type internally)
+
+The MCP shim proxies to the engine at `http://localhost:3111` internally — that is not your concern. All memory operations go through MCP, period.
+
 ## Solution Map
 
 Start with [README.md](README.md) for intent and architecture. Use [devs-readme.md](docs/devs-readme.md) for setup, local runs, tool contracts, and verification.
 
 Load only the project README you need:
 
+- Audit outbox:
+  - [InfraGate.AuditOutbox](src/InfraGate.AuditOutbox/README.md): generic audit-outbox engine — `AuditOutboxRow`, `AuditOutboxConventions`, stream names, lock-key derivation. No Postgres dependency.
+  - [InfraGate.AuditOutbox.Postgres](src/InfraGate.AuditOutbox.Postgres/README.md): Npgsql core (`PostgresAuditOutboxCore`), migration runner, `AuditCanonicalJson`, DI registration, chain-verification SQL recipe.
 - Runtime projects:
   - [InfraGate.McpServer](src/InfraGate.McpServer/README.md): stdio MCP server, Kubernetes validation, approval plans, and plan application.
   - [InfraGate.McpGateway](src/InfraGate.McpGateway/README.md): HTTP MCP gateway, downstream stdio client, guardrails, sanitization, and audit logging.
@@ -130,6 +145,9 @@ Load only the project README you need:
   - [InfraGate.RuntimeSafety](src/InfraGate.RuntimeSafety/README.md): runtime mode resolution, production safety validation, and environment variable conventions.
   - [InfraGate.Observability](src/InfraGate.Observability/README.md): shared Serilog structured logging configuration for the MCP Gateway and MCP Server.
   - [InfraGate.RunProfiles](src/InfraGate.RunProfiles/README.md): CLI tool that compiles named run profiles from `deploy/run-profiles.yaml` into `.env` files and appsettings JSON for Docker Compose and .NET runtime binding.
+  - [InfraGate.Prompts](src/InfraGate.Prompts/README.md): Prompt Library — `IPromptLibrary` seam over a Semantic Kernel Handlebars renderer; used by Observer and Planner for parameterised system prompts.
+  - [InfraGate.AgentMcp](src/InfraGate.AgentMcp/README.md): Agent MCP Toolset — abstraction connecting Observer and Planner to the MCP Gateway with ReadOnlyHint filtering.
+  - [InfraGate.AgentGuardrails](src/InfraGate.AgentGuardrails/README.md): shared guardrail module — tool-call guardrail middleware, guardrail/hallucination metric taxonomy; composed into both Observer and Planner agents.
   - [InfraGate.Observer](src/InfraGate.Observer/README.md): Anomaly Observer — LLM-driven periodic cluster inspection through the MCP gateway read-only tools.
   - [InfraGate.Planner](src/InfraGate.Planner/README.md): Remediation Planner — LLM-driven Anomaly Report consumer that proposes approval-pending plans through `propose_plan`.
   - [InfraGate.Executor](src/InfraGate.Executor/README.md): Remediation Executor — deterministic plan watcher that waits for approval and executes approved plans.

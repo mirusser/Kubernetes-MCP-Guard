@@ -7,4 +7,5 @@ public enum LlmProvider
     Google,
     Azure,
     Ollama,
+    OpenRouter,
 }

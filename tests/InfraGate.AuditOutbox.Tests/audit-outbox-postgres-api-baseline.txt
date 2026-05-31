@@ -1,0 +1,4 @@
+static class InfraGate.AuditOutbox.Postgres.PostgresAuditOutboxMigrationRunner
+  static Task ApplyAsync(NpgsqlDataSource dataSource, String schemaName, String migrationsDirectory, CancellationToken cancellationToken)
+static class InfraGate.AuditOutbox.Postgres.ServiceCollectionExtensions
+  static IServiceCollection AddPostgresAuditOutbox(IServiceCollection services, NpgsqlDataSource dataSource)

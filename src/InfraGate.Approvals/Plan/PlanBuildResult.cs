@@ -1,4 +1,3 @@
-using InfraGate.Approvals;
 using InfraGate.Approvals.Audit;
 namespace InfraGate.Approvals.Plan;
 
@@ -10,7 +9,7 @@ public sealed record class PlanBuildResult(
     string Message,
     string? ReasonCode = null)
 {
-    public PlanAudit? Audit { get; init; }
+    public ApprovalAuditEntry? Audit { get; init; }
 
     public static PlanBuildResult Success(PlanEnvelope envelope, string planId, string targetNamespace) =>
         new(true, envelope, planId, targetNamespace, string.Empty);
@@ -18,6 +17,6 @@ public sealed record class PlanBuildResult(
     public static PlanBuildResult Failed(string message, string? reasonCode = null) =>
         new(false, null, string.Empty, string.Empty, message, reasonCode);
 
-    public static PlanBuildResult Failed(string message, PlanAudit audit, string? reasonCode = null) =>
+    public static PlanBuildResult Failed(string message, ApprovalAuditEntry audit, string? reasonCode = null) =>
         new(false, null, string.Empty, string.Empty, message, reasonCode) { Audit = audit };
 }

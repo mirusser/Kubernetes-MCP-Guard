@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowMissingPrunePackageData>true</AllowMissingPrunePackageData>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="10.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="InfraGate.AuditOutbox.Postgres" />
+    <InternalsVisibleTo Include="InfraGate.AuditOutbox.Tests" />
+    <InternalsVisibleTo Include="InfraGate.Approvals.Postgres" />
+    <InternalsVisibleTo Include="InfraGate.Approvals.Postgres.Tests" />
+    <InternalsVisibleTo Include="InfraGate.Observer" />
+    <InternalsVisibleTo Include="InfraGate.Observer.Tests" />
+    <InternalsVisibleTo Include="InfraGate.Observer.IntegrationTests" />
+    <InternalsVisibleTo Include="InfraGate.Planner" />
+    <InternalsVisibleTo Include="InfraGate.Planner.Tests" />
+    <InternalsVisibleTo Include="InfraGate.Planner.IntegrationTests" />
+    <InternalsVisibleTo Include="InfraGate.Safety.E2E.Tests" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+
+</Project>

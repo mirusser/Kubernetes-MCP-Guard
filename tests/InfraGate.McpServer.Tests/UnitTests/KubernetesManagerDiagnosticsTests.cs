@@ -243,8 +243,7 @@ public sealed class KubernetesManagerDiagnosticsTests
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-tests", Guid.NewGuid().ToString("N"));
         var options = new KubernetesMcpOptions(
-            new HashSet<string>(StringComparer.Ordinal) { "demo" },
-            root);
+            new HashSet<string>(StringComparer.Ordinal) { "demo" });
         var client = api is null
             ? null
             : new Kubernetes(new KubernetesClientConfiguration

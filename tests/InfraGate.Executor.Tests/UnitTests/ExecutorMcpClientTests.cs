@@ -64,7 +64,8 @@ public sealed class ExecutorMcpClientTests
     {
         var client = CreateClient();
 
-        await client.DisposeAsync();
+        var ex = await Record.ExceptionAsync(() => client.DisposeAsync().AsTask());
+        Assert.Null(ex);
     }
 
     private static ExecutorMcpClient CreateClient(string gatewayBaseUrl = "http://gateway:3001")

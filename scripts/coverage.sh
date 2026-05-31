@@ -6,7 +6,7 @@ line_coverage_threshold=80
 # The remaining gap (~150 branches) is concentrated in Kubernetes-dependent code
 # (KubernetesManager.Evidence, Execute, DryRun, Apply — all 0% covered).
 # Raise to 80 after adding integration tests with a mock Kubernetes client for those.
-branch_coverage_threshold=69
+branch_coverage_threshold=80
 merged_cobertura="coverage-report/Cobertura.xml"
 
 echo "Cleaning old coverage output..."

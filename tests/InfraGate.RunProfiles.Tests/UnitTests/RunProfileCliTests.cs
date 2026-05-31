@@ -28,8 +28,7 @@ public sealed class RunProfileCliTests
             error,
             CancellationToken.None);
 
-        Assert.Equal(0, exitCode);
-        Assert.Contains("local-compose", output.ToString(), StringComparison.Ordinal);
+        Assert.True(0 == exitCode, $"CLI exited with {exitCode}. Error output: {error}");
         Assert.Empty(error.ToString());
     }
 
@@ -743,6 +742,7 @@ public sealed class RunProfileCliTests
             "INFRA_GATE_OBSERVER_PLANNER_HANDOFF_URL",
             "INFRA_GATE_OBSERVER_HOST_PATH",
             "INFRA_GATE_OBSERVER_ALLOWED_NAMESPACES",
+            "INFRA_GATE_OBSERVER_AUDIT_CONNECTION_STRING",
             "INFRA_GATE_PLANNER_ASPNETCORE_URLS",
             "INFRA_GATE_PLANNER_GATEWAY_BASE_URL",
             "INFRA_GATE_PLANNER_EXECUTOR_HANDOFF_URL",
@@ -1157,6 +1157,114 @@ public sealed class RunProfileCliTests
                 content,
                 StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetAllSections_OverridesInfrastructureFields()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                gateway: {}
+                identityProvider: {}
+                approvalAuthority: {}
+                genericApprovalCore:
+                  approvalRoot: /data/approvals
+                downstreamAuth: {}
+                host: {}
+                observer: {}
+                planner: {}
+                executor: {}
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            [
+                "generate", "local-compose", "--config", configPath, "--output", outputPath,
+                "--set", "gateway.aspnetcoreUrls=http://localhost:3001",
+                "--set", "gateway.downstreamAssembly=InfraGate.McpServer.dll",
+                "--set", "gateway.guardAuditRoot=/audit",
+                "--set", "identityProvider.authority=http://auth:8080/realms/test",
+                "--set", "identityProvider.metadataAddress=http://auth:8080/realms/test/.well-known/openid-configuration",
+                "--set", "identityProvider.resource=gateway",
+                "--set", "identityProvider.scope=openid",
+                "--set", "identityProvider.requireHttpsMetadata=false",
+                "--set", "approvalAuthority.baseUrl=http://gateway.test",
+                "--set", "approvalAuthority.oauthClientId=approval-client",
+                "--set", "approvalAuthority.oauthCallbackPath=/approval/callback",
+                "--set", "approvalAuthority.oauthAuthorizationEndpoint=http://auth/authorize",
+                "--set", "approvalAuthority.oauthTokenEndpoint=http://auth/token",
+                "--set", "genericApprovalCore.approvalRoot=/data/approvals",
+                "--set", "genericApprovalCore.postgresConnectionString=Host=db;Database=approvals",
+                "--set", "genericApprovalCore.runMigrationsOnStartup=true",
+                "--set", "downstreamAuth.required=true",
+                "--set", "downstreamAuth.authority=http://auth:8080",
+                "--set", "downstreamAuth.metadataAddress=http://auth:8080/.well-known/oidc",
+                "--set", "downstreamAuth.requireHttpsMetadata=false",
+                "--set", "downstreamAuth.audience=http://localhost:3001",
+                "--set", "downstreamAuth.scope=mcp:tools",
+                "--set", "downstreamAuth.gatewayClientId=gateway-client",
+                "--set", "downstreamAuth.gatewayClientSecret=gateway-secret",
+                "--set", "host.bindAddress=0.0.0.0",
+                "--set", "host.bindPort=8080",
+                "--set", "host.gatewayImage=infragate/gateway:latest",
+                "--set", "host.configHostPath=/host/config",
+                "--set", "host.kubeconfigHostPath=/host/kubeconfig",
+                "--set", "host.approvalHostPath=/host/approvals",
+                "--set", "host.guardAuditHostPath=/host/audit",
+                "--set", "host.dataProtectionHostPath=/host/dataprotection",
+                "--set", "observer.auditConnectionString=Host=audit;Database=observer_audit",
+            ],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        Assert.Contains($"{RunProfileConventions.Env.AspnetcoreUrls}=http://localhost:3001", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.DownstreamAssembly}=InfraGate.McpServer.dll", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.GuardAuditRoot}=/audit", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.OauthAuthority}=http://auth:8080/realms/test", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.OauthMetadataAddress}=http://auth:8080/realms/test/.well-known/openid-configuration", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.OauthResource}=gateway", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.OauthScope}=openid", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.OauthRequireHttpsMetadata}=false", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.ApprovalBaseUrl}=http://gateway.test", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.ApprovalOauthClientId}=approval-client", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.ApprovalOauthCallbackPath}=/approval/callback", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.ApprovalOauthAuthorizationEndpoint}=http://auth/authorize", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.ApprovalOauthTokenEndpoint}=http://auth/token", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.ApprovalRoot}=/data/approvals", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.DownstreamAuthRequired}=true", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.DownstreamAuthAuthority}=http://auth:8080", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.DownstreamAuthMetadataAddress}=http://auth:8080/.well-known/oidc", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.DownstreamAuthRequireHttpsMetadata}=false", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.DownstreamAuthAudience}=http://localhost:3001", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.DownstreamAuthScope}=mcp:tools", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.DownstreamAuthGatewayClientId}=gateway-client", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.DownstreamAuthGatewayClientSecret}=gateway-secret", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.BindAddress}=0.0.0.0", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.BindPort}=8080", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.GatewayImage}=infragate/gateway:latest", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.ConfigHostPath}=/host/config", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.KubeconfigHostPath}=/host/kubeconfig", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.ApprovalHostPath}=/host/approvals", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.GuardAuditHostPath}=/host/audit", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.DataProtectionHostPath}=/host/dataprotection", content, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.ObserverAuditConnectionString}=Host=audit;Database=observer_audit", content, StringComparison.Ordinal);
     }
 
     [Theory]

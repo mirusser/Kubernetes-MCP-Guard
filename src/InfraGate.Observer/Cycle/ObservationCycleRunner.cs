@@ -1,54 +1,93 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using InfraGate.AgentGuardrails;
+using InfraGate.AgentLlm;
+using InfraGate.Observer.Audit;
 using InfraGate.Observer.Classification;
+using InfraGate.Observer.Cycle.Workflow;
 using InfraGate.Observer.Diagnostics;
-using InfraGate.Observer.Handoff;
-using InfraGate.Observer.Mcp;
-using InfraGate.Observer.Prompts;
+using InfraGate.AgentMcp;
+using InfraGate.Prompts;
 using InfraGate.Observer.Snapshot;
 using InfraGate.Observer.State;
+using Microsoft.Agents.AI.Workflows;
 using Serilog.Context;
 
 namespace InfraGate.Observer.Cycle;
 
 internal sealed class ObservationCycleRunner : IObservationCycleRunner
 {
+    // Justification: These DTOs exist solely for ChatResponseFormat.ForJsonSchema<T>() reflection below.
+    // System.Text.Json discovers the properties to generate a JSON schema that constrains the LLM output format.
+    // The properties are never read/written by imperative C# code — they are schema-only metadata.
+    // AnomalyParseExecutor.ExtractJsonArray finds the '[' inside the serialised object, so no parser changes needed.
+    private sealed class AnomalyBatchOutput
+    {
+        public List<AnomalyOutputItem> Anomalies { get; init; } = [];
+    }
+
+#pragma warning disable S1144
+    private sealed class AnomalyOutputItem
+    {
+        public string? Kind { get; init; }
+        public string? Severity { get; init; }
+        public string? Summary { get; init; }
+        public AnomalyTargetOutput? Target { get; init; }
+    }
+
+    private sealed class AnomalyTargetOutput
+    {
+        public string? Kind { get; init; }
+        public string? Namespace { get; init; }
+        public string? Name { get; init; }
+    }
+#pragma warning restore S1144
+
+    private static readonly ChatResponseFormat observerResponseFormat =
+        ChatResponseFormat.ForJsonSchema<AnomalyBatchOutput>();
+
     private readonly IOptionsMonitor<ObserverOptions> optionsMonitor;
     private readonly ISnapshotFetcher snapshotFetcher;
-    private readonly ISystemPromptProvider systemPromptProvider;
-    private readonly IChatClient chatClient;
+    private readonly IPromptLibrary promptLibrary;
+    private readonly ToolCallingAgentFactory agentFactory;
     private readonly ISeverityClassifier severityClassifier;
-    private readonly IObserverMcpClient mcpClient;
+    private readonly IAgentMcpToolset mcpClient;
     private readonly IAnomalyDedupeStore dedupeStore;
     private readonly IAnomalyHandoffSink handoffSink;
+    private readonly IObserverAuditOutbox? auditOutbox;
     private readonly ILogger<ObservationCycleRunner> logger;
     private readonly Counter<long>? cycleCountCounter;
     private readonly Counter<long>? toolCallsCounter;
     private readonly Counter<long>? severityDisagreementCounter;
     private readonly Counter<long>? reportsEmittedCounter;
     private readonly Histogram<double>? cycleDurationHistogram;
+    private readonly AgentGuardrailPolicy? guardrailPolicy;
 
     public ObservationCycleRunner( // NOSONAR:S107 — DI constructor; all params are required services.
         IOptionsMonitor<ObserverOptions> optionsMonitor,
         ISnapshotFetcher snapshotFetcher,
-        ISystemPromptProvider systemPromptProvider,
-        IChatClient chatClient,
+        IPromptLibrary promptLibrary,
+        ToolCallingAgentFactory agentFactory,
         ISeverityClassifier severityClassifier,
-        IObserverMcpClient mcpClient,
+        IAgentMcpToolset mcpClient,
         IAnomalyDedupeStore dedupeStore,
         IAnomalyHandoffSink handoffSink,
         ILogger<ObservationCycleRunner> logger,
-        Meter? meter = null)
+        Meter? meter = null,
+        IObserverAuditOutbox? auditOutbox = null,
+        AgentGuardrailPolicy? guardrailPolicy = null)
     {
         this.optionsMonitor = optionsMonitor;
         this.snapshotFetcher = snapshotFetcher;
-        this.systemPromptProvider = systemPromptProvider;
-        this.chatClient = chatClient;
+        this.promptLibrary = promptLibrary;
+        this.agentFactory = agentFactory;
         this.severityClassifier = severityClassifier;
         this.mcpClient = mcpClient;
         this.dedupeStore = dedupeStore;
         this.handoffSink = handoffSink;
+        this.auditOutbox = auditOutbox;
         this.logger = logger;
+        this.guardrailPolicy = guardrailPolicy;
 
         cycleCountCounter = ObserverMetrics.CreateCycleCountCounter(meter);
         toolCallsCounter = ObserverMetrics.CreateToolCallsCounter(meter);
@@ -59,558 +98,180 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
 
     public async Task<CycleResult> RunAsync(CancellationToken shutdownToken)
     {
-        var cycleId = Guid.NewGuid().ToString("D");
+        string cycleId = Guid.NewGuid().ToString("D");
         using var _ = LogContext.PushProperty("CycleId", cycleId);
 
         var opts = optionsMonitor.CurrentValue;
+
+        if (opts.AllowedNamespaces.Count == 0)
+        {
+            return EmptyResult(cycleId);
+        }
+
         var stopwatch = Stopwatch.StartNew();
-        var allReports = new List<AnomalyReport>();
-        var totalToolCalls = 0;
-        var totalDisagreements = 0;
-        var isTruncated = false;
 
         using var cycleCts = CancellationTokenSource.CreateLinkedTokenSource(shutdownToken);
         cycleCts.CancelAfter(TimeSpan.FromSeconds(opts.WallClockCapSeconds));
 
+        var tools = await mcpClient.GetAgentToolsAsync(cycleCts.Token).ConfigureAwait(false);
+        var input = new CycleWorkflowInput(cycleId, opts.MaxToolIterations);
+
+        var renderedPrompts = new Dictionary<string, string>(opts.AllowedNamespaces.Count, StringComparer.Ordinal);
+        foreach (var ns in opts.AllowedNamespaces)
+        {
+            renderedPrompts[ns] = await promptLibrary.RenderAsync(
+                ObserverConventions.Prompts.SystemPromptTemplateName,
+                new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    [ObserverConventions.Prompts.NamespaceArgumentName] = ns,
+                    [ObserverConventions.Prompts.MaxToolIterationsArgumentName] = opts.MaxToolIterations,
+                },
+                cycleCts.Token).ConfigureAwait(false);
+        }
+
+        var (workflow, getToolCallCounts) = BuildWorkflow(opts, cycleId, tools, stopwatch, renderedPrompts);
+
         try
         {
-            foreach (var ns in opts.AllowedNamespaces)
+            var run = await InProcessExecution
+                .RunAsync<CycleWorkflowInput>(workflow, input, cancellationToken: cycleCts.Token)
+                .ConfigureAwait(false);
+            await using (run.ConfigureAwait(false))
             {
-                var (nsReports, toolCalls, disagreements, truncated) = await AnalyzeNamespaceAsync(
-                    ns, cycleId, opts.MaxToolIterations, cycleCts.Token).ConfigureAwait(false);
+                // Check cancellation first — the workflow may have captured the OCE from executors
+                // as ExecutorFailedEvents without re-throwing it.
+                if (cycleCts.IsCancellationRequested)
+                    throw new OperationCanceledException(cycleCts.Token);
 
-                allReports.AddRange(nsReports);
-                totalToolCalls += toolCalls;
-                totalDisagreements += disagreements;
+                var outputEvent = run.OutgoingEvents
+                    .OfType<WorkflowOutputEvent>()
+                    .FirstOrDefault(e => e.Is<CycleResult>());
 
-                if (truncated)
+                if (outputEvent?.As<CycleResult>() is { } cycleResult)
                 {
-                    isTruncated = true;
-                    break;
+                    return cycleResult;
                 }
             }
+
+            // Workflow completed but yielded no output — treat as empty cycle.
+            return EmptyResult(cycleId);
         }
         catch (OperationCanceledException)
         {
-            isTruncated = true;
+            stopwatch.Stop();
+            bool isTruncated = true;
+            int totalToolCalls = getToolCallCounts();
 
             if (shutdownToken.IsCancellationRequested)
-            {
                 ObserverLogEvents.LogCycleCancelled(logger);
-            }
             else
-            {
                 ObserverLogEvents.LogCycleTruncated(logger);
-            }
-        }
 
-        stopwatch.Stop();
-        toolCallsCounter?.Add(totalToolCalls);
-
-        if (isTruncated)
-        {
             ObserverLogEvents.LogTruncatedNoReports(logger, cycleId, totalToolCalls);
 
             cycleCountCounter?.Add(1,
                 new KeyValuePair<string, object?>(ObserverMetrics.ResultTag, ObserverMetrics.ResultTruncated));
+            toolCallsCounter?.Add(totalToolCalls);
 
             return new CycleResult
             {
                 CycleId = cycleId,
                 Reports = Array.Empty<AnomalyReport>(),
-                IsTruncated = true,
+                IsTruncated = isTruncated,
                 ToolCallsUsed = totalToolCalls,
-                SeverityDisagreements = totalDisagreements,
+                SeverityDisagreements = 0,
                 Duration = stopwatch.Elapsed,
             };
         }
-
-        return await CompleteCycleAsync(cycleId, allReports, totalToolCalls, totalDisagreements,
-            stopwatch.Elapsed, shutdownToken).ConfigureAwait(false);
     }
 
-    private async Task<CycleResult> CompleteCycleAsync(
+    private (Microsoft.Agents.AI.Workflows.Workflow Workflow, Func<int> GetToolCallCounts) BuildWorkflow(
+        ObserverOptions opts,
         string cycleId,
-        List<AnomalyReport> allReports,
-        int totalToolCalls,
-        int totalDisagreements,
-        TimeSpan duration,
-        CancellationToken shutdownToken)
+        IReadOnlyList<AITool> tools,
+        Stopwatch stopwatch,
+        IReadOnlyDictionary<string, string> renderedPrompts)
     {
-        var detectedAt = DateTimeOffset.UtcNow;
-        var opts = optionsMonitor.CurrentValue;
-        var (dedupedReports, resolvedReports) = dedupeStore.ProcessReports(
-            cycleId, allReports, opts.DedupeSuppressionWindow, opts.DedupeResolutionThreshold, detectedAt);
+        var namespaces = opts.AllowedNamespaces;
+        var cycleInput = new CycleInputPassthroughExecutor();
 
-        var finalReports = new List<AnomalyReport>(dedupedReports.Count + resolvedReports.Count);
-        finalReports.AddRange(dedupedReports);
-        finalReports.AddRange(resolvedReports);
+        // Per-namespace agents with tool-call counting.
+        var agentGetCounts = new List<Func<int>>(namespaces.Count);
+        var snapExecutors = new List<ExecutorBinding>(namespaces.Count);
+        var agentExecutors = new List<ExecutorBinding>(namespaces.Count);
+        var parseExecutors = new List<ExecutorBinding>(namespaces.Count);
 
-        if (finalReports.Count > 0)
+        for (int i = 0; i < namespaces.Count; i++)
         {
-            var handoffBatch = new AnomalyHandoffBatch
-            {
-                CycleId = cycleId,
-                EmittedAt = detectedAt,
-                Reports = finalReports,
-            };
+            string ns = namespaces[i];
+            string systemPrompt = renderedPrompts[ns];
 
-            await handoffSink.PublishAsync(handoffBatch, shutdownToken).ConfigureAwait(false);
+            var (agent, getCount) = agentFactory.Create($"observer-{ns}", systemPrompt, tools, opts.MaxToolIterations,
+                observerResponseFormat, guardrailPolicy);
+            var agentBinding = agent.BindAsExecutor(new AIAgentHostOptions { ForwardIncomingMessages = false });
+
+            ExecutorBinding snap = new SnapshotExecutor($"snapshot-{i}", ns, snapshotFetcher, logger);
+            ExecutorBinding parse = new AnomalyParseExecutor(
+                $"parse-{i}", ns, cycleId,
+                getCount,
+                severityClassifier, logger);
+
+            snapExecutors.Add(snap);
+            agentExecutors.Add(agentBinding);
+            parseExecutors.Add(parse);
+            agentGetCounts.Add(getCount);
         }
 
-        ObserverLogEvents.LogCycleCompletedDetailed(
-            logger, cycleId, finalReports.Count, dedupedReports.Count, resolvedReports.Count,
-            totalToolCalls, totalDisagreements, (long)duration.TotalMilliseconds);
+        var aggregate = new CycleAggregateExecutor(
+            "aggregate",
+            suppressionWindow: opts.DedupeSuppressionWindow,
+            resolutionThreshold: opts.DedupeResolutionThreshold,
+            wallClockElapsed: stopwatch.Elapsed,
+            dedupeStore: dedupeStore,
+            handoffSink: handoffSink,
+            auditOutbox: auditOutbox,
+            logger: logger,
+            cycleCountCounter: cycleCountCounter,
+            toolCallsCounter: toolCallsCounter,
+            severityDisagreementCounter: severityDisagreementCounter,
+            reportsEmittedCounter: reportsEmittedCounter,
+            cycleDurationHistogram: cycleDurationHistogram);
 
-        cycleCountCounter?.Add(1,
-            new KeyValuePair<string, object?>(ObserverMetrics.ResultTag, ObserverMetrics.ResultCompleted));
-        cycleDurationHistogram?.Record(duration.TotalMilliseconds);
+        var builder = new WorkflowBuilder(cycleInput)
+            .AddFanOutEdge(cycleInput, snapExecutors);
 
-        if (severityDisagreementCounter is not null && totalDisagreements > 0)
+        for (int i = 0; i < namespaces.Count; i++)
         {
-            severityDisagreementCounter.Add(totalDisagreements);
+            builder = builder
+                .AddEdge(snapExecutors[i], agentExecutors[i])
+                .AddEdge(agentExecutors[i], parseExecutors[i]);
         }
 
-        if (reportsEmittedCounter is not null)
-        {
-            foreach (var report in finalReports)
-            {
-                var statusTag = report.Status switch
-                {
-                    AnomalyStatus.Active => "active",
-                    AnomalyStatus.Resolved => "resolved",
-                    _ => "unknown",
-                };
-                reportsEmittedCounter.Add(1,
-                    new KeyValuePair<string, object?>(ObserverMetrics.StatusTag, statusTag));
-            }
-        }
+        var workflow = builder
+            .AddFanInBarrierEdge(parseExecutors, aggregate)
+            .WithOutputFrom(aggregate)
+            .WithOpenTelemetry()
+            .Build();
 
-        return new CycleResult
-        {
-            CycleId = cycleId,
-            Reports = finalReports,
-            IsTruncated = false,
-            ToolCallsUsed = totalToolCalls,
-            SeverityDisagreements = totalDisagreements,
-            Duration = duration,
-        };
+        return (workflow, () => agentGetCounts.Sum(f => f()));
     }
 
-    private async Task<(List<AnomalyReport> Reports, int ToolCalls, int Disagreements, bool Truncated)> AnalyzeNamespaceAsync(
-        string namespaceName,
-        string cycleId,
-        int maxToolIterations,
-        CancellationToken cancellationToken)
+    private static CycleResult EmptyResult(string cycleId) => new()
     {
-        var reports = new List<AnomalyReport>();
-        var toolCallsUsed = 0;
-        var disagreements = 0;
+        CycleId = cycleId,
+        Reports = Array.Empty<AnomalyReport>(),
+        IsTruncated = false,
+        ToolCallsUsed = 0,
+        SeverityDisagreements = 0,
+        Duration = TimeSpan.Zero,
+    };
 
-        var snapshot = await snapshotFetcher.FetchAsync(namespaceName, cancellationToken).ConfigureAwait(false);
-        var snapshotJson = JsonSerializer.Serialize(snapshot, SnapshotSerializerOptions.Instance);
-
-        var systemPrompt = systemPromptProvider.Get(namespaceName, maxToolIterations);
-
-        var messages = new List<ChatMessage>
-        {
-            new(ChatRole.System, systemPrompt),
-            new(ChatRole.User, snapshotJson),
-        };
-
-        string? llmResponseText = null;
-
-        while (toolCallsUsed < maxToolIterations)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var response = await chatClient.GetResponseAsync(messages, cancellationToken: cancellationToken)
-                .ConfigureAwait(false);
-
-            var responseText = response.Text ?? string.Empty;
-
-            var toolCall = TryParseToolCall(responseText);
-            if (toolCall is not null)
-            {
-                toolCallsUsed++;
-                messages.Add(new ChatMessage(ChatRole.Assistant, responseText));
-
-                string toolResult;
-                try
-                {
-                    toolResult = await mcpClient.GetToolResultAsync(
-                        toolCall.Value.ToolName,
-                        toolCall.Value.Arguments,
-                        cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    toolResult = $"Error executing tool '{toolCall.Value.ToolName}': {ex.Message}";
-                    ObserverLogEvents.LogToolCallFailed(logger, toolCall.Value.ToolName, ex);
-                }
-
-                messages.Add(new ChatMessage(ChatRole.User, toolResult));
-            }
-            else
-            {
-                llmResponseText = responseText;
-                break;
-            }
-        }
-
-        if (toolCallsUsed >= maxToolIterations)
-        {
-            return (reports, toolCallsUsed, disagreements, Truncated: true);
-        }
-
-        if (string.IsNullOrEmpty(llmResponseText))
-        {
-            return (reports, toolCallsUsed, disagreements, Truncated: false);
-        }
-
-        var (parsedReports, parseDisagreements) = ParseLlmOutput(llmResponseText, cycleId, namespaceName);
-        disagreements += parseDisagreements;
-        reports.AddRange(parsedReports);
-
-        return (reports, toolCallsUsed, disagreements, Truncated: false);
-    }
-
-    private (List<AnomalyReport> Reports, int Disagreements) ParseLlmOutput(
-        string llmOutput,
-        string cycleId,
-        string namespaceName)
+    // Trivial pass-through start node; converts the typed workflow input into the fan-out.
+    private sealed class CycleInputPassthroughExecutor()
+        : Executor<CycleWorkflowInput, CycleWorkflowInput>("cycle-input")
     {
-        var reports = new List<AnomalyReport>();
-        var disagreements = 0;
-
-        var json = ExtractJsonArray(llmOutput);
-        if (json is null)
-        {
-            ObserverLogEvents.LogJsonArrayExtractFailed(logger, namespaceName);
-            return (reports, disagreements);
-        }
-
-        List<LlmAnomalyOutput>? llmReports;
-        try
-        {
-            llmReports = JsonSerializer.Deserialize<List<LlmAnomalyOutput>>(json, LlmOutputSerializerOptions.Instance);
-        }
-        catch (JsonException ex)
-        {
-            ObserverLogEvents.LogJsonParseFailed(logger, namespaceName, ex);
-            return (reports, disagreements);
-        }
-
-        if (llmReports is null)
-        {
-            return (reports, disagreements);
-        }
-
-        var detectedAt = DateTimeOffset.UtcNow;
-
-        foreach (var llmReport in llmReports)
-        {
-            var kind = ParseAnomalyKind(llmReport.Kind);
-            var llmSeverity = ParseSeverity(llmReport.Severity);
-            var target = BuildResourceRef(llmReport.Target, namespaceName);
-            if (target is null)
-            {
-                continue;
-            }
-
-            var evidence = BuildAnomalyEvidence(kind, target, llmReport);
-            var (classifierSeverity, matchedRule) = severityClassifier.Classify(evidence);
-
-            if (classifierSeverity != llmSeverity)
-            {
-                disagreements++;
-                ObserverLogEvents.LogSeverityDisagreement(
-                    logger, llmSeverity.ToString(), classifierSeverity.ToString(), matchedRule, kind.ToString(), $"{target.Kind}/{target.Name}");
-            }
-
-            var anomalyId = AnomalyObserverConventions.ComputeAnomalyId(kind, target);
-
-            var annotations = llmReport.Annotations ?? new Dictionary<string, string>(StringComparer.Ordinal);
-            if (!string.IsNullOrEmpty(matchedRule))
-            {
-                annotations["MatchedRule"] = matchedRule;
-            }
-
-            reports.Add(new AnomalyReport
-            {
-                AnomalyId = anomalyId,
-                CycleId = cycleId,
-                DetectedAt = detectedAt,
-                Kind = kind,
-                Target = target,
-                Severity = classifierSeverity,
-                Status = AnomalyStatus.Active,
-                Summary = llmReport.Summary ?? string.Empty,
-                Evidence = ParseEvidence(llmReport.Evidence),
-                Suggested = ParseRemediationHint(llmReport.Suggested),
-                Annotations = annotations,
-            });
-        }
-
-        return (reports, disagreements);
+        public override ValueTask<CycleWorkflowInput> HandleAsync(
+            CycleWorkflowInput message, IWorkflowContext context, CancellationToken cancellationToken = default)
+            => ValueTask.FromResult(message);
     }
-
-    private static AnomalyEvidence BuildAnomalyEvidence(AnomalyKind kind, ResourceRef target, LlmAnomalyOutput llmReport)
-    {
-        var annotations = llmReport.Annotations ?? new Dictionary<string, string>(StringComparer.Ordinal);
-
-        return new AnomalyEvidence
-        {
-            Kind = kind,
-            Target = target,
-            PodCondition = annotations.GetValueOrDefault("PodCondition"),
-            IsAllPodsAffected = ParseBoolAnnotation(annotations, "IsAllPodsAffected") ?? false,
-            HasHealthySiblings = ParseBoolAnnotation(annotations, "HasHealthySiblings") ?? false,
-            IsPending = ParseBoolAnnotation(annotations, "IsPending") ?? false,
-            EndpointCount = ParseIntAnnotation(annotations, "EndpointCount"),
-            SpecReplicas = ParseIntAnnotation(annotations, "ReplicasDesired"),
-            AvailableReplicas = ParseIntAnnotation(annotations, "ReplicasAvailable"),
-            IsSustained = ParseBoolAnnotation(annotations, "IsSustained") ?? false,
-            EventType = annotations.GetValueOrDefault("EventType"),
-            WarningCount = ParseIntAnnotation(annotations, "WarningCount") ?? 0,
-            RestartCountSinceLastCycle = ParseIntAnnotation(annotations, "RestartCountSinceLastCycle"),
-        };
-    }
-
-    private static string? ExtractJsonArray(string text)
-    {
-        var startIndex = text.IndexOf('[', StringComparison.Ordinal);
-        if (startIndex < 0)
-        {
-            return null;
-        }
-
-        var depth = 0;
-        var inString = false;
-        var escape = false;
-
-        for (var i = startIndex; i < text.Length; i++)
-        {
-            var c = text[i];
-
-            if (escape)
-            {
-                escape = false;
-                continue;
-            }
-
-            if (c == '\\' && inString)
-            {
-                escape = true;
-                continue;
-            }
-
-            if (c == '"')
-            {
-                inString = !inString;
-                continue;
-            }
-
-            if (inString) continue;
-
-            if (c == '[' || c == '{') depth++;
-            else if (c == ']' || c == '}') depth--;
-
-            if (depth == 0)
-            {
-                return text[startIndex..(i + 1)];
-            }
-        }
-
-        return null;
-    }
-
-    private const string ToolCallPrefix = "TOOL_CALL:";
-
-    private static (string ToolName, IReadOnlyDictionary<string, object?> Arguments)? TryParseToolCall(string text)
-    {
-        var prefixIndex = text.IndexOf(ToolCallPrefix, StringComparison.Ordinal);
-        if (prefixIndex < 0)
-        {
-            return null;
-        }
-
-        var jsonStart = text.IndexOf('{', prefixIndex);
-        if (jsonStart < 0)
-        {
-            return null;
-        }
-
-        var jsonEnd = text.LastIndexOf('}');
-        if (jsonEnd < 0 || jsonEnd <= jsonStart)
-        {
-            return null;
-        }
-
-        var json = text[jsonStart..(jsonEnd + 1)];
-
-        try
-        {
-            var toolCall = JsonSerializer.Deserialize<LlmToolCall>(json, LlmOutputSerializerOptions.Instance);
-            if (toolCall is { Tool: not null })
-            {
-                var args = toolCall.Arguments ?? new Dictionary<string, object?>(StringComparer.Ordinal);
-                return (toolCall.Tool, args);
-            }
-        }
-        catch (JsonException)
-        {
-            // Benign — LLM sometimes returns non-JSON tool calls; skip and continue.
-        }
-
-        return null;
-    }
-
-    private static AnomalyKind ParseAnomalyKind(string? value)
-    {
-        return value switch
-        {
-            "PodUnhealthy" => AnomalyKind.PodUnhealthy,
-            "DeploymentUnavailable" => AnomalyKind.DeploymentUnavailable,
-            "ServiceNoEndpoints" => AnomalyKind.ServiceNoEndpoints,
-            "WarningEvent" => AnomalyKind.WarningEvent,
-            _ => AnomalyKind.WarningEvent,
-        };
-    }
-
-    private static Severity ParseSeverity(string? value)
-    {
-        return value switch
-        {
-            "High" => Severity.High,
-            "Medium" => Severity.Medium,
-            "Low" => Severity.Low,
-            _ => Severity.Low,
-        };
-    }
-
-    private static ResourceRef? BuildResourceRef(LlmTargetOutput? target, string defaultNamespace)
-    {
-        if (target is null || string.IsNullOrWhiteSpace(target.Name))
-        {
-            return null;
-        }
-
-        return new ResourceRef
-        {
-            ApiVersion = target.ApiVersion ?? "v1",
-            Kind = target.Kind ?? "Unknown",
-            Namespace = target.Namespace ?? defaultNamespace,
-            Name = target.Name,
-        };
-    }
-
-    private static IReadOnlyList<EvidenceItem> ParseEvidence(List<LlmEvidenceOutput>? evidence)
-    {
-        if (evidence is null)
-        {
-            return Array.Empty<EvidenceItem>();
-        }
-
-        return evidence
-            .Where(e => !string.IsNullOrWhiteSpace(e.Source) || !string.IsNullOrWhiteSpace(e.Content))
-            .Select(e => new EvidenceItem
-            {
-                Source = e.Source ?? string.Empty,
-                Content = e.Content ?? string.Empty,
-                CapturedAt = ParseDateTimeOffset(e.CapturedAt),
-            })
-            .ToList();
-    }
-
-    private static RemediationHint? ParseRemediationHint(LlmRemediationOutput? suggested)
-    {
-        if (suggested is null)
-        {
-            return null;
-        }
-
-        return new RemediationHint
-        {
-            Action = suggested.Action,
-            Explanation = suggested.Explanation,
-        };
-    }
-
-    private static DateTimeOffset ParseDateTimeOffset(string? value)
-    {
-        if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var result))
-        {
-            return result;
-        }
-
-        return DateTimeOffset.UtcNow;
-    }
-
-    private static bool? ParseBoolAnnotation(IReadOnlyDictionary<string, string> annotations, string key)
-    {
-        if (annotations.TryGetValue(key, out var value) && bool.TryParse(value, out var result))
-        {
-            return result;
-        }
-
-        return null;
-    }
-
-    private static int? ParseIntAnnotation(IReadOnlyDictionary<string, string> annotations, string key)
-    {
-        if (annotations.TryGetValue(key, out var value) && int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result))
-        {
-            return result;
-        }
-
-        return null;
-    }
-
-    // ── LLM output DTOs ─────────────────────────────────────
-
-    // JSON deserialization DTOs; properties set by System.Text.Json at runtime.
-#pragma warning disable S1144, S3459
-    private sealed class LlmAnomalyOutput
-    {
-        public string? Kind { get; set; }
-        public string? Severity { get; set; }
-        public LlmTargetOutput? Target { get; set; }
-        public string? Summary { get; set; }
-        public List<LlmEvidenceOutput>? Evidence { get; set; }
-        public LlmRemediationOutput? Suggested { get; set; }
-        public Dictionary<string, string>? Annotations { get; set; }
-    }
-
-    // JSON deserialization DTOs.
-    private sealed class LlmTargetOutput
-    {
-        public string? ApiVersion { get; set; }
-        public string? Kind { get; set; }
-        public string? Namespace { get; set; }
-        public string? Name { get; set; }
-    }
-
-    // JSON deserialization DTOs.
-    private sealed class LlmEvidenceOutput
-    {
-        public string? Source { get; set; }
-        public string? Content { get; set; }
-        public string? CapturedAt { get; set; }
-    }
-
-    // JSON deserialization DTOs.
-    private sealed class LlmRemediationOutput
-    {
-        public string? Action { get; set; }
-        public string? Explanation { get; set; }
-    }
-
-    // JSON deserialization DTOs.
-    private sealed class LlmToolCall
-    {
-        public string? Tool { get; set; }
-        public Dictionary<string, object?>? Arguments { get; set; }
-    }
-#pragma warning restore S1144, S3459
 }

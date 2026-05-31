@@ -1,6 +1,5 @@
 using System.Text.Json;
 using InfraGate.Approvals;
-using InfraGate.Approvals.Plan;
 using ModelContextProtocol.Protocol;
 
 namespace InfraGate.McpGateway;
@@ -29,7 +28,8 @@ internal static class ToolDefinitionFactory
         {
             Name = dt.Name,
             Description = dt.Description,
-            InputSchema = dt.InputSchema
+            InputSchema = dt.InputSchema,
+            Annotations = dt.IsReadOnly ? new ToolAnnotations { ReadOnlyHint = true } : null,
         };
     }
 

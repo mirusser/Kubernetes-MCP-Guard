@@ -1,11 +1,6 @@
 using System.Text.Json;
-using InfraGate.Approvals;
-using InfraGate.Approvals.Plan;
-using InfraGate.KubernetesAdapter;
-using InfraGate.KubernetesAdapter.Evidence;
-using InfraGate.KubernetesAdapter.PlanBuilding;
-using InfraGate.KubernetesAdapter.Policy;
 using InfraGate.McpServer.Diff;
+using InfraGate.McpServer.Models;
 using k8s;
 using k8s.Autorest;
 using k8s.Models;
@@ -49,11 +44,6 @@ public sealed class KubernetesEvidenceService
             return ex.Message;
         }
 
-        var policyResult = KubernetesPolicyValidator.Validate(parsed.Objects, KubernetesPolicyOptions.Default);
-        var policyFindings = policyResult.Findings
-            .Select(f => new KubernetesPlanPolicyFinding(f.Severity.ToString(), f.Code, f.ObjectRef, f.Message))
-            .ToArray();
-
         var dryRunResult = await DryRunApplyManifestAsync(parsed.Objects, cancellationToken).ConfigureAwait(false);
         if (!dryRunResult.Succeeded || dryRunResult.DryRun is null)
         {
@@ -62,9 +52,9 @@ public sealed class KubernetesEvidenceService
 
         var evidence = new KubernetesApplyEvidence(
             dryRunResult.DryRun,
-            policyFindings,
-            policyResult.IsDenied,
-            policyResult.IsDenied ? policyResult.FormatRefusal() : null);
+            [],
+            false,
+            null);
 
         return JsonSerializer.Serialize(evidence, KubernetesManagerHelpers.JsonOptions);
     }
@@ -125,7 +115,7 @@ public sealed class KubernetesEvidenceService
             return validation;
         }
 
-        var restartedAtUtc = DateTimeOffset.UtcNow.ToString(ApprovalConventions.DateTimeFormats.RoundTrip);
+        var restartedAtUtc = DateTimeOffset.UtcNow.ToString(KubernetesConventions.DateTimeFormats.RoundTrip);
         var result = await DryRunRestartDeploymentAsync(namespaceName, name, restartedAtUtc, cancellationToken).ConfigureAwait(false);
         return result.Succeeded && result.DryRun is not null
             ? JsonSerializer.Serialize(result.DryRun, KubernetesManagerHelpers.JsonOptions)
@@ -262,7 +252,7 @@ public sealed class KubernetesEvidenceService
                 KubernetesConventions.MutationOperations.Restart
                     => await DryRunRestartDeploymentAsync(
                         namespaceName, name,
-                        DateTimeOffset.UtcNow.ToString(ApprovalConventions.DateTimeFormats.RoundTrip),
+                        DateTimeOffset.UtcNow.ToString(KubernetesConventions.DateTimeFormats.RoundTrip),
                         cancellationToken).ConfigureAwait(false),
                 KubernetesConventions.MutationOperations.SetImage
                     => await DryRunSetDeploymentImageAsync(namespaceName, name, container ?? string.Empty, image ?? string.Empty, cancellationToken).ConfigureAwait(false),

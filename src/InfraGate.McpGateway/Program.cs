@@ -5,8 +5,7 @@ using InfraGate.McpGateway.Notifications;
 using ModelContextProtocol.Protocol;
 
 var builder = WebApplication.CreateBuilder(args);
-
-GatewayConfigurationExtensions.AddInfraGateConfiguration(builder.Configuration, args);
+builder.Configuration.AddInfraGateConfiguration(args);
 builder.AddInfraGateServices();
 
 builder.Services
@@ -16,14 +15,7 @@ builder.Services
         {
             Resources = new ResourcesCapability { Subscribe = true }
         };
-        serverOptions.ServerInstructions = """
-            Approval workflow (MANDATORY — no exceptions):
-            1. After calling any request_* tool, call execute_approved_plan(planId=...) to get the approval URL.
-            2. You MUST then call wait_for_plan_approval(planId=...) in a polling loop (55 s timeout, repeat as needed).
-                Do NOT wait for the user to confirm approval — poll automatically.
-            3. When wait_for_plan_approval returns Approved, call execute_approved_plan again to apply the plan.
-            Skipping the polling step and waiting for user confirmation instead is not permitted.
-            """;
+        serverOptions.ServerInstructions = ServerInstructions.ApprovalWorkflow;
     })
     .WithHttpTransport(transportOptions =>
     {
@@ -42,15 +34,17 @@ builder.Services
             {
                 registry.RegisterSession(id, new McpServerSessionNotifier(server));
             }
+
             try
             {
                 handlerLogger.LogInformation("RunSessionHandler: calling server.RunAsync");
                 await server.RunAsync(ct).ConfigureAwait(false);
                 handlerLogger.LogInformation("RunSessionHandler: server.RunAsync completed normally");
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException ex)
             {
-                handlerLogger.LogInformation("RunSessionHandler: session cancelled (client disconnected)"); // NOSONAR
+                handlerLogger.LogInformation(ex,
+                    "RunSessionHandler: session cancelled (client disconnected)"); // NOSONAR
             }
             catch (Exception ex)
             {
@@ -62,34 +56,40 @@ builder.Services
                 {
                     registry.RemoveSession(id);
                 }
+
                 handlerLogger.LogInformation("RunSessionHandler: cleanup done (session={SessionId})", id);
             }
         };
 #pragma warning restore MCPEXP002
     })
     .WithListToolsHandler((request, ct) =>
-        new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().ListToolsAsync(request.Params, ct)))
+        new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>()
+            .ListToolsAsync(request.Params, ct)))
     .WithCallToolHandler((request, ct) =>
     {
         if (request.Services!.GetService<IHttpContextAccessor>() is { HttpContext: { } httpCtx })
         {
             httpCtx.Items[NotificationsConventions.McpSessionIdItemKey] = request.Server.SessionId;
         }
-        return new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct));
+
+        return new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>()
+            .CallToolAsync(request.Params, ct));
     })
     .WithListResourceTemplatesHandler((request, ct) =>
-        new ValueTask<ListResourceTemplatesResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>().ListTemplates()))
+        new ValueTask<ListResourceTemplatesResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>()
+            .ListTemplates()))
     .WithReadResourceHandler((request, ct) =>
-        new ValueTask<ReadResourceResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>().ReadAsync(request.Params, ct)))
+        new ValueTask<ReadResourceResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>()
+            .ReadAsync(request.Params, ct)))
     .WithSubscribeToResourcesHandler((request, ct) =>
-        new ValueTask<EmptyResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>().Subscribe(request.Server.SessionId, request.Params)))
+        new ValueTask<EmptyResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>()
+            .Subscribe(request.Server.SessionId, request.Params)))
     .WithUnsubscribeFromResourcesHandler((request, ct) =>
-        new ValueTask<EmptyResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>().Unsubscribe(request.Server.SessionId, request.Params)));
-
+        new ValueTask<EmptyResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>()
+            .Unsubscribe(request.Server.SessionId, request.Params)));
 var app = builder.Build();
 
-await GatewayConfigurationExtensions.RunPostgresMigrationsAsync(
-    builder.Configuration, app).ConfigureAwait(false);
+await builder.Configuration.RunPostgresMigrationsAsync(app).ConfigureAwait(false);
 
 await app.Services.GetRequiredService<PostgresApprovalSchemaValidator>()
     .ValidateAsync(CancellationToken.None).ConfigureAwait(false);

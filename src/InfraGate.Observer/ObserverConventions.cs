@@ -31,6 +31,7 @@ internal static class ObserverConventions
         public const string DedupeResolutionThreshold = "InfraGate:Observer:DedupeResolutionThreshold";
         public const string FileSinkRoot = "InfraGate:Observer:FileSink:Root";
         public const string PlannerHandoffUrl = "InfraGate:Observer:PlannerHandoffUrl";
+        public const string AuditConnectionString = "InfraGate:Observer:AuditConnectionString";
     }
 
     public static class EnvironmentVariables
@@ -52,6 +53,17 @@ internal static class ObserverConventions
         public const string DedupeResolutionThreshold = "INFRA_GATE_OBSERVER_DEDUPE_RESOLUTION_THRESHOLD";
         public const string FileSinkRoot = "INFRA_GATE_OBSERVER_FILE_SINK_ROOT";
         public const string PlannerHandoffUrl = "INFRA_GATE_OBSERVER_PLANNER_HANDOFF_URL";
+        public const string AuditConnectionString = "INFRA_GATE_OBSERVER_AUDIT_CONNECTION_STRING";
+    }
+
+    public static class LlmProviders
+    {
+        public const string Anthropic = "ANTHROPIC";
+        public const string OpenAI = "OPENAI";
+        public const string Google = "GOOGLE";
+        public const string Azure = "AZURE";
+        public const string Ollama = "OLLAMA";
+        public const string OpenRouter = "OPENROUTER";
     }
 
     public static class HttpClients
@@ -70,16 +82,13 @@ internal static class ObserverConventions
         public const string GetK8sServices = "get_k8s_services";
         public const string GetK8sEndpoints = "get_k8s_endpoints";
 
-        public static readonly IReadOnlySet<string> ReadOnlyToolNames = new HashSet<string>(StringComparer.Ordinal)
-        {
-            GetAllowedNamespaces,
-            GetK8sStatus,
-            GetK8sEvents,
-            GetK8sPods,
-            DescribeK8sResource,
-            GetK8sDeployments,
-            GetK8sServices,
-            GetK8sEndpoints,
-        };
+    }
+
+    public static class Prompts
+    {
+        public const string SystemPromptResourceName = "InfraGate.Observer.Prompts.ObserverSystemPrompt.md";
+        public const string SystemPromptTemplateName = "observer-system-prompt";
+        public const string NamespaceArgumentName = "namespace";
+        public const string MaxToolIterationsArgumentName = "maxToolIterations";
     }
 }

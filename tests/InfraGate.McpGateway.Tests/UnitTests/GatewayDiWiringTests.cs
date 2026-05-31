@@ -29,7 +29,7 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton<TestApprovalWorkflow>();
         services.AddSingleton<IApprovalPlanWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
         services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
-        services.AddSingleton<IApprovalAuditPublisher>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
+        services.AddSingleton<IApprovalAuditOutbox>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
         services.AddSingleton<IPlanReviewAdapter, KubernetesPlanReviewAdapter>();
         services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
         services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
@@ -72,7 +72,7 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton<IApprovalPlanWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
         services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
         services.AddSingleton<IApprovalExecutionWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
-        services.AddSingleton<IApprovalAuditPublisher>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
+        services.AddSingleton<IApprovalAuditOutbox>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
         services.AddSingleton<IAuthorizationCheck, SameSubjectAuthorizationCheck>();
         services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
         services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();

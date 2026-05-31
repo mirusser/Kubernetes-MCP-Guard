@@ -28,6 +28,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\InfraGate.AgentMcp\InfraGate.AgentMcp.csproj" />
+    <ProjectReference Include="..\..\src\InfraGate.AuditOutbox\InfraGate.AuditOutbox.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.Planner\InfraGate.Planner.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.Observer.Contracts\InfraGate.Observer.Contracts.csproj" />
   </ItemGroup>

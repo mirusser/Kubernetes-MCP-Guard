@@ -1,0 +1,14 @@
+
+- Designing, building, and configuring AI agents, including defining roles, guardrails, prompt libraries, memory boundaries, workflows, and validation steps.
+- Developing and maintaining structured prompt libraries for AI agents supporting tasks across the SDLC.
+- Designing and implementing workflows for AI-driven test generation, analysis, and reporting.
+- Integrating AI agents with enterprise tools, including collaboration platforms, issue tracking systems, test management systems, and test automation frameworks.
+- Implementing AI observability practices, including usage tracking, cost monitoring, and output quality evaluation.
+- Establishing and monitoring controls for hallucinations, safety risks, and potential data leakage issues.
+- Defining and maintaining guardrails to ensure reliable, secure, and compliant AI behavior.
+- Optimizing prompts, workflows, and agent logic to improve accuracy, performance, and operational efficiency.
+- Collecting feedback from QA and engineering teams and implementing continuous tuning and improvement cycles.
+- Supporting the evolution of AI-augmented QA processes, including automated test creation, defect triage, reporting, and coverage expansion.
+- Collaborating with QA Leads, Automation Engineers, and project stakeholders to align AI capabilities with the QA operating model.
+- Supporting onboarding and enablement of teams adopting AI agents.
+- Documenting agent behavior, integration patterns, and usage guidelines. 

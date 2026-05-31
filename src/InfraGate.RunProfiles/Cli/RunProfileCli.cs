@@ -387,7 +387,7 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.Observer => profile with
             {
                 Observer = ApplyObserverOverride(
-                    profile.Observer ?? new ObserverProfile(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null), field, value, path)
+                    profile.Observer ?? new ObserverProfile(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null), field, value, path)
             },
             RunProfileConventions.YamlKeys.Planner => profile with
             {
@@ -498,6 +498,7 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.FileSinkRoot => profile with { FileSinkRoot = value },
             RunProfileConventions.YamlKeys.PlannerHandoffUrl => profile with { PlannerHandoffUrl = value },
             RunProfileConventions.YamlKeys.ObserverHostPath => profile with { ObserverHostPath = value },
+            RunProfileConventions.YamlKeys.ObserverAuditConnectionString => profile with { AuditConnectionString = value },
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };
 

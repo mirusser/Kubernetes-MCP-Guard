@@ -1,16 +1,25 @@
 using InfraGate.Planner;
+using InfraGate.Planner.Audit;
 using InfraGate.Planner.Cycle;
 using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
 using InfraGate.Planner.Endpoints;
 using InfraGate.Planner.Handoff;
+using InfraGate.AgentGuardrails;
 using InfraGate.AgentLlm;
+using InfraGate.AuditOutbox;
+using InfraGate.AuditOutbox.Postgres;
 using InfraGate.Planner.Llm;
-using InfraGate.Planner.Mcp;
+using InfraGate.AgentMcp;
+using InfraGate.Prompts;
+using ModelContextProtocol.Protocol;
 using InfraGate.Observability;
+using System.Reflection;
+using System.Text;
 using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.AI;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +34,7 @@ builder.Configuration.AddInfraGateEnvironmentVariables(mappings =>
     mappings.Map(PlannerConventions.EnvironmentVariables.LlmModel, PlannerConventions.ConfigurationKeys.LlmModel);
     mappings.Map(PlannerConventions.EnvironmentVariables.LlmApiKey, PlannerConventions.ConfigurationKeys.LlmApiKey);
     mappings.Map(PlannerConventions.EnvironmentVariables.FileSinkRoot, PlannerConventions.ConfigurationKeys.FileSinkRoot);
+    mappings.Map(PlannerConventions.EnvironmentVariables.AuditConnectionString, PlannerConventions.ConfigurationKeys.AuditConnectionString);
     RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
 });
 
@@ -35,6 +45,12 @@ builder.AddInfraGateObservability(opt =>
 {
     opt.WriteToConsole = true;
     opt.ConsoleToStandardError = false;
+});
+
+builder.AddInfraGateTelemetry(opt =>
+{
+    opt.ServiceName = "infragate-planner";
+    opt.MeterNames = [PlannerMetrics.MeterName, AgentGuardrailConventions.MeterName];
 });
 
 ConfigureUrls(builder);
@@ -63,18 +79,46 @@ var authOptions = new ClientCredentialsTokenOptions
 };
 builder.Services.AddClientCredentialsTokenProvider(authOptions);
 
-builder.Services.AddSingleton<IPlannerMcpClient, PlannerMcpClient>();
+builder.Services.AddInfraGateAgentMcp(new AgentMcpOptions
+{
+    GatewayBaseUrl = plannerOptions.GatewayBaseUrl,
+    ClientName = PlannerConventions.DefaultClientId,
+});
 builder.Services.AddSingleton<IChatClientFactory>(sp =>
 {
     return new ChatClientFactory(
         sp.GetRequiredService<IOptions<PlannerOptions>>(),
-        PlannerMetrics.Meter);
+        sp.GetRequiredService<ILoggerFactory>());
+});
+builder.Services.AddSingleton<ToolCallingAgentFactory>();
+builder.Services.AddAgentGuardrails();
+builder.Services.AddSingleton(_ =>
+{
+    var allowedTools = new HashSet<string>(StringComparer.Ordinal)
+    {
+        PlannerConventions.ToolNames.GetAllowedNamespaces,
+        PlannerConventions.ToolNames.GetK8sStatus,
+        PlannerConventions.ToolNames.GetK8sEvents,
+        PlannerConventions.ToolNames.GetK8sPods,
+        PlannerConventions.ToolNames.DescribeK8sResource,
+        PlannerConventions.ToolNames.GetK8sDeployments,
+        PlannerConventions.ToolNames.GetK8sServices,
+        PlannerConventions.ToolNames.GetK8sEndpoints,
+    };
+    return new AgentGuardrailPolicy(allowedTools);
 });
 builder.Services.AddSingleton<IChatClient>(sp =>
 {
     var factory = sp.GetRequiredService<IChatClientFactory>();
     return factory.Create();
 });
+var plannerAssembly = typeof(BatchProcessor).Assembly;
+var plannerPromptTemplate = await LoadEmbeddedResourceAsync(
+    plannerAssembly, PlannerConventions.Prompts.SystemPromptResourceName).ConfigureAwait(false);
+builder.Services.AddInfraGatePromptLibrary(b => b.AddTemplate(
+    PlannerConventions.Prompts.SystemPromptTemplateName,
+    plannerPromptTemplate));
+
 builder.Services.AddSingleton<AnomalyBatchQueue>();
 builder.Services.AddSingleton<PlannerDedupeStore>();
 builder.Services.AddHttpClient(PlannerConventions.HttpClients.ExecutorHandoff)
@@ -108,6 +152,16 @@ builder.Services.AddSingleton<IRemediationProposalSink>(sp =>
     var logger = sp.GetRequiredService<ILogger<CompositeRemediationProposalSink>>();
     return new CompositeRemediationProposalSink(sinks, logger);
 });
+string? auditConnectionString = builder.Configuration[PlannerConventions.ConfigurationKeys.AuditConnectionString];
+if (!string.IsNullOrWhiteSpace(auditConnectionString))
+{
+    var auditDataSource = NpgsqlDataSource.Create(auditConnectionString);
+    string migrationsDir = Path.Combine(AppContext.BaseDirectory, "Migrations");
+    await PostgresAuditOutboxMigrationRunner.ApplyAsync(
+        auditDataSource, AuditOutboxConventions.Streams.Planner, migrationsDir, CancellationToken.None).ConfigureAwait(false);
+    builder.Services.AddPlannerAuditOutbox(auditDataSource);
+}
+
 builder.Services.AddSingleton<BatchProcessor>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BatchProcessor>());
 
@@ -169,21 +223,32 @@ static void ConfigureUrls(WebApplicationBuilder builder)
     }
 }
 
+static async Task<string> LoadEmbeddedResourceAsync(Assembly assembly, string resourceName, CancellationToken cancellationToken = default)
+{
+    using var stream = assembly.GetManifestResourceStream(resourceName)
+        ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found.");
+    using var reader = new StreamReader(stream, Encoding.UTF8);
+    return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+}
+
 static async Task ConnectPlannerMcpClientAsync(WebApplication app)
 {
     var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
     var logger = loggerFactory.CreateLogger("InfraGate.Planner.Startup");
-    var mcpClient = app.Services.GetRequiredService<IPlannerMcpClient>();
+    var mcpClient = app.Services.GetRequiredService<IAgentMcpToolset>();
     var configuration = app.Services.GetRequiredService<IConfiguration>();
 
     try
     {
         await mcpClient.ConnectAsync(CancellationToken.None).ConfigureAwait(false);
 
-        var allowedNsResponse = await mcpClient.CallToolAsync(
+        var nsResult = await mcpClient.CallToolAsync(
             PlannerConventions.ToolNames.GetAllowedNamespaces,
             null,
             CancellationToken.None).ConfigureAwait(false);
+        string allowedNsResponse = nsResult.IsError != true
+            ? string.Join(Environment.NewLine, nsResult.Content.OfType<TextContentBlock>().Select(c => c.Text))
+            : string.Empty;
 
         PlannerLogEvents.LogStartupConnected(
             logger,

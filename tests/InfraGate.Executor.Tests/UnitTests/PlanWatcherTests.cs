@@ -1,4 +1,5 @@
 using System.Diagnostics.Metrics;
+using System.Text.Json;
 using InfraGate.Executor.Diagnostics;
 using InfraGate.Executor.Mcp;
 using InfraGate.Executor.Queue;
@@ -164,6 +165,111 @@ public sealed class PlanWatcherTests
                 logger ?? new CapturingLogger<PlanWatcher>(),
                 meter),
             queue);
+    }
+
+    [Theory]
+    [InlineData("""{"status":"Approved","timedOut":false}""", "Approved", false)]
+    [InlineData("""{"status":"NotFound","timedOut":false}""", "NotFound", false)]
+    [InlineData("""{"status":"Expired","timedOut":false}""", "Expired", false)]
+    [InlineData("""{"status":"Approved","timedOut":true}""", "Approved", true)]
+    public void TryParseWaitResult_ValidJson_ReturnsTrue(string json, string expectedStatus, bool expectedTimedOut)
+    {
+        var result = PlanWatcher.TryParseWaitResult(json, out var status, out var timedOut);
+
+        Assert.True(result);
+        Assert.Equal(expectedStatus, status);
+        Assert.Equal(expectedTimedOut, timedOut);
+    }
+
+    [Fact]
+    public void TryParseWaitResult_InvalidJson_ReturnsFalse()
+    {
+        Assert.False(PlanWatcher.TryParseWaitResult("not-json", out _, out _));
+    }
+
+    [Fact]
+    public void TryFindWaitResult_NestedStatus_ReturnsTrue()
+    {
+        using var doc = JsonDocument.Parse("""{"data":{"status":"Approved","timedOut":false}}""");
+        var status = string.Empty;
+        var timedOut = false;
+
+        Assert.True(PlanWatcher.TryFindWaitResult(doc.RootElement, ref status, ref timedOut));
+        Assert.Equal("Approved", status);
+    }
+
+    [Fact]
+    public void TryFindWaitResult_PrimitiveValue_ReturnsFalse()
+    {
+        using var doc = JsonDocument.Parse("42");
+        var status = string.Empty;
+        var timedOut = false;
+
+        Assert.False(PlanWatcher.TryFindWaitResult(doc.RootElement, ref status, ref timedOut));
+    }
+
+    [Fact]
+    public void TryFindWaitResult_NoStatus_ReturnsFalse()
+    {
+        using var doc = JsonDocument.Parse("""{"data":{"value":1}}""");
+        var status = string.Empty;
+        var timedOut = false;
+
+        Assert.False(PlanWatcher.TryFindWaitResult(doc.RootElement, ref status, ref timedOut));
+    }
+
+    [Fact]
+    public void TryFindWaitResultInArray_Empty_ReturnsFalse()
+    {
+        using var doc = JsonDocument.Parse("""[]""");
+        var status = string.Empty;
+        var timedOut = false;
+
+        Assert.False(PlanWatcher.TryFindWaitResultInArray(doc.RootElement, ref status, ref timedOut));
+    }
+
+    [Fact]
+    public void TryFindWaitResultInJsonString_NullOrEmpty_ReturnsFalse()
+    {
+        var status = string.Empty;
+        var timedOut = false;
+        Assert.False(PlanWatcher.TryFindWaitResultInJsonString(null, ref status, ref timedOut));
+        Assert.False(PlanWatcher.TryFindWaitResultInJsonString("", ref status, ref timedOut));
+    }
+
+    [Fact]
+    public void TryFindWaitResultInJsonString_NoQuotes_ReturnsFalse()
+    {
+        var status = string.Empty;
+        var timedOut = false;
+        Assert.False(PlanWatcher.TryFindWaitResultInJsonString("noquotes", ref status, ref timedOut));
+    }
+
+    [Fact]
+    public void TryFindWaitResultInJsonString_InvalidJson_ReturnsFalse()
+    {
+        var status = string.Empty;
+        var timedOut = false;
+
+        Assert.False(PlanWatcher.TryFindWaitResultInJsonString("""{"broken":""", ref status, ref timedOut));
+    }
+
+    [Fact]
+    public void IsErrorResponse_True_ReturnsTrue()
+    {
+        Assert.True(PlanWatcher.IsErrorResponse("""{"isError":true}"""));
+    }
+
+    [Fact]
+    public void IsErrorResponse_NoField_ReturnsFalse()
+    {
+        Assert.False(PlanWatcher.IsErrorResponse("""{"status":"ok"}"""));
+    }
+
+    [Fact]
+    public void IsErrorResponse_InvalidJson_ReturnsFalse()
+    {
+        Assert.False(PlanWatcher.IsErrorResponse("not-json"));
     }
 
     private static RemediationProposal CreateProposal(string planId) =>

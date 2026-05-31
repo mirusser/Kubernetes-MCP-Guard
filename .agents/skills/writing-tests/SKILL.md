@@ -72,3 +72,7 @@ dotnet test tests/<Project>.Tests/<Project>.Tests.csproj
 ```
 
 All pre-existing tests must continue to pass. New tests must pass too — do not commit failing tests.
+
+## Mocking
+
+Never use mocks (Moq, NSubstitute) or any similar packages. Write integration tests using Testcontainers instead.

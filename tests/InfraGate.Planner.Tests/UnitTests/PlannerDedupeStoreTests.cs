@@ -60,7 +60,8 @@ public sealed class PlannerDedupeStoreTests
     {
         var store = new PlannerDedupeStore();
 
-        store.Remove("anomaly-unknown");
+        var ex = Record.Exception(() => store.Remove("anomaly-unknown"));
+        Assert.Null(ex);
     }
 
     [Fact]
@@ -74,5 +75,19 @@ public sealed class PlannerDedupeStoreTests
         Assert.True(store.HasActivePlan("anomaly-a"));
         Assert.True(store.HasActivePlan("anomaly-b"));
         Assert.False(store.HasActivePlan("anomaly-c"));
+    }
+
+    [Fact]
+    public void TrackActivePlan_ExceedsCapacity_EvictsLruEntry()
+    {
+        var store = new PlannerDedupeStore();
+        var now = DateTimeOffset.UtcNow;
+
+        for (int i = 0; i < 1001; i++)
+        {
+            store.TrackActivePlan($"anomaly-{i}", $"plan-{i}", now, now.AddHours(1));
+        }
+
+        Assert.True(store.HasActivePlan("anomaly-1000"));
     }
 }

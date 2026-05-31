@@ -13,30 +13,6 @@ public sealed class PlannerMetricsTests
     }
 
     [Fact]
-    public void CreateLlmTokensCounter_ReturnsNonNull()
-    {
-        using var meter = new Meter("test-planner-metrics");
-        var counter = PlannerMetrics.CreateLlmTokensCounter(meter);
-        Assert.NotNull(counter);
-    }
-
-    [Fact]
-    public void CreateDecisionInvalidOperationCounter_ReturnsNonNull()
-    {
-        using var meter = new Meter("test-planner-metrics");
-        var counter = PlannerMetrics.CreateDecisionInvalidOperationCounter(meter);
-        Assert.NotNull(counter);
-    }
-
-    [Fact]
-    public void CreateDecisionInvalidArgumentsCounter_ReturnsNonNull()
-    {
-        using var meter = new Meter("test-planner-metrics");
-        var counter = PlannerMetrics.CreateDecisionInvalidArgumentsCounter(meter);
-        Assert.NotNull(counter);
-    }
-
-    [Fact]
     public void CreateDecisionTimeoutCounter_ReturnsNonNull()
     {
         using var meter = new Meter("test-planner-metrics");
@@ -79,8 +55,21 @@ public sealed class PlannerMetricsTests
     [Fact]
     public void CounterNames_UseExpectedPrefix()
     {
-        Assert.StartsWith("infragate.planner.", PlannerMetrics.LlmTokensCounterName);
         Assert.StartsWith("infragate.planner.", PlannerMetrics.HandoffHttpFailedCounterName);
         Assert.StartsWith("infragate.planner.", PlannerMetrics.HandoffSinkFailedCounterName);
+    }
+
+    [Fact]
+    public void CreateDecisionTimeoutCounter_NullMeter_UsesDefaultMeter()
+    {
+        var counter = PlannerMetrics.CreateDecisionTimeoutCounter(null);
+        Assert.NotNull(counter);
+    }
+
+    [Fact]
+    public void CreateProposeFailedCounter_NullMeter_UsesDefaultMeter()
+    {
+        var counter = PlannerMetrics.CreateProposeFailedCounter(null);
+        Assert.NotNull(counter);
     }
 }

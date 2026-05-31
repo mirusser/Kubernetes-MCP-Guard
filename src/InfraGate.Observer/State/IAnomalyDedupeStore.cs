@@ -2,7 +2,7 @@ namespace InfraGate.Observer.State;
 
 internal interface IAnomalyDedupeStore
 {
-    (IReadOnlyList<AnomalyReport> Emitted, IReadOnlyList<AnomalyReport> Resolved) ProcessReports(
+    (IReadOnlyList<AnomalyReport> Emitted, IReadOnlyList<AnomalyReport> Resolved, IReadOnlyList<AnomalyReport> Suppressed) ProcessReports(
         string cycleId,
         IReadOnlyList<AnomalyReport> incomingReports,
         int suppressionWindowCycles,

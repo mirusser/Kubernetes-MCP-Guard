@@ -111,7 +111,7 @@ public sealed class RunProfileDocumentTests
         {
             Observer = new ObserverProfile(
                 "http://observer-local",
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
             Planner = new PlannerProfile(
                 null,
                 "http://gateway-local",
@@ -138,6 +138,7 @@ public sealed class RunProfileDocumentTests
                 "/observer/out",
                 "http://planner/handoff",
                 "/observer/state",
+                null,
                 ["default"]),
             new PlannerProfile(
                 "http://planner-default",
@@ -187,7 +188,7 @@ public sealed class RunProfileDocumentTests
             null, null, null, null, null, null,
             new ObserverProfile(
                 "http://observer",
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
             new PlannerProfile(
                 "http://planner",
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
@@ -199,6 +200,98 @@ public sealed class RunProfileDocumentTests
         Assert.Null(merged.Observer);
         Assert.Null(merged.Planner);
         Assert.Null(merged.Executor);
+    }
+
+    [Fact]
+    public void FindProfileWithDefaults_IdentityProviderDefaults_MergesValues()
+    {
+        var profile = MakeProfile("my-profile") with
+        {
+            IdentityProvider = new IdentityProviderProfile(null, null, null, null, null, null)
+        };
+        var defaults = new ProfileDefaults(
+            null,
+            new IdentityProviderProfile(null, "http://auth:8080", null, null, null, null),
+            null, null, null, null, null, null, null);
+        var doc = new RunProfileDocument([profile]);
+
+        var merged = doc.FindProfileWithDefaults("my-profile", defaults);
+
+        Assert.NotNull(merged.IdentityProvider);
+        Assert.Equal("http://auth:8080", merged.IdentityProvider!.Authority);
+    }
+
+    [Fact]
+    public void FindProfileWithDefaults_ApprovalAuthorityDefaults_MergesValues()
+    {
+        var profile = MakeProfile("my-profile") with
+        {
+            ApprovalAuthority = new ApprovalAuthorityProfile(null, null, null, null, null)
+        };
+        var defaults = new ProfileDefaults(
+            null, null,
+            new ApprovalAuthorityProfile("http://gateway.test", null, null, null, null),
+            null, null, null, null, null, null);
+        var doc = new RunProfileDocument([profile]);
+
+        var merged = doc.FindProfileWithDefaults("my-profile", defaults);
+
+        Assert.NotNull(merged.ApprovalAuthority);
+        Assert.Equal("http://gateway.test", merged.ApprovalAuthority!.BaseUrl);
+    }
+
+    [Fact]
+    public void FindProfileWithDefaults_HostDefaults_MergesValues()
+    {
+        var profile = MakeProfile("my-profile") with
+        {
+            Host = new HostProfile(null, null, null, null, null, null, null, null)
+        };
+        var defaults = new ProfileDefaults(
+            null, null, null, null,
+            new HostProfile("0.0.0.0", "8080", null, null, null, null, null, null),
+            null, null, null, null);
+        var doc = new RunProfileDocument([profile]);
+
+        var merged = doc.FindProfileWithDefaults("my-profile", defaults);
+
+        Assert.NotNull(merged.Host);
+        Assert.Equal("0.0.0.0", merged.Host!.BindAddress);
+        Assert.Equal("8080", merged.Host!.BindPort);
+    }
+
+    [Fact]
+    public void FindProfileWithDefaults_DownstreamAuthDefaults_MergesValues()
+    {
+        var profile = MakeProfile("my-profile") with { DownstreamAuth = null };
+        var defaults = new ProfileDefaults(
+            null, null, null, null, null,
+            new DownstreamAuthProfile("true", null, null, null, "audience-value", null, null, null),
+            null, null, null);
+        var doc = new RunProfileDocument([profile]);
+
+        var merged = doc.FindProfileWithDefaults("my-profile", defaults);
+
+        Assert.NotNull(merged.DownstreamAuth);
+        Assert.Equal("true", merged.DownstreamAuth!.Required);
+        Assert.Equal("audience-value", merged.DownstreamAuth!.Audience);
+    }
+
+    [Fact]
+    public void FindProfileWithDefaults_GenericApprovalCoreDefaults_MergesValues()
+    {
+        var profile = MakeProfile("my-profile") with { GenericApprovalCore = null };
+        var defaults = new ProfileDefaults(
+            null, null, null,
+            new GenericApprovalCoreProfile("/data/approvals", "Host=db;Database=test"),
+            null, null, null, null, null);
+        var doc = new RunProfileDocument([profile]);
+
+        var merged = doc.FindProfileWithDefaults("my-profile", defaults);
+
+        Assert.NotNull(merged.GenericApprovalCore);
+        Assert.Equal("/data/approvals", merged.GenericApprovalCore!.ApprovalRoot);
+        Assert.Equal("Host=db;Database=test", merged.GenericApprovalCore!.PostgresConnectionString);
     }
 
     private static RunProfile MakeProfile(string name) =>
