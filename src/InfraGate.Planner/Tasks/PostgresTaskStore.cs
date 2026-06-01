@@ -14,6 +14,73 @@ internal sealed class PostgresTaskStore(NpgsqlDataSource dataSource) : IPlannerT
 {
     private const int DefaultPageSize = 50;
 
+    private const string GetTaskSql =
+        $"""
+        select task_json
+        from {PlannerTaskStoreConventions.QualifiedTable}
+        where task_id = @TaskId
+        """;
+
+    private const string SaveTaskSql =
+        $"""
+        insert into {PlannerTaskStoreConventions.QualifiedTable} (
+            task_id,
+            context_id,
+            status_state,
+            status_timestamp,
+            task_json,
+            updated_at_utc)
+        values (
+            @TaskId,
+            @ContextId,
+            @StatusState,
+            @StatusTimestamp,
+            @TaskJson,
+            now())
+        on conflict (task_id) do update set
+            context_id = excluded.context_id,
+            status_state = excluded.status_state,
+            status_timestamp = excluded.status_timestamp,
+            task_json = excluded.task_json,
+            updated_at_utc = now()
+        """;
+
+    private const string TryCreateTaskSql =
+        $"""
+        insert into {PlannerTaskStoreConventions.QualifiedTable} (
+            task_id,
+            context_id,
+            status_state,
+            status_timestamp,
+            task_json,
+            updated_at_utc)
+        values (
+            @TaskId,
+            @ContextId,
+            @StatusState,
+            @StatusTimestamp,
+            @TaskJson,
+            now())
+        on conflict (context_id) do nothing
+        returning 1
+        """;
+
+    private const string DeleteTaskSql =
+        $"""
+        delete from {PlannerTaskStoreConventions.QualifiedTable}
+        where task_id = @TaskId
+        """;
+
+    private const string CountTasksSqlBase =
+        $"select count(*) from {PlannerTaskStoreConventions.QualifiedTable} ";
+
+    private const string SelectTasksSqlBase =
+        $"""
+        select task_json
+        from {PlannerTaskStoreConventions.QualifiedTable}
+        """;
+
+
     public async Task<AgentTask?> GetTaskAsync(string taskId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
@@ -22,11 +89,7 @@ internal sealed class PostgresTaskStore(NpgsqlDataSource dataSource) : IPlannerT
         await using (connection.ConfigureAwait(false))
         {
             string? taskJson = await connection.QuerySingleOrDefaultAsync<string?>(new CommandDefinition(
-                $"""
-                select task_json
-                from {PlannerTaskStoreConventions.QualifiedTable}
-                where task_id = @TaskId
-                """,
+                GetTaskSql,
                 new { TaskId = taskId },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
@@ -43,28 +106,7 @@ internal sealed class PostgresTaskStore(NpgsqlDataSource dataSource) : IPlannerT
         await using (connection.ConfigureAwait(false))
         {
             await connection.ExecuteAsync(new CommandDefinition(
-                $"""
-                insert into {PlannerTaskStoreConventions.QualifiedTable} (
-                    task_id,
-                    context_id,
-                    status_state,
-                    status_timestamp,
-                    task_json,
-                    updated_at_utc)
-                values (
-                    @TaskId,
-                    @ContextId,
-                    @StatusState,
-                    @StatusTimestamp,
-                    @TaskJson,
-                    now())
-                on conflict (task_id) do update set
-                    context_id = excluded.context_id,
-                    status_state = excluded.status_state,
-                    status_timestamp = excluded.status_timestamp,
-                    task_json = excluded.task_json,
-                    updated_at_utc = now()
-                """,
+                SaveTaskSql,
                 new
                 {
                     TaskId = taskId,
@@ -89,24 +131,7 @@ internal sealed class PostgresTaskStore(NpgsqlDataSource dataSource) : IPlannerT
         await using (connection.ConfigureAwait(false))
         {
             int? inserted = await connection.ExecuteScalarAsync<int?>(new CommandDefinition(
-                $"""
-                insert into {PlannerTaskStoreConventions.QualifiedTable} (
-                    task_id,
-                    context_id,
-                    status_state,
-                    status_timestamp,
-                    task_json,
-                    updated_at_utc)
-                values (
-                    @TaskId,
-                    @ContextId,
-                    @StatusState,
-                    @StatusTimestamp,
-                    @TaskJson,
-                    now())
-                on conflict (context_id) do nothing
-                returning 1
-                """,
+                TryCreateTaskSql,
                 new
                 {
                     TaskId = taskId,
@@ -129,10 +154,7 @@ internal sealed class PostgresTaskStore(NpgsqlDataSource dataSource) : IPlannerT
         await using (connection.ConfigureAwait(false))
         {
             await connection.ExecuteAsync(new CommandDefinition(
-                $"""
-                delete from {PlannerTaskStoreConventions.QualifiedTable}
-                where task_id = @TaskId
-                """,
+                DeleteTaskSql,
                 new { TaskId = taskId },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
         }
@@ -153,27 +175,17 @@ internal sealed class PostgresTaskStore(NpgsqlDataSource dataSource) : IPlannerT
         var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using (connection.ConfigureAwait(false))
         {
-            // Justification: The whereClause is built from ListTasksRequest properties via
-            // BuildWhereClause using only Dapper parameterized placeholders (@ContextId, @StatusState,
-            // @StatusTimestampAfter). QualifiedTable is a compile-time const string. No user input
-            // is concatenated into the SQL text.
-            int totalSize = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
-                $"select count(*) from {PlannerTaskStoreConventions.QualifiedTable} {whereClause}",
+            // whereClause is assembled by BuildWhereClause from fixed column names and only
+            // Dapper @Param placeholders — no user-supplied string is ever concatenated into it.
+            int totalSize = await connection.ExecuteScalarAsync<int>(new CommandDefinition( // NOSONAR:S2077
+                CountTasksSqlBase + whereClause,
                 parameters,
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
             parameters.Add("Limit", pageSize);
             parameters.Add("Offset", startIndex);
-            // Justification: Same safe parameterized pattern — whereClause uses only Dapper
-            // placeholders, QualifiedTable is a const, and user input goes through DynamicParameters.
-            var rows = await connection.QueryAsync<string>(new CommandDefinition(
-                $"""
-                select task_json
-                from {PlannerTaskStoreConventions.QualifiedTable}
-                {whereClause}
-                order by status_timestamp desc nulls last, task_id
-                limit @Limit offset @Offset
-                """,
+            var rows = await connection.QueryAsync<string>(new CommandDefinition( // NOSONAR:S2077
+                SelectTasksSqlBase + $"\n{whereClause}\norder by status_timestamp desc nulls last, task_id\nlimit @Limit offset @Offset",
                 parameters,
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
