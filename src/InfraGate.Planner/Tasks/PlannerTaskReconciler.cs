@@ -2,7 +2,6 @@ using A2A;
 using InfraGate.AgentMcp;
 using InfraGate.Planner.Diagnostics;
 using InfraGate.Planner.Handoff;
-using InfraGate.Remediation.Contracts;
 using ModelContextProtocol.Protocol;
 
 namespace InfraGate.Planner.Tasks;
@@ -24,6 +23,8 @@ internal sealed class PlannerTaskReconciler(
             return;
         }
 
+        var attempted = new HashSet<string>(StringComparer.Ordinal);
+
         while (true)
         {
             var response = await taskStore.ListTasksAsync(
@@ -39,7 +40,15 @@ internal sealed class PlannerTaskReconciler(
                 return;
             }
 
-            foreach (var task in response.Tasks)
+            // Stop if every returned task was already attempted this pass — they are
+            // stuck (e.g. FailAsync itself failed) and re-processing would spin forever.
+            var pending = response.Tasks.Where(t => attempted.Add(t.Id)).ToList();
+            if (pending.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var task in pending)
             {
                 await ReconcileTaskSafelyAsync(task, cancellationToken).ConfigureAwait(false);
             }

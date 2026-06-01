@@ -399,7 +399,7 @@ internal sealed class PostgresApprovalPersistence(
             var command = connection.CreateCommand();
             await using (command.ConfigureAwait(false))
             {
-                command.CommandText =
+                command.CommandText = // NOSONAR:S2077 — static parameterized literal, no user input interpolated
                     """
                     select c.challenge_id,
                            c.plan_id,
@@ -448,7 +448,7 @@ internal sealed class PostgresApprovalPersistence(
             var command = connection.CreateCommand();
             await using (command.ConfigureAwait(false))
             {
-                command.CommandText =
+                command.CommandText = // NOSONAR:S2077 — static parameterized literal, no user input interpolated
                     """
                     select c.challenge_id,
                            c.plan_id,
@@ -1094,7 +1094,7 @@ internal sealed class PostgresApprovalPersistence(
         var command = connection.CreateCommand();
         await using (command.ConfigureAwait(false))
         {
-            command.CommandText =
+            command.CommandText = // NOSONAR:S2077 — static parameterized literal, no user input interpolated
                 """
                 select canonical_json_text,
                        canonical_sha256
@@ -1189,7 +1189,7 @@ internal sealed class PostgresApprovalPersistence(
         var command = connection.CreateCommand();
         await using (command.ConfigureAwait(false))
         {
-            command.CommandText =
+            command.CommandText = // NOSONAR:S2077 — static parameterized literal, no user input interpolated
                 """
                 select grant_id,
                        plan_id,

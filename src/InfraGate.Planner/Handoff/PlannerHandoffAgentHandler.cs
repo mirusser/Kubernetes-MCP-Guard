@@ -20,10 +20,17 @@ internal sealed class PlannerHandoffAgentHandler(
     {
         string? json = context.Message?.Parts.FirstOrDefault(p => p.Text is not null)?.Text;
 
-        if (json is not null && JsonSerializer.Deserialize<AnomalyHandoffBatch>(json) is { } batch)
+        AnomalyHandoffBatch? batch = null;
+        if (json is not null)
+        {
+            try { batch = JsonSerializer.Deserialize<AnomalyHandoffBatch>(json); }
+            catch (JsonException) { /* fall through to invalid-params below */ }
+        }
+
+        if (batch?.Reports is not null)
         {
             if (batch.Reports.Count != 1
-                || !string.Equals(batch.Reports[0].AnomalyId, context.ContextId, StringComparison.Ordinal))
+                || !string.Equals(batch.Reports[0]?.AnomalyId, context.ContextId, StringComparison.Ordinal))
             {
                 throw new A2AException(
                     "Planner handoff requires one anomaly report with contextId matching anomalyId.",

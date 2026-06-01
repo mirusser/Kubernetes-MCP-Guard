@@ -96,7 +96,7 @@ internal sealed class DecideExecutor( // NOSONAR:S107 — DI constructor; all pa
     private async Task<RemediationDecision?> DecideCoreAsync(AnomalyReport message, CancellationToken cancellationToken)
     {
         string anomalyJson = JsonSerializer.Serialize(message, anomalyJsonOptions);
-        string agentId = $"{PlannerConventions.A2AHandoff.AgentIdPrefix}{message.AnomalyId[..8]}";
+        string agentId = $"{PlannerConventions.A2AHandoff.AgentIdPrefix}{message.AnomalyId[..Math.Min(8, message.AnomalyId.Length)]}";
         (AIAgent agent, _) = agentFactory.Create(agentId, systemPrompt, tools,
             maxToolIterations, decisionResponseFormat, guardrailPolicy);
 

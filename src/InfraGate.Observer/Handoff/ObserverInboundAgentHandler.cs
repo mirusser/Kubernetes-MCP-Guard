@@ -23,7 +23,10 @@ internal sealed class ObserverInboundAgentHandler(
 
         ObserverInboundEnvelope? envelope = null;
         if (json is not null)
-            envelope = JsonSerializer.Deserialize<ObserverInboundEnvelope>(json);
+        {
+            try { envelope = JsonSerializer.Deserialize<ObserverInboundEnvelope>(json); }
+            catch (JsonException) { /* envelope remains null, handled below */ }
+        }
 
         string response;
         if (envelope is null)

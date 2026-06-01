@@ -148,7 +148,7 @@ public sealed class PostgresApprovalAccessCodeStore(NpgsqlDataSource dataSource,
         command.Transaction = transaction;
         await using (command.ConfigureAwait(false))
         {
-            command.CommandText =
+            command.CommandText = // NOSONAR:S2077 — static parameterized literal, no user input interpolated
                 """
                 select challenge_id,
                        expires_at_utc,
