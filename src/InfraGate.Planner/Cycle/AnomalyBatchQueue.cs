@@ -2,11 +2,11 @@ namespace InfraGate.Planner.Cycle;
 
 internal sealed class AnomalyBatchQueue
 {
-    private readonly Channel<AnomalyHandoffBatch> channel = Channel.CreateUnbounded<AnomalyHandoffBatch>();
+    private readonly Channel<PlannerTaskWorkItem> channel = Channel.CreateUnbounded<PlannerTaskWorkItem>();
 
-    public ChannelWriter<AnomalyHandoffBatch> Writer => channel.Writer;
+    public ChannelWriter<PlannerTaskWorkItem> Writer => channel.Writer;
 
-    public ChannelReader<AnomalyHandoffBatch> Reader => channel.Reader;
+    public ChannelReader<PlannerTaskWorkItem> Reader => channel.Reader;
 
-    public bool TryEnqueue(AnomalyHandoffBatch batch) => channel.Writer.TryWrite(batch);
+    public bool TryEnqueue(PlannerTaskWorkItem workItem) => channel.Writer.TryWrite(workItem);
 }

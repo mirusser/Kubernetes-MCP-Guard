@@ -30,10 +30,6 @@ internal sealed class ObserverInboundAgentHandler(
         {
             response = "error: malformed request";
         }
-        else if (string.Equals(envelope.Intent, ObserverInboundIntents.Progress, StringComparison.Ordinal))
-        {
-            response = await HandleProgressAsync(envelope, cancellationToken).ConfigureAwait(false);
-        }
         else if (string.Equals(envelope.Intent, ObserverInboundIntents.ToolRequest, StringComparison.Ordinal))
         {
             response = await HandleToolRequestAsync(envelope, cancellationToken).ConfigureAwait(false);
@@ -58,30 +54,6 @@ internal sealed class ObserverInboundAgentHandler(
         RequestContext context,
         AgentEventQueue eventQueue,
         CancellationToken cancellationToken) => Task.CompletedTask;
-
-    private async Task<string> HandleProgressAsync(
-        ObserverInboundEnvelope envelope,
-        CancellationToken cancellationToken)
-    {
-        if (auditOutbox is not null && envelope.Progress is not null)
-        {
-            await auditOutbox.AppendAsync(
-                new ObserverAuditEntry(
-                    EventName: ObserverAuditEvents.HandoffProgress,
-                    Payload: new
-                    {
-                        stage = envelope.Progress.Stage,
-                        detail = envelope.Progress.Detail,
-                        proposalCount = envelope.Progress.ProposalCount,
-                    },
-                    CycleId: envelope.CycleId,
-                    ActorSubject: ObserverAuditEvents.Subjects.Planner,
-                    Outcome: ObserverAuditEvents.Outcomes.Received),
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        return "ack";
-    }
 
     private async Task<string> HandleToolRequestAsync(
         ObserverInboundEnvelope envelope,

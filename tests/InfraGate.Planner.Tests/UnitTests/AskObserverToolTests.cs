@@ -108,10 +108,6 @@ public sealed class AskObserverToolTests
 
     private sealed class StubObserverChannel : IObserverChannel
     {
-        public Task SendProgressAsync(
-            string cycleId, string stage, string? detail, int? proposalCount, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
-
         public Task<ToolResponsePayload> SendToolRequestAsync(
             string cycleId, string toolName, string? argumentsJson, CancellationToken cancellationToken = default)
             => Task.FromResult(new ToolResponsePayload { IsError = false, ResultJson = string.Empty });
@@ -120,10 +116,6 @@ public sealed class AskObserverToolTests
     private sealed class CapturingObserverChannel(ToolResponsePayload? respondWith = null) : IObserverChannel
     {
         public List<(string CycleId, string ToolName, string? ArgumentsJson)> Requests { get; } = [];
-
-        public Task SendProgressAsync(
-            string cycleId, string stage, string? detail, int? proposalCount, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
 
         public Task<ToolResponsePayload> SendToolRequestAsync(
             string cycleId, string toolName, string? argumentsJson, CancellationToken cancellationToken = default)

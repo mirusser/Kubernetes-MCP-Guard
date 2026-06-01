@@ -1,7 +1,6 @@
 using System.Diagnostics.Metrics;
 using InfraGate.Observer.Audit;
 using InfraGate.Observer.Diagnostics;
-using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace InfraGate.Observer.Tests.UnitTests;
@@ -11,10 +10,10 @@ public sealed class A2AAnomalyHandoffSinkTests
     // ── Helpers ──────────────────────────────────────────────────────
 
     private static A2AAnomalyHandoffSink CreateSink(
-        FakeA2AAgent agent,
+        FakePlannerHandoffClient client,
         Meter? meter = null,
         CapturingAuditOutbox? auditOutbox = null) =>
-        new(agent, NullLogger<A2AAnomalyHandoffSink>.Instance, auditOutbox, meter);
+        new(client, NullLogger<A2AAnomalyHandoffSink>.Instance, auditOutbox, meter);
 
     private static AnomalyHandoffBatch BatchWithReport(string cycleId = "cycle-1") => new()
     {
@@ -50,12 +49,12 @@ public sealed class A2AAnomalyHandoffSinkTests
     [Fact]
     public async Task PublishAsync_EmptyBatch_DoesNotCallAgent()
     {
-        var agent = new FakeA2AAgent();
-        var sink = CreateSink(agent);
+        var client = new FakePlannerHandoffClient();
+        var sink = CreateSink(client);
 
         await sink.PublishAsync(EmptyBatch(), CancellationToken.None);
 
-        Assert.False(agent.WasInvoked);
+        Assert.False(client.WasInvoked);
     }
 
     // ── Success path ─────────────────────────────────────────────────
@@ -63,35 +62,54 @@ public sealed class A2AAnomalyHandoffSinkTests
     [Fact]
     public async Task PublishAsync_ValidBatch_InvokesAgent()
     {
-        var agent = new FakeA2AAgent();
-        var sink = CreateSink(agent);
+        var client = new FakePlannerHandoffClient();
+        var sink = CreateSink(client);
 
         await sink.PublishAsync(BatchWithReport(), CancellationToken.None);
 
-        Assert.True(agent.WasInvoked);
+        Assert.True(client.WasInvoked);
     }
 
     [Fact]
     public async Task PublishAsync_ValidBatch_SendsSerializedJson()
     {
-        var agent = new FakeA2AAgent();
-        var sink = CreateSink(agent);
+        var client = new FakePlannerHandoffClient();
+        var sink = CreateSink(client);
         var batch = BatchWithReport("cycle-json");
 
         await sink.PublishAsync(batch, CancellationToken.None);
 
-        Assert.NotNull(agent.LastMessage);
-        var deserialized = JsonSerializer.Deserialize<AnomalyHandoffBatch>(agent.LastMessage);
-        Assert.NotNull(deserialized);
-        Assert.Equal("cycle-json", deserialized.CycleId);
+        Assert.Equal("cycle-json", Assert.Single(client.Batches).CycleId);
+    }
+
+    [Fact]
+    public async Task PublishAsync_MultipleReports_SendsOneBatchPerAnomalyContext()
+    {
+        var client = new FakePlannerHandoffClient();
+        var sink = CreateSink(client);
+        var batch = BatchWithReport();
+        var firstReport = Assert.Single(batch.Reports);
+        batch = batch with
+        {
+            Reports =
+            [
+                firstReport,
+                firstReport with { AnomalyId = "anomaly-2" },
+            ],
+        };
+
+        await sink.PublishAsync(batch, CancellationToken.None);
+
+        Assert.Equal(["anomaly-1", "anomaly-2"], client.ContextIds);
+        Assert.All(client.Batches, sentBatch => Assert.Single(sentBatch.Reports));
     }
 
     [Fact]
     public async Task PublishAsync_Success_EmitsHandoffPublishedAuditEvent()
     {
         var auditOutbox = new CapturingAuditOutbox();
-        var agent = new FakeA2AAgent();
-        var sink = CreateSink(agent, auditOutbox: auditOutbox);
+        var client = new FakePlannerHandoffClient();
+        var sink = CreateSink(client, auditOutbox: auditOutbox);
 
         await sink.PublishAsync(BatchWithReport(), CancellationToken.None);
 
@@ -106,8 +124,8 @@ public sealed class A2AAnomalyHandoffSinkTests
     {
         using var meter = new Meter("a2a-sink-success-test");
         using var probe = new CounterProbe(meter, ObserverMetrics.HandoffHttpFailedCounterName);
-        var agent = new FakeA2AAgent();
-        var sink = CreateSink(agent, meter: meter);
+        var client = new FakePlannerHandoffClient();
+        var sink = CreateSink(client, meter: meter);
 
         await sink.PublishAsync(BatchWithReport(), CancellationToken.None);
 
@@ -120,8 +138,8 @@ public sealed class A2AAnomalyHandoffSinkTests
     public async Task PublishAsync_AgentThrows_EmitsHandoffFailedAuditEvent()
     {
         var auditOutbox = new CapturingAuditOutbox();
-        var agent = new FakeA2AAgent(shouldThrow: true);
-        var sink = CreateSink(agent, auditOutbox: auditOutbox);
+        var client = new FakePlannerHandoffClient(shouldThrow: true);
+        var sink = CreateSink(client, auditOutbox: auditOutbox);
 
         await sink.PublishAsync(BatchWithReport(), CancellationToken.None);
 
@@ -136,8 +154,8 @@ public sealed class A2AAnomalyHandoffSinkTests
     {
         using var meter = new Meter("a2a-sink-fail-test");
         using var probe = new CounterProbe(meter, ObserverMetrics.HandoffHttpFailedCounterName);
-        var agent = new FakeA2AAgent(shouldThrow: true);
-        var sink = CreateSink(agent, meter: meter);
+        var client = new FakePlannerHandoffClient(shouldThrow: true);
+        var sink = CreateSink(client, meter: meter);
 
         await sink.PublishAsync(BatchWithReport(), CancellationToken.None);
 
@@ -148,8 +166,8 @@ public sealed class A2AAnomalyHandoffSinkTests
     [Fact]
     public async Task PublishAsync_AgentThrows_DoesNotRethrow()
     {
-        var agent = new FakeA2AAgent(shouldThrow: true);
-        var sink = CreateSink(agent);
+        var client = new FakePlannerHandoffClient(shouldThrow: true);
+        var sink = CreateSink(client);
 
         var ex = await Record.ExceptionAsync(() => sink.PublishAsync(BatchWithReport(), CancellationToken.None));
 
@@ -159,43 +177,34 @@ public sealed class A2AAnomalyHandoffSinkTests
     [Fact]
     public async Task PublishAsync_NullAuditOutbox_DoesNotThrowOnSuccess()
     {
-        var agent = new FakeA2AAgent();
-        var sink = new A2AAnomalyHandoffSink(agent, NullLogger<A2AAnomalyHandoffSink>.Instance);
+        var client = new FakePlannerHandoffClient();
+        var sink = new A2AAnomalyHandoffSink(client, NullLogger<A2AAnomalyHandoffSink>.Instance);
 
         var ex = await Record.ExceptionAsync(() => sink.PublishAsync(BatchWithReport(), CancellationToken.None));
 
         Assert.Null(ex);
     }
 
-    // ── Fake agent ────────────────────────────────────────────────────
+    // ── Fake handoff client ───────────────────────────────────────────
 
-    internal sealed class FakeA2AAgent(bool shouldThrow = false) : AIAgent
+    private sealed class FakePlannerHandoffClient(bool shouldThrow = false) : IPlannerHandoffClient
     {
-        public bool WasInvoked { get; private set; }
-        public string? LastMessage { get; private set; }
+        public bool WasInvoked => ContextIds.Count > 0;
+        public List<string> ContextIds { get; } = [];
+        public List<AnomalyHandoffBatch> Batches { get; } = [];
 
-        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken = default)
-            => new(new FakeSession());
-
-        protected override ValueTask<JsonElement> SerializeSessionCoreAsync(AgentSession session, JsonSerializerOptions? jsonSerializerOptions = null, CancellationToken cancellationToken = default)
-            => new(default(JsonElement));
-
-        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(JsonElement serializedState, JsonSerializerOptions? jsonSerializerOptions = null, CancellationToken cancellationToken = default)
-            => new(new FakeSession());
-
-        protected override Task<AgentResponse> RunCoreAsync(IEnumerable<ChatMessage> messages, AgentSession? session = null, AgentRunOptions? options = null, CancellationToken cancellationToken = default)
+        public Task SendAsync(
+            string contextId,
+            AnomalyHandoffBatch batch,
+            CancellationToken cancellationToken)
         {
-            WasInvoked = true;
-            LastMessage = messages.FirstOrDefault()?.Text;
             if (shouldThrow)
                 throw new InvalidOperationException("Simulated A2A handoff failure");
-            return Task.FromResult(new AgentResponse([]));
+
+            ContextIds.Add(contextId);
+            Batches.Add(batch);
+            return Task.CompletedTask;
         }
-
-        protected override IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(IEnumerable<ChatMessage> messages, AgentSession? session = null, AgentRunOptions? options = null, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException("Streaming not used by handoff sink");
-
-        private sealed class FakeSession : AgentSession { }
     }
 
     // ── Fake audit outbox ─────────────────────────────────────────────

@@ -1,12 +1,11 @@
 using System.Diagnostics.Metrics;
 using InfraGate.Observer.Audit;
 using InfraGate.Observer.Diagnostics;
-using Microsoft.Agents.AI;
 
 namespace InfraGate.Observer.Handoff;
 
 internal sealed class A2AAnomalyHandoffSink(
-    AIAgent agent,
+    IPlannerHandoffClient client,
     ILogger<A2AAnomalyHandoffSink> logger,
     IObserverAuditOutbox? auditOutbox = null,
     Meter? meter = null) : IAnomalyHandoffSink
@@ -18,11 +17,15 @@ internal sealed class A2AAnomalyHandoffSink(
         if (batch.Reports.Count == 0)
             return;
 
-        string json = JsonSerializer.Serialize(batch);
-
         try
         {
-            await agent.RunAsync(json, cancellationToken: cancellationToken).ConfigureAwait(false);
+            foreach (var report in batch.Reports)
+            {
+                await client.SendAsync(
+                    report.AnomalyId,
+                    batch with { Reports = [report] },
+                    cancellationToken).ConfigureAwait(false);
+            }
 
             if (auditOutbox is not null)
                 await EmitHandoffPublishedAsync(batch, cancellationToken).ConfigureAwait(false);

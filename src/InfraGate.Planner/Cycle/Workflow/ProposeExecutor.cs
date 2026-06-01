@@ -19,7 +19,6 @@ internal sealed class ProposeExecutor(
     Counter<long>? proposeFailedCounter,
     ILogger logger) : Executor<DecisionContext>(id)
 {
-    private const string ServicePlannerSubject = "service:planner";
 
     public override async ValueTask HandleAsync(
         DecisionContext ctx,
@@ -68,7 +67,7 @@ internal sealed class ProposeExecutor(
             if (planId is null)
             {
                 PlannerLogEvents.LogProposePlanMissingPlanId(logger, report.AnomalyId);
-                return await RecordProposeFailureAsync(report, "missing_plan_id", null, null, cancellationToken)
+                return await RecordProposeFailureAsync(report, PlannerConventions.Audit.Reasons.MissingPlanId, null, null, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -81,8 +80,8 @@ internal sealed class ProposeExecutor(
                         Payload: new { operationType = decision.OperationType, arguments = decision.Arguments },
                         AnomalyId: report.AnomalyId,
                         PlanId: planId,
-                        ActorSubject: ServicePlannerSubject,
-                        Outcome: "succeeded"),
+                        ActorSubject: PlannerConventions.Audit.ServicePlannerSubject,
+                        Outcome: PlannerConventions.Audit.Outcomes.Succeeded),
                     cancellationToken).ConfigureAwait(false);
             }
             return planId;
@@ -91,7 +90,7 @@ internal sealed class ProposeExecutor(
         {
             PlannerLogEvents.LogProposePlanFailed(logger, report.AnomalyId, ex);
             var statusCode = ex is HttpRequestException httpEx ? (int?)httpEx.StatusCode : null;
-            return await RecordProposeFailureAsync(report, "gateway_error", ex.GetType().Name, statusCode, cancellationToken)
+            return await RecordProposeFailureAsync(report, PlannerConventions.Audit.Reasons.GatewayError, ex.GetType().Name, statusCode, cancellationToken)
                 .ConfigureAwait(false);
         }
     }
@@ -125,8 +124,8 @@ internal sealed class ProposeExecutor(
                     EventName: PlannerAuditEvents.ProposePlanFailed,
                     Payload: new { reasonCode, errorClass, statusCode },
                     AnomalyId: report.AnomalyId,
-                    ActorSubject: ServicePlannerSubject,
-                    Outcome: "failed",
+                    ActorSubject: PlannerConventions.Audit.ServicePlannerSubject,
+                    Outcome: PlannerConventions.Audit.Outcomes.Failed,
                     Reason: errorClass ?? reasonCode),
                 cancellationToken).ConfigureAwait(false);
         }

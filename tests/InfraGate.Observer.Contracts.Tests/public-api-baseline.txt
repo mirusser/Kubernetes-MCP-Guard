@@ -73,23 +73,10 @@ interface InfraGate.Observer.Contracts.IAnomalyHandoffSink
 class InfraGate.Observer.Contracts.ObserverInboundEnvelope
   String CycleId { get; set; }
   String Intent { get; set; }
-  PlanProgressPayload Progress { get; set; }
   ToolRequestPayload ToolRequest { get; set; }
 
 class InfraGate.Observer.Contracts.ObserverInboundIntents
-  const String Progress
   const String ToolRequest
-
-class InfraGate.Observer.Contracts.PlanProgressPayload
-  String Detail { get; set; }
-  Nullable<Int32> ProposalCount { get; set; }
-  String Stage { get; set; }
-
-class InfraGate.Observer.Contracts.PlanProgressStage
-  const String Analyzing
-  const String Failed
-  const String NoAction
-  const String PlanProposed
 
 class InfraGate.Observer.Contracts.RemediationHint
   String Action { get; set; }

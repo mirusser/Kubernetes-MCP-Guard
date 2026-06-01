@@ -723,7 +723,6 @@ public sealed class WorkflowExecutorTests
     private sealed class FakeObserverChannel : IObserverChannel
     {
         public int SendToolRequestCallCount { get; private set; }
-        public Task SendProgressAsync(string cycleId, string stage, string? detail, int? proposalCount, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<ToolResponsePayload> SendToolRequestAsync(string cycleId, string toolName, string? argumentsJson, CancellationToken cancellationToken = default)
         {
             SendToolRequestCallCount++;

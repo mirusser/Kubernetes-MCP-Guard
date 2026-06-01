@@ -23,6 +23,7 @@ using InfraGate.Prompts;
 using InfraGate.RuntimeSafety;
 using ModelContextProtocol.Protocol;
 using Npgsql;
+using Microsoft.Agents.AI.A2A;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -208,10 +209,14 @@ builder.Services.AddSingleton<IAnomalyHandoffSink>(sp =>
         var httpClient = httpClientFactory.CreateClient(ObserverConventions.HttpClients.PlannerHandoff);
         var a2aLogger = sp.GetRequiredService<ILogger<A2AAnomalyHandoffSink>>();
 #pragma warning disable MEAI001 // Experimental A2A preview package — accepted per plan
-        var a2aAgent = new A2AClient(new Uri(options.PlannerHandoffUrl), httpClient)
-            .AsAIAgent(name: ObserverConventions.A2AHandoffAgentName);
+        var a2aAgent = new A2AAgent(
+            new A2AClient(new Uri(options.PlannerHandoffUrl), httpClient),
+            name: ObserverConventions.A2AHandoffAgentName);
 #pragma warning restore MEAI001
-        sinks.Add(new A2AAnomalyHandoffSink(a2aAgent, a2aLogger, sp.GetService<IObserverAuditOutbox>()));
+        sinks.Add(new A2AAnomalyHandoffSink(
+            new A2APlannerHandoffClient(a2aAgent),
+            a2aLogger,
+            sp.GetService<IObserverAuditOutbox>()));
     }
 
     var logger = sp.GetRequiredService<ILogger<CompositeAnomalyHandoffSink>>();

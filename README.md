@@ -84,14 +84,14 @@ flowchart TB
         PIn["/a2a/planner<br/>azp=infra-gate-observer"]
         PBatch["BatchProcessor<br/>LLM + argument validation"]
         PMcp["PlannerMcpClient<br/>readonly + propose_plan"]
-        POut["RemediationProposalSink"]
+        POut["A2A Executor dispatch"]
         PIn --> PBatch --> PMcp
         PBatch --> POut
     end
 
     subgraph ExecutorProc["Executor"]
         direction TB
-        EIn["/handoff/proposals<br/>azp=infra-gate-planner"]
+        EIn["/a2a/executor<br/>azp=infra-gate-planner"]
         Watch["PlanWatcher"]
         EMcp["ExecutorMcpClient<br/>wait + execute only"]
         EIn --> Watch --> EMcp
@@ -157,7 +157,7 @@ The [InfraGate.Observer](src/InfraGate.Observer/README.md) is an LLM-driven agen
 | Anomaly detection | LLM-assisted classification across four categories: Pod unhealthy, Deployment unavailable, Service no endpoints, Warning events. |
 | Severity classification | Rules-derived `High`/`Medium`/`Low` with LLM disagreement telemetry. |
 | Deduplication & resolution | In-memory dedupe window suppresses repeat reports; automatic `Resolved` emission when anomalies clear. |
-| Handoff | Log sink always on; JSON file sink and Planner HTTP handoff are opt-in; see [docs/configuration.md](docs/configuration.md). |
+| Handoff | Log sink always on; JSON file sink and Planner A2A handoff are opt-in; see [docs/configuration.md](docs/configuration.md). |
 
 ### 🤖📋 Remediation Planner
 
@@ -165,7 +165,7 @@ The [InfraGate.Planner](src/InfraGate.Planner/README.md) consumes Anomaly Report
 
 | Capability | Description |
 | --- | --- |
-| Anomaly intake | Receives `AnomalyHandoffBatch` payloads from the Observer over HTTP. |
+| Anomaly intake | Receives one-anomaly `AnomalyHandoffBatch` payloads from the Observer over A2A. |
 | Operation menu | Chooses only `restart_deployment`, `scale_deployment`, or `set_deployment_image` in v1. |
 | Plan proposal | Calls `propose_plan` to create a digest-bound Plan Envelope for operator approval. |
 | Approval notification | `propose_plan` creates an Approval Access Code and sends the configured operator email through the gateway SMTP sender when configured. |
@@ -177,7 +177,7 @@ The [InfraGate.Executor](src/InfraGate.Executor/README.md) consumes Planner prop
 
 | Capability | Description |
 | --- | --- |
-| Proposal intake | Receives `RemediationProposalBatch` payloads from the Planner over HTTP. |
+| Proposal intake | Receives plan ids from the Planner over synchronous A2A dispatch. |
 | Approval wait | Calls `wait_for_plan_approval` for each plan id until approval, timeout, or terminal status. |
 | Approved execution | Calls `execute_approved_plan` only after approval is reported. |
 | Scope boundary | Executor can wait and execute approved plans; it cannot create plans or call read-only inspection tools. |

@@ -14,39 +14,6 @@ public sealed class ObserverChannelTests
     private static ObserverChannel CreateChannel(FakeA2AAgent agent) =>
         new(agent, NullLogger<ObserverChannel>.Instance);
 
-    // ── Progress delivery ─────────────────────────────────────────────
-
-    [Fact]
-    public async Task SendProgressAsync_DeliversProgressEnvelope()
-    {
-        var agent = new FakeA2AAgent();
-        var channel = CreateChannel(agent);
-
-        await channel.SendProgressAsync("cycle-1", PlanProgressStage.Analyzing, null, null);
-
-        Assert.True(agent.WasInvoked);
-        Assert.NotNull(agent.LastMessage);
-
-        var envelope = JsonSerializer.Deserialize<ObserverInboundEnvelope>(agent.LastMessage);
-        Assert.NotNull(envelope);
-        Assert.Equal(ObserverInboundIntents.Progress, envelope.Intent);
-        Assert.Equal("cycle-1", envelope.CycleId);
-        Assert.NotNull(envelope.Progress);
-        Assert.Equal(PlanProgressStage.Analyzing, envelope.Progress.Stage);
-    }
-
-    [Fact]
-    public async Task SendProgressAsync_PlanProposed_IncludesProposalCount()
-    {
-        var agent = new FakeA2AAgent();
-        var channel = CreateChannel(agent);
-
-        await channel.SendProgressAsync("cycle-2", PlanProgressStage.PlanProposed, null, 3);
-
-        var envelope = JsonSerializer.Deserialize<ObserverInboundEnvelope>(agent.LastMessage!);
-        Assert.Equal(3, envelope?.Progress?.ProposalCount);
-    }
-
     // ── Tool request delivery ─────────────────────────────────────────
 
     [Fact]
@@ -100,33 +67,6 @@ public sealed class ObserverChannelTests
             channel.SendToolRequestAsync("cycle-1", "get_k8s_events", null));
 
         Assert.Null(ex);
-    }
-
-    // ── Failure resilience ────────────────────────────────────────────
-
-    [Fact]
-    public async Task SendProgressAsync_AgentThrows_DoesNotRethrow()
-    {
-        var agent = new FakeA2AAgent(shouldThrow: true);
-        var channel = CreateChannel(agent);
-
-        var ex = await Record.ExceptionAsync(() =>
-            channel.SendProgressAsync("cycle-1", PlanProgressStage.Failed, null, null));
-
-        Assert.Null(ex);
-    }
-
-    [Fact]
-    public async Task SendProgressAsync_AgentThrows_DoesNotBlockCaller()
-    {
-        var agent = new FakeA2AAgent(shouldThrow: true);
-        var channel = CreateChannel(agent);
-        bool reached = false;
-
-        await channel.SendProgressAsync("cycle-1", PlanProgressStage.Failed, null, null);
-        reached = true;
-
-        Assert.True(reached);
     }
 
     // ── Fake agent ────────────────────────────────────────────────────

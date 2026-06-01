@@ -20,6 +20,8 @@ internal static class PlannerConventions
 
     // A2A agent name used when the Planner constructs an AIAgent against the Observer's inbound A2A endpoint
     public const string A2AObserverAgentName = "planner-to-observer";
+    public const string A2AExecutorAgentName = "planner-to-executor";
+    public static readonly TimeSpan ExecutorDispatchTimeout = TimeSpan.FromMinutes(61);
 
     public const int DefaultAnomalyWallClockCapSeconds = 30;
     public const int MinAnomalyWallClockCapSeconds = 5;
@@ -106,6 +108,7 @@ internal static class PlannerConventions
 
     public static class ToolArguments
     {
+        public const string PlanId = "planId";
         public const string OperationType = "operationType";
         public const string OperationArguments = "arguments";
         public const string Name = "name";
@@ -118,6 +121,7 @@ internal static class PlannerConventions
     public static class ProposePlanResponseFields
     {
         public const string PlanId = "planId";
+        public const string Status = "status";
         public const string ContentLower = "content";
         public const string ContentUpper = "Content";
         public const string TextLower = "text";
@@ -126,6 +130,7 @@ internal static class PlannerConventions
 
     public static class ToolNames
     {
+        public const string GetPlanStatus = "get_plan_status";
         public const string ProposePlan = "propose_plan";
         public const string GetAllowedNamespaces = "get_allowed_namespaces";
         public const string GetK8sStatus = "get_k8s_status";
@@ -136,6 +141,15 @@ internal static class PlannerConventions
         public const string GetK8sServices = "get_k8s_services";
         public const string GetK8sEndpoints = "get_k8s_endpoints";
 
+    }
+
+    public static class PlanStatusValues
+    {
+        public const string NotFound = "NotFound";
+        public const string ApprovalRequired = "ApprovalRequired";
+        public const string Approved = "Approved";
+        public const string Applied = "Applied";
+        public const string Expired = "Expired";
     }
 
     public static class Claims
@@ -151,6 +165,32 @@ internal static class PlannerConventions
     public static class Policies
     {
         public const string ObserverSender = "ObserverSender";
+    }
+
+    public static class Audit
+    {
+        public const string ServicePlannerSubject = "service:planner";
+        public const string ServiceObserverSubject = "service:observer";
+
+        public static class Outcomes
+        {
+            public const string Skipped = "skipped";
+            public const string Succeeded = "succeeded";
+            public const string Failed = "failed";
+            public const string Received = "received";
+        }
+
+        public static class Reasons
+        {
+            public const string MissingPlanId = "missing_plan_id";
+            public const string GatewayError = "gateway_error";
+        }
+    }
+
+    public static class A2AHandoff
+    {
+        public const string AcceptedResponse = "accepted";
+        public const string AgentIdPrefix = "planner-";
     }
 
     public static class FilterDropReasons

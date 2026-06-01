@@ -51,63 +51,25 @@ public sealed class ObserverInboundAgentHandlerTests
             events.Add(e);
     }
 
-    // ── Progress intent ───────────────────────────────────────────────
+    // ── Retired progress intent ───────────────────────────────────────
 
     [Fact]
-    public async Task ExecuteAsync_ProgressIntent_WritesHandoffProgressAuditEntry()
+    public async Task ExecuteAsync_ProgressIntent_RespondsWithUnknownIntentWithoutAudit()
     {
         var auditOutbox = new CapturingAuditOutbox();
         var handler = CreateHandler(auditOutbox);
         var context = ContextWithEnvelope(new ObserverInboundEnvelope
         {
-            Intent = ObserverInboundIntents.Progress,
+            Intent = "progress",
             CycleId = "cycle-1",
-            Progress = new PlanProgressPayload { Stage = PlanProgressStage.Analyzing },
-        });
-
-        await ExecuteAndDrainAsync(handler, context);
-
-        Assert.Single(auditOutbox.Entries);
-        var entry = auditOutbox.Entries[0];
-        Assert.Equal(ObserverAuditEvents.HandoffProgress, entry.EventName);
-        Assert.Equal("cycle-1", entry.CycleId);
-        Assert.Equal("service:planner", entry.ActorSubject);
-        Assert.Equal("received", entry.Outcome);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_ProgressIntent_RespondsWithAck()
-    {
-        var handler = CreateHandler();
-        var context = ContextWithEnvelope(new ObserverInboundEnvelope
-        {
-            Intent = ObserverInboundIntents.Progress,
-            CycleId = "cycle-1",
-            Progress = new PlanProgressPayload { Stage = PlanProgressStage.PlanProposed, ProposalCount = 2 },
         });
 
         var events = await ExecuteAndDrainAsync(handler, context);
 
         Assert.Single(events);
-        Assert.Equal(StreamResponseCase.Message, events[0].PayloadCase);
         var text = events[0].Message?.Parts.FirstOrDefault()?.Text;
-        Assert.Equal("ack", text);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_ProgressIntent_NullAuditOutbox_DoesNotThrow()
-    {
-        var handler = CreateHandler(auditOutbox: null);
-        var context = ContextWithEnvelope(new ObserverInboundEnvelope
-        {
-            Intent = ObserverInboundIntents.Progress,
-            CycleId = "cycle-1",
-            Progress = new PlanProgressPayload { Stage = PlanProgressStage.Failed },
-        });
-
-        var ex = await Record.ExceptionAsync(() => ExecuteAndDrainAsync(handler, context));
-
-        Assert.Null(ex);
+        Assert.Equal("error: unknown intent", text);
+        Assert.Empty(auditOutbox.Entries);
     }
 
     // ── Unknown intent ────────────────────────────────────────────────

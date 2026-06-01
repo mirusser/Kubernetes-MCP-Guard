@@ -34,8 +34,7 @@ public sealed class ExecutorGatewayIntegrationTests
         await using var mcpClient = await gateway.CreateExecutorClientAsync();
 
         var proposal = CreateProposal("plan-approved");
-        var (watcher, queue) = CreateWatcher(mcpClient);
-        queue.TryEnqueueAll([proposal]);
+        var watcher = CreateWatcher(mcpClient);
 
         await watcher.WatchPlanAsync(proposal, CancellationToken.None);
 
@@ -52,8 +51,7 @@ public sealed class ExecutorGatewayIntegrationTests
         await using var mcpClient = await gateway.CreateExecutorClientAsync();
 
         var proposal = CreateProposal("plan-id-check");
-        var (watcher, queue) = CreateWatcher(mcpClient);
-        queue.TryEnqueueAll([proposal]);
+        var watcher = CreateWatcher(mcpClient);
 
         await watcher.WatchPlanAsync(proposal, CancellationToken.None);
 
@@ -72,8 +70,7 @@ public sealed class ExecutorGatewayIntegrationTests
         await using var mcpClient = await gateway.CreateExecutorClientAsync();
 
         var proposal = CreateProposal("plan-dedupe");
-        var (watcher, queue) = CreateWatcher(mcpClient);
-        queue.TryEnqueueAll([proposal]);
+        var watcher = CreateWatcher(mcpClient);
 
         // First watch: runs normally
         await watcher.WatchPlanAsync(proposal, CancellationToken.None);
@@ -82,8 +79,7 @@ public sealed class ExecutorGatewayIntegrationTests
         // (TryTrack should return false the second time while the plan is still tracked)
         var dedupeStore = new ExecutorDedupeStore();
         dedupeStore.TryTrack("plan-dedupe"); // mark it active
-        var (watcher2, queue2) = CreateWatcher(mcpClient, dedupeStore);
-        queue2.TryEnqueueAll([proposal]);
+        var watcher2 = CreateWatcher(mcpClient, dedupeStore);
 
         await watcher2.WatchPlanAsync(proposal, CancellationToken.None);
 
@@ -100,8 +96,7 @@ public sealed class ExecutorGatewayIntegrationTests
         await using var mcpClient = await gateway.CreateExecutorClientAsync();
 
         var proposal = CreateProposal("plan-notfound");
-        var (watcher, queue) = CreateWatcher(mcpClient);
-        queue.TryEnqueueAll([proposal]);
+        var watcher = CreateWatcher(mcpClient);
 
         await watcher.WatchPlanAsync(proposal, CancellationToken.None);
 
@@ -117,8 +112,7 @@ public sealed class ExecutorGatewayIntegrationTests
         await using var mcpClient = await gateway.CreateExecutorClientAsync();
 
         var proposal = CreateProposal("plan-execute-err");
-        var (watcher, queue) = CreateWatcher(mcpClient);
-        queue.TryEnqueueAll([proposal]);
+        var watcher = CreateWatcher(mcpClient);
 
         // Must not throw — blocked execution is swallowed and logged
         var ex = await Record.ExceptionAsync(() => watcher.WatchPlanAsync(proposal, CancellationToken.None));
@@ -129,7 +123,7 @@ public sealed class ExecutorGatewayIntegrationTests
 
     // --- helpers ---
 
-    private static (PlanWatcher Watcher, ProposalQueue Queue) CreateWatcher(
+    private static PlanWatcher CreateWatcher(
         IExecutorMcpClient mcpClient,
         IExecutorDedupeStore? dedupeStore = null)
     {
@@ -139,16 +133,11 @@ public sealed class ExecutorGatewayIntegrationTests
             ConcurrencyCap = 8,
         };
         var optionsMonitor = new FixedOptionsMonitor<ExecutorOptions>(options);
-        var queue = new ProposalQueue(Options.Create(options));
-
-        var watcher = new PlanWatcher(
-            queue,
+        return new PlanWatcher(
             dedupeStore ?? new ExecutorDedupeStore(),
             mcpClient,
             optionsMonitor,
             NullLogger<PlanWatcher>.Instance);
-
-        return (watcher, queue);
     }
 
     private static RemediationProposal CreateProposal(string planId)

@@ -165,27 +165,6 @@ public sealed class PlannerLogEventsTests
     }
 
     [Fact]
-    public void LogHandoffHttpFailed_LogsAtWarningLevel_WithStatusCode()
-    {
-        var logger = new CapturingLogger<PlannerLogEventsTests>();
-        PlannerLogEvents.LogHandoffHttpFailed(logger, 503);
-
-        Assert.Single(logger.Entries);
-        Assert.Equal(LogLevel.Warning, logger.Entries[0].Level);
-        Assert.Equal(503, logger.Entries[0].Properties["StatusCode"]);
-    }
-
-    [Fact]
-    public void LogHandoffHttpBackpressure_LogsAtWarningLevel()
-    {
-        var logger = new CapturingLogger<PlannerLogEventsTests>();
-        PlannerLogEvents.LogHandoffHttpBackpressure(logger);
-
-        Assert.Single(logger.Entries);
-        Assert.Equal(LogLevel.Warning, logger.Entries[0].Level);
-    }
-
-    [Fact]
     public void LogFilterDropped_LogsAtDebugLevel_WithProperties()
     {
         var logger = new CapturingLogger<PlannerLogEventsTests>();

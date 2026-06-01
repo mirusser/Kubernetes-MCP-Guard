@@ -197,6 +197,8 @@ public sealed class PlannerConventionsTests
     public void HttpClients_ExecutorHandoff_IsPinned()
     {
         Assert.Equal("ExecutorHandoff", PlannerConventions.HttpClients.ExecutorHandoff);
+        Assert.Equal("planner-to-executor", PlannerConventions.A2AExecutorAgentName);
+        Assert.True(PlannerConventions.ExecutorDispatchTimeout > TimeSpan.FromHours(1));
     }
 
     [Fact]

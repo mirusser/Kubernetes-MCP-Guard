@@ -1,8 +1,9 @@
+using A2A;
 using InfraGate.Executor;
 using InfraGate.Executor.Diagnostics;
 using InfraGate.Executor.Endpoints;
+using InfraGate.Executor.Handoff;
 using InfraGate.Executor.Mcp;
-using InfraGate.Executor.Queue;
 using InfraGate.Executor.Watch;
 using InfraGate.Observability;
 using InfraGate.RuntimeSafety;
@@ -54,9 +55,22 @@ var authOptions = new ClientCredentialsTokenOptions
 builder.Services.AddClientCredentialsTokenProvider(authOptions);
 
 builder.Services.AddSingleton<IExecutorMcpClient, ExecutorMcpClient>();
-builder.Services.AddSingleton<ProposalQueue>();
 builder.Services.AddSingleton<IExecutorDedupeStore, ExecutorDedupeStore>();
-builder.Services.AddHostedService<PlanWatcher>();
+builder.Services.AddSingleton<ExecutorConcurrencyGate>();
+builder.Services.AddSingleton<PlanWatcher>();
+builder.Services.AddSingleton<ExecutorAgentHandler>();
+#pragma warning disable MEAI001 // Experimental A2A preview package - accepted per plan
+builder.Services.AddKeyedSingleton<A2AServer>(ExecutorConventions.A2AHandoffAgentName, (sp, _) =>
+{
+    var handler = sp.GetRequiredService<ExecutorAgentHandler>();
+    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+    return new A2AServer(
+        handler,
+        new InMemoryTaskStore(),
+        new ChannelEventNotifier(),
+        loggerFactory.CreateLogger<A2AServer>());
+});
+#pragma warning restore MEAI001
 
 var jwtAuthority = builder.Configuration[ExecutorConventions.EnvironmentVariables.OAuthAuthority] ?? string.Empty;
 builder.Services
@@ -92,7 +106,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapExecutorHealthEndpoint();
-app.MapExecutorHandoffEndpoint();
+#pragma warning disable MEAI001 // Experimental A2A preview package - accepted per plan
+app.MapA2AHttpJson(ExecutorConventions.A2AHandoffAgentName, ExecutorConventions.A2AHandoffEndpointPath)
+   .RequireAuthorization(ExecutorConventions.Policies.PlannerSender);
+#pragma warning restore MEAI001
 app.Use(async (context, next) =>
 {
     if (context.Request.Path == "/")

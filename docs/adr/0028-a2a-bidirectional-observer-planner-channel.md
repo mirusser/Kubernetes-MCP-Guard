@@ -1,6 +1,6 @@
 # ADR 0028: A2A Bidirectional Observer↔Planner Channel
 
-**Status:** Accepted  
+**Status:** Superseded for progress transport by [ADR-0029](0029-planner-owned-durable-a2a-task-lifecycle.md); reverse context requests remain accepted
 **Date:** 2026-05-31  
 **Context:** `feat/a2a` branch — extends `8f844cb` (Observer→Planner A2A handoff)
 

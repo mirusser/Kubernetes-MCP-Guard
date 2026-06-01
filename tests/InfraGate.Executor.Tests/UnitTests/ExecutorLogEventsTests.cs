@@ -57,30 +57,6 @@ public sealed class ExecutorLogEventsTests
     }
 
     [Fact]
-    public void LogHandoffBatchReceived_LogsAtInformationLevel_WithProperties()
-    {
-        var logger = new CapturingLogger<ExecutorLogEventsTests>();
-        ExecutorLogEvents.LogHandoffBatchReceived(logger, "cycle-123", 5);
-
-        Assert.Single(logger.Entries);
-        Assert.Equal(LogLevel.Information, logger.Entries[0].Level);
-        Assert.Equal("cycle-123", logger.Entries[0].Properties["CycleId"]);
-        Assert.Equal(5, logger.Entries[0].Properties["ProposalCount"]);
-    }
-
-    [Fact]
-    public void LogHandoffCapacityRejected_LogsAtWarningLevel()
-    {
-        var logger = new CapturingLogger<ExecutorLogEventsTests>();
-        ExecutorLogEvents.LogHandoffCapacityRejected(logger, "cycle-99", 3);
-
-        Assert.Single(logger.Entries);
-        Assert.Equal(LogLevel.Warning, logger.Entries[0].Level);
-        Assert.Equal("cycle-99", logger.Entries[0].Properties["CycleId"]);
-        Assert.Equal(3, logger.Entries[0].Properties["ProposalCount"]);
-    }
-
-    [Fact]
     public void LogWatchStarted_LogsAtInformationLevel_WithPlanId()
     {
         var logger = new CapturingLogger<ExecutorLogEventsTests>();

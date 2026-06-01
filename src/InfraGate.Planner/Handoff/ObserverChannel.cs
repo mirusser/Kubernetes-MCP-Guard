@@ -7,37 +7,6 @@ internal sealed class ObserverChannel(
     AIAgent agent,
     ILogger<ObserverChannel> logger) : IObserverChannel
 {
-    public async Task SendProgressAsync(
-        string cycleId,
-        string stage,
-        string? detail,
-        int? proposalCount,
-        CancellationToken cancellationToken = default)
-    {
-        var envelope = new ObserverInboundEnvelope
-        {
-            Intent = ObserverInboundIntents.Progress,
-            CycleId = cycleId,
-            Progress = new PlanProgressPayload
-            {
-                Stage = stage,
-                Detail = detail,
-                ProposalCount = proposalCount,
-            },
-        };
-
-        string json = JsonSerializer.Serialize(envelope);
-
-        try
-        {
-            await agent.RunAsync(json, cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            PlannerLogEvents.LogProgressSendFailed(logger, cycleId, stage, ex);
-        }
-    }
-
     public async Task<ToolResponsePayload> SendToolRequestAsync(
         string cycleId,
         string toolName,

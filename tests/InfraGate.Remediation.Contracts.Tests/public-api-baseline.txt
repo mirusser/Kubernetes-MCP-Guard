@@ -1,3 +1,9 @@
+class InfraGate.Remediation.Contracts.ExecutorDispatchResult
+  String Detail { get; set; }
+  String Status { get; set; }
+
+class InfraGate.Remediation.Contracts.ExecutorDispatchStatuses
+
 interface InfraGate.Remediation.Contracts.IRemediationProposalSink
   Task PublishAsync(RemediationProposalBatch batch, CancellationToken cancellationToken)
 

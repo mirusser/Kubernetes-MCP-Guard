@@ -2,14 +2,15 @@
 
 This document visualizes the detection, processing, and handoff flow between the autonomous `InfraGate.Observer` service and the analytical `InfraGate.Planner` service.
 
-This document describes the **current** bidirectional Agent-to-Agent (A2A) channel architecture.
+This document describes the **current** Agent-to-Agent (A2A) channel architecture.
 
 ## Channel Overview
 
-The Observer and Planner communicate over two A2A channels:
+The autonomous remediation loop communicates over three A2A channels:
 
-1. **Observer → Planner (handoff)**: the Observer POSTs an `AnomalyHandoffBatch` to the Planner's A2A endpoint (`/a2a/planner`). This is the original direction and is unchanged.
-2. **Planner → Observer (progress + questions)**: the Planner calls back to the Observer's A2A endpoint (`/a2a/observer`) to deliver **Plan Progress Notifications** and to ask **Reverse Context Requests** (read-only K8s tool calls via `ask_observer_to_inspect`). The Observer is the A2A server; the Planner is the A2A client.
+1. **Observer → Planner (handoff)**: the Observer sends one-anomaly `AnomalyHandoffBatch` messages to the Planner's A2A endpoint (`/a2a/planner`) and requests an immediate task handle.
+2. **Planner → Observer (questions)**: the Planner calls the Observer's A2A endpoint (`/a2a/observer`) for **Reverse Context Requests** (read-only K8s tool calls via `ask_observer_to_inspect`). Planner progress lives on the Planner-owned durable A2A task.
+3. **Planner → Executor (dispatch)**: the Planner sends the proposed `planId` to the Executor's A2A endpoint (`/a2a/executor`) synchronously. The Executor watches approval, applies the approved plan, and returns the outcome.
 
 ## Object Flow
 
@@ -37,7 +38,6 @@ flowchart TD
     parsedAnomaly -.->|Audit| auditObs[Observer Audit Outbox]
     handoffBatch -.->|Audit| auditPlan[Planner Audit Outbox]
 
-    planAgent -->|A2A: progress| obsInbound[Observer Inbound Handler]
     planAgent -->|A2A: tool-request| obsInbound
     obsInbound -.->|Audit| auditObs
 ```
@@ -147,12 +147,11 @@ sequenceDiagram
 
     Plan->>Plan: Log HandoffReceived to Planner Audit
     Plan->>Plan: Enqueue AnomalyHandoffBatch
-    Plan-->>Obs: 202 Accepted
+    Plan-->>Obs: ack (non-blocking Observer does not track taskId)
     
     loop Background Batch Processor
         Plan->>Plan: Dequeue Batch
-        Plan->>Obs: A2A /a2a/observer — progress: Analyzing
-        Obs->>Obs: Log handoff.progress to Audit Outbox
+        Plan->>Plan: Task state Submitted -> Working
         Plan->>Plan: Filter out resolved anomalies
         Plan->>Plan: Dedupe Gate (check for active plans)
         Plan->>Gateway: LLM evaluates anomaly + context tools
@@ -165,11 +164,11 @@ sequenceDiagram
         Plan->>Plan: Validate remediation strategy
         Plan->>Gateway: Call propose_plan MCP tool
         Plan->>Plan: Log to Planner Audit Outbox
-        Plan->>Exec: HTTP POST RemediationProposalBatch
-        Plan->>Obs: A2A /a2a/observer — progress: PlanProposed | NoAction
-        opt Processing exception
-            Plan->>Obs: A2A /a2a/observer — progress: Failed
-        end
+        Plan->>Plan: Attach planId artifact Task state -> AuthRequired
+        Plan->>Exec: A2A synchronous dispatch(planId)
+        Exec->>Gateway: Wait for approval, execute approved plan
+        Exec-->>Plan: Applied | Failed | Rejected
+        Plan->>Plan: Task state -> terminal result
     end
 ```
 
@@ -180,12 +179,12 @@ sequenceDiagram
 2. Snapshot is fetched and fed to the Observer LLM.
 3. LLM identifies a failing Pod.
 4. Observer parses it into an `AnomalyReport`, classifies its severity, and verifies it isn't suppressed in the `AnomalyDedupeStore`.
-5. Observer POSTs the report in a batch to Planner.
-6. Planner queues the batch.
+5. Observer sends the report to Planner over A2A with `contextId = AnomalyId`; Planner creates a durable task and returns an ack.
+6. Planner queues the task work item.
 7. Planner dequeues, passes the Filter and Dedupe gates.
 8. Planner LLM investigates the specific Pod and devises a rollout restart strategy.
 9. Planner validates the strategy and formally proposes it to the Gateway.
-10. Planner forwards the `RemediationProposal` to the Executor.
+10. Planner attaches the `planId` artifact and synchronously dispatches the plan id to the Executor over A2A.
 
 ### Deduped / Suppressed Anomaly
 1. Observer detects a failing Pod.
@@ -199,7 +198,7 @@ sequenceDiagram
 1. Observer detects zero anomalies.
 2. The `AnomalyDedupeStore` notices a previously active anomaly has not been seen for longer than the `DedupeResolutionThreshold`.
 3. The store produces a "Resolved" `AnomalyReport`.
-4. Observer POSTs the "Resolved" batch to the Planner.
+4. Observer sends the "Resolved" batch to the Planner over A2A.
 5. Planner queues and dequeues the batch.
 6. Planner's `FilterExecutor` sees the "Resolved" status and terminates the workflow for that item immediately. No LLM call is made.
 
@@ -208,3 +207,16 @@ sequenceDiagram
 2. Planner's `DedupeGateExecutor` checks the `PlannerDedupeStore`.
 3. The store indicates there is already an active or pending remediation plan proposed for this exact anomaly target in a previous cycle.
 4. The workflow for that anomaly terminates early to prevent the LLM from proposing duplicate, overlapping plans.
+
+### Persistent Anomaly After Terminal Task *(known v1 gap)*
+1. Observer detects a failing Pod and hands it off to Planner (new task, `contextId = AnomalyId`).
+2. Planner proposes a plan, dispatches to Executor.
+3. Executor returns `Rejected` (human denied the approval challenge).
+4. Planner sets the durable task to `Rejected` (terminal).
+5. On the next cycle, Observer detects the same Pod still failing — the anomaly is active and outside its debounce suppression window.
+6. Observer sends a fresh handoff with the same `contextId` (= AnomalyId).
+7. Planner's `PostgresTaskStore` sees `context_id` already exists (`ON CONFLICT DO NOTHING`) and returns a no-op ack.
+8. No new task is created. No new remediation is attempted.
+9. The anomaly remains visible in Observer reports with no closed-loop indication that it was already triaged.
+
+> **Deferred**: the v1 architecture gives each anomaly one remediation attempt. A persistent or recurring anomaly after a terminal task is not re-attempted. The Observer has no `GetTask(contextId)` path to query the Planner's task outcome. The symptom stays visible in Observer reports; re-attempt policy and closed-loop task observability are deferred to later work. See [ADR-0029](../docs/adr/0029-planner-owned-durable-a2a-task-lifecycle.md).

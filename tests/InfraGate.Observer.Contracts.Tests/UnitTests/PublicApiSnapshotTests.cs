@@ -9,7 +9,7 @@ public sealed class PublicApiSnapshotTests
     public void PublicApiMatchesCommittedBaseline()
     {
         var actual = GeneratePublicApi(typeof(AnomalyReport).Assembly);
-        var expected = File.ReadAllText(GetBaselinePath());
+        var expected = File.ReadAllText(GetBaselinePath()).TrimEnd();
 
         Assert.Equal(expected, actual);
     }

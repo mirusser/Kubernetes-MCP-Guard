@@ -76,7 +76,7 @@ profiles:
     planner:
       aspnetcoreUrls: http://0.0.0.0:3004
       gatewayBaseUrl: http://gateway:3001/mcp
-      executorHandoffUrl: http://executor:3005/handoff/proposals
+      executorHandoffUrl: http://executor:3005/a2a/executor
       tokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
       clientId: infra-gate-planner
       clientSecret: planner-secret
@@ -137,7 +137,7 @@ profiles:
     planner:
       aspnetcoreUrls: http://0.0.0.0:3004
       gatewayBaseUrl: http://127.0.0.1:3001/mcp
-      executorHandoffUrl: http://127.0.0.1:3005/handoff/proposals
+      executorHandoffUrl: http://127.0.0.1:3005/a2a/executor
       tokenEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token
       clientId: infra-gate-planner
       clientSecret: planner-secret

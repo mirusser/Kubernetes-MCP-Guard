@@ -96,6 +96,18 @@ internal static class ObserverConventions
         public const string PlannerHandoff = "PlannerHandoff";
     }
 
+    public static class Audit
+    {
+        public const string ServiceObserverSubject = "service:observer";
+
+        public static class Outcomes
+        {
+            public const string Resolved = "resolved";
+            public const string Active = "active";
+            public const string Suppressed = "suppressed";
+        }
+    }
+
     public static class ToolNames
     {
         public const string GetAllowedNamespaces = "get_allowed_namespaces";

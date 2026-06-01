@@ -30,7 +30,7 @@ public sealed class EnvFileRendererTests
             Planner = new PlannerProfile(
                 AspnetcoreUrls: "http://localhost:3004",
                 GatewayBaseUrl: "http://localhost:3001/mcp",
-                ExecutorHandoffUrl: "http://localhost:3005/handoff/proposals",
+                ExecutorHandoffUrl: "http://localhost:3005/a2a/executor",
                 TokenEndpoint: null,
                 ClientId: null,
                 ClientSecret: null,
@@ -51,7 +51,7 @@ public sealed class EnvFileRendererTests
         Assert.Contains("# Planner", result, StringComparison.Ordinal);
         Assert.Contains($"{RunProfileConventions.Env.PlannerAspnetcoreUrls}=http://localhost:3004", result, StringComparison.Ordinal);
         Assert.Contains($"{RunProfileConventions.Env.PlannerGatewayBaseUrl}=http://localhost:3001/mcp", result, StringComparison.Ordinal);
-        Assert.Contains($"{RunProfileConventions.Env.PlannerExecutorHandoffUrl}=http://localhost:3005/handoff/proposals", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.PlannerExecutorHandoffUrl}=http://localhost:3005/a2a/executor", result, StringComparison.Ordinal);
         Assert.Contains($"{RunProfileConventions.Env.PlannerLlmApiKey}=sk-test", result, StringComparison.Ordinal);
     }
 

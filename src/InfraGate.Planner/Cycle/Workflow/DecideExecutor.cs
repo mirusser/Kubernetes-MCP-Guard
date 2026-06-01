@@ -3,6 +3,7 @@ using InfraGate.AgentGuardrails;
 using InfraGate.AgentLlm;
 using InfraGate.Planner.Decision;
 using InfraGate.Planner.Diagnostics;
+using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 
@@ -30,7 +31,7 @@ internal sealed class DecideExecutor( // NOSONAR:S107 — DI constructor; all pa
         IWorkflowContext context,
         CancellationToken cancellationToken = default)
     {
-        var decision = await DecideWithTimeoutAsync(message, cancellationToken).ConfigureAwait(false);
+        RemediationDecision? decision = await DecideWithTimeoutAsync(message, cancellationToken).ConfigureAwait(false);
         if (decision is null) return;
 
         await context.SendMessageAsync(new DecisionContext(message, decision), cancellationToken).ConfigureAwait(false);
@@ -56,10 +57,11 @@ internal sealed class DecideExecutor( // NOSONAR:S107 — DI constructor; all pa
     private async Task<RemediationDecision?> DecideCoreAsync(AnomalyReport message, CancellationToken cancellationToken)
     {
         string anomalyJson = JsonSerializer.Serialize(message, anomalyJsonOptions);
-        var (agent, _) = agentFactory.Create($"planner-{message.AnomalyId[..8]}", systemPrompt, tools,
+        string agentId = $"{PlannerConventions.A2AHandoff.AgentIdPrefix}{message.AnomalyId[..8]}";
+        (AIAgent agent, _) = agentFactory.Create(agentId, systemPrompt, tools,
             maxToolIterations, decisionResponseFormat, guardrailPolicy);
 
-        var response = await agent.RunAsync(anomalyJson, cancellationToken: cancellationToken).ConfigureAwait(false);
+        AgentResponse response = await agent.RunAsync(anomalyJson, cancellationToken: cancellationToken).ConfigureAwait(false);
         string responseText = response.Text ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(responseText)) return null;

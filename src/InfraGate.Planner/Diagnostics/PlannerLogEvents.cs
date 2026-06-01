@@ -46,17 +46,8 @@ internal static partial class PlannerLogEvents
     [LoggerMessage(Level = LogLevel.Warning, Message = "planner.handoff.failed sink={SinkName}: {ErrorMessage}")]
     public static partial void LogHandoffSinkFailed(ILogger logger, string sinkName, string errorMessage, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "planner.handoff.http_failed statusCode={StatusCode}")]
-    public static partial void LogHandoffHttpFailed(ILogger logger, int statusCode);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "planner.observer_channel.send_failed cycleId={CycleId} stage={Stage}")]
-    public static partial void LogProgressSendFailed(ILogger logger, string cycleId, string stage, Exception ex);
-
     [LoggerMessage(Level = LogLevel.Warning, Message = "planner.observer_channel.tool_request_failed cycleId={CycleId} toolName={ToolName}")]
     public static partial void LogToolRequestFailed(ILogger logger, string cycleId, string toolName, Exception ex);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "planner.handoff.http_backpressure: executor returned 429")]
-    public static partial void LogHandoffHttpBackpressure(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "planner.llm.provider provider={Provider} model={Model}")]
     public static partial void LogLlmProviderConfigured(ILogger logger, string provider, string model);
@@ -78,4 +69,7 @@ internal static partial class PlannerLogEvents
 
     [LoggerMessage(Level = LogLevel.Information, Message = "planner.handoff.published cycleId={CycleId} proposalCount={ProposalCount}")]
     public static partial void LogHandoffPublished(ILogger logger, string cycleId, int proposalCount);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Planner task reconciliation failed: taskId={TaskId} contextId={ContextId}")]
+    public static partial void LogTaskReconciliationFailed(ILogger logger, string taskId, string contextId, Exception exception);
 }

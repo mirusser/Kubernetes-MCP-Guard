@@ -7,7 +7,6 @@ internal static class ObserverAuditEvents
     public const string AnomalyResolved = "anomaly.resolved";
     public const string HandoffPublished = "handoff.published";
     public const string HandoffFailed = "handoff.failed";
-    public const string HandoffProgress = "handoff.progress";
     public const string HandoffToolServed = "handoff.tool_served";
     public const string HandoffToolDenied = "handoff.tool_denied";
 
