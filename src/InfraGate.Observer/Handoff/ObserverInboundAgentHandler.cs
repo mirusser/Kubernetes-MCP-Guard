@@ -126,6 +126,11 @@ internal sealed class ObserverInboundAgentHandler(
             ? string.Join("\n", result.Content.OfType<TextContentBlock>().Select(c => c.Text))
             : string.Empty;
 
+        if (!isError)
+            ObserverLogEvents.LogInboundToolServed(logger, request.ToolName, envelope.CycleId ?? string.Empty);
+        else
+            ObserverLogEvents.LogMcpToolError(logger, request.ToolName);
+
         if (auditOutbox is not null)
         {
             await auditOutbox.AppendAsync(

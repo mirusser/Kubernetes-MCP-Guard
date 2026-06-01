@@ -159,11 +159,11 @@ builder.Services.AddSingleton(_ =>
         ObserverConventions.ToolNames.GetAllowedNamespaces,
         ObserverConventions.ToolNames.GetK8sStatus,
         ObserverConventions.ToolNames.GetK8sEvents,
-        ObserverConventions.ToolNames.GetK8sPods,
-        ObserverConventions.ToolNames.DescribeK8sResource,
-        ObserverConventions.ToolNames.GetK8sDeployments,
-        ObserverConventions.ToolNames.GetK8sServices,
-        ObserverConventions.ToolNames.GetK8sEndpoints,
+        ObserverConventions.ToolNames.GetPodLogs,
+        ObserverConventions.ToolNames.GetK8sResource,
+        ObserverConventions.ToolNames.GetDeploymentDiagnostics,
+        ObserverConventions.ToolNames.GetPodDiagnostics,
+        ObserverConventions.ToolNames.GetServiceDiagnostics,
     };
     return new AgentGuardrailPolicy(allowedTools);
 });
@@ -257,7 +257,7 @@ app.UseAuthorization();
 app.MapObserverHealthEndpoint();
 app.MapObserverObserveNowEndpoint();
 #pragma warning disable MEAI001 // Experimental A2A preview package — accepted per plan
-app.MapA2AHttpJson(ObserverConventions.A2AInboundAgentName, ObserverConventions.A2AInboundEndpointPath)
+app.MapA2AJsonRpc(ObserverConventions.A2AInboundAgentName, ObserverConventions.A2AInboundEndpointPath)
    .RequireAuthorization(ObserverConventions.Policies.PlannerSender);
 #pragma warning restore MEAI001
 app.Use(async (context, next) =>

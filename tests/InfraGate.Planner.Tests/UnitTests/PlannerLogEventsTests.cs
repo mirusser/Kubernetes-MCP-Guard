@@ -57,12 +57,14 @@ public sealed class PlannerLogEventsTests
     public void LogHandoffBatchReceived_LogsAtInformationLevel_WithProperties()
     {
         var logger = new CapturingLogger<PlannerLogEventsTests>();
-        PlannerLogEvents.LogHandoffBatchReceived(logger, "cycle-xyz", 4);
+        PlannerLogEvents.LogHandoffBatchReceived(logger, "cycle-xyz", "anomaly-1", "PodUnhealthy", "High", "Active");
 
         Assert.Single(logger.Entries);
         Assert.Equal(LogLevel.Information, logger.Entries[0].Level);
         Assert.Equal("cycle-xyz", logger.Entries[0].Properties["CycleId"]);
-        Assert.Equal(4, logger.Entries[0].Properties["ReportCount"]);
+        Assert.Equal("anomaly-1", logger.Entries[0].Properties["AnomalyId"]);
+        Assert.Equal("PodUnhealthy", logger.Entries[0].Properties["Kind"]);
+        Assert.Equal("High", logger.Entries[0].Properties["Severity"]);
     }
 
     [Fact]

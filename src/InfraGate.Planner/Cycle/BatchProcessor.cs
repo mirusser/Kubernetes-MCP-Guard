@@ -227,9 +227,9 @@ internal sealed class BatchProcessor : BackgroundService
             filterExecs.Add(new FilterExecutor(filterIds[i], dedupeStore, auditOutbox, logger));
             dedupeExecs.Add(new DedupeGateExecutor($"dedupe-{i}", dedupeStore, auditOutbox, logger));
             decideExecs.Add(new DecideExecutor($"decide-{i}", agentFactory, systemPrompt, tools,
-                opts.MaxToolIterations, opts.AnomalyWallClockCapSeconds, timeoutCounter, logger, guardrailPolicy));
+                opts.MaxToolIterations, opts.AnomalyWallClockCapSeconds, timeoutCounter, logger, guardrailPolicy, dedupeStore, auditOutbox));
             validateExecs.Add(new ValidateExecutor($"validate-{i}", batchOperationKeys, dedupeStore,
-                guardrailMetrics, logger));
+                guardrailMetrics, logger, auditOutbox));
             proposeExecs.Add(new ProposeExecutor($"propose-{i}", mcpClient, dedupeStore,
                 auditOutbox, proposeFailedCounter, logger));
         }

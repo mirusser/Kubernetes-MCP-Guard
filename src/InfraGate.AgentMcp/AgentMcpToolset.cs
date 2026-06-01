@@ -54,17 +54,16 @@ internal sealed class AgentMcpToolset(
 
     public async Task<IReadOnlyList<AITool>> GetAgentToolsAsync(CancellationToken cancellationToken)
     {
-        if (mcpClient is null)
+        EnsureConnected();
+        try
         {
-            throw new InvalidOperationException("MCP toolset is not connected. Call ConnectAsync first.");
+            return await ListToolsFilteredAsync(cancellationToken).ConfigureAwait(false);
         }
-
-        var tools = await mcpClient.ListToolsAsync(cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-        return tools
-            .Where(t => t.ProtocolTool.Annotations?.ReadOnlyHint == true)
-            .Cast<AITool>()
-            .ToList();
+        catch (OperationCanceledException ex) when (IsSessionDead(ex, cancellationToken))
+        {
+            await ReconnectAsync(cancellationToken).ConfigureAwait(false);
+            return await ListToolsFilteredAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public async Task<CallToolResult> CallToolAsync(
@@ -72,14 +71,51 @@ internal sealed class AgentMcpToolset(
         IReadOnlyDictionary<string, object?>? arguments,
         CancellationToken cancellationToken)
     {
-        if (mcpClient is null)
+        EnsureConnected();
+        try
         {
+            return await mcpClient!.CallToolAsync(toolName, arguments, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex) when (IsSessionDead(ex, cancellationToken))
+        {
+            await ReconnectAsync(cancellationToken).ConfigureAwait(false);
+            return await mcpClient!.CallToolAsync(toolName, arguments, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private void EnsureConnected()
+    {
+        if (mcpClient is null)
             throw new InvalidOperationException("MCP toolset is not connected. Call ConnectAsync first.");
+    }
+
+    private async Task<IReadOnlyList<AITool>> ListToolsFilteredAsync(CancellationToken cancellationToken)
+    {
+        var tools = await mcpClient!.ListToolsAsync(cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        return tools
+            .Where(t => t.ProtocolTool.Annotations?.ReadOnlyHint == true)
+            .Cast<AITool>()
+            .ToList();
+    }
+
+    private async Task ReconnectAsync(CancellationToken cancellationToken)
+    {
+        if (mcpClient is not null)
+        {
+            try { await mcpClient.DisposeAsync().ConfigureAwait(false); } catch { /* ignore */ }
+            mcpClient = null;
         }
 
-        return await mcpClient.CallToolAsync(toolName, arguments, cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+        await ConnectAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    // True when the OperationCanceledException came from the MCP session's own CTS,
+    // not from the caller — meaning the session is dead and needs to be rebuilt.
+    private static bool IsSessionDead(OperationCanceledException ex, CancellationToken callerToken)
+        => ex.CancellationToken != callerToken && !callerToken.IsCancellationRequested;
 
     public async ValueTask DisposeAsync()
     {

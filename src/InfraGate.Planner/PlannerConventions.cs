@@ -23,17 +23,17 @@ internal static class PlannerConventions
     public const string A2AExecutorAgentName = "planner-to-executor";
     public static readonly TimeSpan ExecutorDispatchTimeout = TimeSpan.FromMinutes(61);
 
-    public const int DefaultAnomalyWallClockCapSeconds = 30;
+    public const int DefaultAnomalyWallClockCapSeconds = 90;
     public const int MinAnomalyWallClockCapSeconds = 5;
-    public const int MaxAnomalyWallClockCapSeconds = 120;
+    public const int MaxAnomalyWallClockCapSeconds = 300;
 
     public const int DefaultBatchWallClockCapSeconds = 300;
     public const int MinBatchWallClockCapSeconds = 30;
     public const int MaxBatchWallClockCapSeconds = 900;
 
-    public const int DefaultMaxToolIterations = 4;
+    public const int DefaultMaxToolIterations = 6;
     public const int MinMaxToolIterations = 1;
-    public const int MaxMaxToolIterations = 10;
+    public const int MaxMaxToolIterations = 15;
 
     public static class EnvironmentVariables
     {

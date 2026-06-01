@@ -107,7 +107,7 @@ app.UseAuthorization();
 
 app.MapExecutorHealthEndpoint();
 #pragma warning disable MEAI001 // Experimental A2A preview package - accepted per plan
-app.MapA2AHttpJson(ExecutorConventions.A2AHandoffAgentName, ExecutorConventions.A2AHandoffEndpointPath)
+app.MapA2AJsonRpc(ExecutorConventions.A2AHandoffAgentName, ExecutorConventions.A2AHandoffEndpointPath)
    .RequireAuthorization(ExecutorConventions.Policies.PlannerSender);
 #pragma warning restore MEAI001
 app.Use(async (context, next) =>

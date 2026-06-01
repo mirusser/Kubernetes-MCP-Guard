@@ -21,11 +21,17 @@ internal sealed class A2AAnomalyHandoffSink(
         {
             foreach (var report in batch.Reports)
             {
+                ObserverLogEvents.LogHandoffA2ASending(
+                    logger, batch.CycleId, report.AnomalyId,
+                    report.Kind.ToString(), report.Severity.ToString(), report.Status.ToString());
+
                 await client.SendAsync(
                     report.AnomalyId,
                     batch with { Reports = [report] },
                     cancellationToken).ConfigureAwait(false);
             }
+
+            ObserverLogEvents.LogHandoffA2ASent(logger, batch.CycleId, batch.Reports.Count);
 
             if (auditOutbox is not null)
                 await EmitHandoffPublishedAsync(batch, cancellationToken).ConfigureAwait(false);

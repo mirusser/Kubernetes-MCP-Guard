@@ -141,7 +141,7 @@ if (!string.IsNullOrEmpty(plannerOptions.ExecutorHandoffUrl))
             new A2AClient(new Uri(plannerOptions.ExecutorHandoffUrl), httpClient),
             name: PlannerConventions.A2AExecutorAgentName);
 #pragma warning restore MEAI001
-        return new A2AExecutorDispatchClient(agent);
+        return new A2AExecutorDispatchClient(agent, sp.GetRequiredService<ILogger<A2AExecutorDispatchClient>>());
     });
 }
 
@@ -256,7 +256,7 @@ app.UseAuthorization();
 
 app.MapPlannerHealthEndpoint();
 #pragma warning disable MEAI001 // Experimental A2A preview package — accepted per plan
-app.MapA2AHttpJson(PlannerConventions.A2AHandoffAgentName, PlannerConventions.A2AHandoffEndpointPath)
+app.MapA2AJsonRpc(PlannerConventions.A2AHandoffAgentName, PlannerConventions.A2AHandoffEndpointPath)
    .RequireAuthorization(PlannerConventions.Policies.ObserverSender);
 #pragma warning restore MEAI001
 app.Use(async (context, next) =>

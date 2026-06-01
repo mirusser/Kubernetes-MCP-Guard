@@ -1,12 +1,10 @@
-using System.Text.Json;
-
 namespace InfraGate.Observer.Tests.UnitTests;
 
 public sealed class SnapshotDocumentSerializationTests
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false,
     };
 
     [Fact]
@@ -14,12 +12,11 @@ public sealed class SnapshotDocumentSerializationTests
     {
         var original = new SnapshotDocument(
             "test-ns",
-            "{\"healthy\":true}",
-            "{\"events\":[]}",
-            "{\"pods\":[...]}",
-            "{\"deployments\":[...]}",
-            "{\"services\":[...]}",
-            "{\"endpoints\":[...]}",
+            new Dictionary<string, string?>
+            {
+                ["get_k8s_status"] = "{\"healthy\":true}",
+                ["get_k8s_events"] = "{\"events\":[]}",
+            },
             DateTimeOffset.UtcNow);
 
         var json = JsonSerializer.Serialize(original, JsonOptions);
@@ -27,30 +24,27 @@ public sealed class SnapshotDocumentSerializationTests
 
         Assert.NotNull(roundTripped);
         Assert.Equal(original.Namespace, roundTripped.Namespace);
-        Assert.Equal(original.StatusJson, roundTripped.StatusJson);
-        Assert.Equal(original.EventsJson, roundTripped.EventsJson);
-        Assert.Equal(original.PodsJson, roundTripped.PodsJson);
+        Assert.Equal("{\"healthy\":true}", roundTripped.ToolResults["get_k8s_status"]);
+        Assert.Equal("{\"events\":[]}", roundTripped.ToolResults["get_k8s_events"]);
     }
 
     [Fact]
-    public void RoundTrip_PartialSnapshot_NullFieldsSurvive()
+    public void RoundTrip_PartialSnapshot_NullValuesSurvive()
     {
         var original = new SnapshotDocument(
             "test-ns",
-            "{}",
-            null,
-            null,
-            null,
-            null,
-            null,
+            new Dictionary<string, string?>
+            {
+                ["get_k8s_status"] = "{}",
+                ["get_k8s_events"] = null,
+            },
             DateTimeOffset.UtcNow);
 
         var json = JsonSerializer.Serialize(original, JsonOptions);
         var roundTripped = JsonSerializer.Deserialize<SnapshotDocument>(json, JsonOptions);
 
         Assert.NotNull(roundTripped);
-        Assert.NotNull(roundTripped.StatusJson);
-        Assert.Null(roundTripped.EventsJson);
-        Assert.Null(roundTripped.PodsJson);
+        Assert.Equal("{}", roundTripped.ToolResults["get_k8s_status"]);
+        Assert.Null(roundTripped.ToolResults["get_k8s_events"]);
     }
 }

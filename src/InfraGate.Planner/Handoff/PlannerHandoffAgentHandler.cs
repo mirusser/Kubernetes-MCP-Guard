@@ -49,7 +49,10 @@ internal sealed class PlannerHandoffAgentHandler(
 
             await eventQueue.EnqueueTaskAsync(task, cancellationToken).ConfigureAwait(false);
 
-            PlannerLogEvents.LogHandoffBatchReceived(logger, batch.CycleId, batch.Reports.Count);
+            var report = batch.Reports[0];
+            PlannerLogEvents.LogHandoffBatchReceived(
+                logger, batch.CycleId, report.AnomalyId,
+                report.Kind.ToString(), report.Severity.ToString(), report.Status.ToString());
 
             if (auditOutbox is not null)
             {

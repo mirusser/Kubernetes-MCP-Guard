@@ -1,7 +1,9 @@
 using System.Diagnostics.Metrics;
 using InfraGate.AgentGuardrails;
 using InfraGate.AgentLlm;
+using InfraGate.Planner.Audit;
 using InfraGate.Planner.Decision;
+using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -19,7 +21,9 @@ internal sealed class DecideExecutor( // NOSONAR:S107 — DI constructor; all pa
     int anomalyWallClockCapSeconds,
     Counter<long>? timeoutCounter,
     ILogger logger,
-    AgentGuardrailPolicy? guardrailPolicy = null) : Executor<AnomalyReport>(id)
+    AgentGuardrailPolicy? guardrailPolicy = null,
+    PlannerDedupeStore? dedupeStore = null,
+    IPlannerAuditOutbox? auditOutbox = null) : Executor<AnomalyReport>(id)
 {
     private static readonly JsonSerializerOptions anomalyJsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -31,26 +35,61 @@ internal sealed class DecideExecutor( // NOSONAR:S107 — DI constructor; all pa
         IWorkflowContext context,
         CancellationToken cancellationToken = default)
     {
-        RemediationDecision? decision = await DecideWithTimeoutAsync(message, cancellationToken).ConfigureAwait(false);
-        if (decision is null) return;
+        var (decision, timedOut) = await DecideWithTimeoutAsync(message, cancellationToken).ConfigureAwait(false);
+        if (decision is null)
+        {
+            var now = DateTimeOffset.UtcNow;
+            dedupeStore?.TrackActivePlan(message.AnomalyId, string.Empty, now,
+                now + PlannerConventions.Dedupe.FailedProposalBackoff);
+
+            if (timedOut)
+            {
+                if (auditOutbox is not null)
+                    await auditOutbox.AppendAsync(
+                        new PlannerAuditEntry(
+                            EventName: PlannerAuditEvents.DecisionTimedOut,
+                            Payload: new { wallClockCapSeconds = anomalyWallClockCapSeconds },
+                            AnomalyId: message.AnomalyId,
+                            ActorSubject: PlannerConventions.Audit.ServicePlannerSubject,
+                            Outcome: PlannerConventions.Audit.Outcomes.Failed,
+                            Reason: "timeout"),
+                        cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                PlannerLogEvents.LogDecisionNoOutput(logger, message.AnomalyId);
+                if (auditOutbox is not null)
+                    await auditOutbox.AppendAsync(
+                        new PlannerAuditEntry(
+                            EventName: PlannerAuditEvents.DecisionNoOutput,
+                            Payload: new { },
+                            AnomalyId: message.AnomalyId,
+                            ActorSubject: PlannerConventions.Audit.ServicePlannerSubject,
+                            Outcome: PlannerConventions.Audit.Outcomes.Failed,
+                            Reason: "no_output"),
+                        cancellationToken).ConfigureAwait(false);
+            }
+            return;
+        }
 
         await context.SendMessageAsync(new DecisionContext(message, decision), cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<RemediationDecision?> DecideWithTimeoutAsync(AnomalyReport message, CancellationToken batchToken)
+    private async Task<(RemediationDecision? Decision, bool TimedOut)> DecideWithTimeoutAsync(AnomalyReport message, CancellationToken batchToken)
     {
         using var anomalyCts = CancellationTokenSource.CreateLinkedTokenSource(batchToken);
         anomalyCts.CancelAfter(TimeSpan.FromSeconds(anomalyWallClockCapSeconds));
 
         try
         {
-            return await DecideCoreAsync(message, anomalyCts.Token).ConfigureAwait(false);
+            var decision = await DecideCoreAsync(message, anomalyCts.Token).ConfigureAwait(false);
+            return (decision, false);
         }
         catch (OperationCanceledException) when (!batchToken.IsCancellationRequested)
         {
             timeoutCounter?.Add(1);
             PlannerLogEvents.LogDecisionTimedOut(logger, message.AnomalyId);
-            return null;
+            return (null, true);
         }
     }
 

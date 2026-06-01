@@ -29,16 +29,20 @@ builder.Services.AddKeyedSingleton<A2AServer>("my-agent", (sp, _) =>
         sp.GetRequiredService<ILoggerFactory>().CreateLogger<A2AServer>()));
 
 // ... after app.Build():
-#pragma warning disable MEAI001 // MapA2AHttpJson is an experimental hosting helper
-app.MapA2AHttpJson("my-agent", "/a2a/my-agent")
+#pragma warning disable MEAI001 // MapA2AJsonRpc is an experimental hosting helper
+app.MapA2AJsonRpc("my-agent", "/a2a/my-agent")
    .RequireAuthorization();
 #pragma warning restore MEAI001
 ```
 
-> `MapA2AHttpJson`/`MapA2AJsonRpc` come from `Microsoft.Agents.AI.Hosting.A2A.AspNetCore` (an
+> `MapA2AJsonRpc`/`MapA2AHttpJson` come from `Microsoft.Agents.AI.Hosting.A2A.AspNetCore` (an
 > `[Experimental("MEAI001")]` helper) — *not* the raw `A2A` SDK, whose AspNetCore package exposes
 > `MapA2A`. They resolve the `A2AServer` registered under the matching keyed name, which is why
 > registering the keyed singleton directly (without `AddA2AServer`) is enough.
+>
+> **Use `MapA2AJsonRpc` when callers use `A2AClient`** (JSON-RPC POST to the base URL).
+> `MapA2AHttpJson` exposes REST sub-routes (`/message:send`, `/tasks/{id}`, etc.) — only use it
+> when callers speak HTTP+JSON REST explicitly.
 
 The handler implements `IAgentHandler`:
 
@@ -90,13 +94,13 @@ Long-running agents should use A2A tasks via `TaskUpdater`, not bare message rep
 The agent-framework can wrap an `AIAgent` into an A2A server declaratively, avoiding manual `IAgentHandler`/`A2AServer` wiring:
 
 ```csharp
-#pragma warning disable MEAI001 // AddA2AServer + AgentRunMode + MapA2AHttpJson are [Experimental]
+#pragma warning disable MEAI001 // AddA2AServer + AgentRunMode + MapA2AJsonRpc are [Experimental]
 builder.AddA2AServer("my-agent", options =>   // NuGet: Microsoft.Agents.AI.Hosting.A2A
 {
     options.AgentRunMode = AgentRunMode.DisallowBackground;
 });
 // Map endpoint (NuGet: Microsoft.Agents.AI.Hosting.A2A.AspNetCore):
-app.MapA2AHttpJson("my-agent", "/a2a/my-agent");
+app.MapA2AJsonRpc("my-agent", "/a2a/my-agent");
 #pragma warning restore MEAI001
 ```
 
@@ -116,7 +120,7 @@ See [`references/SERVER_HOSTING.md`](references/SERVER_HOSTING.md) for `AgentRun
 | Message-only listener | `InfraGate.Executor/Handoff/ExecutorAgentHandler.cs`, `InfraGate.Observer/Handoff/ObserverInboundAgentHandler.cs` |
 | Fire-and-forget caller | `InfraGate.Observer/Handoff/A2APlannerHandoffClient.cs` |
 | Synchronous caller (long timeout) | `InfraGate.Planner/Handoff/A2AExecutorDispatchClient.cs` |
-| Keyed `A2AServer` + JWT/`azp` wiring | `InfraGate.{Observer,Planner,Executor}/Program.cs` |
+| Keyed `A2AServer` + `MapA2AJsonRpc` + JWT/`azp` wiring | `InfraGate.{Observer,Planner,Executor}/Program.cs` |
 | Idempotent task-store interface | `InfraGate.Planner/Tasks/IPlannerTaskStore.cs` |
 
 Test handlers against `InMemoryTaskStore` and assert persisted state via `ITaskStore.GetTaskAsync` — see the `writing-tests` skill.

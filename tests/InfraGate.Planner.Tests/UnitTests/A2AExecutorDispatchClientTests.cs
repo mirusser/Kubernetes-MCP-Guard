@@ -13,7 +13,7 @@ public sealed class A2AExecutorDispatchClientTests
     {
         var a2aClient = new CapturingA2AClient();
 #pragma warning disable MEAI001 // A2AAgent is in the accepted experimental Agent Framework package.
-        var client = new A2AExecutorDispatchClient(new A2AAgent(a2aClient));
+        var client = new A2AExecutorDispatchClient(new A2AAgent(a2aClient), Microsoft.Extensions.Logging.Abstractions.NullLogger<A2AExecutorDispatchClient>.Instance);
 #pragma warning restore MEAI001
 
         var result = await client.DispatchAsync("anomaly-1", "plan-1", CancellationToken.None);

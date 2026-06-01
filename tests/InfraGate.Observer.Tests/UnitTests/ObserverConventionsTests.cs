@@ -103,11 +103,11 @@ public sealed class ObserverConventionsTests
         Assert.Equal("get_allowed_namespaces", ObserverConventions.ToolNames.GetAllowedNamespaces);
         Assert.Equal("get_k8s_status", ObserverConventions.ToolNames.GetK8sStatus);
         Assert.Equal("get_k8s_events", ObserverConventions.ToolNames.GetK8sEvents);
-        Assert.Equal("get_k8s_pods", ObserverConventions.ToolNames.GetK8sPods);
-        Assert.Equal("describe_k8s_resource", ObserverConventions.ToolNames.DescribeK8sResource);
-        Assert.Equal("get_k8s_deployments", ObserverConventions.ToolNames.GetK8sDeployments);
-        Assert.Equal("get_k8s_services", ObserverConventions.ToolNames.GetK8sServices);
-        Assert.Equal("get_k8s_endpoints", ObserverConventions.ToolNames.GetK8sEndpoints);
+        Assert.Equal("get_pod_logs", ObserverConventions.ToolNames.GetPodLogs);
+        Assert.Equal("get_k8s_resource", ObserverConventions.ToolNames.GetK8sResource);
+        Assert.Equal("get_deployment_diagnostics", ObserverConventions.ToolNames.GetDeploymentDiagnostics);
+        Assert.Equal("get_pod_diagnostics", ObserverConventions.ToolNames.GetPodDiagnostics);
+        Assert.Equal("get_service_diagnostics", ObserverConventions.ToolNames.GetServiceDiagnostics);
     }
 
 }

@@ -24,26 +24,26 @@ internal sealed class SnapshotFetcher : ISnapshotFetcher
 
     public async Task<SnapshotDocument> FetchAsync(string namespaceName, CancellationToken cancellationToken)
     {
+        var availableTools = await mcpClient.GetAgentToolsAsync(cancellationToken).ConfigureAwait(false);
+        var availableNames = availableTools.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+
         var arguments = new Dictionary<string, object?>(StringComparer.Ordinal) { ["namespace"] = namespaceName };
 
-        Task<string?> statusTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sStatus, arguments, namespaceName, cancellationToken);
-        Task<string?> eventsTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sEvents, arguments, namespaceName, cancellationToken);
-        Task<string?> podsTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sPods, arguments, namespaceName, cancellationToken);
-        Task<string?> deploymentsTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sDeployments, arguments, namespaceName, cancellationToken);
-        Task<string?> servicesTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sServices, arguments, namespaceName, cancellationToken);
-        Task<string?> endpointsTask = FetchToolSafeAsync(ObserverConventions.ToolNames.GetK8sEndpoints, arguments, namespaceName, cancellationToken);
+        var tasks = ObserverConventions.ToolNames.NamespaceSnapshotTools
+            .Where(availableNames.Contains)
+            .ToDictionary(
+                name => name,
+                name => FetchToolSafeAsync(name, arguments, namespaceName, cancellationToken),
+                StringComparer.Ordinal);
 
-        await Task.WhenAll(statusTask, eventsTask, podsTask, deploymentsTask, servicesTask, endpointsTask).ConfigureAwait(false);
+        await Task.WhenAll(tasks.Values).ConfigureAwait(false);
 
-        return new SnapshotDocument(
-            namespaceName,
-            await statusTask.ConfigureAwait(false),
-            await eventsTask.ConfigureAwait(false),
-            await podsTask.ConfigureAwait(false),
-            await deploymentsTask.ConfigureAwait(false),
-            await servicesTask.ConfigureAwait(false),
-            await endpointsTask.ConfigureAwait(false),
-            DateTimeOffset.UtcNow);
+        var toolResults = tasks.ToDictionary(
+            kv => kv.Key,
+            kv => kv.Value.Result,
+            StringComparer.Ordinal);
+
+        return new SnapshotDocument(namespaceName, toolResults, DateTimeOffset.UtcNow);
     }
 
     private async Task<string?> FetchToolSafeAsync(

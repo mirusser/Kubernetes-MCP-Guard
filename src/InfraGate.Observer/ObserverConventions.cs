@@ -113,12 +113,20 @@ internal static class ObserverConventions
         public const string GetAllowedNamespaces = "get_allowed_namespaces";
         public const string GetK8sStatus = "get_k8s_status";
         public const string GetK8sEvents = "get_k8s_events";
-        public const string GetK8sPods = "get_k8s_pods";
-        public const string DescribeK8sResource = "describe_k8s_resource";
-        public const string GetK8sDeployments = "get_k8s_deployments";
-        public const string GetK8sServices = "get_k8s_services";
-        public const string GetK8sEndpoints = "get_k8s_endpoints";
+        public const string GetPodLogs = "get_pod_logs";
+        public const string GetK8sResource = "get_k8s_resource";
+        public const string GetDeploymentDiagnostics = "get_deployment_diagnostics";
+        public const string GetPodDiagnostics = "get_pod_diagnostics";
+        public const string GetServiceDiagnostics = "get_service_diagnostics";
 
+        // Tools callable with only {namespace} — used by SnapshotFetcher to build the namespace overview.
+        // SnapshotFetcher intersects this set with the live MCP tool list so missing tools are skipped
+        // rather than generating isError=true responses.
+        public static readonly IReadOnlySet<string> NamespaceSnapshotTools = new HashSet<string>(StringComparer.Ordinal)
+        {
+            GetK8sStatus,
+            GetK8sEvents,
+        };
     }
 
     public static class Prompts
