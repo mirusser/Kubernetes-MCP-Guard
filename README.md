@@ -23,9 +23,9 @@
 
 
 ### 📝 TL;DR
-**A security-first bridge between AI agents and Kubernetes, with out-of-band, human-in-the-loop (HITL), plan-based approval for every gateway-exposed mutation.**
+**When something breaks, the system can collect evidence, propose a bounded fix, dry-run it, package it into a reviewable plan, and wait for a human to approve.**
 
-Agents can inspect a narrow cluster surface and propose changes, but writes are staged as server-side dry-run plans and execute only after an OAuth-authenticated human approves the exact review snapshot in a separate browser session.
+It is a security-first bridge between AI agents and Kubernetes, with out-of-band, OAuth-authenticated, human-in-the-loop (HITL), plan-based approval for every gateway-exposed mutation.
 
 <sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments, not production-certified infrastructure.</em></sub>
 
@@ -58,19 +58,13 @@ Kubernetes MCP Guard explores a practical safety pattern for AI-assisted operati
 - **Durable grant model:** an approved Approval Challenge records a Challenge Outcome and issues an Approval Grant consumed by pre-execution gates.
 - **Narrow Kubernetes scope:** namespace allow-lists, namespace-scoped RBAC, supported-kind checks, and bounded read tools keep the operational surface small.
 - **Auditable controls:** guardrail and approval events are written as JSONL streams with identity, digest, grant, and execution context.
-- **Structured multi-agent coordination:** Observer, Planner, and Executor are independent processes that communicate over the [A2A protocol](https://google.github.io/A2A/), each with a separate OAuth service identity and a narrow gateway scope. The Planner owns a durable per-anomaly Task that persists across restarts and enforces one-remediation-per-anomaly without cross-service locking.
+- **Structured multi-agent coordination:** Observer, Planner, and Executor are independent processes (agents) that communicate over the [A2A protocol](https://google.github.io/A2A/) (via `a2a-dotnet`), each with a separate OAuth service identity and a narrow gateway scope. The Planner owns a durable per-anomaly Task that persists across restarts and enforces one-remediation-per-anomaly without cross-service locking.
 
 The repository also separates the generic approval lifecycle from the Kubernetes adapter, so the core language is not tied to one infrastructure domain.
 
 <sub><em>See [CONTEXT.md](CONTEXT.md), [docs/mutation-approval-profile.md](docs/mutation-approval-profile.md), [docs/mutation-approval-flow.md](docs/mutation-approval-flow.md).</em></sub>
 
 ## 🗺️ Architecture
-
-Inter-agent communication uses the [A2A protocol](https://google.github.io/A2A/) (`v1.0.0-preview2` via `a2a-dotnet`)
-
-The Observer notifies the Planner and the Planner dispatches to the Executor synchronously and waits for the outcome. 
- 
- The Planner's internal remediation pipeline is a concurrent DAG built on `Microsoft.Agents.AI.Workflows`, fanning each incoming anomaly through independent Filter → Dedupe → LLM-Decide → Validate → Propose executor chains.
 
 ```mermaid
 ---
@@ -108,6 +102,12 @@ flowchart TB
     agents -->|"Bearer JWT · service identity"| Guard
     ApprovalCore -->|"stdio · service token"| McpServer -->|"KubernetesClient"| K8s
 ```
+
+The Observer notifies the Planner and the Planner dispatches to the Executor synchronously and waits for the outcome. 
+ 
+The Planner's internal remediation pipeline is a concurrent DAG built on `Microsoft.Agents.AI.Workflows`, fanning each incoming anomaly through independent: 
+`Filter → Dedupe → LLM-Decide → Validate → Propose executor chains`.
+
 
 Full request-flow diagrams live in [docs/architecture.md](docs/architecture.md).
 
