@@ -47,14 +47,15 @@ public sealed class DecideExecutor(string id, AIAgent llmAgent) : Executor<TItem
 Terminal executors emit results via `context.YieldOutputAsync`:
 
 ```csharp
+// see InfraGate.Planner/Cycle/Workflow/ProposeExecutor.cs
 [YieldsOutput(typeof(RemediationPlan))]
-public sealed class ProposeExecutor(string id, IToolSet tools) : Executor<TItem>(id)
+public sealed class ProposeExecutor(string id, IAgentMcpToolset tools) : Executor<TItem>(id)
 {
     public override async ValueTask HandleAsync(
         TItem message, IWorkflowContext context, CancellationToken ct)
     {
-        var result = await tools.ProposeAsync(message, ct);
-        await context.YieldOutputAsync(result, ct);
+        var result = await tools.CallToolAsync("propose_plan", message.ToArgs(), ct);
+        await context.YieldOutputAsync(RemediationPlan.From(result), ct);
     }
 }
 ```
@@ -119,7 +120,7 @@ private sealed class BatchIntakeExecutor(string[] targetIds) : Executor<TBatch>(
     {
         for (var i = 0; i < batch.Items.Count; i++)
         {
-            await context.SendMessageAsync(batch.Items[i], targetId: targetIds[i], ct);
+            await context.SendMessageAsync(batch.Items[i], targetId: targetIds[i], cancellationToken: ct);
         }
     }
 }

@@ -2,13 +2,27 @@
 
 ## Task-driven listener with `TaskUpdater`
 
-A handler that creates a durable task, processes in background, and drives state transitions:
+> Mirrors the repo's `InfraGate.Planner/Handoff/PlannerHandoffAgentHandler.cs` (handler) and
+> `InfraGate.Planner/Tasks/PlannerTaskLifecycle.cs` (durable state transitions).
+
+A task-based handler has **two halves**:
+
+1. `ExecuteAsync` runs on the server's event queue and must return quickly — it creates the
+   task idempotently, surfaces it to the caller, and hands the payload to a background worker.
+2. Every state transition *after* `ExecuteAsync` returns goes through a lifecycle helper that
+   owns its **own** queue and persists each event itself.
+
+This split is mandatory. Once `ExecuteAsync` returns, the server calls `Complete()` on the
+queue it gave you (so that queue can no longer deliver events), and every terminal/interrupt
+`TaskUpdater` method (`CompleteAsync`, `RequireAuthAsync`, …) calls `eventQueue.Complete()`
+internally — so a single long-lived updater cannot drive more than one transition.
 
 ```csharp
 #pragma warning disable MEAI001
 public sealed class RemediationAgentHandler(
-    ITaskStore taskStore,
-    ChannelEventNotifier notifier) : IAgentHandler
+    IRemediationTaskStore taskStore,        // ITaskStore + idempotent TryCreateTaskAsync
+    RemediationTaskLifecycle lifecycle,
+    WorkItemQueue workQueue) : IAgentHandler
 {
     public async Task ExecuteAsync(RequestContext context, AgentEventQueue eventQueue, CancellationToken ct)
     {
@@ -20,46 +34,25 @@ public sealed class RemediationAgentHandler(
         {
             Id = context.TaskId,
             ContextId = context.ContextId,
-            Status = new TaskStatus
+            // Qualify: A2A.TaskStatus collides with System.Threading.Tasks.TaskStatus (CS0104).
+            Status = new A2A.TaskStatus
             {
                 State = TaskState.Submitted,
                 Timestamp = DateTimeOffset.UtcNow,
             },
         };
 
-        // Fail fast: if not persisted, WasCreated is false.
-        bool wasCreated = await taskStore.SaveIfNotExistsAsync(context.TaskId, task, ct);
-        if (!wasCreated)
+        // Idempotent create (repo-specific; NOT part of ITaskStore). Returns false when a task
+        // already exists for this contextId — ack and stop.
+        if (!await taskStore.TryCreateTaskAsync(context.TaskId, task, ct))
         {
             await eventQueue.EnqueueMessageAsync(AckMessage(context), ct);
-            return; // idempotent — task already exists for this contextId
+            return;
         }
 
-        // Acknowledge the caller (non-blocking handoff).
+        // Surface the new task to the caller, then hand off to a durable background worker.
         await eventQueue.EnqueueTaskAsync(task, ct);
-        await eventQueue.EnqueueMessageAsync(AckMessage(context), ct);
-
-        // Offload to background processor (not shown: queue/dequeue).
-        _ = ProcessTaskAsync(context.TaskId, context.ContextId, json, ct);
-    }
-
-    private async Task ProcessTaskAsync(string taskId, string contextId, string payload, CancellationToken ct)
-    {
-        var updater = new TaskUpdater(new AgentEventQueue(), taskId, contextId);
-
-        await updater.StartWorkAsync(StatusMessage("planning"), cancellationToken: ct);
-        // ... LLM analysis ...
-        await updater.AddArtifactAsync(
-            [new Part { Text = planId }],
-            artifactId: "plan_reference",
-            name: "Approval Plan",
-            cancellationToken: ct);
-        await updater.RequireAuthAsync(StatusMessage("waiting for approval"), cancellationToken: ct);
-
-        // ... dispatch to executor, wait for result ...
-
-        await updater.CompleteAsync(StatusMessage("applied"), cancellationToken: ct);
-        // Or: updater.FailAsync / updater.RejectAsync
+        workQueue.Enqueue(new WorkItem(context.TaskId, context.ContextId, json));
     }
 
     public Task CancelAsync(RequestContext context, AgentEventQueue eventQueue, CancellationToken ct)
@@ -72,30 +65,98 @@ public sealed class RemediationAgentHandler(
         ContextId = ctx.ContextId,
         Parts = [new Part { Text = "accepted" }],
     };
+}
+#pragma warning restore MEAI001
+```
 
-    private static Message StatusMessage(string domainState) => new()
+The background worker drains `workQueue` and drives the task through its lifecycle. Each call
+is an independent, fully-persisted transition:
+
+```csharp
+async Task ProcessAsync(WorkItem item, CancellationToken ct)
+{
+    await lifecycle.StartWorkAsync(item.TaskId, item.ContextId, ct);                // -> Working
+    string planId = await AnalyzeAsync(item.Payload, ct);
+    await lifecycle.AddPlanArtifactAsync(item.TaskId, item.ContextId, planId, ct);  // artifact
+    await lifecycle.RequireApprovalAsync(item.TaskId, item.ContextId, ct);          // -> AuthRequired
+    // ... dispatch to executor, await result ...
+    await lifecycle.CompleteAsync(item.TaskId, item.ContextId, "applied", ct);      // -> Completed
+    // Or: lifecycle.FailAsync / lifecycle.RejectAsync
+}
+```
+
+The lifecycle helper is the crux: a **fresh** queue + updater per transition, then it drains
+that queue and applies every event to the store under the per-task lock. Without this loop the
+`TaskUpdater` calls persist **nothing** — `TaskUpdater` only *enqueues* events; the server (or,
+here, this helper) is what projects and saves them.
+
+```csharp
+public sealed class RemediationTaskLifecycle(IRemediationTaskStore taskStore, ChannelEventNotifier notifier)
+{
+    public Task StartWorkAsync(string taskId, string contextId, CancellationToken ct) =>
+        ApplyAsync(taskId, contextId, (u, c) => u.StartWorkAsync(Status("planning"), cancellationToken: c), ct);
+
+    public Task AddPlanArtifactAsync(string taskId, string contextId, string planId, CancellationToken ct) =>
+        ApplyAsync(taskId, contextId, (u, c) => u.AddArtifactAsync(
+            [new Part { Text = planId }], artifactId: "plan_reference", name: "Approval Plan", cancellationToken: c), ct);
+
+    public Task RequireApprovalAsync(string taskId, string contextId, CancellationToken ct) =>
+        ApplyAsync(taskId, contextId, (u, c) => u.RequireAuthAsync(Status("waiting for approval"), cancellationToken: c), ct);
+
+    public Task CompleteAsync(string taskId, string contextId, string outcome, CancellationToken ct) =>
+        ApplyAsync(taskId, contextId, (u, c) => u.CompleteAsync(Status(outcome), cancellationToken: c), ct);
+    // FailAsync / RejectAsync follow the same shape.
+
+    private async Task ApplyAsync(
+        string taskId, string contextId,
+        Func<TaskUpdater, CancellationToken, ValueTask> emit, CancellationToken ct)
+    {
+        var eventQueue = new AgentEventQueue();
+        var updater = new TaskUpdater(eventQueue, taskId, contextId);
+
+        await emit(updater, ct);   // enqueues one lifecycle event
+        eventQueue.Complete();
+
+        await foreach (var evt in eventQueue.WithCancellation(ct))
+        {
+            using (await notifier.AcquireTaskLockAsync(taskId, ct))
+            {
+                var current = await taskStore.GetTaskAsync(taskId, ct)
+                    ?? throw new InvalidOperationException($"A2A task '{taskId}' not found.");
+                var updated = TaskProjection.Apply(current, evt)
+                    ?? throw new InvalidOperationException($"A2A task '{taskId}' could not apply its event.");
+                await taskStore.SaveTaskAsync(taskId, updated, ct);
+                notifier.Notify(taskId, evt);
+            }
+        }
+    }
+
+    private static Message Status(string domainState) => new()
     {
         MessageId = Guid.NewGuid().ToString("N"),
         Role = Role.Agent,
         Parts = [new Part { Text = domainState }],
     };
 }
-#pragma warning restore MEAI001
 ```
 
 ### TaskUpdater methods (all return `ValueTask`)
 
 | Method | A2A TaskState | Purpose |
 |---|---|---|
-| `SubmitAsync(msg?, metadata?, ct)` | `Submitted` | Initial handoff |
+| `SubmitAsync(metadata?, ct)` | `Submitted` | Initial handoff (**no message param**) |
 | `StartWorkAsync(msg?, metadata?, ct)` | `Working` | Begin processing |
-| `AddArtifactAsync(parts, artifactId?, name?, ct)` | — | Attach output artifact |
+| `AddArtifactAsync(parts, artifactId?, name?, description?, lastChunk?, append?, metadata?, ct)` | — | Attach output artifact |
 | `RequireAuthAsync(msg?, metadata?, ct)` | `AuthRequired` | Awaiting approval/credentials |
-| `RequireInputAsync(msg?, metadata?, ct)` | `InputRequired` | Awaiting client input |
+| `RequireInputAsync(msg, metadata?, ct)` | `InputRequired` | Awaiting client input (message **required**) |
 | `CompleteAsync(msg?, metadata?, ct)` | `Completed` | Terminal: success |
 | `FailAsync(msg?, metadata?, ct)` | `Failed` | Terminal: error |
 | `RejectAsync(msg?, metadata?, ct)` | `Rejected` | Terminal: rejected |
-| `CancelAsync(msg?, metadata?, ct)` | `Canceled` | Terminal: canceled |
+| `CancelAsync(metadata?, ct)` | `Canceled` | Terminal: canceled (**no message param**) |
+
+> `CompleteAsync`, `FailAsync`, `RejectAsync`, `CancelAsync`, `RequireInputAsync`, and
+> `RequireAuthAsync` call `eventQueue.Complete()` internally — use one queue + updater per
+> transition (see `ApplyAsync` above).
 
 ## Fire-and-forget caller (agent-framework)
 
@@ -139,9 +200,12 @@ public async Task<ExecutorDispatchResult> DispatchAsync(
 For durability across restarts:
 
 ```csharp
-// Override the default InMemoryTaskStore:
+// Override the default InMemoryTaskStore. Register the extended interface so handlers
+// can resolve TryCreateTaskAsync, plus ITaskStore for the SDK:
 var dataSource = NpgsqlDataSource.Create(connectionString);
-builder.Services.AddSingleton<ITaskStore>(new PostgresTaskStore(dataSource));
+var store = new PostgresTaskStore(dataSource);
+builder.Services.AddSingleton<IRemediationTaskStore>(store);  // ITaskStore + TryCreateTaskAsync
+builder.Services.AddSingleton<ITaskStore>(store);
 ```
 
 `PostgresTaskStore` must implement `ITaskStore`:
@@ -150,4 +214,7 @@ builder.Services.AddSingleton<ITaskStore>(new PostgresTaskStore(dataSource));
 - `DeleteTaskAsync(string taskId, CancellationToken)` (optional — SDK never calls this)
 - `ListTasksAsync(ListTasksRequest, CancellationToken)` (supports filtering by `ContextId`, `Status`)
 
-For idempotent "one per contextId", add a UNIQUE constraint on `context_id` and an `INSERT ... ON CONFLICT DO NOTHING` helper — this is not part of the standard `ITaskStore`, so add it to your implementation-specific interface.
+For idempotent "one per contextId", add a UNIQUE constraint on `context_id` and expose an
+`INSERT ... ON CONFLICT DO NOTHING` helper as `TryCreateTaskAsync` on an interface that extends
+`ITaskStore` (the repo's `IPlannerTaskStore` does exactly this). It is **not** part of the
+standard `ITaskStore`.

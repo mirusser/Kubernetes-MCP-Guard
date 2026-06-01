@@ -31,7 +31,7 @@ public interface IAgentHandler
 
 - `RequestContext` provides `TaskId`, `ContextId`, `Message`, `Metadata`.
 - `AgentEventQueue` provides `EnqueueTaskAsync`, `EnqueueStatusUpdateAsync`, `EnqueueArtifactUpdateAsync`, `EnqueueMessageAsync`.
-- `CancelAsync` has a default no-op implementation — only override if your agent supports cancellation.
+- `CancelAsync` has a **default interface implementation that transitions the task to `Canceled`** (via `TaskUpdater.CancelAsync`) — it is *not* a no-op. Override it (e.g. `=> Task.CompletedTask`) to suppress auto-cancel, or to add custom cleanup (abort LLM calls, release resources).
 
 ## `AgentTask` model
 
@@ -52,7 +52,7 @@ public sealed class AgentTask
 
 Properties that do **NOT** exist: `Input`, `CreatedAt`, direct `.State`.
 
-Set task state as: `Status = new TaskStatus { State = TaskState.Submitted, Timestamp = DateTimeOffset.UtcNow }`.
+Set task state as: `Status = new A2A.TaskStatus { State = TaskState.Submitted, Timestamp = DateTimeOffset.UtcNow }`. Qualify `A2A.TaskStatus` — under the implicit `using System.Threading.Tasks` it is ambiguous with `System.Threading.Tasks.TaskStatus` (CS0104).
 
 ## `TaskState` enum
 

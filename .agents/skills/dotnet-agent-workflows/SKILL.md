@@ -91,3 +91,13 @@ await using (run.ConfigureAwait(false))
 - **Guardrails** — inject guardrails into the agent builder to monitor tool usage.
 
 See [`references/EXAMPLES.md`](references/EXAMPLES.md) for filter, output, batch-intake, and fan-out patterns.
+
+## In this repo
+
+| Pattern | Reference implementation |
+|---|---|
+| LLM agent (function invocation, iteration cap, tool-call guardrail) | `InfraGate.AgentLlm/ToolCallingAgentFactory.cs` |
+| Filter / dedupe / decide / validate / propose executors | `InfraGate.Planner/Cycle/Workflow/*.cs` |
+| Batch-intake fan-out + workflow build & run | `InfraGate.Planner/Cycle/BatchProcessor.cs` |
+
+Executors are unit-testable by calling `HandleAsync` with a captured `IWorkflowContext` and asserting the messages/outputs they send — see the `writing-tests` skill.

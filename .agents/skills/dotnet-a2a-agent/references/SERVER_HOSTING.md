@@ -9,7 +9,7 @@ The agent-framework provides a declarative hosting layer that wraps an `AIAgent`
 | `Microsoft.Agents.AI.Hosting.A2A` | `AddA2AServer(agentName)` — wraps `AIAgent` into `A2AServer` |
 | `Microsoft.Agents.AI.Hosting.A2A.AspNetCore` | `MapA2AHttpJson` / `MapA2AJsonRpc` — endpoint mapping |
 
-**Status:** All hosting types are marked `[Experimental]` (`DiagnosticIds.Experiments.AIResponseContinuations`). The raw SDK path is stable.
+**Status:** All hosting types are marked `[Experimental(DiagnosticIds.Experiments.AIResponseContinuations)]`, which resolves to diagnostic ID **`MEAI001`**. Because `[Experimental]` is reported as an *error* by default, suppress it (`#pragma warning disable MEAI001`) around `AddA2AServer`, `AgentRunMode`, and `MapA2AHttpJson`/`MapA2AJsonRpc`. The raw `A2A` SDK path is stable and carries no `[Experimental]` attributes — it needs no suppression.
 
 ## `AddA2AServer` — declarative server registration
 
@@ -24,6 +24,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Register an AIAgent first (e.g., ChatClientAgent)
 builder.Services.AddSingleton<AIAgent>(sp => { /* ... create agent ... */ });
 
+#pragma warning disable MEAI001 // experimental hosting APIs: AddA2AServer, AgentRunMode, MapA2A*
 // Wrap it as an A2A server:
 builder.AddA2AServer("my-agent", options =>
 {
@@ -33,6 +34,7 @@ builder.AddA2AServer("my-agent", options =>
 var app = builder.Build();
 app.MapA2AHttpJson("my-agent", "/a2a/my-agent");
 app.MapA2AJsonRpc("my-agent", "/a2a/my-agent");  // JSON-RPC binding
+#pragma warning restore MEAI001
 await app.RunAsync();
 ```
 
@@ -40,13 +42,14 @@ Under the hood, `AddA2AServer` creates the internal `A2AAgentHandler` (which imp
 
 ## `AgentRunMode` — background execution policy
 
-Controls whether the server accepts background (non-blocking) tasks from callers:
+Controls whether the server accepts background (non-blocking) tasks from callers. `AgentRunMode`
+is a struct with static factory members (not an enum):
 
-| Value | Behavior |
+| Member | Behavior |
 |---|---|
 | `DisallowBackground` | Rejects `return_immediately: true` requests. Callers must request blocking mode. |
 | `AllowBackgroundIfSupported` | Accepts background requests. Handler spawns a Task via `ITaskStore` + notifier to deliver updates after the HTTP response. |
-| `AllowBackgroundWhen(Func<RequestContext, bool>)` | Dynamic decision per request. |
+| `AllowBackgroundWhen(Func<A2ARunDecisionContext, CancellationToken, ValueTask<bool>>)` | Dynamic, per-request decision. |
 
 ## `A2ACardResolver` — agent discovery
 
@@ -57,10 +60,10 @@ var resolver = new A2ACardResolver(new Uri("http://planner:8080"), httpClient);
 AIAgent agent = await resolver.GetAIAgentAsync();
 ```
 
-Or directly from an `AgentCard` object:
+Or directly from an `AgentCard` object (the card overload has **no `name` parameter** — it uses `card.Name`; pass `A2AAgentOptions` to override):
 
 ```csharp
-AIAgent agent = agentCard.AsAIAgent(name: "planner", httpClient: httpClient);
+AIAgent agent = agentCard.AsAIAgent(httpClient: httpClient);
 ```
 
 Both return an `A2AAgent` (message-only) wrapping an `IA2AClient` created from the card's endpoint.
