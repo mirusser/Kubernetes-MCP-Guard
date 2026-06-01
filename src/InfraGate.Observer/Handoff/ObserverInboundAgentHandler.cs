@@ -121,23 +121,32 @@ internal sealed class ObserverInboundAgentHandler(
             return JsonSerializer.Serialize(callErrorPayload);
         }
 
+        return await BuildToolResultResponseAsync(result, request.ToolName, envelope.CycleId, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<string> BuildToolResultResponseAsync(
+        CallToolResult result,
+        string toolName,
+        string? cycleId,
+        CancellationToken cancellationToken)
+    {
         bool isError = result.IsError == true;
         string resultText = result.Content is not null
             ? string.Join("\n", result.Content.OfType<TextContentBlock>().Select(c => c.Text))
             : string.Empty;
 
         if (!isError)
-            ObserverLogEvents.LogInboundToolServed(logger, request.ToolName, envelope.CycleId ?? string.Empty);
+            ObserverLogEvents.LogInboundToolServed(logger, toolName, cycleId ?? string.Empty);
         else
-            ObserverLogEvents.LogMcpToolError(logger, request.ToolName);
+            ObserverLogEvents.LogMcpToolError(logger, toolName);
 
         if (auditOutbox is not null)
         {
             await auditOutbox.AppendAsync(
                 new ObserverAuditEntry(
                     EventName: ObserverAuditEvents.HandoffToolServed,
-                    Payload: new { toolName = request.ToolName, isError },
-                    CycleId: envelope.CycleId,
+                    Payload: new { toolName, isError },
+                    CycleId: cycleId,
                     ActorSubject: ObserverAuditEvents.Subjects.Planner,
                     Outcome: isError ? ObserverAuditEvents.Outcomes.ToolError : ObserverAuditEvents.Outcomes.Served),
                 cancellationToken).ConfigureAwait(false);

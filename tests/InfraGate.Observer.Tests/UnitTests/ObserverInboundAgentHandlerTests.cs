@@ -239,6 +239,137 @@ public sealed class ObserverInboundAgentHandlerTests
         Assert.Equal(0, toolset.CallCount);
     }
 
+    // ── Missing tool request payload ───────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_ToolRequestIntent_NullToolRequest_ReturnsErrorPayload()
+    {
+        var policy = new AgentGuardrailPolicy(new HashSet<string>(StringComparer.Ordinal) { "get_k8s_events" });
+        var handler = CreateHandler(guardrailPolicy: policy);
+        var context = ContextWithEnvelope(new ObserverInboundEnvelope
+        {
+            Intent = ObserverInboundIntents.ToolRequest,
+            CycleId = "cycle-1",
+            ToolRequest = null,
+        });
+
+        var events = await ExecuteAndDrainAsync(handler, context);
+
+        Assert.Single(events);
+        var text = events[0].Message?.Parts.FirstOrDefault()?.Text;
+        Assert.NotNull(text);
+        var payload = JsonSerializer.Deserialize<ToolResponsePayload>(text);
+        Assert.NotNull(payload);
+        Assert.True(payload.IsError);
+        Assert.Contains("missing tool request payload", payload.ResultJson, StringComparison.Ordinal);
+    }
+
+    // ── MCP toolset unavailable ────────────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_ToolRequestIntent_AllowedTool_McpToolsetNull_ReturnsErrorPayload()
+    {
+        var policy = new AgentGuardrailPolicy(new HashSet<string>(StringComparer.Ordinal) { "get_k8s_events" });
+        var handler = CreateHandler(guardrailPolicy: policy, mcpToolset: null);
+        var context = ContextWithEnvelope(new ObserverInboundEnvelope
+        {
+            Intent = ObserverInboundIntents.ToolRequest,
+            CycleId = "cycle-1",
+            ToolRequest = new ToolRequestPayload { ToolName = "get_k8s_events" },
+        });
+
+        var events = await ExecuteAndDrainAsync(handler, context);
+
+        Assert.Single(events);
+        var payload = JsonSerializer.Deserialize<ToolResponsePayload>(
+            events[0].Message?.Parts.FirstOrDefault()?.Text ?? "{}");
+        Assert.NotNull(payload);
+        Assert.True(payload.IsError);
+        Assert.Contains("MCP toolset unavailable", payload.ResultJson, StringComparison.Ordinal);
+    }
+
+    // ── Malformed arguments JSON ───────────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_ToolRequestIntent_MalformedArgumentsJson_ReturnsErrorPayload()
+    {
+        var policy = new AgentGuardrailPolicy(new HashSet<string>(StringComparer.Ordinal) { "get_k8s_events" });
+        var toolset = new CapturingMcpToolset("result");
+        var handler = CreateHandler(mcpToolset: toolset, guardrailPolicy: policy);
+        var context = ContextWithEnvelope(new ObserverInboundEnvelope
+        {
+            Intent = ObserverInboundIntents.ToolRequest,
+            CycleId = "cycle-1",
+            ToolRequest = new ToolRequestPayload
+            {
+                ToolName = "get_k8s_events",
+                ArgumentsJson = "not valid json {{",
+            },
+        });
+
+        var events = await ExecuteAndDrainAsync(handler, context);
+
+        Assert.Single(events);
+        var payload = JsonSerializer.Deserialize<ToolResponsePayload>(
+            events[0].Message?.Parts.FirstOrDefault()?.Text ?? "{}");
+        Assert.NotNull(payload);
+        Assert.True(payload.IsError);
+        Assert.Contains("malformed arguments json", payload.ResultJson, StringComparison.Ordinal);
+    }
+
+    // ── Tool execution throws ──────────────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_ToolRequestIntent_ToolCallThrows_ReturnsErrorPayload()
+    {
+        var policy = new AgentGuardrailPolicy(new HashSet<string>(StringComparer.Ordinal) { "get_k8s_events" });
+        var toolset = new ThrowingMcpToolset(new InvalidOperationException("downstream failure"));
+        var handler = CreateHandler(mcpToolset: toolset, guardrailPolicy: policy);
+        var context = ContextWithEnvelope(new ObserverInboundEnvelope
+        {
+            Intent = ObserverInboundIntents.ToolRequest,
+            CycleId = "cycle-1",
+            ToolRequest = new ToolRequestPayload { ToolName = "get_k8s_events" },
+        });
+
+        var events = await ExecuteAndDrainAsync(handler, context);
+
+        Assert.Single(events);
+        var payload = JsonSerializer.Deserialize<ToolResponsePayload>(
+            events[0].Message?.Parts.FirstOrDefault()?.Text ?? "{}");
+        Assert.NotNull(payload);
+        Assert.True(payload.IsError);
+        Assert.Contains("tool execution failed", payload.ResultJson, StringComparison.Ordinal);
+    }
+
+    // ── Tool result IsError ────────────────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_ToolRequestIntent_ToolReturnsIsError_ReturnsErrorPayload()
+    {
+        var policy = new AgentGuardrailPolicy(new HashSet<string>(StringComparer.Ordinal) { "get_k8s_events" });
+        var toolset = new CapturingMcpToolset("error output", isError: true);
+        var auditOutbox = new CapturingAuditOutbox();
+        var handler = CreateHandler(auditOutbox: auditOutbox, mcpToolset: toolset, guardrailPolicy: policy);
+        var context = ContextWithEnvelope(new ObserverInboundEnvelope
+        {
+            Intent = ObserverInboundIntents.ToolRequest,
+            CycleId = "cycle-1",
+            ToolRequest = new ToolRequestPayload { ToolName = "get_k8s_events" },
+        });
+
+        var events = await ExecuteAndDrainAsync(handler, context);
+
+        Assert.Single(events);
+        var payload = JsonSerializer.Deserialize<ToolResponsePayload>(
+            events[0].Message?.Parts.FirstOrDefault()?.Text ?? "{}");
+        Assert.NotNull(payload);
+        Assert.True(payload.IsError);
+        Assert.Equal("error output", payload.ResultJson);
+        Assert.Single(auditOutbox.Entries);
+        Assert.Equal(ObserverAuditEvents.Outcomes.ToolError, auditOutbox.Entries[0].Outcome);
+    }
+
     // ── CancelAsync ───────────────────────────────────────────────────
 
     [Fact]
@@ -262,7 +393,7 @@ public sealed class ObserverInboundAgentHandlerTests
 
     // ── Fake MCP toolset ─────────────────────────────────────────────
 
-    private sealed class CapturingMcpToolset(string resultText) : IAgentMcpToolset
+    private sealed class CapturingMcpToolset(string resultText, bool isError = false) : IAgentMcpToolset
     {
         public int CallCount { get; private set; }
         public string GatewayBaseUrl => "http://stub";
@@ -281,9 +412,27 @@ public sealed class ObserverInboundAgentHandlerTests
             return Task.FromResult(new CallToolResult
             {
                 Content = [new TextContentBlock { Text = resultText }],
-                IsError = false,
+                IsError = isError,
             });
         }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class ThrowingMcpToolset(Exception exception) : IAgentMcpToolset
+    {
+        public string GatewayBaseUrl => "http://stub";
+        public bool IsConnected => true;
+
+        public Task ConnectAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<IReadOnlyList<AITool>> GetAgentToolsAsync(CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<AITool>>([]);
+
+        public Task<CallToolResult> CallToolAsync(
+            string toolName,
+            IReadOnlyDictionary<string, object?>? arguments,
+            CancellationToken cancellationToken) =>
+            Task.FromException<CallToolResult>(exception);
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

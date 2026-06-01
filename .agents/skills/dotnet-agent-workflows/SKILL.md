@@ -86,9 +86,10 @@ await using (run.ConfigureAwait(false))
 
 - **One executor, one job** — Filter, Validate, LLM, Propose should be separate executors.
 - **Fan-out** — call `SendMessageAsync` multiple times or use `AddFanOutEdge` for concurrent DAG branches.
-- **Early termination** — return without calling `SendMessageAsync` to drop an item.
+- **Early termination** — before returning without `SendMessageAsync`, do any required cleanup first (backoff tracking, audit outbox write). The executor is the last place with full context; callers never see a dropped item.
 - **Terminal results** — use `context.YieldOutputAsync(result, ct)` for outputs collected at workflow end.
 - **Guardrails** — inject guardrails into the agent builder to monitor tool usage.
+- **Side-effectful dependencies** — pass `auditOutbox`, dedup stores, and metrics counters as optional constructor parameters (`= null`). Executors write audit entries and update dedup state on every rejection/drop path, not only on success.
 
 See [`references/EXAMPLES.md`](references/EXAMPLES.md) for filter, output, batch-intake, and fan-out patterns.
 
@@ -97,7 +98,8 @@ See [`references/EXAMPLES.md`](references/EXAMPLES.md) for filter, output, batch
 | Pattern | Reference implementation |
 |---|---|
 | LLM agent (function invocation, iteration cap, tool-call guardrail) | `InfraGate.AgentLlm/ToolCallingAgentFactory.cs` |
-| Filter / dedupe / decide / validate / propose executors | `InfraGate.Planner/Cycle/Workflow/*.cs` |
+| Filter / dedupe / decide / validate / propose executors (with audit + backoff on every rejection path) | `InfraGate.Planner/Cycle/Workflow/*.cs` |
 | Batch-intake fan-out + workflow build & run | `InfraGate.Planner/Cycle/BatchProcessor.cs` |
+| Snapshot fetch → LLM agent → anomaly parse → fan-in aggregate (Observer DAG) | `InfraGate.Observer/Cycle/Workflow/*.cs`, `InfraGate.Observer/Cycle/ObservationCycleRunner.cs` |
 
 Executors are unit-testable by calling `HandleAsync` with a captured `IWorkflowContext` and asserting the messages/outputs they send — see the `writing-tests` skill.

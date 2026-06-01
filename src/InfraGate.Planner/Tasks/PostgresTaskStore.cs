@@ -153,6 +153,10 @@ internal sealed class PostgresTaskStore(NpgsqlDataSource dataSource) : IPlannerT
         var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using (connection.ConfigureAwait(false))
         {
+            // Justification: The whereClause is built from ListTasksRequest properties via
+            // BuildWhereClause using only Dapper parameterized placeholders (@ContextId, @StatusState,
+            // @StatusTimestampAfter). QualifiedTable is a compile-time const string. No user input
+            // is concatenated into the SQL text.
             int totalSize = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 $"select count(*) from {PlannerTaskStoreConventions.QualifiedTable} {whereClause}",
                 parameters,
@@ -160,6 +164,8 @@ internal sealed class PostgresTaskStore(NpgsqlDataSource dataSource) : IPlannerT
 
             parameters.Add("Limit", pageSize);
             parameters.Add("Offset", startIndex);
+            // Justification: Same safe parameterized pattern — whereClause uses only Dapper
+            // placeholders, QualifiedTable is a const, and user input goes through DynamicParameters.
             var rows = await connection.QueryAsync<string>(new CommandDefinition(
                 $"""
                 select task_json
