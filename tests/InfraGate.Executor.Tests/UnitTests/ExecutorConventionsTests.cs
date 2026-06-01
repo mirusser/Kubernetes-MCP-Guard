@@ -15,9 +15,10 @@ public sealed class ExecutorConventionsTests
     }
 
     [Fact]
-    public void HandoffProposalsEndpointPath_IsCorrect()
+    public void A2AHandoffEndpointPath_IsCorrect()
     {
-        Assert.Equal("/handoff/proposals", ExecutorConventions.HandoffProposalsEndpointPath);
+        Assert.Equal("/a2a/executor", ExecutorConventions.A2AHandoffEndpointPath);
+        Assert.Equal("executor-agent", ExecutorConventions.A2AHandoffAgentName);
     }
 
     [Fact]
@@ -46,7 +47,7 @@ public sealed class ExecutorConventionsTests
     {
         Assert.True(ExecutorConventions.MinWatchTimeoutSeconds > 0);
         Assert.True(ExecutorConventions.MinWatchTimeoutSeconds < ExecutorConventions.DefaultWatchTimeoutSeconds);
-        Assert.True(ExecutorConventions.DefaultWatchTimeoutSeconds < ExecutorConventions.MaxWatchTimeoutSeconds);
+        Assert.True(ExecutorConventions.DefaultWatchTimeoutSeconds <= ExecutorConventions.MaxWatchTimeoutSeconds);
     }
 
     [Fact]

@@ -49,7 +49,8 @@ public sealed class ObservationCycleRunnerTests
         var snapshotFetcher = Substitute.For<ISnapshotFetcher>();
         snapshotFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new SnapshotDocument(
-                "default", "{}", "{}", "{}", "{}", "{}", "{}",
+                "default",
+                new Dictionary<string, string?> { ["get_k8s_status"] = "{}", ["get_k8s_events"] = "{}" },
                 DateTimeOffset.UtcNow)));
 
         var promptLibrary = BuildTestPromptLibrary();
@@ -256,7 +257,7 @@ public sealed class ObservationCycleRunnerTests
             {
                 var ct = callInfo.Arg<CancellationToken>();
                 await Task.Delay(2000, ct);
-                return new SnapshotDocument("default", "{}", "{}", "{}", "{}", "{}", "{}", DateTimeOffset.UtcNow);
+                return new SnapshotDocument("default", new Dictionary<string, string?> { ["get_k8s_status"] = "{}", ["get_k8s_events"] = "{}" }, DateTimeOffset.UtcNow);
             });
 
         var promptLibrary = BuildTestPromptLibrary();
@@ -380,7 +381,8 @@ public sealed class ObservationCycleRunnerTests
         var snapshotFetcher = Substitute.For<ISnapshotFetcher>();
         snapshotFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new SnapshotDocument(
-                "default", "{}", "{}", "{}", "{}", "{}", "{}",
+                "default",
+                new Dictionary<string, string?> { ["get_k8s_status"] = "{}", ["get_k8s_events"] = "{}" },
                 DateTimeOffset.UtcNow)));
 
         var promptLibrary = BuildTestPromptLibrary();
@@ -433,7 +435,8 @@ public sealed class ObservationCycleRunnerTests
         var snapshotFetcher = Substitute.For<ISnapshotFetcher>();
         snapshotFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new SnapshotDocument(
-                "default", "{}", "{}", "{}", "{}", "{}", "{}",
+                "default",
+                new Dictionary<string, string?> { ["get_k8s_status"] = "{}", ["get_k8s_events"] = "{}" },
                 DateTimeOffset.UtcNow)));
 
         var promptLibrary = BuildTestPromptLibrary();
@@ -569,7 +572,7 @@ public sealed class ObservationCycleRunnerTests
             {
                 var ct = callInfo.Arg<CancellationToken>();
                 await Task.Delay(2000, ct);
-                return new SnapshotDocument("default", "{}", "{}", "{}", "{}", "{}", "{}", DateTimeOffset.UtcNow);
+                return new SnapshotDocument("default", new Dictionary<string, string?> { ["get_k8s_status"] = "{}", ["get_k8s_events"] = "{}" }, DateTimeOffset.UtcNow);
             });
 
         var promptLibrary = BuildTestPromptLibrary();
@@ -639,7 +642,8 @@ public sealed class ObservationCycleRunnerTests
         var snapshotFetcher = Substitute.For<ISnapshotFetcher>();
         snapshotFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new SnapshotDocument(
-                "default", "{}", "{}", "{}", "{}", "{}", "{}",
+                "default",
+                new Dictionary<string, string?> { ["get_k8s_status"] = "{}", ["get_k8s_events"] = "{}" },
                 DateTimeOffset.UtcNow)));
 
         var promptLibrary = BuildTestPromptLibrary();
@@ -715,7 +719,7 @@ public sealed class ObservationCycleRunnerTests
             {
                 var ct = callInfo.Arg<CancellationToken>();
                 await Task.Delay(2000, ct);
-                return new SnapshotDocument("default", "{}", "{}", "{}", "{}", "{}", "{}", DateTimeOffset.UtcNow);
+                return new SnapshotDocument("default", new Dictionary<string, string?> { ["get_k8s_status"] = "{}", ["get_k8s_events"] = "{}" }, DateTimeOffset.UtcNow);
             });
 
         var promptLibrary = BuildTestPromptLibrary();

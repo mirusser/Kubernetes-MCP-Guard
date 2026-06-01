@@ -7,11 +7,14 @@ using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
 using System.Net;
 using System.Text.Json;
+using A2A;
 using InfraGate.AgentLlm;
 using InfraGate.AgentMcp;
 using InfraGate.ClientCredentials;
 using InfraGate.Planner.Cycle;
 using InfraGate.Planner.Diagnostics;
+using InfraGate.Planner.Handoff;
+using InfraGate.Planner.Tasks;
 using InfraGate.Prompts;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -51,6 +54,57 @@ public sealed class PlannerGatewayIntegrationTests
         Assert.Equal(batch.CycleId, published.CycleId);
         var proposal = Assert.Single(published.Proposals);
         Assert.Equal(PlannerGatewayFixture.FakePlanId, proposal.PlanId);
+    }
+
+    [Theory]
+    [InlineData(ExecutorDispatchStatuses.Applied, TaskState.Completed)]
+    [InlineData(ExecutorDispatchStatuses.Failed, TaskState.Failed)]
+    [InlineData(ExecutorDispatchStatuses.Rejected, TaskState.Rejected)]
+    public async Task ProcessTaskAsync_FailingDeploymentFixture_MapsExecutorOutcome(
+        string executorStatus,
+        TaskState expectedTaskState)
+    {
+        await using var gateway = PlannerGatewayFixture.Create();
+        await using var mcpClient = await gateway.CreatePlannerClientAsync();
+
+        var anomaly = CreateDeploymentUnavailableAnomaly("nginx-demo");
+        var batch = CreateBatch(anomaly);
+        var store = new InMemoryPlannerTaskStore();
+        await store.TryCreateTaskAsync(
+            "task-1",
+            new AgentTask
+            {
+                Id = "task-1",
+                ContextId = anomaly.AnomalyId,
+                Status = new A2A.TaskStatus
+                {
+                    State = TaskState.Submitted,
+                    Timestamp = DateTimeOffset.UtcNow,
+                },
+            },
+            CancellationToken.None);
+        var lifecycle = new PlannerTaskLifecycle(store, new ChannelEventNotifier());
+        var executorDispatchClient = new CapturingExecutorDispatchClient(executorStatus);
+        var processor = CreateProcessor(
+            mcpClient,
+            CreateRestartDeploymentChatClient("nginx-demo", NamespaceName),
+            new CapturingRemediationProposalSink(),
+            taskLifecycle: lifecycle,
+            executorDispatchClient: executorDispatchClient);
+
+        await processor.ProcessTaskAsync(
+            new PlannerTaskWorkItem("task-1", anomaly.AnomalyId, batch),
+            CancellationToken.None);
+
+        var task = await store.GetTaskAsync("task-1", CancellationToken.None);
+        Assert.Equal(expectedTaskState, task!.Status.State);
+        Assert.Equal(executorStatus, task.Status.Message!.Parts.Single().Text);
+        var artifact = Assert.Single(task.Artifacts!);
+        Assert.Equal(PlannerTaskStoreConventions.Artifacts.PlanReferenceId, artifact.ArtifactId);
+        Assert.Equal(PlannerGatewayFixture.FakePlanId, Assert.Single(artifact.Parts).Text);
+        Assert.Equal(
+            (anomaly.AnomalyId, PlannerGatewayFixture.FakePlanId),
+            Assert.Single(executorDispatchClient.Calls));
     }
 
     [Fact]
@@ -158,7 +212,9 @@ public sealed class PlannerGatewayIntegrationTests
         IAgentMcpToolset mcpClient,
         FixtureChatClient chatClientFactory,
         IRemediationProposalSink sink,
-        PlannerDedupeStore? dedupeStore = null)
+        PlannerDedupeStore? dedupeStore = null,
+        PlannerTaskLifecycle? taskLifecycle = null,
+        IExecutorDispatchClient? executorDispatchClient = null)
     {
         var options = new PlannerOptions
         {
@@ -177,7 +233,9 @@ public sealed class PlannerGatewayIntegrationTests
             sink,
             NullLogger<BatchProcessor>.Instance,
             BuildTestPromptLibrary(),
-            dedupeStore);
+            dedupeStore,
+            taskLifecycle: taskLifecycle,
+            executorDispatchClient: executorDispatchClient);
     }
 
     private static FixtureChatClient CreateRestartDeploymentChatClient(string name, string ns)
@@ -504,6 +562,20 @@ public sealed class PlannerGatewayIntegrationTests
         {
             Batches.Add(batch);
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class CapturingExecutorDispatchClient(string status) : IExecutorDispatchClient
+    {
+        public List<(string ContextId, string PlanId)> Calls { get; } = [];
+
+        public Task<ExecutorDispatchResult> DispatchAsync(
+            string contextId,
+            string planId,
+            CancellationToken cancellationToken)
+        {
+            Calls.Add((contextId, planId));
+            return Task.FromResult(new ExecutorDispatchResult { Status = status, Detail = status });
         }
     }
 

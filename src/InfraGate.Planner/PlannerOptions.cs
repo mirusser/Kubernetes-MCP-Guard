@@ -11,6 +11,7 @@ public sealed record class PlannerOptions
     public string LlmModel { get; init; } = string.Empty;
     public string LlmApiKey { get; init; } = string.Empty;
     public string FileSinkRoot { get; init; } = string.Empty;
+    public string ObserverBaseUrl { get; init; } = string.Empty;
 
     public void Validate()
     {

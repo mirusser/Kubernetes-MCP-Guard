@@ -15,9 +15,15 @@ public sealed class PlannerConventionsTests
     }
 
     [Fact]
-    public void HandoffAnomaliesEndpointPath_IsSlashHandoffAnomalies()
+    public void A2AHandoffEndpointPath_IsSlashA2APlanner()
     {
-        Assert.Equal("/handoff/anomalies", PlannerConventions.HandoffAnomaliesEndpointPath);
+        Assert.Equal("/a2a/planner", PlannerConventions.A2AHandoffEndpointPath);
+    }
+
+    [Fact]
+    public void A2AHandoffAgentName_IsPlannerAgent()
+    {
+        Assert.Equal("planner-agent", PlannerConventions.A2AHandoffAgentName);
     }
 
     [Fact]
@@ -191,6 +197,8 @@ public sealed class PlannerConventionsTests
     public void HttpClients_ExecutorHandoff_IsPinned()
     {
         Assert.Equal("ExecutorHandoff", PlannerConventions.HttpClients.ExecutorHandoff);
+        Assert.Equal("planner-to-executor", PlannerConventions.A2AExecutorAgentName);
+        Assert.True(PlannerConventions.ExecutorDispatchTimeout > TimeSpan.FromHours(1));
     }
 
     [Fact]

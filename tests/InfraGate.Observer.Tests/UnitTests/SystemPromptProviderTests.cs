@@ -104,11 +104,11 @@ public sealed class SystemPromptProviderTests
             ObserverConventions.ToolNames.GetAllowedNamespaces,
             ObserverConventions.ToolNames.GetK8sStatus,
             ObserverConventions.ToolNames.GetK8sEvents,
-            ObserverConventions.ToolNames.GetK8sPods,
-            ObserverConventions.ToolNames.DescribeK8sResource,
-            ObserverConventions.ToolNames.GetK8sDeployments,
-            ObserverConventions.ToolNames.GetK8sServices,
-            ObserverConventions.ToolNames.GetK8sEndpoints,
+            ObserverConventions.ToolNames.GetPodLogs,
+            ObserverConventions.ToolNames.GetK8sResource,
+            ObserverConventions.ToolNames.GetDeploymentDiagnostics,
+            ObserverConventions.ToolNames.GetPodDiagnostics,
+            ObserverConventions.ToolNames.GetServiceDiagnostics,
         ];
         foreach (var toolName in readOnlyToolNames)
         {

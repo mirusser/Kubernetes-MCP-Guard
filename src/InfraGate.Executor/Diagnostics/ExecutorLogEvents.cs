@@ -16,12 +16,6 @@ internal static partial class ExecutorLogEvents
     [LoggerMessage(Level = LogLevel.Error, Message = "Executor health check failed")]
     public static partial void LogHealthCheckFailed(ILogger logger, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Handoff batch received: cycleId={CycleId} proposals={ProposalCount}")]
-    public static partial void LogHandoffBatchReceived(ILogger logger, string cycleId, int proposalCount);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Executor handoff rejected: concurrency cap reached for cycleId={CycleId} proposals={ProposalCount}")]
-    public static partial void LogHandoffCapacityRejected(ILogger logger, string cycleId, int proposalCount);
-
     [LoggerMessage(Level = LogLevel.Information, Message = "executor.watch.started planId={PlanId}")]
     public static partial void LogWatchStarted(ILogger logger, string planId);
 

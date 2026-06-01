@@ -16,8 +16,11 @@ internal static partial class PlannerLogEvents
     [LoggerMessage(Level = LogLevel.Error, Message = "Planner health check failed")]
     public static partial void LogHealthCheckFailed(ILogger logger, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Handoff batch received: cycleId={CycleId} reports={ReportCount}")]
-    public static partial void LogHandoffBatchReceived(ILogger logger, string cycleId, int reportCount);
+    [LoggerMessage(Level = LogLevel.Information, Message = "planner.handoff.received cycleId={CycleId} anomalyId={AnomalyId} kind={Kind} severity={Severity} status={Status}")]
+    public static partial void LogHandoffBatchReceived(ILogger logger, string cycleId, string anomalyId, string kind, string severity, string status);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "planner.handoff.backpressure: batch queue full, dropped cycleId={CycleId}")]
+    public static partial void LogHandoffBatchBackpressure(ILogger logger, string cycleId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Planner rejected remediation decision for anomaly {AnomalyId}: unsupported operation {OperationType}")]
     public static partial void LogDecisionInvalidOperation(ILogger logger, string anomalyId, string operationType);
@@ -27,6 +30,9 @@ internal static partial class PlannerLogEvents
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Planner decision timed out for anomaly {AnomalyId}")]
     public static partial void LogDecisionTimedOut(ILogger logger, string anomalyId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "planner.decision.no_output anomalyId={AnomalyId}: LLM returned no actionable decision; applying backoff")]
+    public static partial void LogDecisionNoOutput(ILogger logger, string anomalyId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Planner propose_plan failed for anomaly {AnomalyId}")]
     public static partial void LogProposePlanFailed(ILogger logger, string anomalyId, Exception exception);
@@ -43,11 +49,23 @@ internal static partial class PlannerLogEvents
     [LoggerMessage(Level = LogLevel.Warning, Message = "planner.handoff.failed sink={SinkName}: {ErrorMessage}")]
     public static partial void LogHandoffSinkFailed(ILogger logger, string sinkName, string errorMessage, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "planner.handoff.http_failed statusCode={StatusCode}")]
-    public static partial void LogHandoffHttpFailed(ILogger logger, int statusCode);
+    [LoggerMessage(Level = LogLevel.Information, Message = "planner.observer_channel.tool_request_sent cycleId={CycleId} toolName={ToolName}")]
+    public static partial void LogToolRequestSent(ILogger logger, string cycleId, string toolName);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "planner.handoff.http_backpressure: executor returned 429")]
-    public static partial void LogHandoffHttpBackpressure(ILogger logger);
+    [LoggerMessage(Level = LogLevel.Information, Message = "planner.observer_channel.tool_response_received cycleId={CycleId} toolName={ToolName} isError={IsError}")]
+    public static partial void LogToolResponseReceived(ILogger logger, string cycleId, string toolName, bool isError);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "planner.observer_channel.tool_request_failed cycleId={CycleId} toolName={ToolName}")]
+    public static partial void LogToolRequestFailed(ILogger logger, string cycleId, string toolName, Exception ex);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "planner.executor.dispatch_sent contextId={ContextId} planId={PlanId}")]
+    public static partial void LogExecutorDispatchSent(ILogger logger, string contextId, string planId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "planner.executor.dispatch_result contextId={ContextId} planId={PlanId} outcome={Outcome}")]
+    public static partial void LogExecutorDispatchResult(ILogger logger, string contextId, string planId, string outcome);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "planner.executor.dispatch_failed contextId={ContextId} planId={PlanId}")]
+    public static partial void LogExecutorDispatchFailed(ILogger logger, string contextId, string planId, Exception ex);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "planner.llm.provider provider={Provider} model={Model}")]
     public static partial void LogLlmProviderConfigured(ILogger logger, string provider, string model);
@@ -69,4 +87,7 @@ internal static partial class PlannerLogEvents
 
     [LoggerMessage(Level = LogLevel.Information, Message = "planner.handoff.published cycleId={CycleId} proposalCount={ProposalCount}")]
     public static partial void LogHandoffPublished(ILogger logger, string cycleId, int proposalCount);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Planner task reconciliation failed: taskId={TaskId} contextId={ContextId}")]
+    public static partial void LogTaskReconciliationFailed(ILogger logger, string taskId, string contextId, Exception exception);
 }

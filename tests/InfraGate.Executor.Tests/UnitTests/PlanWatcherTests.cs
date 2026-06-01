@@ -2,7 +2,6 @@ using System.Diagnostics.Metrics;
 using System.Text.Json;
 using InfraGate.Executor.Diagnostics;
 using InfraGate.Executor.Mcp;
-using InfraGate.Executor.Queue;
 using InfraGate.Executor.Watch;
 using InfraGate.Remediation.Contracts;
 using Microsoft.Extensions.Logging;
@@ -29,12 +28,12 @@ public sealed class PlanWatcherTests
                 Arg.Any<CancellationToken>())
             .Returns("""{"isError":true,"content":[{"text":"Pre-execution gate rejected the plan."}]}""");
         var proposal = CreateProposal("plan-blocked");
-        var (watcher, queue) = CreateWatcher(mcpClient, logger, meter);
+        var watcher = CreateWatcher(mcpClient, logger, meter);
         using var probe = ListenForCounter(meter, ExecutorMetrics.ExecuteBlockedCounterName);
-        queue.TryEnqueueAll([proposal]);
 
-        await watcher.WatchPlanAsync(proposal, CancellationToken.None);
+        var result = await watcher.WatchPlanAsync(proposal, CancellationToken.None);
 
+        Assert.Equal(ExecutorDispatchStatuses.Failed, result.Status);
         Assert.Single(probe.Measurements);
         Assert.Equal(1L, probe.Measurements[0].Value);
         Assert.Contains(logger.Entries, e =>
@@ -59,11 +58,11 @@ public sealed class PlanWatcherTests
                 Arg.Any<CancellationToken>())
             .Returns("""{"isError":true}""");
         var proposal = CreateProposal("plan-gated");
-        var (watcher, queue) = CreateWatcher(mcpClient, meter: meter);
-        queue.TryEnqueueAll([proposal]);
+        var watcher = CreateWatcher(mcpClient, meter: meter);
 
-        await watcher.WatchPlanAsync(proposal, CancellationToken.None);
+        var result = await watcher.WatchPlanAsync(proposal, CancellationToken.None);
 
+        Assert.Equal(ExecutorDispatchStatuses.Failed, result.Status);
         Assert.Empty(probe.Measurements);
     }
 
@@ -84,12 +83,12 @@ public sealed class PlanWatcherTests
                 Arg.Any<CancellationToken>())
             .Returns("""{"status":"Applied"}""");
         var proposal = CreateProposal("plan-ok");
-        var (watcher, queue) = CreateWatcher(mcpClient, logger, meter);
+        var watcher = CreateWatcher(mcpClient, logger, meter);
         using var probe = ListenForCounter(meter, ExecutorMetrics.ExecuteSucceededCounterName);
-        queue.TryEnqueueAll([proposal]);
 
-        await watcher.WatchPlanAsync(proposal, CancellationToken.None);
+        var result = await watcher.WatchPlanAsync(proposal, CancellationToken.None);
 
+        Assert.Equal(ExecutorDispatchStatuses.Applied, result.Status);
         Assert.Single(probe.Measurements);
         Assert.Equal(1L, probe.Measurements[0].Value);
         Assert.Contains(logger.Entries, e =>
@@ -112,13 +111,13 @@ public sealed class PlanWatcherTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromException<string>(new HttpRequestException("gateway down")));
         var proposal = CreateProposal("plan-fail");
-        var (watcher, queue) = CreateWatcher(mcpClient, meter: meter);
+        var watcher = CreateWatcher(mcpClient, meter: meter);
         using var failedProbe = ListenForCounter(meter, ExecutorMetrics.ExecuteFailedCounterName);
         using var blockedProbe = ListenForCounter(meter, ExecutorMetrics.ExecuteBlockedCounterName);
-        queue.TryEnqueueAll([proposal]);
 
-        await watcher.WatchPlanAsync(proposal, CancellationToken.None);
+        var result = await watcher.WatchPlanAsync(proposal, CancellationToken.None);
 
+        Assert.Equal(ExecutorDispatchStatuses.Failed, result.Status);
         Assert.Single(failedProbe.Measurements);
         Assert.Empty(blockedProbe.Measurements);
     }
@@ -130,18 +129,18 @@ public sealed class PlanWatcherTests
         var dedupeStore = Substitute.For<IExecutorDedupeStore>();
         dedupeStore.TryTrack(Arg.Any<string>()).Returns(false);
         var proposal = CreateProposal("plan-tracked");
-        var (watcher, queue) = CreateWatcher(mcpClient, dedupeStore: dedupeStore);
-        queue.TryEnqueueAll([proposal]);
+        var watcher = CreateWatcher(mcpClient, dedupeStore: dedupeStore);
 
-        await watcher.WatchPlanAsync(proposal, CancellationToken.None);
+        var result = await watcher.WatchPlanAsync(proposal, CancellationToken.None);
 
+        Assert.Equal(ExecutorDispatchStatuses.Failed, result.Status);
         await mcpClient.DidNotReceive().CallToolAsync(
             Arg.Any<string>(),
             Arg.Any<IReadOnlyDictionary<string, object?>?>(),
             Arg.Any<CancellationToken>());
     }
 
-    private static (PlanWatcher Watcher, ProposalQueue Queue) CreateWatcher(
+    private static PlanWatcher CreateWatcher(
         IExecutorMcpClient mcpClient,
         ILogger<PlanWatcher>? logger = null,
         Meter? meter = null,
@@ -155,16 +154,12 @@ public sealed class PlanWatcherTests
         });
         var optionsMonitor = Substitute.For<IOptionsMonitor<ExecutorOptions>>();
         optionsMonitor.CurrentValue.Returns(options.Value);
-        var queue = new ProposalQueue(options);
-        return (
-            new PlanWatcher(
-                queue,
-                dedupeStore ?? new ExecutorDedupeStore(),
-                mcpClient,
-                optionsMonitor,
-                logger ?? new CapturingLogger<PlanWatcher>(),
-                meter),
-            queue);
+        return new PlanWatcher(
+            dedupeStore ?? new ExecutorDedupeStore(),
+            mcpClient,
+            optionsMonitor,
+            logger ?? new CapturingLogger<PlanWatcher>(),
+            meter);
     }
 
     [Theory]

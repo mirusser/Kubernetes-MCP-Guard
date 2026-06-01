@@ -13,8 +13,11 @@
     <InternalsVisibleTo Include="InfraGate.Remediation.E2E.Tests" />
     <InternalsVisibleTo Include="InfraGate.Safety.E2E.Tests" />
     <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+    <PackageReference Include="Dapper" Version="2.1.79" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.8" />
     <PackageReference Include="Microsoft.Agents.AI" Version="1.8.0" />
+    <PackageReference Include="Microsoft.Agents.AI.A2A" Version="1.8.0-preview.260528.1" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting.A2A.AspNetCore" Version="1.8.0-preview.260528.1" />
     <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.8.0" />
     <PackageReference Include="Microsoft.Extensions.AI" Version="10.6.0" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.6.0" />
@@ -24,6 +27,9 @@
 
   <ItemGroup>
     <Content Include="Migrations\*.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Tasks\Migrations\*.sql">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <EmbeddedResource Include="Prompts\PlannerSystemPrompt.md" />

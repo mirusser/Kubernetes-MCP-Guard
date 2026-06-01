@@ -29,6 +29,8 @@ Use this skill when you need to get oriented in `k8s-toolkit`, start a broad inv
    | `code-standards` | Code edits, reviews, refactors, convention work |
    | `writing-tests` | Adding or modifying tests, or tasks involving internal types |
    | `tdd` | Feature or bugfix work requiring test-first discipline |
+   | `dotnet-a2a-agent` | Implementing A2A listeners/callers, task lifecycle, or agent handlers |
+   | `dotnet-agent-workflows` | Building LLM agents (AIFunction tools) or DAG executor workflows |
    | `infragate-mcp-gateway` | Kubernetes or local MCP gateway inspection and guarded changes |
    | `verify-readme-docs` | README audits or documentation refreshes |
    | `review-mutation-approval-flow` | Mutation-approval glossary, flow diagrams, relationship table, profile sketch, ADR consistency |

@@ -12,8 +12,6 @@ internal sealed class DedupeGateExecutor(
     IPlannerAuditOutbox? auditOutbox,
     ILogger logger) : Executor<AnomalyReport>(id)
 {
-    private const string ServicePlannerSubject = "service:planner";
-
     public override async ValueTask HandleAsync(
         AnomalyReport message,
         IWorkflowContext context,
@@ -29,8 +27,8 @@ internal sealed class DedupeGateExecutor(
                         EventName: PlannerAuditEvents.ProposalSkipped,
                         Payload: new { reasonCode = PlannerConventions.FilterDropReasons.DedupeActivePlan },
                         AnomalyId: message.AnomalyId,
-                        ActorSubject: ServicePlannerSubject,
-                        Outcome: "skipped",
+                        ActorSubject: PlannerConventions.Audit.ServicePlannerSubject,
+                        Outcome: PlannerConventions.Audit.Outcomes.Skipped,
                         Reason: PlannerConventions.FilterDropReasons.DedupeActivePlan),
                     cancellationToken).ConfigureAwait(false);
             }

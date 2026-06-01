@@ -396,34 +396,33 @@ internal sealed class PostgresApprovalPersistence(
         var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using (connection.ConfigureAwait(false))
         {
-            var command = connection.CreateCommand();
+            var command = new NpgsqlCommand(
+                """
+                select c.challenge_id,
+                       c.plan_id,
+                       c.pending_plan_hash,
+                       c.requester_subject,
+                       c.requester_authentication_type,
+                       c.created_at_utc,
+                       c.expires_at_utc,
+                       c.intent_digest_algorithm,
+                       c.intent_digest_canonicalization,
+                       c.intent_digest_value,
+                       c.review_digest_algorithm,
+                       c.review_digest_canonicalization,
+                       c.review_digest_value,
+                       o.outcome_id,
+                       o.status,
+                       o.actor_subject,
+                       o.decided_at_utc,
+                       o.reason,
+                       o.grant_id
+                from approvals.approval_challenges c
+                left join approvals.challenge_outcomes o on o.challenge_id = c.challenge_id
+                where c.challenge_id = @ChallengeId
+                """, connection);
             await using (command.ConfigureAwait(false))
             {
-                command.CommandText =
-                    """
-                    select c.challenge_id,
-                           c.plan_id,
-                           c.pending_plan_hash,
-                           c.requester_subject,
-                           c.requester_authentication_type,
-                           c.created_at_utc,
-                           c.expires_at_utc,
-                           c.intent_digest_algorithm,
-                           c.intent_digest_canonicalization,
-                           c.intent_digest_value,
-                           c.review_digest_algorithm,
-                           c.review_digest_canonicalization,
-                           c.review_digest_value,
-                           o.outcome_id,
-                           o.status,
-                           o.actor_subject,
-                           o.decided_at_utc,
-                           o.reason,
-                           o.grant_id
-                    from approvals.approval_challenges c
-                    left join approvals.challenge_outcomes o on o.challenge_id = c.challenge_id
-                    where c.challenge_id = @ChallengeId
-                    """;
                 command.Parameters.AddWithValue("ChallengeId", challengeId);
 
                 return await ReadSingleChallengeAsync(command, cancellationToken).ConfigureAwait(false);
@@ -445,46 +444,45 @@ internal sealed class PostgresApprovalPersistence(
         var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using (connection.ConfigureAwait(false))
         {
-            var command = connection.CreateCommand();
+            var command = new NpgsqlCommand(
+                """
+                select c.challenge_id,
+                       c.plan_id,
+                       c.pending_plan_hash,
+                       c.requester_subject,
+                       c.requester_authentication_type,
+                       c.created_at_utc,
+                       c.expires_at_utc,
+                       c.intent_digest_algorithm,
+                       c.intent_digest_canonicalization,
+                       c.intent_digest_value,
+                       c.review_digest_algorithm,
+                       c.review_digest_canonicalization,
+                       c.review_digest_value,
+                       o.outcome_id,
+                       o.status,
+                       o.actor_subject,
+                       o.decided_at_utc,
+                       o.reason,
+                       o.grant_id
+                from approvals.approval_challenges c
+                left join approvals.challenge_outcomes o on o.challenge_id = c.challenge_id
+                where c.plan_id = @PlanId
+                  and c.pending_plan_hash = @PendingPlanHash
+                  and c.requester_subject = @RequesterSubject
+                  and c.intent_digest_algorithm = @IntentDigestAlgorithm
+                  and c.intent_digest_canonicalization = @IntentDigestCanonicalization
+                  and c.intent_digest_value = @IntentDigestValue
+                  and c.review_digest_algorithm = @ReviewDigestAlgorithm
+                  and c.review_digest_canonicalization = @ReviewDigestCanonicalization
+                  and c.review_digest_value = @ReviewDigestValue
+                  and c.expires_at_utc > @Now
+                  and o.outcome_id is null
+                order by c.created_at_utc
+                limit 1
+                """, connection);
             await using (command.ConfigureAwait(false))
             {
-                command.CommandText =
-                    """
-                    select c.challenge_id,
-                           c.plan_id,
-                           c.pending_plan_hash,
-                           c.requester_subject,
-                           c.requester_authentication_type,
-                           c.created_at_utc,
-                           c.expires_at_utc,
-                           c.intent_digest_algorithm,
-                           c.intent_digest_canonicalization,
-                           c.intent_digest_value,
-                           c.review_digest_algorithm,
-                           c.review_digest_canonicalization,
-                           c.review_digest_value,
-                           o.outcome_id,
-                           o.status,
-                           o.actor_subject,
-                           o.decided_at_utc,
-                           o.reason,
-                           o.grant_id
-                    from approvals.approval_challenges c
-                    left join approvals.challenge_outcomes o on o.challenge_id = c.challenge_id
-                    where c.plan_id = @PlanId
-                      and c.pending_plan_hash = @PendingPlanHash
-                      and c.requester_subject = @RequesterSubject
-                      and c.intent_digest_algorithm = @IntentDigestAlgorithm
-                      and c.intent_digest_canonicalization = @IntentDigestCanonicalization
-                      and c.intent_digest_value = @IntentDigestValue
-                      and c.review_digest_algorithm = @ReviewDigestAlgorithm
-                      and c.review_digest_canonicalization = @ReviewDigestCanonicalization
-                      and c.review_digest_value = @ReviewDigestValue
-                      and c.expires_at_utc > @Now
-                      and o.outcome_id is null
-                    order by c.created_at_utc
-                    limit 1
-                    """;
                 command.Parameters.AddWithValue("PlanId", planId);
                 command.Parameters.AddWithValue("PendingPlanHash", pendingPlanHash);
                 command.Parameters.AddWithValue("RequesterSubject", subject);
@@ -1091,16 +1089,15 @@ internal sealed class PostgresApprovalPersistence(
         string planId,
         CancellationToken cancellationToken)
     {
-        var command = connection.CreateCommand();
+        var command = new NpgsqlCommand(
+            """
+            select canonical_json_text,
+                   canonical_sha256
+            from approvals.plan_envelopes
+            where plan_id = @PlanId
+            """, connection);
         await using (command.ConfigureAwait(false))
         {
-            command.CommandText =
-                """
-                select canonical_json_text,
-                       canonical_sha256
-                from approvals.plan_envelopes
-                where plan_id = @PlanId
-                """;
             command.Parameters.AddWithValue("PlanId", planId);
 
             var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -1186,29 +1183,28 @@ internal sealed class PostgresApprovalPersistence(
         string planId,
         CancellationToken cancellationToken)
     {
-        var command = connection.CreateCommand();
+        var command = new NpgsqlCommand(
+            """
+            select grant_id,
+                   plan_id,
+                   requester_subject,
+                   approver_subject,
+                   source_challenge_id,
+                   intent_digest_algorithm,
+                   intent_digest_canonicalization,
+                   intent_digest_value,
+                   review_digest_algorithm,
+                   review_digest_canonicalization,
+                   review_digest_value,
+                   approval_policy_json_text,
+                   execution_reuse_policy_json_text,
+                   issued_at_utc,
+                   expires_at_utc
+            from approvals.approval_grants
+            where plan_id = @PlanId
+            """, connection);
         await using (command.ConfigureAwait(false))
         {
-            command.CommandText =
-                """
-                select grant_id,
-                       plan_id,
-                       requester_subject,
-                       approver_subject,
-                       source_challenge_id,
-                       intent_digest_algorithm,
-                       intent_digest_canonicalization,
-                       intent_digest_value,
-                       review_digest_algorithm,
-                       review_digest_canonicalization,
-                       review_digest_value,
-                       approval_policy_json_text,
-                       execution_reuse_policy_json_text,
-                       issued_at_utc,
-                       expires_at_utc
-                from approvals.approval_grants
-                where plan_id = @PlanId
-                """;
             command.Parameters.AddWithValue("PlanId", planId);
 
             var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);

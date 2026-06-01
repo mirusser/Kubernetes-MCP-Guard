@@ -127,11 +127,11 @@ internal sealed class CycleAggregateExecutor( // NOSONAR:S107 — DI constructor
                         target = $"{report.Target.Kind}/{report.Target.Namespace}/{report.Target.Name}",
                         report.Summary,
                     },
-                    ActorSubject: "service:observer",
+                    ActorSubject: ObserverConventions.Audit.ServiceObserverSubject,
                     CycleId: cycleId,
                     AnomalyId: report.AnomalyId,
                     DedupeKey: DedupeKeyString(report),
-                    Outcome: report.Status == AnomalyStatus.Resolved ? "resolved" : "active"),
+                    Outcome: report.Status == AnomalyStatus.Resolved ? ObserverConventions.Audit.Outcomes.Resolved : ObserverConventions.Audit.Outcomes.Active),
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -146,11 +146,11 @@ internal sealed class CycleAggregateExecutor( // NOSONAR:S107 — DI constructor
                         severity = report.Severity.ToString("G"),
                         target = $"{report.Target.Kind}/{report.Target.Namespace}/{report.Target.Name}",
                     },
-                    ActorSubject: "service:observer",
+                    ActorSubject: ObserverConventions.Audit.ServiceObserverSubject,
                     CycleId: cycleId,
                     AnomalyId: report.AnomalyId,
                     DedupeKey: DedupeKeyString(report),
-                    Outcome: "suppressed"),
+                    Outcome: ObserverConventions.Audit.Outcomes.Suppressed),
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -164,11 +164,11 @@ internal sealed class CycleAggregateExecutor( // NOSONAR:S107 — DI constructor
                         kind = report.Kind.ToString("G"),
                         target = $"{report.Target.Kind}/{report.Target.Namespace}/{report.Target.Name}",
                     },
-                    ActorSubject: "service:observer",
+                    ActorSubject: ObserverConventions.Audit.ServiceObserverSubject,
                     CycleId: cycleId,
                     AnomalyId: report.AnomalyId,
                     DedupeKey: DedupeKeyString(report),
-                    Outcome: "resolved"),
+                    Outcome: ObserverConventions.Audit.Outcomes.Resolved),
                 cancellationToken).ConfigureAwait(false);
         }
     }

@@ -261,15 +261,23 @@ The machine identity the **Anomaly Observer** uses to authenticate to the gatewa
 _Avoid_: Requester, Approver, Gateway Service Identity, user token passthrough
 
 **Anomaly Handoff**:
-The act of the **Anomaly Observer** publishing one or more **Anomaly Reports** to the **Remediation Planner**. The contract is `AnomalyHandoffBatch` (defined by the v1 **Anomaly Observer** implementation). The v1 transport is HTTPS POST from `HttpAnomalyHandoffSink` to the **Remediation Planner**'s `/handoff/anomalies` endpoint, authenticated by **Observer Service Identity** bearer.
+The act of the **Anomaly Observer** publishing an **Anomaly Report** to the **Remediation Planner**. The wire contract remains `AnomalyHandoffBatch`, but the Observer sends one report per A2A message with `contextId = AnomalyId` so the Planner can create one durable **Planner Task** per anomaly. The transport uses the Agent-to-Agent (A2A) protocol via `A2AAnomalyHandoffSink` to the **Remediation Planner**'s `/a2a/planner` endpoint, authenticated by **Observer Service Identity** bearer.
 _Avoid_: Plan Envelope, Approval Notification, Approval Grant, Audit Spine event
+
+**Reverse Context Request**:
+A request the **Remediation Planner**'s LLM agent sends to the **Observer Inbound Channel** (via the `ask_observer_to_inspect` AI function) when it needs current cluster state before proposing a plan. The Observer executes the named read-only MCP tool against the gateway, enforces the server-side allowed-tools whitelist (`AgentGuardrailPolicy`), and returns the result or a denial. Allowed calls are audited as `handoff.tool_served`; denied calls as `handoff.tool_denied`.
+_Avoid_: reverse handoff, Observer tool proxy, push notification, agent tool call
+
+**Observer Inbound Channel**:
+The A2A server the **Anomaly Observer** hosts at `/a2a/observer` to receive **Reverse Context Requests** from the **Remediation Planner**. `ObserverInboundAgentHandler` accepts the `"tool-request"` envelope intent and rejects unknown intents. Protected by JWT Bearer + `PlannerSender` authorization policy (`azp == infra-gate-planner`).
+_Avoid_: Observer A2A proxy, planner webhook, reverse subscription
 
 **Dedupe Key**:
 The tuple `(AnomalyKind, ResourceKind, Namespace, Name)` that uniquely identifies an anomaly for deduplication purposes. Two **Anomaly Reports** with the same **Dedupe Key** are considered the same underlying anomaly regardless of which **Observation Cycle** produced them.
 _Avoid_: Anomaly Report primary key, resource identity
 
 **Dedupe State**:
-The in-memory `ConcurrentDictionary<DedupKey, ActiveAnomalyState>` that tracks which anomalies are currently active, their first-seen and last-seen cycle numbers, and their most recent **Severity**. The **Dedupe State** is the source of truth for suppression and resolution decisions.
+The in-memory `ConcurrentDictionary<DedupKey, ActiveAnomalyState>` that tracks which anomalies are currently active, their first-seen and last-seen cycle numbers, and their most recent **Severity**. The **Dedupe State** is the source of truth for flapping suppression and resolution decisions, not remediation work-in-flight idempotency.
 _Avoid_: Approval grant set, audit ledger, persistent database
 
 **Suppression Window**:
@@ -286,8 +294,12 @@ _Avoid_: cleanup event, archive notification
 A non-human MCP client that consumes **Anomaly Reports** from the **Anomaly Observer**, reasons about candidate remediations with LLM assistance, and proposes one **Mutation Intent** per acted-on **Anomaly** through the gateway's `propose_plan` tool. The **Remediation Planner** does not execute mutations and does not bypass any **Pre-Execution Gate**.
 _Avoid_: Approver, Approval Authority, Remediation Executor, Domain Adapter
 
+**Planner Task**:
+A **Remediation Planner**-owned durable A2A task representing one remediation work item, with `contextId = AnomalyId`. It is the authoritative work-in-flight idempotency layer: a duplicate **Anomaly Handoff** for the same context does not create or enqueue a second task. Its lifecycle is `Submitted` → `Working` → `AuthRequired` while awaiting operator approval → terminal (`Completed`, `Failed`, or `Rejected`). When `propose_plan` succeeds, the task carries the **Plan Identifier** as an artifact reference; the **Plan Envelope** remains the source of truth for the remediation decision.
+_Avoid_: Plan Envelope, Approval Challenge, approval status, Observer Dedupe State
+
 **Remediation Executor**:
-A non-human MCP client that consumes **Remediation Proposals** from the **Remediation Planner**, blocks on `wait_for_plan_approval` for each carried **Plan Identifier**, and calls `execute_approved_plan` only after the **Approval Grant** is issued. The **Remediation Executor** does not produce **Plan Envelopes** and does not influence the **Challenge Outcome**.
+A non-human MCP client that receives synchronous A2A dispatches carrying a **Plan Identifier** from the **Remediation Planner**, blocks on `wait_for_plan_approval`, calls `execute_approved_plan` only after the **Approval Grant** is issued, and returns the outcome to the Planner. The **Remediation Executor** does not produce **Plan Envelopes** and does not influence the **Challenge Outcome**.
 _Avoid_: Approver, Approval Authority, Remediation Planner, `IDomainPlanExecutor`
 
 **Operator Approval Policy**:
@@ -295,7 +307,7 @@ An **Approval Policy** subtype permitting any authenticated subject in a configu
 _Avoid_: Same-Subject Approval, Authorization Check, Delegated Approval
 
 **Remediation Proposal**:
-A **Remediation Planner**-produced reference to one approved-pending **Plan Envelope**, carrying the **Plan Identifier**, the originating **Anomaly Identifier**, and the proposal timestamp. A **Remediation Proposal** is informational; it does not authorize execution and does not carry **Mutation Intent** content.
+A **Remediation Planner**-produced reference to one approval-pending **Plan Envelope**, carrying the **Plan Identifier**, the originating **Anomaly Identifier**, and the proposal timestamp. A **Remediation Proposal** is informational output for logging and optional file sinks; synchronous Executor dispatch carries only the **Plan Identifier**. It does not authorize execution and does not carry **Mutation Intent** content.
 _Avoid_: Plan Envelope, Approval Grant, Mutation Intent, Anomaly Report
 
 **Approval Access Code**:
@@ -303,7 +315,7 @@ A short-lived one-time-use UX token bound to one **Approval Challenge**, generat
 _Avoid_: Authentication token, OAuth code, magic-link authentication, session token
 
 **Planner Service Identity**:
-The machine identity the **Remediation Planner** uses to authenticate to the gateway via OAuth client_credentials. Separate from **Requester**, **Approver**, **Gateway Service Identity**, **Observer Service Identity**, and **Executor Service Identity**, and authorized only for the `propose_plan` tool.
+The machine identity the **Remediation Planner** uses to authenticate via OAuth client_credentials. Separate from **Requester**, **Approver**, **Gateway Service Identity**, **Observer Service Identity**, and **Executor Service Identity**. Its gateway scopes permit `propose_plan` plus read-only tools, but not execution tools.
 _Avoid_: Requester, Approver, Observer Service Identity, Executor Service Identity
 
 **Executor Service Identity**:
@@ -396,7 +408,7 @@ _Avoid_: Planner Service Identity, Approver, Requester, Gateway Service Identity
 - An **Observer Service Identity** is not a **Requester** or an **Approver**
 - An **Observer Service Identity** does not produce **Plan Envelopes**, **Approval Grants**, or **Challenge Outcomes**
 - An **Anomaly Observer** does not bypass any **Pre-Execution Gate** and does not call execution tools
-- An **Anomaly Handoff** carries one or more **Anomaly Reports**
+- An **Anomaly Handoff** carries exactly one **Anomaly Report** per A2A message
 - An **Anomaly Handoff** is not an **Approval Grant** and does not authorize **Approval-Bound Execution**
 - An **Anomaly Report** emission may be suppressed by the **Suppression Window** in the **Dedupe State**
 - An **Anomaly Report** emission may be a **Resolution Emission** when the tracked anomaly is absent beyond the resolution threshold
@@ -407,10 +419,16 @@ _Avoid_: Planner Service Identity, Approver, Requester, Gateway Service Identity
 
 - A **Remediation Planner** consumes **Anomaly Reports** from the **Anomaly Observer** through the **Anomaly Handoff**
 - A **Remediation Planner** produces zero or more **Remediation Proposals** per `AnomalyHandoffBatch`
+- A **Remediation Planner** owns exactly one **Planner Task** per `contextId = AnomalyId`
+- A **Planner Task** is the authoritative work-in-flight idempotency layer above the retained in-memory dedupe stores
+- A **Planner Task** may carry one **Plan Identifier** artifact reference after `propose_plan`
+- A waiting **Planner Task** uses A2A `TaskState.AuthRequired`
+- On restart, a **Remediation Planner** checks the approval-core status of waiting **Planner Tasks** and re-dispatches only non-terminal plans
 - A **Remediation Planner** calls `propose_plan` to create a **Plan Envelope** with **Operator Approval Policy**
 - A **Remediation Planner** authenticates with exactly one **Planner Service Identity**
 - A **Remediation Planner** does not call execution tools and does not bypass any **Pre-Execution Gate**
-- A **Remediation Executor** consumes **Remediation Proposals** from the **Remediation Planner**
+- A **Remediation Executor** receives synchronous A2A dispatches carrying one **Plan Identifier** from the **Remediation Planner**
+- A **Remediation Executor** returns an applied, failed, or rejected outcome to the **Remediation Planner**
 - A **Remediation Executor** authenticates with exactly one **Executor Service Identity**
 - A **Remediation Executor** calls `wait_for_plan_approval` and `execute_approved_plan` through the gateway
 - A **Remediation Executor** does not produce **Plan Envelopes** and does not influence the **Challenge Outcome**
@@ -420,7 +438,7 @@ _Avoid_: Planner Service Identity, Approver, Requester, Gateway Service Identity
 - The **Operator Approval Policy** is an **Approval Policy** subtype evaluated by the **Generic Approval Core** alongside **Same-Subject Approval**
 - A **Planner Service Identity** is not a **Requester** in the lifecycle sense and is not an **Approver**
 - An **Executor Service Identity** is not a **Requester** and is not an **Approver**
-- A **Planner Service Identity** is authorized only for `propose_plan`
+- A **Planner Service Identity** is authorized for `propose_plan` plus read-only tools, but not execution tools
 - An **Executor Service Identity** is authorized only for `wait_for_plan_approval` and `execute_approved_plan`
 - A **Plan Envelope** originated by `propose_plan` always declares **Operator Approval Policy**
 - A **Plan Envelope** originated by a human-driven MCP client may declare **Same-Subject Approval**

@@ -144,19 +144,17 @@ public sealed class PostgresApprovalAccessCodeStore(NpgsqlDataSource dataSource,
         string code,
         CancellationToken cancellationToken)
     {
-        var command = connection.CreateCommand();
-        command.Transaction = transaction;
+        var command = new NpgsqlCommand(
+            """
+            select challenge_id,
+                   expires_at_utc,
+                   consumed_at_utc
+            from approvals.approval_access_codes
+            where code = @Code
+            for update
+            """, connection, transaction);
         await using (command.ConfigureAwait(false))
         {
-            command.CommandText =
-                """
-                select challenge_id,
-                       expires_at_utc,
-                       consumed_at_utc
-                from approvals.approval_access_codes
-                where code = @Code
-                for update
-                """;
             command.Parameters.AddWithValue("Code", code);
 
             var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);

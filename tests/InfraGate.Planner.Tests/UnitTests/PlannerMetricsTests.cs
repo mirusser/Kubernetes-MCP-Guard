@@ -29,22 +29,6 @@ public sealed class PlannerMetricsTests
     }
 
     [Fact]
-    public void CreateHandoffHttpFailedCounter_ReturnsNonNull()
-    {
-        using var meter = new Meter("test-planner-metrics");
-        var counter = PlannerMetrics.CreateHandoffHttpFailedCounter(meter);
-        Assert.NotNull(counter);
-    }
-
-    [Fact]
-    public void CreateHandoffHttpBackpressureCounter_ReturnsNonNull()
-    {
-        using var meter = new Meter("test-planner-metrics");
-        var counter = PlannerMetrics.CreateHandoffHttpBackpressureCounter(meter);
-        Assert.NotNull(counter);
-    }
-
-    [Fact]
     public void CreateHandoffSinkFailedCounter_ReturnsNonNull()
     {
         using var meter = new Meter("test-planner-metrics");
@@ -55,7 +39,6 @@ public sealed class PlannerMetricsTests
     [Fact]
     public void CounterNames_UseExpectedPrefix()
     {
-        Assert.StartsWith("infragate.planner.", PlannerMetrics.HandoffHttpFailedCounterName);
         Assert.StartsWith("infragate.planner.", PlannerMetrics.HandoffSinkFailedCounterName);
     }
 

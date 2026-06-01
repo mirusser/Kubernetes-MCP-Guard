@@ -9,9 +9,9 @@ public sealed class AnomalyBatchQueueTests
     public void TryEnqueue_ValidBatch_ReturnsTrue()
     {
         var queue = new AnomalyBatchQueue();
-        var batch = CreateBatch("cycle-1");
+        var workItem = CreateWorkItem("cycle-1");
 
-        bool result = queue.TryEnqueue(batch);
+        bool result = queue.TryEnqueue(workItem);
 
         Assert.True(result);
     }
@@ -20,12 +20,14 @@ public sealed class AnomalyBatchQueueTests
     public async Task TryEnqueue_ThenRead_DequeuesCorrectBatch()
     {
         var queue = new AnomalyBatchQueue();
-        var batch = CreateBatch("cycle-1");
+        var workItem = CreateWorkItem("cycle-1");
 
-        queue.TryEnqueue(batch);
+        queue.TryEnqueue(workItem);
 
         var dequeued = await queue.Reader.ReadAsync(CancellationToken.None);
-        Assert.Equal(batch.CycleId, dequeued.CycleId);
+        Assert.Equal("task-1", dequeued.TaskId);
+        Assert.Equal("anomaly-1", dequeued.ContextId);
+        Assert.Equal(workItem.Batch.CycleId, dequeued.Batch.CycleId);
     }
 
     [Fact]
@@ -51,7 +53,7 @@ public sealed class AnomalyBatchQueueTests
 
         for (int i = 0; i < 5; i++)
         {
-            queue.TryEnqueue(CreateBatch($"cycle-{i}"));
+            queue.TryEnqueue(CreateWorkItem($"cycle-{i}"));
         }
 
         for (int i = 0; i < 5; i++)
@@ -66,4 +68,7 @@ public sealed class AnomalyBatchQueueTests
         EmittedAt = new DateTimeOffset(2026, 5, 26, 10, 0, 0, TimeSpan.Zero),
         Reports = [],
     };
+
+    private static PlannerTaskWorkItem CreateWorkItem(string cycleId) =>
+        new("task-1", "anomaly-1", CreateBatch(cycleId));
 }

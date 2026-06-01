@@ -59,16 +59,10 @@ public sealed class ObserverGatewayIntegrationTests
 
         Assert.Contains(gateway.Calls, call => call.ToolName == ObserverConventions.ToolNames.GetK8sStatus);
         Assert.Contains(gateway.Calls, call => call.ToolName == ObserverConventions.ToolNames.GetK8sEvents);
-        Assert.Contains(gateway.Calls, call => call.ToolName == ObserverConventions.ToolNames.GetK8sPods);
-        Assert.Contains(gateway.Calls, call => call.ToolName == ObserverConventions.ToolNames.GetK8sDeployments);
-        Assert.Contains(gateway.Calls, call => call.ToolName == ObserverConventions.ToolNames.GetK8sServices);
-        Assert.Contains(gateway.Calls, call => call.ToolName == ObserverConventions.ToolNames.GetK8sEndpoints);
         IReadOnlySet<string> expectedReadOnlyTools = new HashSet<string>(StringComparer.Ordinal)
         {
             ObserverConventions.ToolNames.GetAllowedNamespaces, ObserverConventions.ToolNames.GetK8sStatus,
-            ObserverConventions.ToolNames.GetK8sEvents, ObserverConventions.ToolNames.GetK8sPods,
-            ObserverConventions.ToolNames.DescribeK8sResource, ObserverConventions.ToolNames.GetK8sDeployments,
-            ObserverConventions.ToolNames.GetK8sServices, ObserverConventions.ToolNames.GetK8sEndpoints,
+            ObserverConventions.ToolNames.GetK8sEvents,
         };
         Assert.All(gateway.Calls, call => Assert.Contains(call.ToolName, expectedReadOnlyTools));
         Assert.All(gateway.AuthorizationHeaders, header => Assert.Equal("Bearer observer-token", header));
@@ -384,11 +378,11 @@ public sealed class ObserverGatewayIntegrationTests
                     """{ "namespaces": [ "mcp-nginx-demo" ] }""",
                 ObserverConventions.ToolNames.GetK8sStatus => isFixed ? FixedStatusJson : FailingStatusJson,
                 ObserverConventions.ToolNames.GetK8sEvents => isFixed ? FixedEventsJson : FailingEventsJson,
-                ObserverConventions.ToolNames.GetK8sPods => isFixed ? FixedPodsJson : FailingPodsJson,
-                ObserverConventions.ToolNames.GetK8sDeployments => isFixed ? FixedDeploymentsJson : FailingDeploymentsJson,
-                ObserverConventions.ToolNames.GetK8sServices => ServicesJson,
-                ObserverConventions.ToolNames.GetK8sEndpoints => isFixed ? FixedEndpointsJson : FailingEndpointsJson,
-                ObserverConventions.ToolNames.DescribeK8sResource => "{}",
+                ObserverConventions.ToolNames.GetPodLogs => "{}",
+                ObserverConventions.ToolNames.GetK8sResource => "{}",
+                ObserverConventions.ToolNames.GetDeploymentDiagnostics => "{}",
+                ObserverConventions.ToolNames.GetPodDiagnostics => "{}",
+                ObserverConventions.ToolNames.GetServiceDiagnostics => "{}",
                 _ => throw new InvalidOperationException($"Unexpected tool '{toolName}'."),
             };
         }
@@ -399,9 +393,9 @@ public sealed class ObserverGatewayIntegrationTests
             string[] readOnlyToolNames =
             [
                 ObserverConventions.ToolNames.GetAllowedNamespaces, ObserverConventions.ToolNames.GetK8sStatus,
-                ObserverConventions.ToolNames.GetK8sEvents, ObserverConventions.ToolNames.GetK8sPods,
-                ObserverConventions.ToolNames.DescribeK8sResource, ObserverConventions.ToolNames.GetK8sDeployments,
-                ObserverConventions.ToolNames.GetK8sServices, ObserverConventions.ToolNames.GetK8sEndpoints,
+                ObserverConventions.ToolNames.GetK8sEvents, ObserverConventions.ToolNames.GetPodLogs,
+                ObserverConventions.ToolNames.GetK8sResource, ObserverConventions.ToolNames.GetDeploymentDiagnostics,
+                ObserverConventions.ToolNames.GetPodDiagnostics, ObserverConventions.ToolNames.GetServiceDiagnostics,
             ];
             return readOnlyToolNames
                 .Select(toolName => new Tool
@@ -446,100 +440,6 @@ public sealed class ObserverGatewayIntegrationTests
 
         private const string FixedEventsJson = """{ "events": [] }""";
 
-        private const string FailingPodsJson = """
-        {
-          "pods": [
-            {
-              "metadata": { "name": "nginx-demo-5fdb9f6b7c-x7z5q" },
-              "status": {
-                "phase": "Pending",
-                "containerStatuses": [
-                  {
-                    "state": { "waiting": { "reason": "ImagePullBackOff" } },
-                    "image": "nginx:1.27-doesnotexist"
-                  }
-                ]
-              }
-            }
-          ]
-        }
-        """;
-
-        private const string FixedPodsJson = """
-        {
-          "pods": [
-            {
-              "metadata": { "name": "nginx-demo-5fdb9f6b7c-x7z5q" },
-              "status": {
-                "phase": "Running",
-                "containerStatuses": [
-                  {
-                    "ready": true,
-                    "image": "nginx:1.27-alpine"
-                  }
-                ]
-              }
-            }
-          ]
-        }
-        """;
-
-        private const string FailingDeploymentsJson = """
-        {
-          "deployments": [
-            {
-              "metadata": { "name": "nginx-demo" },
-              "spec": { "replicas": 2 },
-              "status": { "availableReplicas": 0 }
-            }
-          ]
-        }
-        """;
-
-        private const string FixedDeploymentsJson = """
-        {
-          "deployments": [
-            {
-              "metadata": { "name": "nginx-demo" },
-              "spec": { "replicas": 2 },
-              "status": { "availableReplicas": 2 }
-            }
-          ]
-        }
-        """;
-
-        private const string ServicesJson = """
-        {
-          "services": [
-            {
-              "metadata": { "name": "nginx-demo" },
-              "spec": { "selector": { "app.kubernetes.io/name": "nginx-demo" } }
-            }
-          ]
-        }
-        """;
-
-        private const string FailingEndpointsJson = """
-        {
-          "endpoints": [
-            {
-              "service": "nginx-demo",
-              "addresses": []
-            }
-          ]
-        }
-        """;
-
-        private const string FixedEndpointsJson = """
-        {
-          "endpoints": [
-            {
-              "service": "nginx-demo",
-              "addresses": [ "10.244.0.42" ]
-            }
-          ]
-        }
-        """;
     }
 
     private sealed class HttpMcpAgentToolset : IAgentMcpToolset, IAsyncDisposable

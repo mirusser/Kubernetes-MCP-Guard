@@ -47,6 +47,11 @@ internal static partial class ObserverLogEvents
 
     [LoggerMessage(
         Level = LogLevel.Information,
+        Message = "observer.cycle.starting")]
+    public static partial void LogCycleStarting(ILogger logger);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
         Message = "Observation cycle cancelled: host shutting down")]
     public static partial void LogCycleCancelled(ILogger logger);
 
@@ -157,6 +162,41 @@ internal static partial class ObserverLogEvents
         Level = LogLevel.Warning,
         Message = "observer.handoff.http_backpressure: planner returned 429")]
     public static partial void LogHandoffHttpBackpressure(ILogger logger);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "observer.handoff.a2a_sending contextI={CycleId} anomalyId={AnomalyId} kind={Kind} severity={Severity} status={Status}")]
+    public static partial void LogHandoffA2ASending(ILogger logger, string cycleId, string anomalyId, string kind, string severity, string status);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "observer.handoff.a2a_sent cycleId={CycleId} reports={ReportCount}")]
+    public static partial void LogHandoffA2ASent(ILogger logger, string cycleId, int reportCount);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "observer.handoff.a2a_failed errorClass={ErrorClass}")]
+    public static partial void LogHandoffA2AFailed(ILogger logger, string errorClass, Exception ex);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "observer.inbound.unknown_intent intent={Intent}")]
+    public static partial void LogInboundUnknownIntent(ILogger logger, string intent);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "observer.inbound.tool_denied toolName={ToolName}")]
+    public static partial void LogInboundToolDenied(ILogger logger, string toolName);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "observer.inbound.tool_served toolName={ToolName} cycleId={CycleId}")]
+    public static partial void LogInboundToolServed(ILogger logger, string toolName, string cycleId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "observer.inbound.tool_call_failed toolName={ToolName}")]
+    public static partial void LogInboundToolCallFailed(ILogger logger, string toolName, Exception ex);
 
     // ── MCP calls ───────────────────────────────────────────────
 

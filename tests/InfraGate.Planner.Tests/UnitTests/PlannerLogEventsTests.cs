@@ -57,12 +57,14 @@ public sealed class PlannerLogEventsTests
     public void LogHandoffBatchReceived_LogsAtInformationLevel_WithProperties()
     {
         var logger = new CapturingLogger<PlannerLogEventsTests>();
-        PlannerLogEvents.LogHandoffBatchReceived(logger, "cycle-xyz", 4);
+        PlannerLogEvents.LogHandoffBatchReceived(logger, "cycle-xyz", "anomaly-1", "PodUnhealthy", "High", "Active");
 
         Assert.Single(logger.Entries);
         Assert.Equal(LogLevel.Information, logger.Entries[0].Level);
         Assert.Equal("cycle-xyz", logger.Entries[0].Properties["CycleId"]);
-        Assert.Equal(4, logger.Entries[0].Properties["ReportCount"]);
+        Assert.Equal("anomaly-1", logger.Entries[0].Properties["AnomalyId"]);
+        Assert.Equal("PodUnhealthy", logger.Entries[0].Properties["Kind"]);
+        Assert.Equal("High", logger.Entries[0].Properties["Severity"]);
     }
 
     [Fact]
@@ -162,27 +164,6 @@ public sealed class PlannerLogEventsTests
         Assert.Equal(LogLevel.Warning, logger.Entries[0].Level);
         Assert.Equal("HttpSink", logger.Entries[0].Properties["SinkName"]);
         Assert.Same(ex, logger.Entries[0].Exception);
-    }
-
-    [Fact]
-    public void LogHandoffHttpFailed_LogsAtWarningLevel_WithStatusCode()
-    {
-        var logger = new CapturingLogger<PlannerLogEventsTests>();
-        PlannerLogEvents.LogHandoffHttpFailed(logger, 503);
-
-        Assert.Single(logger.Entries);
-        Assert.Equal(LogLevel.Warning, logger.Entries[0].Level);
-        Assert.Equal(503, logger.Entries[0].Properties["StatusCode"]);
-    }
-
-    [Fact]
-    public void LogHandoffHttpBackpressure_LogsAtWarningLevel()
-    {
-        var logger = new CapturingLogger<PlannerLogEventsTests>();
-        PlannerLogEvents.LogHandoffHttpBackpressure(logger);
-
-        Assert.Single(logger.Entries);
-        Assert.Equal(LogLevel.Warning, logger.Entries[0].Level);
     }
 
     [Fact]

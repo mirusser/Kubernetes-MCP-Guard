@@ -29,7 +29,8 @@ The `InfraGate.AgentGuardrails` meter is registered in the Observer's telemetry 
 - **AnomalyId** — stable 12-char hex hash of `(Kind, ApiVersion, Kind, Namespace, Name)`. Stable across cycles for the same underlying anomaly.
 - **Read-Only Scope** — the Observer connects to the gateway with a read-only scope, meaning the Gateway filters the tools to strictly those marked with `ReadOnlyHint`. Any hallucinated call to a mutation tool is rejected by the Gateway.
 - The Observer is a peer MCP client (not embedded in the gateway). It never calls mutation tools, never produces Plan Envelopes or Approval Grants, and never writes through `IApprovalAuditPublisher`.
-- Optional HTTP handoff posts `AnomalyHandoffBatch` payloads to the Remediation Planner's `/handoff/anomalies` endpoint.
+- Optional A2A handoff posts `AnomalyHandoffBatch` payloads to the Remediation Planner's `/a2a/planner` endpoint.
+- The Observer also acts as an A2A **server** at `/a2a/observer`. The Planner calls back to request read-only K8s tool executions (**Reverse Context Requests**). Planner progress is represented by the Planner-owned durable A2A task lifecycle. See [ADR-0028](../../docs/adr/0028-a2a-bidirectional-observer-planner-channel.md).
 - LLM provider is configurable via env vars. Supported provider: `openrouter` (OpenAI-compatible). `INFRA_GATE_OBSERVER_LLM_API_KEY` is required. Configuring `ANTHROPIC` as the provider throws `InvalidOperationException` at startup — use OpenRouter instead.
 - `POST /observe-now` triggers a synchronous on-demand cycle (30s HTTP timeout) without resetting the scheduled tick. Concurrent calls serialise via a shared semaphore.
 
@@ -41,15 +42,17 @@ Runtime environment variables, defaults, examples, and production guidance are d
 
 `ObserverAuditOutbox` writes a tamper-evident hash chain to `observer.audit_outbox` (ADR-0020). The Observer's Audit Stream is independent of the Approval Authority's Audit Spine — it does not produce Audit Spine events and does not reference `InfraGate.Approvals` (enforced by architecture tests in `tests/InfraGate.Observer.Tests/UnitTests/Architecture/`).
 
-Five audit-worthy events are defined in `ObserverAuditEvents`:
+Seven audit-worthy events are defined in `ObserverAuditEvents`:
 
 | Event name | When emitted |
 |---|---|
 | `anomaly.detected` | Anomaly passes the suppression-window check and will be reported |
 | `anomaly.suppressed` | Anomaly is observed but suppressed by the Suppression Window |
 | `anomaly.resolved` | Anomaly is absent for the resolution threshold; `resolved` report emitted |
-| `handoff.published` | Successful POST to the Planner's `/handoff/anomalies` endpoint |
+| `handoff.published` | Successful A2A message to the Planner's `/a2a/planner` endpoint |
 | `handoff.failed` | Non-2xx or exception from the Planner handoff sink |
+| `handoff.tool_served` | Read-only tool executed on behalf of the Planner (Reverse Context Request) |
+| `handoff.tool_denied` | Tool request denied — tool name not in the Observer's allowed-tools whitelist |
 
 All emit uses the `AppendAsync(entry, ct)` convenience overload — Observer audit writes are not part of a larger state-mutation transaction.
 

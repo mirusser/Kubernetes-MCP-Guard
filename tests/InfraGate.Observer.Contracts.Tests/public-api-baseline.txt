@@ -70,6 +70,14 @@ class InfraGate.Observer.Contracts.EvidenceItem
 interface InfraGate.Observer.Contracts.IAnomalyHandoffSink
   Task PublishAsync(AnomalyHandoffBatch batch, CancellationToken cancellationToken)
 
+class InfraGate.Observer.Contracts.ObserverInboundEnvelope
+  String CycleId { get; set; }
+  String Intent { get; set; }
+  ToolRequestPayload ToolRequest { get; set; }
+
+class InfraGate.Observer.Contracts.ObserverInboundIntents
+  const String ToolRequest
+
 class InfraGate.Observer.Contracts.RemediationHint
   String Action { get; set; }
   String Explanation { get; set; }
@@ -84,3 +92,11 @@ enum InfraGate.Observer.Contracts.Severity
   High
   Low
   Medium
+
+class InfraGate.Observer.Contracts.ToolRequestPayload
+  String ArgumentsJson { get; set; }
+  String ToolName { get; set; }
+
+class InfraGate.Observer.Contracts.ToolResponsePayload
+  Boolean IsError { get; set; }
+  String ResultJson { get; set; }

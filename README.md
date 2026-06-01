@@ -58,75 +58,55 @@ Kubernetes MCP Guard explores a practical safety pattern for AI-assisted operati
 - **Durable grant model:** an approved Approval Challenge records a Challenge Outcome and issues an Approval Grant consumed by pre-execution gates.
 - **Narrow Kubernetes scope:** namespace allow-lists, namespace-scoped RBAC, supported-kind checks, and bounded read tools keep the operational surface small.
 - **Auditable controls:** guardrail and approval events are written as JSONL streams with identity, digest, grant, and execution context.
+- **Structured multi-agent coordination:** Observer, Planner, and Executor are independent processes that communicate over the [A2A protocol](https://google.github.io/A2A/), each with a separate OAuth service identity and a narrow gateway scope. The Planner owns a durable per-anomaly Task that persists across restarts and enforces one-remediation-per-anomaly without cross-service locking.
 
-The repository also separates the generic approval lifecycle from the Kubernetes adapter, so the core language is not tied to one infrastructure domain. 
+The repository also separates the generic approval lifecycle from the Kubernetes adapter, so the core language is not tied to one infrastructure domain.
 
 <sub><em>See [CONTEXT.md](CONTEXT.md), [docs/mutation-approval-profile.md](docs/mutation-approval-profile.md), [docs/mutation-approval-flow.md](docs/mutation-approval-flow.md).</em></sub>
 
 ## 🗺️ Architecture
 
+Inter-agent communication uses the [A2A protocol](https://google.github.io/A2A/) (`v1.0.0-preview2` via `a2a-dotnet`)
+
+The Observer notifies the Planner and the Planner dispatches to the Executor synchronously and waits for the outcome. 
+ 
+ The Planner's internal remediation pipeline is a concurrent DAG built on `Microsoft.Agents.AI.Workflows`, fanning each incoming anomaly through independent Filter → Dedupe → LLM-Decide → Validate → Propose executor chains.
+
 ```mermaid
 ---
-title: Autonomous Process Boundaries
+title: Security Boundaries
 ---
 flowchart TB
-    subgraph ObserverProc["Observer"]
-        direction TB
-        ORunner["ObservationCycleRunner + LLM analyze"]
-        OMcp["ObserverMcpClient<br/>read-only whitelist"]
-        OHandoff["AnomalyHandoffSink"]
-        ORunner --> OMcp
-        ORunner --> OHandoff
+    subgraph outer["🌐 Internet / Operator"]
+        Human["👤 Operator\nbrowser · OAuth PKCE"]
+        McpClient["🤖 MCP Client\nCodex · Claude Code"]
     end
 
-    subgraph PlannerProc["Planner"]
-        direction TB
-        PIn["/handoff/anomalies<br/>azp=infra-gate-observer"]
-        PBatch["BatchProcessor<br/>LLM + argument validation"]
-        PMcp["PlannerMcpClient<br/>readonly + propose_plan"]
-        POut["RemediationProposalSink"]
-        PIn --> PBatch --> PMcp
-        PBatch --> POut
+    subgraph gateway["🛡️ Gateway —  OAuth JWT required"]
+        direction LR
+        Guard["🔍 Guardrails\n+ ToolScopeGuard"]
+        ApprovalUI["📋 Approval UI\n/approvals/*"]
+        ApprovalCore["🔐 Approval Core\nplan · challenge · grant · digest"]
     end
 
-    subgraph ExecutorProc["Executor"]
-        direction TB
-        EIn["/handoff/proposals<br/>azp=infra-gate-planner"]
-        Watch["PlanWatcher"]
-        EMcp["ExecutorMcpClient<br/>wait + execute only"]
-        EIn --> Watch --> EMcp
+    subgraph agents["🤖 Agent Tier  —  client_credentials · narrow scopes"]
+        direction LR
+        Obs["🔎 Observer\nmcp:tools.readonly"]
+        Plan["📋 Planner\nmcp:tools.propose + readonly"]
+        Exec["🛠️ Executor\nmcp:tools.execute"]
+        Obs <-->|"A2A"| Plan <-->|"A2A"| Exec
     end
 
-    subgraph GatewayProc["McpGateway"]
-        direction TB
-        Dispatch["GatewayToolDispatcher"]
-        Scope["ToolScopeGuard"]
-        ProposeHandler["ProposePlanHandler"]
-        Approval["Generic Approval Core"]
-        PreGate["ApprovalPreExecutionGate"]
-        AdapterBoundary["Kubernetes Adapter"]
-        DownstreamClient["DownstreamMcpClient"]
-        Dispatch --> Scope
-        Scope --> ProposeHandler --> Approval
-        Scope --> PreGate --> Approval
-        ProposeHandler --> AdapterBoundary
-        PreGate --> AdapterBoundary
-        AdapterBoundary --> DownstreamClient
+    subgraph private["🔒 Private Subprocess  —  no public port"]
+        McpServer["⚙️ McpServer\nKubernetes tools"]
     end
 
-    subgraph ServerProc["McpServer"]
-        direction TB
-        Tools["KubernetesTools<br/>read / evidence / destructive annotations"]
-        API["Kubernetes API"]
-        Tools --> API
-    end
+    K8s(("☸️ Kubernetes API\n(namespace-scoped RBAC)"))
 
-    OMcp --> Dispatch
-    OHandoff --> PIn
-    PMcp --> Dispatch
-    POut --> EIn
-    EMcp --> Dispatch
-    DownstreamClient --> Tools
+    Human -->|"review snapshot · approve/deny"| ApprovalUI --> ApprovalCore
+    McpClient -->|"Bearer JWT · mcp:tools scope"| Guard -->|"scope-filtered tool call"| ApprovalCore
+    agents -->|"Bearer JWT · service identity"| Guard
+    ApprovalCore -->|"stdio · service token"| McpServer -->|"KubernetesClient"| K8s
 ```
 
 Full request-flow diagrams live in [docs/architecture.md](docs/architecture.md).
@@ -141,7 +121,7 @@ The central safety property is that approval is necessary but not sufficient. A 
 | **Approve** | The client calls `execute_approved_plan`; the gateway creates or reuses a short-lived Approval Challenge and returns a browser URL. The browser renders the stored review snapshot, not model-supplied approval text. | Expired challenge, wrong authenticated subject, anti-forgery failure, changed digest binding, denied/rejected/canceled Challenge Outcome. |
 | **Execute** | After approval, the client retries `execute_approved_plan`; the gateway validates the Approval Grant, digests, validity window, reuse policy, freshness checks, and domain policy checks before the adapter writes. | Missing/expired/mismatched grant, digest mismatch, already-applied Single-Execution Plan, second dry-run failure, policy failure, live-state drift. |
 
-<sub><em>Current implementation notes are tracked in [docs/mutation-approval-profile.md#current-repository-fit](docs/mutation-approval-profile.md#current-repository-fit). Remaining profile work is intentionally documented as future direction, not as shipped standard behavior.</em></sub>
+<sub><em>Current implementation notes are tracked in [docs/mutation-approval-profile.md#current-repository-fit](docs/mutation-approval-profile.md#current-repository-fit).</em></sub>
 
 
 ## 🧰 Current Capabilities
@@ -157,7 +137,7 @@ The [InfraGate.Observer](src/InfraGate.Observer/README.md) is an LLM-driven agen
 | Anomaly detection | LLM-assisted classification across four categories: Pod unhealthy, Deployment unavailable, Service no endpoints, Warning events. |
 | Severity classification | Rules-derived `High`/`Medium`/`Low` with LLM disagreement telemetry. |
 | Deduplication & resolution | In-memory dedupe window suppresses repeat reports; automatic `Resolved` emission when anomalies clear. |
-| Handoff | Log sink always on; JSON file sink and Planner HTTP handoff are opt-in; see [docs/configuration.md](docs/configuration.md). |
+| Handoff | Log sink always on; JSON file sink and Planner A2A handoff are opt-in; see [docs/configuration.md](docs/configuration.md). |
 
 ### 🤖📋 Remediation Planner
 
@@ -165,10 +145,11 @@ The [InfraGate.Planner](src/InfraGate.Planner/README.md) consumes Anomaly Report
 
 | Capability | Description |
 | --- | --- |
-| Anomaly intake | Receives `AnomalyHandoffBatch` payloads from the Observer over HTTP. |
+| Anomaly intake | Receives `AnomalyHandoffBatch` payloads from the Observer over A2A; each anomaly is processed independently through a concurrent DAG pipeline: Filter → Dedupe → LLM-Decide → Validate → Propose. |
 | Operation menu | Chooses only `restart_deployment`, `scale_deployment`, or `set_deployment_image` in v1. |
 | Plan proposal | Calls `propose_plan` to create a digest-bound Plan Envelope for operator approval. |
 | Approval notification | `propose_plan` creates an Approval Access Code and sends the configured operator email through the gateway SMTP sender when configured. |
+| Durable task lifecycle | One A2A Task per anomaly (keyed by `contextId`) tracks state from `Submitted` through `Working`, `AuthRequired` (awaiting operator approval), to `Completed`/`Failed`/`Rejected`. Persisted to PostgreSQL when `INFRA_GATE_PLANNER_AUDIT_CONNECTION_STRING` is set; otherwise in-memory. |
 | Scope boundary | Planner can propose plans and use read-only inspection tools; it cannot execute plans. |
 
 ### 🤖🛠️ Remediation Executor
@@ -177,7 +158,7 @@ The [InfraGate.Executor](src/InfraGate.Executor/README.md) consumes Planner prop
 
 | Capability | Description |
 | --- | --- |
-| Proposal intake | Receives `RemediationProposalBatch` payloads from the Planner over HTTP. |
+| Proposal intake | Receives plan ids from the Planner over synchronous A2A dispatch. |
 | Approval wait | Calls `wait_for_plan_approval` for each plan id until approval, timeout, or terminal status. |
 | Approved execution | Calls `execute_approved_plan` only after approval is reported. |
 | Scope boundary | Executor can wait and execute approved plans; it cannot create plans or call read-only inspection tools. |

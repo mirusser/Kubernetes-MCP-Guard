@@ -68,7 +68,7 @@ profiles:
       cycleWallClockCapSeconds: "120"
       maxToolIterations: "8"
       fileSinkRoot: /data/observer/findings
-      plannerHandoffUrl: http://planner:3004/handoff/anomalies
+      plannerHandoffUrl: http://planner:3004/a2a/planner
       auditConnectionString: "Host=postgres;Port=5432;Database=infra-gate;Username=infra-gate;Password=infra-gate-dev-password"
       observerHostPath: ../../.mcp-observer/findings
       allowedNamespaces:
@@ -76,7 +76,7 @@ profiles:
     planner:
       aspnetcoreUrls: http://0.0.0.0:3004
       gatewayBaseUrl: http://gateway:3001/mcp
-      executorHandoffUrl: http://executor:3005/handoff/proposals
+      executorHandoffUrl: http://executor:3005/a2a/executor
       tokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
       clientId: infra-gate-planner
       clientSecret: planner-secret
@@ -84,7 +84,8 @@ profiles:
       scope: mcp:tools.propose mcp:tools.readonly
       llmProvider: openrouter
       llmModel: openrouter/free
-      maxToolIterations: "4"
+      anomalyWallClockCapSeconds: "90"
+      maxToolIterations: "6"
       fileSinkRoot: /data/planner/proposals
       plannerHostPath: ../../.mcp-remediation/proposals
     executor:
@@ -131,13 +132,13 @@ profiles:
       cycleWallClockCapSeconds: "120"
       maxToolIterations: "8"
       fileSinkRoot: .mcp-observer/findings
-      plannerHandoffUrl: http://127.0.0.1:3004/handoff/anomalies
+      plannerHandoffUrl: http://127.0.0.1:3004/a2a/planner
       allowedNamespaces:
         - mcp-nginx-demo
     planner:
       aspnetcoreUrls: http://0.0.0.0:3004
       gatewayBaseUrl: http://127.0.0.1:3001/mcp
-      executorHandoffUrl: http://127.0.0.1:3005/handoff/proposals
+      executorHandoffUrl: http://127.0.0.1:3005/a2a/executor
       tokenEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token
       clientId: infra-gate-planner
       clientSecret: planner-secret
@@ -145,7 +146,8 @@ profiles:
       scope: mcp:tools.propose mcp:tools.readonly
       llmProvider: openrouter
       llmModel: openrouter/free
-      maxToolIterations: "4"
+      anomalyWallClockCapSeconds: "90"
+      maxToolIterations: "6"
       fileSinkRoot: .mcp-planner/proposals
     executor:
       aspnetcoreUrls: http://0.0.0.0:3005

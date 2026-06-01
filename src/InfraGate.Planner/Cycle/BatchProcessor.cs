@@ -5,6 +5,9 @@ using InfraGate.Planner.Audit;
 using InfraGate.Planner.Cycle.Workflow;
 using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
+using InfraGate.Planner.Handoff;
+using InfraGate.Planner.Llm;
+using InfraGate.Planner.Tasks;
 using InfraGate.AgentMcp;
 using InfraGate.Prompts;
 using Microsoft.Agents.AI.Workflows;
@@ -29,6 +32,9 @@ internal sealed class BatchProcessor : BackgroundService
     private readonly Counter<long>? proposeFailedCounter;
     private readonly AgentGuardrailPolicy? guardrailPolicy;
     private readonly AgentGuardrailMetrics? guardrailMetrics;
+    private readonly IObserverChannel? observerChannel;
+    private readonly PlannerTaskLifecycle? taskLifecycle;
+    private readonly IExecutorDispatchClient? executorDispatchClient;
 
     public BatchProcessor( // NOSONAR:S107 — orchestrator dependencies are explicit production seams.
         IOptionsMonitor<PlannerOptions> optionsMonitor,
@@ -42,7 +48,10 @@ internal sealed class BatchProcessor : BackgroundService
         Meter? meter = null,
         IPlannerAuditOutbox? auditOutbox = null,
         AgentGuardrailPolicy? guardrailPolicy = null,
-        AgentGuardrailMetrics? guardrailMetrics = null)
+        AgentGuardrailMetrics? guardrailMetrics = null,
+        IObserverChannel? observerChannel = null,
+        PlannerTaskLifecycle? taskLifecycle = null,
+        IExecutorDispatchClient? executorDispatchClient = null)
     {
         this.optionsMonitor = optionsMonitor;
         this.queue = queue;
@@ -57,9 +66,14 @@ internal sealed class BatchProcessor : BackgroundService
         proposeFailedCounter = PlannerMetrics.CreateProposeFailedCounter(meter);
         this.guardrailPolicy = guardrailPolicy;
         this.guardrailMetrics = guardrailMetrics;
+        this.observerChannel = observerChannel;
+        this.taskLifecycle = taskLifecycle;
+        this.executorDispatchClient = executorDispatchClient;
     }
 
-    internal async Task ProcessBatchAsync(AnomalyHandoffBatch batch, CancellationToken shutdownToken)
+    internal async Task<IReadOnlyList<RemediationProposal>> ProcessBatchAsync(
+        AnomalyHandoffBatch batch,
+        CancellationToken shutdownToken)
     {
         var opts = optionsMonitor.CurrentValue;
         using var batchCts = CancellationTokenSource.CreateLinkedTokenSource(shutdownToken);
@@ -68,14 +82,21 @@ internal sealed class BatchProcessor : BackgroundService
         // Throws OCE immediately if shutdown CT was already cancelled.
         var tools = await mcpClient.GetAgentToolsAsync(batchCts.Token).ConfigureAwait(false);
 
-        if (batch.Reports.Count == 0) return;
+        if (batch.Reports.Count == 0)
+        {
+            return [];
+        }
 
         var systemPrompt = await promptLibrary.RenderAsync(
             PlannerConventions.Prompts.SystemPromptTemplateName,
             emptyPromptArgs,
             batchCts.Token).ConfigureAwait(false);
 
-        var (workflow, _) = BuildWorkflow(opts, batch, tools, systemPrompt);
+        IReadOnlyList<AITool> agentTools = observerChannel is null
+            ? tools
+            : [.. tools, AskObserverTool.Create(observerChannel, batch.CycleId)];
+
+        var (workflow, _) = BuildWorkflow(opts, batch, agentTools, systemPrompt);
 
         var run = await InProcessExecution
             .RunAsync<AnomalyHandoffBatch>(workflow, batch, cancellationToken: batchCts.Token)
@@ -104,18 +125,66 @@ internal sealed class BatchProcessor : BackgroundService
 
                 PlannerLogEvents.LogHandoffPublished(logger, batch.CycleId, proposals.Count);
             }
+
+            return proposals;
         }
+    }
+
+    internal async Task ProcessTaskAsync(PlannerTaskWorkItem workItem, CancellationToken cancellationToken)
+    {
+        var lifecycle = taskLifecycle
+            ?? throw new InvalidOperationException("Planner task lifecycle is not configured.");
+
+        await lifecycle.StartWorkAsync(workItem.TaskId, workItem.ContextId, cancellationToken).ConfigureAwait(false);
+        var proposals = await ProcessBatchAsync(workItem.Batch, cancellationToken).ConfigureAwait(false);
+
+        if (proposals.Count == 0)
+        {
+            await lifecycle.CompleteNoActionAsync(workItem.TaskId, workItem.ContextId, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        foreach (var proposal in proposals)
+        {
+            await lifecycle.AddPlanArtifactAsync(
+                workItem.TaskId,
+                workItem.ContextId,
+                proposal.PlanId,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        await lifecycle.RequireApprovalAsync(workItem.TaskId, workItem.ContextId, cancellationToken).ConfigureAwait(false);
+
+        if (executorDispatchClient is null)
+        {
+            return;
+        }
+
+        if (proposals.Count != 1)
+        {
+            throw new InvalidOperationException("Planner task execution requires exactly one remediation proposal.");
+        }
+
+        var outcome = await executorDispatchClient.DispatchAsync(
+            workItem.ContextId,
+            proposals[0].PlanId,
+            cancellationToken).ConfigureAwait(false);
+        await lifecycle.ApplyExecutorOutcomeAsync(
+            workItem.TaskId,
+            workItem.ContextId,
+            outcome,
+            cancellationToken).ConfigureAwait(false);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (await queue.Reader.WaitToReadAsync(stoppingToken).ConfigureAwait(false))
         {
-            while (queue.Reader.TryRead(out var batch))
+            while (queue.Reader.TryRead(out var workItem))
             {
                 try
                 {
-                    await ProcessBatchAsync(batch, stoppingToken).ConfigureAwait(false);
+                    await ProcessTaskAsync(workItem, stoppingToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
@@ -123,7 +192,15 @@ internal sealed class BatchProcessor : BackgroundService
                 }
                 catch (Exception ex)
                 {
-                    PlannerLogEvents.LogBatchProcessingFailed(logger, batch.CycleId, ex);
+                    PlannerLogEvents.LogBatchProcessingFailed(logger, workItem.Batch.CycleId, ex);
+                    if (taskLifecycle is not null)
+                    {
+                        await taskLifecycle.FailAsync(
+                            workItem.TaskId,
+                            workItem.ContextId,
+                            ex.Message,
+                            stoppingToken).ConfigureAwait(false);
+                    }
                 }
             }
         }
@@ -150,9 +227,9 @@ internal sealed class BatchProcessor : BackgroundService
             filterExecs.Add(new FilterExecutor(filterIds[i], dedupeStore, auditOutbox, logger));
             dedupeExecs.Add(new DedupeGateExecutor($"dedupe-{i}", dedupeStore, auditOutbox, logger));
             decideExecs.Add(new DecideExecutor($"decide-{i}", agentFactory, systemPrompt, tools,
-                opts.MaxToolIterations, opts.AnomalyWallClockCapSeconds, timeoutCounter, logger, guardrailPolicy));
+                opts.MaxToolIterations, opts.AnomalyWallClockCapSeconds, timeoutCounter, logger, guardrailPolicy, dedupeStore, auditOutbox));
             validateExecs.Add(new ValidateExecutor($"validate-{i}", batchOperationKeys, dedupeStore,
-                guardrailMetrics, logger));
+                guardrailMetrics, logger, auditOutbox));
             proposeExecs.Add(new ProposeExecutor($"propose-{i}", mcpClient, dedupeStore,
                 auditOutbox, proposeFailedCounter, logger));
         }

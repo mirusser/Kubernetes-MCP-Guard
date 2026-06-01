@@ -31,6 +31,8 @@ public sealed class RateLimitRetryingChatClient(
             LogRaw(log, "llm.input ──────────────────────────\n" + FormatMessages(messages));
         }
 
+        LogRaw(log, "llm.call ─────────────────────────── [awaiting response]");
+
         var totalDelay = TimeSpan.Zero;
         for (int attempt = 0; attempt <= retryDelays.Length; attempt++)
         {

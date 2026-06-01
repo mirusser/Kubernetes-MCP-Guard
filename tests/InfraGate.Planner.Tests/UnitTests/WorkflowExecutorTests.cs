@@ -15,6 +15,8 @@ using InfraGate.Remediation.Contracts;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
+using InfraGate.Planner.Handoff;
+using InfraGate.Planner.Llm;
 
 namespace InfraGate.Planner.Tests.UnitTests;
 
@@ -263,6 +265,49 @@ public sealed class WorkflowExecutorTests
 
         var forwarded = Assert.Single(context.SentMessages);
         Assert.IsType<DecisionContext>(forwarded);
+    }
+
+    [Fact]
+    public async Task DecideExecutor_WithAskObserverTool_ToolCanBeInvoked()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+
+        // ChatClient yields a tool call on first invocation, and a valid JSON decision on second
+        var chatClient = new FixtureChatClient((messages) =>
+        {
+            if (!messages.Skip(2).Any()) // System + User
+            {
+                return new ChatResponse(new ChatMessage(ChatRole.Assistant, [
+                    new FunctionCallContent("call1", "ask_observer_to_inspect", new Dictionary<string, object?> { ["toolName"] = "get_k8s_pods", ["argumentsJson"] = "{}" })
+                ]));
+            }
+
+            // Second invocation (System + User + Assistant(tool_call) + Tool(result))
+            return new ChatResponse(new ChatMessage(ChatRole.Assistant, """
+            {
+              "operationType": "restart_deployment",
+              "arguments": { "name": "nginx-demo", "namespace": "mcp-nginx-demo" }
+            }
+            """));
+        });
+
+        var context = new FakeWorkflowContext();
+        var agentFactory = new ToolCallingAgentFactory(chatClient);
+
+        var observerChannel = new FakeObserverChannel();
+        var askObserverTool = AskObserverTool.Create(observerChannel, "cycle-1");
+
+        var executor = new DecideExecutor(
+            "decide-7", agentFactory, "system prompt", [askObserverTool],
+            4, 30, null, NullLogger.Instance);
+
+        await executor.HandleAsync(report, context, CancellationToken.None);
+
+        Assert.Equal(1, observerChannel.SendToolRequestCallCount);
+
+        var forwarded = Assert.Single(context.SentMessages);
+        var decisionCtx = Assert.IsType<DecisionContext>(forwarded);
+        Assert.Equal("restart_deployment", decisionCtx.Decision.OperationType);
     }
 
     // ------------------------------------------------------------------ //
@@ -673,5 +718,15 @@ public sealed class WorkflowExecutorTests
             Task.FromResult(new CallToolResult { Content = [new TextContentBlock { Text = ResponseText }] });
         public Task<IReadOnlyList<AITool>> GetAgentToolsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<AITool>>([]);
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class FakeObserverChannel : IObserverChannel
+    {
+        public int SendToolRequestCallCount { get; private set; }
+        public Task<ToolResponsePayload> SendToolRequestAsync(string cycleId, string toolName, string? argumentsJson, CancellationToken cancellationToken = default)
+        {
+            SendToolRequestCallCount++;
+            return Task.FromResult(new ToolResponsePayload { IsError = false, ResultJson = "simulated-response" });
+        }
     }
 }

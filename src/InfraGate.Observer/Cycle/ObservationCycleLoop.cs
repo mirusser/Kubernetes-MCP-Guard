@@ -71,6 +71,7 @@ internal sealed class ObservationCycleLoop(
             }
 
             acquired = true;
+            ObserverLogEvents.LogCycleStarting(logger);
 
             var result = await cycleRunner.RunAsync(shutdownToken).ConfigureAwait(false);
 

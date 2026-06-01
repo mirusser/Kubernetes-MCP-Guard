@@ -1,14 +1,12 @@
 using System.Diagnostics.Metrics;
 using InfraGate.Executor.Diagnostics;
 using InfraGate.Executor.Mcp;
-using InfraGate.Executor.Queue;
 using Serilog.Context;
 
 namespace InfraGate.Executor.Watch;
 
-internal sealed class PlanWatcher : BackgroundService
+internal sealed class PlanWatcher
 {
-    private readonly ProposalQueue queue;
     private readonly IExecutorDedupeStore dedupeStore;
     private readonly IExecutorMcpClient mcpClient;
     private readonly IOptionsMonitor<ExecutorOptions> optionsMonitor;
@@ -20,14 +18,12 @@ internal sealed class PlanWatcher : BackgroundService
     private readonly Counter<long>? executeBlockedCounter;
 
     public PlanWatcher(
-        ProposalQueue queue,
         IExecutorDedupeStore dedupeStore,
         IExecutorMcpClient mcpClient,
         IOptionsMonitor<ExecutorOptions> optionsMonitor,
         ILogger<PlanWatcher> logger,
         Meter? meter = null)
     {
-        this.queue = queue;
         this.dedupeStore = dedupeStore;
         this.mcpClient = mcpClient;
         this.optionsMonitor = optionsMonitor;
@@ -39,62 +35,57 @@ internal sealed class PlanWatcher : BackgroundService
         executeBlockedCounter = ExecutorMetrics.CreateExecuteBlockedCounter(meter);
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        while (await queue.Reader.WaitToReadAsync(stoppingToken).ConfigureAwait(false))
-        {
-            while (queue.Reader.TryRead(out var proposal))
-            {
-                _ = WatchPlanAsync(proposal, stoppingToken);
-            }
-        }
-    }
-
-    internal async Task WatchPlanAsync(RemediationProposal proposal, CancellationToken stoppingToken)
+    internal async Task<ExecutorDispatchResult> WatchPlanAsync(
+        RemediationProposal proposal,
+        CancellationToken stoppingToken)
     {
         var planId = proposal.PlanId;
         using var planScope = LogContext.PushProperty("PlanId", planId);
 
         if (!dedupeStore.TryTrack(planId))
         {
-            queue.ReleaseSlot();
-            return;
+            return ExecutorDispatchResult.Failed($"Plan '{planId}' is already being executed.");
         }
 
         try
         {
             ExecutorLogEvents.LogWatchStarted(logger, planId);
             var opts = optionsMonitor.CurrentValue;
-            bool approved = await WaitForApprovalAsync(planId, opts, stoppingToken).ConfigureAwait(false);
+            string status = await WaitForApprovalAsync(planId, opts, stoppingToken).ConfigureAwait(false);
 
-            if (approved)
+            if (string.Equals(status, ExecutorConventions.PlanStatusValues.Approved, StringComparison.Ordinal))
             {
                 ExecutorLogEvents.LogWatchApproved(logger, planId);
-                await ExecutePlanAsync(planId, stoppingToken).ConfigureAwait(false);
+                return await ExecutePlanAsync(planId, stoppingToken).ConfigureAwait(false);
             }
-            else
+
+            if (string.Equals(status, ExecutorConventions.PlanStatusValues.Applied, StringComparison.Ordinal))
             {
-                watchTimeoutCounter?.Add(1);
-                ExecutorLogEvents.LogWatchTimeout(logger, planId);
+                return ExecutorDispatchResult.Applied($"Plan '{planId}' was already applied.");
             }
+
+            watchTimeoutCounter?.Add(1);
+            ExecutorLogEvents.LogWatchTimeout(logger, planId);
+            return ExecutorDispatchResult.Failed(
+                $"Plan '{planId}' did not reach approval. Last status: {status}.");
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            // Graceful shutdown — in-flight plan watch is lost; operator can re-trigger via approval URL.
+            throw;
         }
         catch (Exception ex)
         {
             watchFailedCounter?.Add(1);
             ExecutorLogEvents.LogWatchFailed(logger, planId, ex);
+            return ExecutorDispatchResult.Failed(ex.Message);
         }
         finally
         {
             dedupeStore.Remove(planId);
-            queue.ReleaseSlot();
         }
     }
 
-    private async Task<bool> WaitForApprovalAsync(string planId, ExecutorOptions opts, CancellationToken stoppingToken)
+    private async Task<string> WaitForApprovalAsync(string planId, ExecutorOptions opts, CancellationToken stoppingToken)
     {
         var deadline = DateTimeOffset.UtcNow.AddSeconds(opts.WatchTimeoutSeconds);
 
@@ -103,7 +94,7 @@ internal sealed class PlanWatcher : BackgroundService
             int remaining = (int)(deadline - DateTimeOffset.UtcNow).TotalSeconds;
             if (remaining <= 0)
             {
-                return false;
+                return ExecutorConventions.PlanStatusValues.ApprovalRequired;
             }
 
             int callTimeout = Math.Min(remaining, ExecutorConventions.WaitForPlanApprovalPerCallTimeoutSeconds);
@@ -125,29 +116,29 @@ internal sealed class PlanWatcher : BackgroundService
 
             if (string.Equals(status, ExecutorConventions.PlanStatusValues.Approved, StringComparison.Ordinal))
             {
-                return true;
+                return status;
             }
 
             if (string.Equals(status, ExecutorConventions.PlanStatusValues.NotFound, StringComparison.Ordinal) ||
                 string.Equals(status, ExecutorConventions.PlanStatusValues.Expired, StringComparison.Ordinal) ||
                 string.Equals(status, ExecutorConventions.PlanStatusValues.Applied, StringComparison.Ordinal))
             {
-                return false;
+                return status;
             }
 
             if (!timedOut)
             {
-                return false;
+                return status;
             }
 
             // timedOut=true, status=ApprovalRequired: loop until wall-clock deadline
         }
 
         stoppingToken.ThrowIfCancellationRequested();
-        return false;
+        return ExecutorConventions.PlanStatusValues.ApprovalRequired;
     }
 
-    private async Task ExecutePlanAsync(string planId, CancellationToken stoppingToken)
+    private async Task<ExecutorDispatchResult> ExecutePlanAsync(string planId, CancellationToken stoppingToken)
     {
         string response;
         try
@@ -168,18 +159,19 @@ internal sealed class PlanWatcher : BackgroundService
         {
             executeFailedCounter?.Add(1);
             ExecutorLogEvents.LogExecuteFailed(logger, planId, ex);
-            return;
+            return ExecutorDispatchResult.Failed(ex.Message);
         }
 
         if (IsErrorResponse(response))
         {
             executeBlockedCounter?.Add(1);
             ExecutorLogEvents.LogExecuteBlocked(logger, planId);
-            return;
+            return ExecutorDispatchResult.Failed(response);
         }
 
         executeSucceededCounter?.Add(1);
         ExecutorLogEvents.LogExecuteSucceeded(logger, planId);
+        return ExecutorDispatchResult.Applied(response);
     }
 
     internal static bool TryParseWaitResult(string response, out string status, out bool timedOut)

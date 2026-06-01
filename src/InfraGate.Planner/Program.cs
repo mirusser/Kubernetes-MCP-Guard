@@ -1,3 +1,4 @@
+using A2A;
 using InfraGate.Planner;
 using InfraGate.Planner.Audit;
 using InfraGate.Planner.Cycle;
@@ -5,6 +6,7 @@ using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
 using InfraGate.Planner.Endpoints;
 using InfraGate.Planner.Handoff;
+using InfraGate.Planner.Tasks;
 using InfraGate.AgentGuardrails;
 using InfraGate.AgentLlm;
 using InfraGate.AuditOutbox;
@@ -18,6 +20,7 @@ using System.Reflection;
 using System.Text;
 using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Agents.AI.A2A;
 using Microsoft.Extensions.AI;
 using Npgsql;
 
@@ -35,6 +38,7 @@ builder.Configuration.AddInfraGateEnvironmentVariables(mappings =>
     mappings.Map(PlannerConventions.EnvironmentVariables.LlmApiKey, PlannerConventions.ConfigurationKeys.LlmApiKey);
     mappings.Map(PlannerConventions.EnvironmentVariables.FileSinkRoot, PlannerConventions.ConfigurationKeys.FileSinkRoot);
     mappings.Map(PlannerConventions.EnvironmentVariables.AuditConnectionString, PlannerConventions.ConfigurationKeys.AuditConnectionString);
+    mappings.Map(PlannerConventions.EnvironmentVariables.ObserverBaseUrl, PlannerConventions.ConfigurationKeys.ObserverBaseUrl);
     RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
 });
 
@@ -121,7 +125,27 @@ builder.Services.AddInfraGatePromptLibrary(b => b.AddTemplate(
 
 builder.Services.AddSingleton<AnomalyBatchQueue>();
 builder.Services.AddSingleton<PlannerDedupeStore>();
-builder.Services.AddHttpClient(PlannerConventions.HttpClients.ExecutorHandoff)
+builder.Services.AddHttpClient(PlannerConventions.HttpClients.ExecutorHandoff, httpClient =>
+    {
+        httpClient.Timeout = PlannerConventions.ExecutorDispatchTimeout;
+    })
+    .AddClientCredentialsBearerHandler();
+if (!string.IsNullOrEmpty(plannerOptions.ExecutorHandoffUrl))
+{
+    builder.Services.AddSingleton<IExecutorDispatchClient>(sp =>
+    {
+        var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+        var httpClient = httpClientFactory.CreateClient(PlannerConventions.HttpClients.ExecutorHandoff);
+#pragma warning disable MEAI001 // Experimental A2A preview package - accepted per plan
+        var agent = new A2AAgent(
+            new A2AClient(new Uri(plannerOptions.ExecutorHandoffUrl), httpClient),
+            name: PlannerConventions.A2AExecutorAgentName);
+#pragma warning restore MEAI001
+        return new A2AExecutorDispatchClient(agent, sp.GetRequiredService<ILogger<A2AExecutorDispatchClient>>());
+    });
+}
+
+builder.Services.AddHttpClient(PlannerConventions.HttpClients.ObserverRequest)
     .AddClientCredentialsBearerHandler();
 
 builder.Services.AddSingleton<LoggingRemediationProposalSink>();
@@ -141,18 +165,11 @@ builder.Services.AddSingleton<IRemediationProposalSink>(sp =>
             sp.GetRequiredService<ILogger<JsonFileRemediationProposalSink>>()));
     }
 
-    if (!string.IsNullOrEmpty(options.ExecutorHandoffUrl))
-    {
-        var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
-        var httpClient = httpClientFactory.CreateClient(PlannerConventions.HttpClients.ExecutorHandoff);
-        var httpLogger = sp.GetRequiredService<ILogger<HttpRemediationProposalSink>>();
-        sinks.Add(new HttpRemediationProposalSink(httpClient, options.ExecutorHandoffUrl, httpLogger));
-    }
-
     var logger = sp.GetRequiredService<ILogger<CompositeRemediationProposalSink>>();
     return new CompositeRemediationProposalSink(sinks, logger);
 });
 string? auditConnectionString = builder.Configuration[PlannerConventions.ConfigurationKeys.AuditConnectionString];
+IPlannerTaskStore plannerTaskStore = new InMemoryPlannerTaskStore();
 if (!string.IsNullOrWhiteSpace(auditConnectionString))
 {
     var auditDataSource = NpgsqlDataSource.Create(auditConnectionString);
@@ -160,10 +177,49 @@ if (!string.IsNullOrWhiteSpace(auditConnectionString))
     await PostgresAuditOutboxMigrationRunner.ApplyAsync(
         auditDataSource, AuditOutboxConventions.Streams.Planner, migrationsDir, CancellationToken.None).ConfigureAwait(false);
     builder.Services.AddPlannerAuditOutbox(auditDataSource);
+
+    // Durable A2A task store on the same Postgres data source - lets the Planner reconcile
+    // in-flight (waiting) remediation tasks after a restart.
+    string taskMigrationsDir = Path.Combine(AppContext.BaseDirectory, PlannerTaskStoreConventions.MigrationsRelativePath);
+    await PostgresAuditOutboxMigrationRunner.ApplyAsync(
+        auditDataSource, PlannerTaskStoreConventions.Schema, taskMigrationsDir, CancellationToken.None).ConfigureAwait(false);
+    plannerTaskStore = new PostgresTaskStore(auditDataSource);
+}
+builder.Services.AddSingleton(plannerTaskStore);
+builder.Services.AddSingleton<ChannelEventNotifier>();
+builder.Services.AddSingleton<PlannerTaskLifecycle>();
+builder.Services.AddHostedService<PlannerTaskReconciler>();
+
+if (!string.IsNullOrEmpty(plannerOptions.ObserverBaseUrl))
+{
+    builder.Services.AddSingleton<IObserverChannel>(sp =>
+    {
+        var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+        var httpClient = httpClientFactory.CreateClient(PlannerConventions.HttpClients.ObserverRequest);
+#pragma warning disable MEAI001 // Experimental A2A preview package — accepted per plan
+        var agent = new A2AClient(new Uri(plannerOptions.ObserverBaseUrl), httpClient)
+            .AsAIAgent(name: PlannerConventions.A2AObserverAgentName);
+#pragma warning restore MEAI001
+        return new ObserverChannel(agent, sp.GetRequiredService<ILogger<ObserverChannel>>());
+    });
 }
 
 builder.Services.AddSingleton<BatchProcessor>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BatchProcessor>());
+
+builder.Services.AddSingleton<PlannerHandoffAgentHandler>();
+#pragma warning disable MEAI001 // Experimental A2A preview package — accepted per plan
+builder.Services.AddKeyedSingleton<A2AServer>(PlannerConventions.A2AHandoffAgentName, (sp, _) =>
+{
+    var handler = sp.GetRequiredService<PlannerHandoffAgentHandler>();
+    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+    return new A2AServer(
+        handler,
+        plannerTaskStore,
+        sp.GetRequiredService<ChannelEventNotifier>(),
+        loggerFactory.CreateLogger<A2AServer>());
+});
+#pragma warning restore MEAI001
 
 var jwtAuthority = builder.Configuration[PlannerConventions.EnvironmentVariables.OAuthAuthority] ?? string.Empty;
 builder.Services
@@ -199,7 +255,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapPlannerHealthEndpoint();
-app.MapPlannerHandoffEndpoint();
+#pragma warning disable MEAI001 // Experimental A2A preview package — accepted per plan
+app.MapA2AJsonRpc(PlannerConventions.A2AHandoffAgentName, PlannerConventions.A2AHandoffEndpointPath)
+   .RequireAuthorization(PlannerConventions.Policies.ObserverSender);
+#pragma warning restore MEAI001
 app.Use(async (context, next) =>
 {
     if (context.Request.Path == "/")

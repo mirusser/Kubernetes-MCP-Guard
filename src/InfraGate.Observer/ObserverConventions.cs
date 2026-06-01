@@ -66,9 +66,46 @@ internal static class ObserverConventions
         public const string OpenRouter = "OPENROUTER";
     }
 
+    // A2A agent name used when the Observer constructs an AIAgent against the Planner's A2A endpoint
+    public const string A2AHandoffAgentName = "observer-to-planner";
+
+    // A2A server hosted by the Observer for inbound Planner→Observer messages
+    public const string A2AInboundAgentName = "observer-inbound";
+    public const string A2AInboundEndpointPath = "/a2a/observer";
+
+    public static class Claims
+    {
+        public const string AuthorizedParty = "azp";
+    }
+
+    public static class ServiceClients
+    {
+        public const string Planner = "infra-gate-planner";
+    }
+
+    // "PlannerSender" means the Planner is the caller — the Observer is the receiver.
+    // The Executor also defines a PlannerSender policy with the same semantics (Planner→Executor inbound).
+    // Each lives in its own service; there is no cross-service collision.
+    public static class Policies
+    {
+        public const string PlannerSender = "PlannerSender";
+    }
+
     public static class HttpClients
     {
         public const string PlannerHandoff = "PlannerHandoff";
+    }
+
+    public static class Audit
+    {
+        public const string ServiceObserverSubject = "service:observer";
+
+        public static class Outcomes
+        {
+            public const string Resolved = "resolved";
+            public const string Active = "active";
+            public const string Suppressed = "suppressed";
+        }
     }
 
     public static class ToolNames
@@ -76,12 +113,20 @@ internal static class ObserverConventions
         public const string GetAllowedNamespaces = "get_allowed_namespaces";
         public const string GetK8sStatus = "get_k8s_status";
         public const string GetK8sEvents = "get_k8s_events";
-        public const string GetK8sPods = "get_k8s_pods";
-        public const string DescribeK8sResource = "describe_k8s_resource";
-        public const string GetK8sDeployments = "get_k8s_deployments";
-        public const string GetK8sServices = "get_k8s_services";
-        public const string GetK8sEndpoints = "get_k8s_endpoints";
+        public const string GetPodLogs = "get_pod_logs";
+        public const string GetK8sResource = "get_k8s_resource";
+        public const string GetDeploymentDiagnostics = "get_deployment_diagnostics";
+        public const string GetPodDiagnostics = "get_pod_diagnostics";
+        public const string GetServiceDiagnostics = "get_service_diagnostics";
 
+        // Tools callable with only {namespace} — used by SnapshotFetcher to build the namespace overview.
+        // SnapshotFetcher intersects this set with the live MCP tool list so missing tools are skipped
+        // rather than generating isError=true responses.
+        public static readonly IReadOnlySet<string> NamespaceSnapshotTools = new HashSet<string>(StringComparer.Ordinal)
+        {
+            GetK8sStatus,
+            GetK8sEvents,
+        };
     }
 
     public static class Prompts

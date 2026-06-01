@@ -1,4 +1,5 @@
 using InfraGate.AgentGuardrails;
+using InfraGate.Planner.Audit;
 using InfraGate.Planner.Decision;
 using InfraGate.Planner.Dedupe;
 using InfraGate.Planner.Diagnostics;
@@ -12,7 +13,8 @@ internal sealed class ValidateExecutor(
     ConcurrentDictionary<string, byte> batchOperationKeys,
     PlannerDedupeStore dedupeStore,
     AgentGuardrailMetrics? guardrailMetrics,
-    ILogger logger) : Executor<DecisionContext>(id)
+    ILogger logger,
+    IPlannerAuditOutbox? auditOutbox = null) : Executor<DecisionContext>(id)
 {
     public override async ValueTask HandleAsync(
         DecisionContext ctx,
@@ -26,6 +28,19 @@ internal sealed class ValidateExecutor(
         {
             guardrailMetrics?.RecordDecision(GuardrailDecisionOutcome.Rejected, AgentGuardrailConventions.Reasons.InvalidOperation);
             PlannerLogEvents.LogDecisionInvalidOperation(logger, report.AnomalyId, decision.OperationType);
+            var now = DateTimeOffset.UtcNow;
+            dedupeStore.TrackActivePlan(report.AnomalyId, string.Empty, now,
+                now + PlannerConventions.Dedupe.FailedProposalBackoff);
+            if (auditOutbox is not null)
+                await auditOutbox.AppendAsync(
+                    new PlannerAuditEntry(
+                        EventName: PlannerAuditEvents.DecisionInvalidOperation,
+                        Payload: new { operationType = decision.OperationType },
+                        AnomalyId: report.AnomalyId,
+                        ActorSubject: PlannerConventions.Audit.ServicePlannerSubject,
+                        Outcome: PlannerConventions.Audit.Outcomes.Failed,
+                        Reason: AgentGuardrailConventions.Reasons.InvalidOperation),
+                    cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -38,6 +53,19 @@ internal sealed class ValidateExecutor(
                 string.Join(", ", decision.Arguments.Select(kv => $"{kv.Key}={kv.Value}")));
             guardrailMetrics?.RecordDecision(GuardrailDecisionOutcome.Rejected, AgentGuardrailConventions.Reasons.InvalidArguments);
             PlannerLogEvents.LogDecisionInvalidArguments(logger, report.AnomalyId, decision.OperationType);
+            var now = DateTimeOffset.UtcNow;
+            dedupeStore.TrackActivePlan(report.AnomalyId, string.Empty, now,
+                now + PlannerConventions.Dedupe.FailedProposalBackoff);
+            if (auditOutbox is not null)
+                await auditOutbox.AppendAsync(
+                    new PlannerAuditEntry(
+                        EventName: PlannerAuditEvents.DecisionInvalidArguments,
+                        Payload: new { operationType = decision.OperationType, arguments = decision.Arguments },
+                        AnomalyId: report.AnomalyId,
+                        ActorSubject: PlannerConventions.Audit.ServicePlannerSubject,
+                        Outcome: PlannerConventions.Audit.Outcomes.Failed,
+                        Reason: AgentGuardrailConventions.Reasons.InvalidArguments),
+                    cancellationToken).ConfigureAwait(false);
             return;
         }
 
