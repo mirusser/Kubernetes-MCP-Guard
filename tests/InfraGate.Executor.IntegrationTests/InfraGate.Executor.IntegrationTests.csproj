@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="InfraGate.Executor.Settings" />
   </ItemGroup>
 
   <ItemGroup>

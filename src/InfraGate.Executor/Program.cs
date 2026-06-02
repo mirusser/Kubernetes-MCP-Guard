@@ -37,15 +37,9 @@ catch (InvalidOperationException ex)
     return 1;
 }
 
-var authOptions = new ClientCredentialsTokenOptions
-{
-    Authority = executorOptions.OAuthAuthority,
-    ClientId = executorOptions.ClientId,
-    ClientSecret = executorOptions.ClientSecret,
-    Scope = executorOptions.OAuthScope,
-    RequireHttpsMetadata = false,
-};
-builder.Services.AddClientCredentialsTokenProvider(authOptions);
+// ClientCredentials binds recursively from InfraGate:Executor:ClientCredentials — no manual mapping.
+// AddClientCredentialsTokenProvider validates the bound options (Authority/ClientId/Scope) at startup.
+builder.Services.AddClientCredentialsTokenProvider(executorOptions.ClientCredentials);
 
 builder.Services.AddSingleton<IExecutorMcpClient, ExecutorMcpClient>();
 builder.Services.AddSingleton<IExecutorDedupeStore, ExecutorDedupeStore>();
@@ -65,7 +59,7 @@ builder.Services.AddKeyedSingleton<A2AServer>(ExecutorConventions.A2AHandoffAgen
 });
 #pragma warning restore MEAI001
 
-var jwtAuthority = executorOptions.OAuthAuthority;
+var jwtAuthority = executorOptions.ClientCredentials.Authority;
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -139,9 +133,11 @@ static async Task ConnectExecutorMcpClientAsync(WebApplication app, ExecutorOpti
     }
     catch (Exception ex)
     {
-        var authority = string.IsNullOrEmpty(options.OAuthAuthority) ? "(not set)" : options.OAuthAuthority;
-        var scope = options.OAuthScope;
-        var clientId = options.ClientId;
+        var authority = string.IsNullOrEmpty(options.ClientCredentials.Authority)
+            ? "(not set)"
+            : options.ClientCredentials.Authority;
+        var scope = options.ClientCredentials.Scope;
+        var clientId = options.ClientCredentials.ClientId;
 
         ExecutorLogEvents.LogStartupConnectionFailed(
             logger,

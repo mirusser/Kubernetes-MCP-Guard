@@ -1,6 +1,6 @@
 # Implementation Plan: Appsettings-First Configuration with a Single `.env` per Profile
 
-> Status: proposed (2026-06-02). No code changed yet. Branch: work on the current branch, **do not commit** until reviewed.
+> Status: in progress (2026-06-02) — **Executor reference slice done & verified**; remaining services pending. Branch: work on the current branch, **do not commit** until reviewed.
 
 ## Overview
 
@@ -27,10 +27,14 @@ lines of conventions/mapping/renderer glue are removed.
   `__` convention (anything else needs a translation layer — the thing we are deleting). The `__`
   keys only ever appear in generated artifacts (the `.env`, k8s ConfigMaps/Secrets) and ad-hoc
   overrides; humans author the YAML. This matches CitiesService's k8s overlay env files.
-- **Section binding via `Configure<T>(GetSection)`.** Each service keeps a bindable settings type
-  (`sealed class`, `get; set;`/`init` properties — the binder needs settable members), bound from a
-  named section under `InfraGate:`. Section-root strings stay as constants (code-standards: no magic
-  strings); the **per-field** env/key constant tables are deleted.
+- **Section binding via `Configure<T>(GetSection)`.** Each service keeps one bindable settings type,
+  bound from a named section under `InfraGate:`. `sealed record class` with `init` properties works (the
+  Executor baseline uses exactly that, plus a `Validate()` method). The class lives in a **`Settings/`
+  folder** (namespace `…<Service>.Settings`) — **not `Options/`**, which as a child namespace shadows
+  `Microsoft.Extensions.Options.Options` and breaks `Options.Create`. Shared option types (e.g.
+  `ClientCredentialsTokenOptions`) are **nested bound properties**, never inline-constructed. Section-root
+  strings stay as constants (no magic strings); the **per-field** env/key constant tables are deleted.
+  **The Executor slice (Task 6, ✅ done) is the reference — see "Slice conventions" under Task 1.**
 - **Validation moves to `IValidateOptions<T>` + `ValidateOnStart()`.** The current manual
   `ValidateProductionSafety()` calls in `Program.cs` become `sealed` validators registered via
   `services.AddOptions<T>().Bind(section).ValidateOnStart()`. `ProductionSafetyValidator`,
@@ -43,8 +47,8 @@ lines of conventions/mapping/renderer glue are removed.
   especially the gateway's `?? new DownstreamAuthOptions()` null-provider fallback in
   `ConfigurationExtensions.cs` — so an unconfigured instance stays safe rather than silently demanding
   auth with empty credentials.
-- **`appsettings.json` = static defaults only.** Today only McpServer and McpGateway ship one (logging
-  defaults). Observer/Planner/Executor get an `appsettings.json` added. Per-environment files
+- **`appsettings.json` = static defaults only.** Today McpServer, McpGateway, **and Executor** (done)
+  ship one. Observer/Planner still get an `appsettings.json` added. Per-environment files
   (`appsettings.Development.json`, etc.) are optional and selected by `DOTNET_ENVIRONMENT`.
 - **The single `.env` mixes two logical groups in one file:** app config in `__` form
   (`InfraGate__…`, consumed by the app via the stock env provider) and Compose orchestration vars in
@@ -71,16 +75,17 @@ lines of conventions/mapping/renderer glue are removed.
 ## Dependency Graph
 
 ```
-Task 1  parser collapse (FromEnvironment → shim over FromConfiguration)   [foundation]
+Task 1  ❌ ABANDONED — parser collapse (per-key reads = the antipattern). Superseded by vertical slices.
    │
-Task 2  McpServer → section binding + IValidateOptions + ValidateOnStart  [pilot, resolves stdio]
+Task 6  ✅ DONE — Executor → Settings/ section binding   [REFERENCE BASELINE for every slice below]
+   │
+Task 2  McpServer → section binding + IValidateOptions + ValidateOnStart  [resolves stdio risk]
    │        (add appsettings defaults; migrate McpServer.Tests off FromEnvironment)
    │
    ├── Task 3  McpGateway → section binding (+ migrate McpGateway.Tests)
    ├── Task 4  Observer   → section binding (+ add appsettings.json)
-   ├── Task 5  Planner    → section binding (+ add appsettings.json)
-   └── Task 6  Executor   → section binding (+ add appsettings.json)
-   │        (Tasks 3–6 are independent of each other; safe to parallelize)
+   └── Task 5  Planner    → section binding (+ add appsettings.json)
+   │        (Tasks 2–5 are independent; safe to parallelize; each follows the Task 6 baseline)
    │
 Task 7  RunProfiles: render single `__` .env; delete AppSettingsRenderer (+ rewrite renderer tests)
    │
@@ -100,9 +105,13 @@ within their phase to fail fast.
 
 ### Phase 1: Foundation — one parser per option type
 
-#### Task 1: Collapse `FromEnvironment` into a shim over `FromConfiguration`
+#### Task 1: ~~Collapse `FromEnvironment` into a shim over `FromConfiguration`~~ ❌ ABANDONED
 
-**Description:** For each options type with both factories (`KubernetesMcpOptions`,
+> **Abandoned (2026-06-02)** — this per-key approach was the antipattern (see APPROACH CORRECTION
+> below). Replaced by the vertical-slice baseline. Kept for history; **do not implement.** The
+> reference is the **Slice conventions** further down, established by the Executor slice (Task 6).
+
+**Description (historical):** For each options type with both factories (`KubernetesMcpOptions`,
 `McpGatewayOptions`, `GatewayAuthOptions`, `DownstreamAuthOptions`, `RuntimeModeResolver`), make
 `FromEnvironment()` build an in-memory/stock `IConfiguration` from environment variables and delegate
 to `FromConfiguration(IConfiguration)`. Eliminate the duplicated parsing body so there is a single
@@ -144,26 +153,57 @@ Simple-Weather (`EmailService`, `ApiResourceAuthSettings` nested binding).
 no per-key reads, no `mappings.Map`), instead of horizontal parser-collapse. The custom provider stays
 until all services are migrated, then is deleted with the `__` transport flip.
 
-✅ **Executor slice DONE & verified** (build 0/0, **94 Executor tests pass**, `RunProfiles validate`
-clean): `ExecutorOptions` now binds the entire `InfraGate:Executor` section (added OAuth fields);
-`Program.cs` dropped the `AddInfraGateEnvironmentVariables`/`mappings.Map` block and all per-key OAuth/URL
-reads; `ExecutorConventions` env/key tables replaced by a single `SectionName`; added
-`appsettings.json`; compose `executor` service now passes `InfraGate__Executor__*` keys (stock binder).
+✅ **Executor slice DONE & verified** (build 0/0, **95 Executor tests pass**, `RunProfiles validate`
+clean): `ExecutorOptions` now binds the entire `InfraGate:Executor` section; `Program.cs` dropped the
+`AddInfraGateEnvironmentVariables`/`mappings.Map` block and all per-key OAuth/URL reads;
+`ExecutorConventions` env/key tables replaced by a single `SectionName`; added `appsettings.json`;
+compose `executor` service now passes `InfraGate__Executor__*` keys (stock binder).
+
+**Slice conventions (apply to every remaining service):**
+1. **The options class lives in a dedicated `Settings/` folder** (namespace `…<Service>.Settings`), one
+   class per file — mirrors Simple-Weather's `Settings/` (`ApiConsumerAuthSettings`, `RabbitMQSettings`).
+   ⚠️ **Do NOT name the folder/namespace `Options`** — as a child namespace it shadows
+   `Microsoft.Extensions.Options.Options.Create()` for all code under the service's root namespace and
+   breaks every test calling `Options.Create` (CS0234). The *class* keeps the repo's `*Options` name.
+2. **Shared option types become NESTED bound properties, not inline-constructed.** `ClientCredentials`
+   is now `ExecutorOptions.ClientCredentials : ClientCredentialsTokenOptions`, bound recursively from
+   `InfraGate:Executor:ClientCredentials`. The old inline `new ClientCredentialsTokenOptions { Authority
+   = …, ClientId = … }` block (which was itself manual field-mapping) is **eliminated** →
+   `builder.Services.AddClientCredentialsTokenProvider(executorOptions.ClientCredentials)`. This is the
+   exact Simple-Weather shape: `ApiConsumerAuthSettings` is `Configure<T>(GetSection(nameof(T)))`-bound
+   and consumed via `IOptions<T>` in `BearerTokenHandler` with zero manual construction.
+3. **Service-specific defaults go in `appsettings.json`**, not C# consts (Executor: `ClientId`, `Scope`,
+   `RequireHttpsMetadata`). Keep a const only when it's a code concern (`DefaultClientId` is still the
+   MCP client `Name`); removed the now-dead `DefaultOAuthScope`.
+4. **Compose keys are nested** with `__`: `InfraGate__Executor__ClientCredentials__{Authority,ClientId,
+   ClientSecret,Scope}`.
+5. **Test projects** get `<Using Include="…<Service>.Settings" />` in the `.csproj` (a project `<Using>`
+   never trips CS8019, unlike a redundant source `using`).
+6. Add a **binding test** (in-memory `IConfiguration` → `GetSection(SectionName).Get<T>()`) asserting
+   scalars + nested options bind — the per-service proof of the pattern.
+
+⚠️ **Known follow-up:** `RequireHttpsMetadata=false` is currently in committed `appsettings.json`
+(behavior-preserving — matches the prior unconditional hardcode and Simple-Weather's own hardcoded
+`false`). The secure-default flip (true base + dev-profile opt-out) is folded into the
+`DownstreamAuthOptions` migration below.
+
 Remaining services: McpServer, McpGateway, Observer, Planner (+ shared `DownstreamAuthOptions` as a
 nested bound section). `DownstreamAuthOptions` still carries the secure-default coupling (set
 `Required=true` POCO default when it's migrated; dev profiles `required=false`).
 
-### Checkpoint: Foundation
-- [ ] All four test projects above pass; build is clean.
-- [ ] No env-var names or config keys changed yet (pure de-duplication).
+### Checkpoint: Foundation (Executor reference slice)
+- [x] Executor builds clean (0/0); **95 Executor tests pass**; `RunProfiles validate` clean.
+- [x] Reference conventions captured (Slice conventions above) for the remaining services.
+- [ ] No app-config env-var **names** changed outside the migrated service (custom provider still feeds the rest).
 
 ---
 
-### Phase 2: Pilot — McpServer end-to-end (resolves the stdio risk early)
+### Phase 2: McpServer end-to-end (resolves the stdio risk; pattern already set by the Executor baseline)
 
 #### Task 2: Migrate McpServer to section binding + options validation
 
-**Description:** Bind `InfraGate:Kubernetes` (and downstream-auth section) via
+**Description:** Follow the **Executor baseline** (Settings/ folder, nested-bound shared options,
+defaults in `appsettings.json`, binding test, csproj `<Using>`). Bind `InfraGate:Kubernetes` (and downstream-auth section) via
 `services.AddOptions<InfraGateKubernetesSettings>().Bind(section).ValidateOnStart()` with a `sealed`
 `IValidateOptions<InfraGateKubernetesSettings>` carrying the `ValidateProductionSafety` logic. Build
 the runtime `KubernetesMcpOptions` from the bound settings (no raw-key reads). Confirm the stdio path:
@@ -206,31 +246,44 @@ Questions). Migrate `K8SMcpOptionsTests` off `FromEnvironment()` to in-memory `I
 > `Configure<T>(GetSection)` + a validator, and migrates that service's tests off `FromEnvironment()`.
 
 #### Task 3: McpGateway → section binding + validation
-**Description:** Replace `McpGatewayOptions.FromConfiguration(...)` raw-key construction with bound
-settings (`InfraGate:Gateway`/`:Auth`/`:Approval` already bound — extend to all gateway config) +
-`IValidateOptions`. Migrate the ~30 `McpGatewayOptions.FromEnvironment()` and `GatewayAuthOptions`
-test call-sites to in-memory `IConfiguration`.
+**Description:** Follow the **Executor baseline**. Replace `McpGatewayOptions.FromConfiguration(...)`
+raw-key construction with bound settings (`InfraGate:Gateway`/`:Auth`/`:Approval` already bound — extend
+to all gateway config) + `IValidateOptions`. **Eliminate the inline `new ClientCredentialsTokenOptions
+{ … }` at `ConfigurationExtensions.cs:~148`** by making it a nested bound property. Migrate the ~30
+`McpGatewayOptions.FromEnvironment()` and `GatewayAuthOptions` test call-sites to in-memory
+`IConfiguration`.
 **Acceptance criteria:** [ ] gateway config comes from bound sections; [ ] production validation via `ValidateOnStart`; [ ] gateway tests use in-memory config, no mocks.
 **Verification:** [ ] `dotnet build`; [ ] `dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj`
-**Dependencies:** Task 2 (pattern established)
+**Dependencies:** Task 6 baseline (pattern established)
 **Files likely touched:** `src/InfraGate.McpGateway/Configuration/ConfigurationExtensions.cs`, `…/McpGatewayOptions.cs`, `src/InfraGate.McpGateway.Auth/GatewayAuthOptions.cs` (+ validator), `tests/InfraGate.McpGateway.Tests/UnitTests/McpGatewayOptionsTests.cs`, `…/GatewayAuthOptionsTests.cs`
 **Estimated scope:** Medium–Large (verify ≤5; split auth into its own task if it grows)
 
 #### Task 4: Observer → section binding (+ add `appsettings.json`)
-**Description:** Replace the inline `mappings.Map(...)` block in `Observer/Program.cs:31-47` with
-`Configure<ObserverOptions>(GetSection)` (already partly present) + validator; add a committed
-`appsettings.json` (logging + static defaults).
+**Description:** Follow the **Executor baseline** (Settings/ folder, nested-bound shared options,
+defaults in `appsettings.json`, binding test, csproj `<Using>`). Replace the inline `mappings.Map(...)`
+block in `Observer/Program.cs:31-47` with `Configure<ObserverOptions>(GetSection)` (already partly
+present) + validator; **eliminate the inline `new ClientCredentialsTokenOptions { … }` at
+`Observer/Program.cs:~80`** via a nested `ObserverOptions.ClientCredentials` bound property; add a
+committed `appsettings.json` (logging + static defaults). Place `ObserverOptions` in
+`src/InfraGate.Observer/Settings/`.
 **Acceptance criteria:** [ ] no inline env→key mapping in `Program.cs`; [ ] Observer binds from section; [ ] appsettings.json added.
 **Verification:** [ ] `dotnet build`; [ ] `dotnet test tests/InfraGate.Observer.Tests/...` (if present; otherwise build + manual)
-**Dependencies:** Task 2
-**Files likely touched:** `src/InfraGate.Observer/Program.cs`, `…/ObserverOptions.cs`, `…/ObserverConventions.cs` (shrink), new `src/InfraGate.Observer/appsettings.json`
+**Dependencies:** Task 6 baseline
+**Files likely touched:** `src/InfraGate.Observer/Program.cs`, new `src/InfraGate.Observer/Settings/ObserverOptions.cs`, `…/ObserverConventions.cs` (shrink), new `src/InfraGate.Observer/appsettings.json`, Observer test csproj `<Using>` + a binding test
 **Estimated scope:** Medium
 
 #### Task 5: Planner → section binding (+ add `appsettings.json`)
-Mirror Task 4 for Planner. **Files:** `src/InfraGate.Planner/Program.cs`, `…/PlannerOptions.cs`, `…/PlannerConventions.cs`, new `appsettings.json`. **Verification:** `dotnet build` + Planner tests. **Dependencies:** Task 2. **Scope:** Medium
+Mirror Task 4 for Planner (same baseline). **Eliminate the inline `new ClientCredentialsTokenOptions
+{ … }` at `Planner/Program.cs:~76`** via a nested `PlannerOptions.ClientCredentials` bound property.
+**Files:** `src/InfraGate.Planner/Program.cs`, new `src/InfraGate.Planner/Settings/PlannerOptions.cs`, `…/PlannerConventions.cs`, new `appsettings.json`, Planner test csproj `<Using>` + a binding test. **Verification:** `dotnet build` + Planner tests. **Dependencies:** Task 6 baseline. **Scope:** Medium
 
-#### Task 6: Executor → section binding (+ add `appsettings.json`)
-Mirror Task 4 for Executor. **Files:** `src/InfraGate.Executor/Program.cs`, `…/ExecutorOptions.cs`, `…/ExecutorConventions.cs`, new `appsettings.json`. **Verification:** `dotnet build` + Executor tests. **Dependencies:** Task 2. **Scope:** Medium
+#### Task 6: ✅ Executor → section binding — DONE (REFERENCE BASELINE)
+**Completed 2026-06-02** (build 0/0, **95 tests**, profiles valid). This is the reference slice every
+other service follows — see the **Slice conventions** under Task 1. `ExecutorOptions` (in
+`src/InfraGate.Executor/Settings/`) binds the whole `InfraGate:Executor` section with a nested
+`ClientCredentials` property; the inline `new ClientCredentialsTokenOptions {…}` and all per-key reads
+are gone; defaults in `appsettings.json`; compose uses `InfraGate__Executor__ClientCredentials__*`;
+added `ExecutorOptionsBindingTests`. **Files (actual):** new `src/InfraGate.Executor/Settings/ExecutorOptions.cs`, `…/Program.cs`, `…/ExecutorConventions.cs`, new `…/appsettings.json`, `…/GlobalUsings.cs`, `deploy/local-oauth/compose.yaml`, both Executor test csproj (`<Using Include="InfraGate.Executor.Settings"/>`), new `…/UnitTests/ExecutorOptionsBindingTests.cs`.
 
 ### Checkpoint: All services on section binding
 - [ ] Every service binds via `Configure<T>(GetSection)` + `ValidateOnStart`; no service reads per-field raw env keys.
@@ -355,7 +408,7 @@ section model. Update each `src/*/README.md` config note, `src/InfraGate.RunProf
 | Losing the RuntimeSafety env allowlist | Medium | **Accepted**: unprefixed `AddEnvironmentVariables()` for simplicity (2026-06-02 decision); document the dropped allowlist in ADR 0030. |
 | Flipping `Required` POCO default to `true` changes the unconfigured-auth path | High | Do it in Phase 2 alongside a `new DownstreamAuthOptions()` call-site audit (esp. the gateway null-provider fallback) **and** dev profiles set `required=false` (Task 7) — all in one change set. |
 | Task 8/10 too large (XL) | Medium | Pre-split as noted (per-service `Program.cs` swaps; docs sub-tasks) so no task exceeds ~5 files. |
-| Binder vs records | Low | Use `sealed class` settings with settable/`init` properties for bindable types; keep behavior out of them (code-standards). |
+| Binder vs records | Low | **Resolved** — the Executor baseline uses `sealed record class` with `init` properties (+ a `Validate()` method) and binds fine, including nested options. Use that shape. |
 
 ## Resolved Decisions (2026-06-02)
 

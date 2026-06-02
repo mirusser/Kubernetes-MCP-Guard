@@ -67,12 +67,6 @@ public sealed class ExecutorConventionsTests
     }
 
     [Fact]
-    public void DefaultOAuthScope_IsPinned()
-    {
-        Assert.Equal("mcp:tools.execute", ExecutorConventions.DefaultOAuthScope);
-    }
-
-    [Fact]
     public void WaitForPlanApprovalPerCallTimeoutSeconds_IsLessThanMinWatchTimeout()
     {
         Assert.True(ExecutorConventions.WaitForPlanApprovalPerCallTimeoutSeconds > 0);

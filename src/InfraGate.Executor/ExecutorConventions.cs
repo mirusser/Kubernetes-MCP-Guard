@@ -8,7 +8,6 @@ internal static class ExecutorConventions
     private const string DefaultPort = "3005";
 
     public const string DefaultClientId = "infra-gate-executor";
-    public const string DefaultOAuthScope = "mcp:tools.execute";
     public const string DefaultUrl = LoopbackHttpScheme + UriSchemeSeparator + LoopbackHost + ":" + DefaultPort;
     public const string HealthEndpointPath = "/health";
     public const string A2AHandoffEndpointPath = "/a2a/executor";
