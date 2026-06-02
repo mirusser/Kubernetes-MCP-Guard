@@ -211,14 +211,13 @@ services:
     environment:
       DOTNET_ENVIRONMENT: Development
       ASPNETCORE_URLS: ${INFRA_GATE_EXECUTOR_ASPNETCORE_URLS:-http://0.0.0.0:3005}
-      INFRA_GATE_EXECUTOR_GATEWAY_BASE_URL: ${INFRA_GATE_EXECUTOR_GATEWAY_BASE_URL:-http://gateway:3001/mcp}
-      INFRA_GATE_EXECUTOR_TOKEN_ENDPOINT: ${INFRA_GATE_EXECUTOR_TOKEN_ENDPOINT:-http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token}
-      INFRA_GATE_EXECUTOR_CLIENT_ID: ${INFRA_GATE_EXECUTOR_CLIENT_ID:-infra-gate-executor}
-      INFRA_GATE_EXECUTOR_CLIENT_SECRET: ${INFRA_GATE_EXECUTOR_CLIENT_SECRET:-executor-secret}
-      INFRA_GATE_EXECUTOR_OAUTH_AUTHORITY: ${INFRA_GATE_EXECUTOR_OAUTH_AUTHORITY:-http://keycloak:8080/realms/infra-gate}
-      INFRA_GATE_EXECUTOR_OAUTH_SCOPE: ${INFRA_GATE_EXECUTOR_OAUTH_SCOPE:-mcp:tools.execute}
-      INFRA_GATE_EXECUTOR_CONCURRENCY_CAP: ${INFRA_GATE_EXECUTOR_CONCURRENCY_CAP:-64}
-      INFRA_GATE_EXECUTOR_WATCH_TIMEOUT_SECONDS: ${INFRA_GATE_EXECUTOR_WATCH_TIMEOUT_SECONDS:-3600}
+      InfraGate__Executor__GatewayBaseUrl: ${INFRA_GATE_EXECUTOR_GATEWAY_BASE_URL:-http://gateway:3001/mcp}
+      InfraGate__Executor__ClientId: ${INFRA_GATE_EXECUTOR_CLIENT_ID:-infra-gate-executor}
+      InfraGate__Executor__ClientSecret: ${INFRA_GATE_EXECUTOR_CLIENT_SECRET:-executor-secret}
+      InfraGate__Executor__OAuthAuthority: ${INFRA_GATE_EXECUTOR_OAUTH_AUTHORITY:-http://keycloak:8080/realms/infra-gate}
+      InfraGate__Executor__OAuthScope: ${INFRA_GATE_EXECUTOR_OAUTH_SCOPE:-mcp:tools.execute}
+      InfraGate__Executor__ConcurrencyCap: ${INFRA_GATE_EXECUTOR_CONCURRENCY_CAP:-64}
+      InfraGate__Executor__WatchTimeoutSeconds: ${INFRA_GATE_EXECUTOR_WATCH_TIMEOUT_SECONDS:-3600}
     ports:
       - "${INFRA_GATE_EXECUTOR_BIND_ADDRESS:-127.0.0.1}:${INFRA_GATE_EXECUTOR_BIND_PORT:-3005}:3005"
     networks:

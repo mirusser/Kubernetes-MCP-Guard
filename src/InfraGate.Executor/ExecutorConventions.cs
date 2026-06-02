@@ -24,25 +24,11 @@ internal static class ExecutorConventions
 
     public const int WaitForPlanApprovalPerCallTimeoutSeconds = 55;
 
-    public static class EnvironmentVariables
-    {
-        public const string AspNetCoreUrls = "ASPNETCORE_URLS";
-        public const string GatewayBaseUrl = "INFRA_GATE_EXECUTOR_GATEWAY_BASE_URL";
-        public const string ConcurrencyCap = "INFRA_GATE_EXECUTOR_CONCURRENCY_CAP";
-        public const string WatchTimeoutSeconds = "INFRA_GATE_EXECUTOR_WATCH_TIMEOUT_SECONDS";
-        public const string ClientId = "INFRA_GATE_EXECUTOR_CLIENT_ID";
-        public const string ClientSecret = "INFRA_GATE_EXECUTOR_CLIENT_SECRET";
-        public const string OAuthAuthority = "INFRA_GATE_EXECUTOR_OAUTH_AUTHORITY";
-        public const string OAuthScope = "INFRA_GATE_EXECUTOR_OAUTH_SCOPE";
-    }
+    /// <summary>Configuration section bound to <see cref="ExecutorOptions"/> (recursive auto-binding).</summary>
+    public const string SectionName = "InfraGate:Executor";
 
-    public static class ConfigurationKeys
-    {
-        public const string Executor = "InfraGate:Executor";
-        public const string GatewayBaseUrl = "InfraGate:Executor:GatewayBaseUrl";
-        public const string ConcurrencyCap = "InfraGate:Executor:ConcurrencyCap";
-        public const string WatchTimeoutSeconds = "InfraGate:Executor:WatchTimeoutSeconds";
-    }
+    /// <summary>Standard ASP.NET Core URLs configuration key (framework-owned, not InfraGate-scoped).</summary>
+    public const string AspNetCoreUrlsKey = "ASPNETCORE_URLS";
 
     public static class ToolNames
     {

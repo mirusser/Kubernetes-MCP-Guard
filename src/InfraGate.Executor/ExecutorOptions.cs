@@ -5,6 +5,10 @@ public sealed record class ExecutorOptions
     public string GatewayBaseUrl { get; init; } = string.Empty;
     public int ConcurrencyCap { get; init; } = ExecutorConventions.DefaultConcurrencyCap;
     public int WatchTimeoutSeconds { get; init; } = ExecutorConventions.DefaultWatchTimeoutSeconds;
+    public string OAuthAuthority { get; init; } = string.Empty;
+    public string ClientId { get; init; } = ExecutorConventions.DefaultClientId;
+    public string? ClientSecret { get; init; }
+    public string OAuthScope { get; init; } = ExecutorConventions.DefaultOAuthScope;
 
     public void Validate()
     {
