@@ -27,10 +27,6 @@
 
 It is a security-first bridge between AI agents and Kubernetes, with out-of-band, OAuth-authenticated, human-in-the-loop (HITL), plan-based approval for every gateway-exposed mutation.
 
-<sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments, not production-certified infrastructure.</em></sub>
-
-<sub><em>The codebase uses **InfraGate** as the internal project name.</em></sub>
-
 ## 🎬 Demo
 
 https://github.com/user-attachments/assets/4e06b4ee-db80-4d74-96cc-38dfbb413042
@@ -323,6 +319,10 @@ Use specific release tags for stable demos. The `:dev` tag tracks the developmen
 - This is not a full Kubernetes policy engine and not an MCP standard.
 
 See [docs/security-model.md](docs/security-model.md) for the full threat model.
+
+<sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments, not production-certified infrastructure.</em></sub>
+
+<sub><em>The codebase uses **InfraGate** as the internal project name.</em></sub>
 
 ## 📜 Governance
 
