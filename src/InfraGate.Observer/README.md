@@ -31,7 +31,7 @@ The `InfraGate.AgentGuardrails` meter is registered in the Observer's telemetry 
 - The Observer is a peer MCP client (not embedded in the gateway). It never calls mutation tools, never produces Plan Envelopes or Approval Grants, and never writes through `IApprovalAuditPublisher`.
 - Optional A2A handoff posts `AnomalyHandoffBatch` payloads to the Remediation Planner's `/a2a/planner` endpoint.
 - The Observer also acts as an A2A **server** at `/a2a/observer`. The Planner calls back to request read-only K8s tool executions (**Reverse Context Requests**). Planner progress is represented by the Planner-owned durable A2A task lifecycle. See [ADR-0028](../../docs/adr/0028-a2a-bidirectional-observer-planner-channel.md).
-- LLM provider is configurable via env vars. Supported provider: `openrouter` (OpenAI-compatible). `INFRA_GATE_OBSERVER_LLM_API_KEY` is required. Configuring `ANTHROPIC` as the provider throws `InvalidOperationException` at startup — use OpenRouter instead.
+- LLM provider is configurable via env vars. Supported provider: `openrouter` (OpenAI-compatible). `InfraGate__Observer__LlmApiKey` is required. Configuring `ANTHROPIC` as the provider throws `InvalidOperationException` at startup — use OpenRouter instead.
 - `POST /observe-now` triggers a synchronous on-demand cycle (30s HTTP timeout) without resetting the scheduled tick. Concurrent calls serialise via a shared semaphore.
 
 ## Settings
@@ -56,7 +56,7 @@ Seven audit-worthy events are defined in `ObserverAuditEvents`:
 
 All emit uses the `AppendAsync(entry, ct)` convenience overload — Observer audit writes are not part of a larger state-mutation transaction.
 
-The `observer` schema is created on startup by `PostgresAuditOutboxMigrationRunner` reading `Migrations/0001-initial-observer-audit.sql`. Connection string: `INFRA_GATE_OBSERVER_AUDIT_CONNECTION_STRING`.
+The `observer` schema is created on startup by `PostgresAuditOutboxMigrationRunner` reading `Migrations/0001-initial-observer-audit.sql`. Connection string: `InfraGate__Observer__AuditConnectionString`.
 
 See [InfraGate.AuditOutbox.Postgres README](../InfraGate.AuditOutbox.Postgres/README.md) for the chain-verification SQL recipe and cross-stream forensic query.
 

@@ -207,11 +207,7 @@ internal sealed class DownstreamMcpClient(
         return bootstrapLine;
     }
 
-    private bool IsDownstreamAuthRequired()
-    {
-        var authOptions = options.DownstreamAuth ?? DownstreamAuthOptions.FromEnvironment();
-        return authOptions.Required;
-    }
+    private bool IsDownstreamAuthRequired() => options.DownstreamAuth?.Required ?? false;
 
     internal StdioClientTransportOptions CreateTransportOptions()
     {

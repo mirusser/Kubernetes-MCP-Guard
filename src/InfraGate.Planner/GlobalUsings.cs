@@ -4,5 +4,6 @@ global using System.Text.Json;
 global using System.Threading.Channels;
 global using InfraGate.ClientCredentials;
 global using InfraGate.Observer.Contracts;
+global using InfraGate.Planner.Settings;
 global using InfraGate.Remediation.Contracts;
 global using Microsoft.Extensions.Options;

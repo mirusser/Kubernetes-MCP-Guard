@@ -87,7 +87,6 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             BindAddress = profile.BindAddress ?? defaults.BindAddress,
             BindPort = profile.BindPort ?? defaults.BindPort,
             GatewayImage = profile.GatewayImage ?? defaults.GatewayImage,
-            ConfigHostPath = profile.ConfigHostPath ?? defaults.ConfigHostPath,
             KubeconfigHostPath = profile.KubeconfigHostPath ?? defaults.KubeconfigHostPath,
             ApprovalHostPath = profile.ApprovalHostPath ?? defaults.ApprovalHostPath,
             GuardAuditHostPath = profile.GuardAuditHostPath ?? defaults.GuardAuditHostPath,
@@ -137,7 +136,6 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
         {
             AspnetcoreUrls = profile.AspnetcoreUrls ?? defaults.AspnetcoreUrls,
             GatewayBaseUrl = profile.GatewayBaseUrl ?? defaults.GatewayBaseUrl,
-            TokenEndpoint = profile.TokenEndpoint ?? defaults.TokenEndpoint,
             OAuthAuthority = profile.OAuthAuthority ?? defaults.OAuthAuthority,
             ClientId = profile.ClientId ?? defaults.ClientId,
             ClientSecret = profile.ClientSecret ?? defaults.ClientSecret,
@@ -163,7 +161,6 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             AspnetcoreUrls = profile.AspnetcoreUrls ?? defaults.AspnetcoreUrls,
             GatewayBaseUrl = profile.GatewayBaseUrl ?? defaults.GatewayBaseUrl,
             ExecutorHandoffUrl = profile.ExecutorHandoffUrl ?? defaults.ExecutorHandoffUrl,
-            TokenEndpoint = profile.TokenEndpoint ?? defaults.TokenEndpoint,
             ClientId = profile.ClientId ?? defaults.ClientId,
             ClientSecret = profile.ClientSecret ?? defaults.ClientSecret,
             OAuthAuthority = profile.OAuthAuthority ?? defaults.OAuthAuthority,
@@ -187,7 +184,6 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
         {
             AspnetcoreUrls = profile.AspnetcoreUrls ?? defaults.AspnetcoreUrls,
             GatewayBaseUrl = profile.GatewayBaseUrl ?? defaults.GatewayBaseUrl,
-            TokenEndpoint = profile.TokenEndpoint ?? defaults.TokenEndpoint,
             ClientId = profile.ClientId ?? defaults.ClientId,
             ClientSecret = profile.ClientSecret ?? defaults.ClientSecret,
             OAuthAuthority = profile.OAuthAuthority ?? defaults.OAuthAuthority,

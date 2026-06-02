@@ -119,4 +119,4 @@ The MCP Authorization standard is built heavily on Draft OAuth 2.1, emphasizing 
 
 ## Security Consideration: Development vs. Production
 As per the MCP spec: *"All authorization server endpoints MUST be served over HTTPS."* 
-The local Keycloak demo runs over HTTP and therefore sets `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false`. This is a deliberate development exception; production deployments must use HTTPS issuer metadata and keep the gateway in `Production` mode.
+The local Keycloak demo runs over HTTP and therefore sets `InfraGate__Auth__OAuthRequireHttpsMetadata=false`. This is a deliberate development exception; production deployments must use HTTPS issuer metadata and keep the gateway in `Production` mode.

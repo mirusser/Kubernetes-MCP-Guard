@@ -4,7 +4,7 @@ public static class ApprovalConventions
 {
     public static class EnvironmentVariables
     {
-        public const string ApprovalRoot = "K8S_MCP_APPROVAL_ROOT";
+        public const string ApprovalRoot = "InfraGate__Approval__Root";
     }
 
     public static class Storage

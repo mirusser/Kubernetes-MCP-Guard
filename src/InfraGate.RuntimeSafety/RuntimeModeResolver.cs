@@ -6,14 +6,6 @@ public static class RuntimeModeResolver
 {
     public static RuntimeMode FromEnvironment()
     {
-        string? infraGateEnvironment = Environment.GetEnvironmentVariable(
-            RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment);
-
-        if (!string.IsNullOrWhiteSpace(infraGateEnvironment))
-        {
-            return ParseInfraGateEnvironment(infraGateEnvironment);
-        }
-
         string? dotNetEnvironment = Environment.GetEnvironmentVariable(
             RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment);
         if (!string.IsNullOrWhiteSpace(dotNetEnvironment))
@@ -34,13 +26,6 @@ public static class RuntimeModeResolver
     public static RuntimeMode FromConfiguration(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-
-        string? infraGateEnvironment = configuration[
-            RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment];
-        if (!string.IsNullOrWhiteSpace(infraGateEnvironment))
-        {
-            return ParseInfraGateEnvironment(infraGateEnvironment);
-        }
 
         string? configuredRuntimeEnvironment = configuration[
             RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment];
@@ -79,7 +64,7 @@ public static class RuntimeModeResolver
         }
 
         throw new InvalidOperationException(
-            $"{RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment} must be " +
+            $"{RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment} must be " +
             $"{RuntimeSafetyConventions.EnvironmentValues.Development} or " +
             $"{RuntimeSafetyConventions.EnvironmentValues.Production}; value '{value}' is not supported.");
     }

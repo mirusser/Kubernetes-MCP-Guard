@@ -3,7 +3,6 @@ namespace InfraGate.RunProfiles;
 internal sealed record class ObserverProfile(
     string? AspnetcoreUrls,
     string? GatewayBaseUrl,
-    string? TokenEndpoint,
     string? OAuthAuthority,
     string? ClientId,
     string? ClientSecret,

@@ -6,14 +6,14 @@
 
 ## Runtime Flow
 
-- `GatewayAuthOptions.cs` reads authentication settings from environment variables.
+- `GatewayAuthOptions.cs` binds authentication settings from the `InfraGate:Auth` configuration section.
 - `GatewayAuthentication.cs` registers the policy scheme, JWT bearer auth, approval UI cookie/OAuth auth, MCP protected-resource metadata, 403 step-up challenges, scope-to-tool authorization, and authorization policies.
 - `GatewayAuditIdentityResolver.cs` maps the authenticated principal to audit-safe subject and authentication-type values.
 - `GatewayAuthConventions.cs` holds external strings such as schemes, env vars, claims, and metadata names.
 
 ## Important Contracts
 
-- `INFRA_GATE_OAUTH_AUTHORITY` is required.
+- `InfraGate__Auth__OAuthAuthority` is required.
 - OAuth tokens must contain the configured audience/resource and required scope.
 - Human MCP clients use the broad mutation scope. Planner clients use the propose scope, Executor clients use the execute scope, and Observer/Planner read paths use the read-only scope.
 - Valid OAuth tokens that lack the required scope return `403 Forbidden` with a `WWW-Authenticate` Bearer challenge containing `error="insufficient_scope"`, the required `scope`, and `resource_metadata`.

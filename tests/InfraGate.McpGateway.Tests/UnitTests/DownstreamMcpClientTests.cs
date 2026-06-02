@@ -75,7 +75,31 @@ public sealed class DownstreamMcpClientTests
     }
 
     [Theory]
-    [InlineData(RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, "Development")]
+    [InlineData("K8S_MCP_APPROVAL_ROOT", "/mnt/approvals")]
+    [InlineData("K8S_MCP_ALLOWED_NAMESPACES", "mcp-nginx-demo")]
+    [InlineData("K8S_MCP_USE_IN_CLUSTER", "true")]
+    [InlineData("K8S_MCP_LOG_PATH", "/data/logs/mcp-server.log")]
+    public void CreateTransportOptions_ExcludesOldStyleEnvVar_AfterHardCut(string envVarName, string envVarValue)
+    {
+        string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";
+        var options = CreateOptions(downstreamProject, workingDirectory: Directory.GetCurrentDirectory());
+        var client = new DownstreamMcpClient(options, new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
+        string? original = Environment.GetEnvironmentVariable(envVarName);
+        Environment.SetEnvironmentVariable(envVarName, envVarValue);
+        try
+        {
+            var transportOptions = client.CreateTransportOptions();
+
+            Assert.DoesNotContain(envVarName, transportOptions.EnvironmentVariables!.Keys);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(envVarName, original);
+        }
+    }
+
+    [Theory]
+    [InlineData("InfraGate__Runtime__Environment", "Development")]
     [InlineData(RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment, "Production")]
     [InlineData(RuntimeSafetyConventions.EnvironmentVariables.AspNetCoreEnvironment, "Staging")]
     public void CreateTransportOptions_PassesThroughAllowedVar_WhenSet(string envVarName, string envVarValue)
@@ -99,11 +123,13 @@ public sealed class DownstreamMcpClientTests
     }
 
     [Theory]
-    [InlineData(ApprovalConventions.EnvironmentVariables.ApprovalRoot, "/mnt/approvals")]
-    [InlineData(DownstreamAuthConventions.EnvironmentVariables.Required, "true")]
-    [InlineData(DownstreamAuthConventions.EnvironmentVariables.Authority, "http://keycloak/realms/infra-gate")]
-    [InlineData(DownstreamAuthConventions.EnvironmentVariables.Audience, "urn:infra-gate:mcp-server")]
-    [InlineData(DownstreamAuthConventions.EnvironmentVariables.Scope, "mcp:downstream")]
+    [InlineData("InfraGate__DownstreamAuth__Required", "true")]
+    [InlineData("InfraGate__DownstreamAuth__Authority", "http://keycloak/realms/infra-gate")]
+    [InlineData("InfraGate__DownstreamAuth__Audience", "urn:infra-gate:mcp-server")]
+    [InlineData("InfraGate__DownstreamAuth__Scope", "mcp:downstream")]
+    [InlineData("InfraGate__Kubernetes__AllowedNamespaces__0", "mcp-nginx-demo")]
+    [InlineData("InfraGate__Kubernetes__UseInClusterConfig", "true")]
+    [InlineData("InfraGate__Kubernetes__LogPath", "/data/logs/mcp-server.log")]
     public void CreateTransportOptions_PassesThroughServerConfigVar_WhenSet(string envVarName, string envVarValue)
     {
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";

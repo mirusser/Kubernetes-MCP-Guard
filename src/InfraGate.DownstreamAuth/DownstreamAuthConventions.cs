@@ -21,14 +21,14 @@ public static class DownstreamAuthConventions
 
     public static class EnvironmentVariables
     {
-        public const string Required = "INFRA_GATE_DOWNSTREAM_AUTH_REQUIRED";
-        public const string Authority = "INFRA_GATE_DOWNSTREAM_AUTH_AUTHORITY";
-        public const string MetadataAddress = "INFRA_GATE_DOWNSTREAM_AUTH_METADATA_ADDRESS";
-        public const string RequireHttpsMetadata = "INFRA_GATE_DOWNSTREAM_AUTH_REQUIRE_HTTPS_METADATA";
-        public const string Audience = "INFRA_GATE_DOWNSTREAM_AUTH_AUDIENCE";
-        public const string Scope = "INFRA_GATE_DOWNSTREAM_AUTH_SCOPE";
-        public const string GatewayClientId = "INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_ID";
-        public const string GatewayClientSecret = "INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET";
+        public const string Required = "InfraGate__DownstreamAuth__Required";
+        public const string Authority = "InfraGate__DownstreamAuth__Authority";
+        public const string MetadataAddress = "InfraGate__DownstreamAuth__MetadataAddress";
+        public const string RequireHttpsMetadata = "InfraGate__DownstreamAuth__RequireHttpsMetadata";
+        public const string Audience = "InfraGate__DownstreamAuth__Audience";
+        public const string Scope = "InfraGate__DownstreamAuth__Scope";
+        public const string GatewayClientId = "InfraGate__DownstreamAuth__GatewayClientId";
+        public const string GatewayClientSecret = "InfraGate__DownstreamAuth__GatewayClientSecret";
     }
 
     public static class ConfigurationKeys

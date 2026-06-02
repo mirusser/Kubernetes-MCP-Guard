@@ -20,7 +20,7 @@
 
 ## Important Contracts
 
-- The approval root directory (`K8S_MCP_APPROVAL_ROOT`) is retained for Data Protection key storage only. Approval state and audit persistence is PostgreSQL-backed via `IApprovalPersistence` and `InfraGate.Approvals.Postgres`.
+- The approval root directory (`InfraGate__Approval__Root`) is retained for Data Protection key storage only. Approval state and audit persistence is PostgreSQL-backed via `IApprovalPersistence` and `InfraGate.Approvals.Postgres`.
 - `IApprovalPlanWorkflow`, `IApprovalChallengeWorkflow`, `IApprovalExecutionWorkflow`, `IApprovalAuditPublisher`, `IApprovalPreExecutionGate`, `IDomainPlanBuilder`, `IDomainPlanExecutor`, `IToolCaller`, `PlanBuildResult`, and `DomainPlanExecutionResult` define generic approval seams used by the gateway and the domain adapter execution path. Failed result records carry stable `ReasonCode` values so callers and tests do not infer behavior from human-readable messages.
 - Pending plan files are generic envelopes. Domain-specific mutation intent and review evidence live inside the adapter payload; Kubernetes payload types live in `InfraGate.KubernetesAdapter`.
 - Audit events use names from `ApprovalConventions.AuditEvents`. Payloads are typed `IPlanAuditPayload` or `IChallengeAuditPayload` records; their JSON keys under `JsonSerializerDefaults.Web` are the contract. Adapter audit details live under nested flexible `adapterPayload` fields.

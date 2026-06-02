@@ -219,8 +219,8 @@ These tests should pass as they do without `INFRA_GATE_RUN_SAFETY_E2E` set. For 
 |---|---|---|
 | `INFRA_GATE_RUN_SAFETY_E2E` | _unset_ | Must equal `1` to opt-in. Anything else (including absent) makes every test early-return. |
 | `KUBECONFIG` | `.kube/mcp-nginx-demo.config` | Kubernetes API target. The fixture sets it on the McpServer subprocess so the spawned process talks to the same cluster as your `kubectl`. |
-| `K8S_MCP_ALLOWED_NAMESPACES` | `mcp-nginx-demo` | Namespace the McpServer is allowed to operate in. Change this only if you also created the matching `Deployment/nginx-demo` in a different namespace. |
-| `K8S_MCP_APPROVAL_ROOT` | _set per-run by the fixture_ | Approval store path. The fixture creates a unique temp directory per run; do **not** set this manually or the McpServer will write to a place the fixture doesn't read for audit assertions. |
+| `InfraGate__Kubernetes__AllowedNamespaces__0` | `mcp-nginx-demo` | Namespace the McpServer is allowed to operate in. Change this only if you also created the matching `Deployment/nginx-demo` in a different namespace. |
+| `InfraGate__Approval__Root` | _set per-run by the fixture_ | Approval store path. The fixture creates a unique temp directory per run; do **not** set this manually or the McpServer will write to a place the fixture doesn't read for audit assertions. |
 
 ## Troubleshooting
 
@@ -246,7 +246,7 @@ docker pull quay.io/keycloak/keycloak:26.6.1
 
 ### Tests fail at request time with `404` from Kubernetes
 
-The `Deployment/nginx-demo` does not exist in the namespace `K8S_MCP_ALLOWED_NAMESPACES` points to. Re-do Step 5.
+The `Deployment/nginx-demo` does not exist in the namespace `InfraGate__Kubernetes__AllowedNamespaces__0` points to. Re-do Step 5.
 
 ### Tests fail with `401 Unauthorized` from Kubernetes
 
@@ -254,12 +254,12 @@ The kubeconfig token expired (24-hour lifetime). Re-run Step 4.
 
 ### Tests fail with "Approval Root path is denied" / production safety errors at McpServer startup
 
-The McpServer subprocess inherited `INFRA_GATE_ENVIRONMENT=Production` from your shell or a parent process. Unset it or set it to `Development`:
+The McpServer subprocess inherited `InfraGate__Runtime__Environment=Production` from your shell or a parent process. Unset it or set it to `Development`:
 
 ```bash
-unset INFRA_GATE_ENVIRONMENT
+unset InfraGate__Runtime__Environment
 # or
-export INFRA_GATE_ENVIRONMENT=Development
+export InfraGate__Runtime__Environment=Development
 ```
 
 ### The McpServer subprocess never starts / first call hangs

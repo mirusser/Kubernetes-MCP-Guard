@@ -9,21 +9,8 @@ public sealed class RuntimeModeResolverTests
     public void FromEnvironment_ReturnsDevelopment_WhenAllUnset()
     {
         using var environment = EnvironmentVariableScope.Set(
-            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, null),
             (RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment, null),
             (RuntimeSafetyConventions.EnvironmentVariables.AspNetCoreEnvironment, null));
-
-        var mode = RuntimeModeResolver.FromEnvironment();
-
-        Assert.Equal(RuntimeMode.Development, mode);
-    }
-
-    [Fact]
-    public void FromEnvironment_PrefersInfraGateEnvironmentOverStandard()
-    {
-        using var environment = EnvironmentVariableScope.Set(
-            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
-            (RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment, RuntimeSafetyConventions.EnvironmentValues.Production));
 
         var mode = RuntimeModeResolver.FromEnvironment();
 
@@ -34,7 +21,6 @@ public sealed class RuntimeModeResolverTests
     public void FromEnvironment_FallsBackToDotNetEnvironment()
     {
         using var environment = EnvironmentVariableScope.Set(
-            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, null),
             (RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment, RuntimeSafetyConventions.EnvironmentValues.Production),
             (RuntimeSafetyConventions.EnvironmentVariables.AspNetCoreEnvironment, null));
 
@@ -47,7 +33,6 @@ public sealed class RuntimeModeResolverTests
     public void FromEnvironment_FallsBackToAspNetCoreEnvironment()
     {
         using var environment = EnvironmentVariableScope.Set(
-            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, null),
             (RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment, null),
             (RuntimeSafetyConventions.EnvironmentVariables.AspNetCoreEnvironment, RuntimeSafetyConventions.EnvironmentValues.Production));
 
@@ -60,7 +45,6 @@ public sealed class RuntimeModeResolverTests
     public void FromEnvironment_TreatsNonDevelopmentStandardEnvironmentAsProduction()
     {
         using var environment = EnvironmentVariableScope.Set(
-            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, null),
             (RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment, "Staging"));
 
         var mode = RuntimeModeResolver.FromEnvironment();
@@ -69,18 +53,7 @@ public sealed class RuntimeModeResolverTests
     }
 
     [Fact]
-    public void FromEnvironment_WithUnsupportedInfraGateEnvironment_Throws()
-    {
-        using var environment = EnvironmentVariableScope.Set(
-            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, "Staging"));
-
-        var exception = Assert.Throws<InvalidOperationException>(() => RuntimeModeResolver.FromEnvironment());
-
-        Assert.Contains(RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, exception.Message);
-    }
-
-    [Fact]
-    public void FromConfiguration_UsesInfraGateRuntimeEnvironment_WhenFlatEnvironmentUnset()
+    public void FromConfiguration_UsesInfraGateRuntimeEnvironment()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -96,12 +69,12 @@ public sealed class RuntimeModeResolverTests
     }
 
     [Fact]
-    public void FromConfiguration_PrefersFlatInfraGateEnvironmentOverJsonValue()
+    public void FromConfiguration_PrefersInfraGateRuntimeEnvironmentOverStandardEnvironment()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                [RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment] =
+                [RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment] =
                     RuntimeSafetyConventions.EnvironmentValues.Development,
                 [RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment] =
                     RuntimeSafetyConventions.EnvironmentValues.Production
@@ -110,7 +83,7 @@ public sealed class RuntimeModeResolverTests
 
         var mode = RuntimeModeResolver.FromConfiguration(configuration);
 
-        Assert.Equal(RuntimeMode.Development, mode);
+        Assert.Equal(RuntimeMode.Production, mode);
     }
 
     private sealed class EnvironmentVariableScope : IDisposable

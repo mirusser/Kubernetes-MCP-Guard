@@ -1,8 +1,8 @@
 # InfraGate.RunProfiles
 
-CLI tool that compiles named profiles from `deploy/run-profiles.yaml` into `.env` files for Docker Compose/deployment scripts and appsettings JSON for .NET runtime binding. It is the canonical source of truth for all runnable environment configuration.
+CLI tool that compiles named profiles from `deploy/run-profiles.yaml` into `.env` files for Docker Compose/deployment scripts and .NET runtime binding. It is the canonical source of truth for all runnable environment configuration.
 
-**Owns:** named profile compilation, `.env` generation, appsettings JSON generation, configuration source of truth
+**Owns:** named profile compilation, `.env` generation, configuration source of truth
 
 ## Commands
 
@@ -13,7 +13,7 @@ dotnet run --project src/InfraGate.RunProfiles -- list
 # Validate all profiles parse without error
 dotnet run --project src/InfraGate.RunProfiles -- validate
 
-# Generate an env file or appsettings JSON from a profile
+# Generate an env file from a profile
 dotnet run --project src/InfraGate.RunProfiles -- generate <profile> [options]
 ```
 
@@ -21,7 +21,7 @@ dotnet run --project src/InfraGate.RunProfiles -- generate <profile> [options]
 
 | Flag | Description |
 |---|---|
-| `--format env\|appsettings` | Output format (default: `env`) |
+| `--format` | Removed; passing it returns an error because generation now always writes one env file |
 | `--output <path>` | Write to a file instead of stdout |
 | `--set section.field=value` | Override a single field after profile merge; repeatable |
 | `--force` | Overwrite an existing output file (default: refuse) |
@@ -131,7 +131,6 @@ profiles:
       aspnetcoreUrls: <url>
       gatewayBaseUrl: <url>
       executorHandoffUrl: <url>
-      tokenEndpoint: <url>
       clientId: <id>
       clientSecret: <secret>
       oauthAuthority: <url>
@@ -148,7 +147,6 @@ profiles:
     executor:
       aspnetcoreUrls: <url>
       gatewayBaseUrl: <url>
-      tokenEndpoint: <url>
       clientId: <id>
       clientSecret: <secret>
       oauthAuthority: <url>
@@ -182,7 +180,7 @@ profiles:
 | `genericApprovalCore` | `approvalRoot` |
 | `genericApprovalCore` | `postgresConnectionString` |
 | `genericApprovalCore` | `runMigrationsOnStartup` |
-| `host` | `bindAddress`, `bindPort`, `gatewayImage`, `configHostPath`, `kubeconfigHostPath`, `approvalHostPath`, `guardAuditHostPath`, `dataProtectionHostPath` |
+| `host` | `bindAddress`, `bindPort`, `gatewayImage`, `kubeconfigHostPath`, `approvalHostPath`, `guardAuditHostPath`, `dataProtectionHostPath` |
 | `observer` | `gatewayBaseUrl`, `oauthAuthority`, `clientId`, `clientSecret`, `scope`, `llmModel`, `fileSinkRoot`, `plannerHandoffUrl`, `observerHostPath` |
 | `planner` | `gatewayBaseUrl`, `executorHandoffUrl`, `clientId`, `clientSecret`, `oauthAuthority`, `scope`, `llmModel`, `fileSinkRoot`, `plannerHostPath` |
 | `executor` | `gatewayBaseUrl`, `clientId`, `clientSecret`, `oauthAuthority`, `scope`, `concurrencyCap`, `watchTimeoutSeconds`, `executorHostPath` |
@@ -193,8 +191,7 @@ Use `--set` when a run needs host paths different from the profile defaults. Doc
 
 ```bash
 ./scripts/generate-env.sh local-compose
-# → writes deploy/generated/local-compose.env and deploy/generated/local-compose.appsettings.json
-#   with absolute REPO_ROOT-based host paths
+# → writes deploy/generated/local-compose.env with absolute REPO_ROOT-based host paths
 ```
 
 To call the generator directly:
@@ -202,10 +199,6 @@ To call the generator directly:
 ```bash
 dotnet run --project src/InfraGate.RunProfiles -- generate local-compose \
   --output deploy/generated/local-compose.env
-
-dotnet run --project src/InfraGate.RunProfiles -- generate local-compose \
-  --format appsettings \
-  --output deploy/generated/local-compose.appsettings.json
 ```
 
 ## Generated file layout
@@ -217,60 +210,50 @@ The generated `.env` file groups vars into labelled sections and includes a head
 # Do not edit. Run: dotnet run --project src/InfraGate.RunProfiles -- generate <name>
 
 # Runtime
-INFRA_GATE_ENVIRONMENT=...
+InfraGate__Runtime__Environment=...
 
 # Gateway
-ASPNETCORE_URLS=...
-INFRA_GATE_DOWNSTREAM_ASSEMBLY=...
-INFRA_GATE_GUARD_AUDIT_ROOT=...
+InfraGate__Gateway__AspNetCoreUrls=...
+InfraGate__Gateway__DownstreamAssembly=...
+InfraGate__Gateway__GuardAuditRoot=...
 
 # Identity Provider
-INFRA_GATE_OAUTH_AUTHORITY=...
+InfraGate__Auth__OAuthAuthority=...
 ...
 
 # Approval Authority
-INFRA_GATE_APPROVAL_BASE_URL=...
+InfraGate__Approval__BaseUrl=...
 ...
 
 # Generic Approval Core
-K8S_MCP_APPROVAL_ROOT=...
-
-# The generated appsettings JSON also includes an InfraGate:Approval:Postgres:ConnectionString
-# section when the profile specifies postgresConnectionString. When runMigrationsOnStartup
-# is "true", the gateway applies pending migrations at startup (development profiles only).
+InfraGate__Approval__Root=...
+InfraGate__Approval__Postgres__ConnectionString=...
+InfraGate__Approval__Postgres__RunMigrationsOnStartup=true
 
 # Kubernetes Adapter
-KUBECONFIG=...
-K8S_MCP_ALLOWED_NAMESPACES=...
+InfraGate__Kubernetes__KubeConfig=...
+InfraGate__Kubernetes__AllowedNamespaces__0=...
 
 # Host
 INFRA_GATE_BIND_ADDRESS=...
-INFRA_GATE_CONFIG_PATH=/app/config/appsettings.InfraGate.json
-INFRA_GATE_CONFIG_HOST_PATH=...
 ...
 
 # Observer / Planner / Executor
 # Generated when the profile declares the corresponding sections.
 ```
 
-The generated appsettings file carries the .NET runtime values under `InfraGate:*` sections. The gateway loads the file named by `INFRA_GATE_CONFIG_PATH`, and the downstream MCP server inherits that same bootstrap env var from the gateway process.
-
 Sections are omitted when the profile produces no values for them.
 
 ## Output paths and gitignore
 
-Generated files belong in `deploy/generated/`, which is covered by `.gitignore`. The committed no-SDK release examples are `deploy/local-oauth/release.env.example` and `deploy/local-oauth/release.appsettings.json`, both generated from the `smoke-release` profile:
+Generated files belong in `deploy/generated/`, which is covered by `.gitignore`. The committed no-SDK release example is `deploy/local-oauth/release.env.example`, generated from the `smoke-release` profile:
 
 ```bash
 dotnet run --project src/InfraGate.RunProfiles -- generate smoke-release \
   --output deploy/local-oauth/release.env.example
-
-dotnet run --project src/InfraGate.RunProfiles -- generate smoke-release \
-  --format appsettings \
-  --output deploy/local-oauth/release.appsettings.json
 ```
 
-Regenerate and commit both files whenever the `smoke-release` profile or its merged defaults change.
+Regenerate and commit this file whenever the `smoke-release` profile or its merged defaults change.
 
 ## Secret handling
 

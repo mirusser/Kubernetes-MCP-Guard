@@ -21,8 +21,8 @@ RUN dotnet publish src/InfraGate.Planner/InfraGate.Planner.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app/planner
 COPY --from=build /app/planner .
-ENV INFRA_GATE_ENVIRONMENT=Production
-ENV ASPNETCORE_URLS=http://+:3004
+ENV InfraGate__Runtime__Environment=Production
+ENV InfraGate__Planner__AspNetCoreUrls=http://+:3004
 EXPOSE 3004
 USER $APP_UID
 ENTRYPOINT ["dotnet", "InfraGate.Planner.dll"]

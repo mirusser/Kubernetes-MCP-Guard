@@ -29,6 +29,6 @@ WORKDIR /app/gateway
 COPY --from=build /app/gateway .
 COPY --from=build /app/server /app/server
 COPY --from=build /data /data
-ENV INFRA_GATE_ENVIRONMENT=Production
+ENV InfraGate__Runtime__Environment=Production
 USER $APP_UID
 ENTRYPOINT ["dotnet", "InfraGate.McpGateway.dll"]

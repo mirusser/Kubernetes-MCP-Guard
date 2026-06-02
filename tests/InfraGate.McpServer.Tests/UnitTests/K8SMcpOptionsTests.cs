@@ -1,5 +1,4 @@
 using InfraGate.DownstreamAuth;
-using InfraGate.McpServer;
 using InfraGate.RuntimeSafety;
 using Microsoft.Extensions.Configuration;
 
@@ -8,6 +7,44 @@ namespace InfraGate.McpServer.Tests.UnitTests;
 public sealed class KubernetesMcpOptionsTests
 {
     private const string DownstreamAuthority = "https://idp.example.com";
+
+    private static IConfiguration BuildConfig(params (string Key, string? Value)[] entries)
+    {
+        return new ConfigurationBuilder()
+            .AddInMemoryCollection(entries.Select(e => new KeyValuePair<string, string?>(e.Key, e.Value)))
+            .Build();
+    }
+
+    private static IConfiguration BuildProductionConfig(params (string Key, string? Value)[] overrides)
+    {
+        string kubeConfig = Path.Combine(
+            Path.GetPathRoot(Directory.GetCurrentDirectory()) ?? Path.DirectorySeparatorChar.ToString(),
+            "var", "lib", "infra-gate-tests", "kubeconfig");
+
+        var entries = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            [RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment] =
+                RuntimeSafetyConventions.EnvironmentValues.Production,
+            [KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":0"] = "mcp-nginx-demo",
+            [KubernetesConventions.ConfigurationKeys.KubeConfig] = kubeConfig,
+            [DownstreamAuthConventions.ConfigurationKeys.Required] = "true",
+            [DownstreamAuthConventions.ConfigurationKeys.Authority] = DownstreamAuthority
+        };
+
+        foreach (var item in overrides)
+        {
+            if (item.Value is null)
+            {
+                entries.Remove(item.Key);
+            }
+            else
+            {
+                entries[item.Key] = item.Value;
+            }
+        }
+
+        return new ConfigurationBuilder().AddInMemoryCollection(entries).Build();
+    }
 
     [Fact]
     public void Constructor_UsesOptionalDefaults_WhenFlagsOmitted()
@@ -21,68 +58,51 @@ public sealed class KubernetesMcpOptionsTests
     }
 
     [Fact]
-    public void FromEnvironment_UsesDefaultNamespace_WhenUnset()
+    public void FromConfiguration_UsesDefaultNamespace_WhenSectionAbsent()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null));
+        var config = BuildConfig();
 
-        var options = KubernetesMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromConfiguration(config);
 
         Assert.Equal([KubernetesMcpOptions.DefaultNamespace], options.AllowedNamespaces);
+        Assert.False(options.HasExplicitAllowedNamespaces);
     }
 
     [Fact]
-    public void FromEnvironment_UsesConfiguredNamespaces_WhenSet()
+    public void FromConfiguration_ParsesAllowedNamespaces_FromSection()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, "alpha, beta ,,gamma"));
+        var config = BuildConfig(
+            (KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":0", "alpha"),
+            (KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":1", "beta"),
+            (KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":2", "gamma"));
 
-        var options = KubernetesMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromConfiguration(config);
 
         Assert.Equal(["alpha", "beta", "gamma"], options.AllowedNamespaces.Order(StringComparer.Ordinal));
+        Assert.True(options.HasExplicitAllowedNamespaces);
     }
 
     [Fact]
-    public void FromEnvironment_ParsesInClusterConfigFlag_WhenSet()
+    public void FromConfiguration_BindsUseInClusterConfig()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
-            (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null),
-            (KubernetesConventions.EnvironmentVariables.KubeConfig, null),
-            (KubernetesConventions.EnvironmentVariables.UseInClusterConfig, "true"));
+        var config = BuildConfig(
+            (RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
+            (KubernetesConventions.ConfigurationKeys.UseInClusterConfig, "true"));
 
-        var options = KubernetesMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromConfiguration(config);
 
         Assert.True(options.IsInClusterConfigEnabled);
         Assert.False(options.HasExplicitKubeConfig);
     }
 
     [Fact]
-    public void FromEnvironment_WithInvalidInClusterConfigFlag_Throws()
-    {
-        using var environment = EnvironmentVariableScope.Set(
-            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
-            (KubernetesConventions.EnvironmentVariables.UseInClusterConfig, "maybe"));
-
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(KubernetesMcpOptions.FromEnvironment);
-
-        Assert.Contains(KubernetesConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
-        Assert.Contains("maybe", exception.Message);
-    }
-
-    [Fact]
     public void FromConfiguration_UsesGeneratedAppSettingsValues()
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                [RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment] =
-                    RuntimeSafetyConventions.EnvironmentValues.Production,
-                [KubernetesConventions.ConfigurationKeys.KubeConfig] = "/var/lib/kubeconfig",
-                [KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":0"] = "alpha",
-                [KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":1"] = "beta"
-            })
-            .Build();
+        var configuration = BuildConfig(
+            (RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment, RuntimeSafetyConventions.EnvironmentValues.Production),
+            (KubernetesConventions.ConfigurationKeys.KubeConfig, "/var/lib/kubeconfig"),
+            (KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":0", "alpha"),
+            (KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":1", "beta"));
 
         var options = KubernetesMcpOptions.FromConfiguration(configuration);
 
@@ -95,19 +115,40 @@ public sealed class KubernetesMcpOptionsTests
     [Fact]
     public void FromConfiguration_BindsFromKubernetesSection()
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                [KubernetesConventions.ConfigurationKeys.KubeConfig] = "/json/kubeconfig",
-                [KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":0"] = "alpha",
-                [KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":1"] = "beta"
-            })
-            .Build();
+        var configuration = BuildConfig(
+            (KubernetesConventions.ConfigurationKeys.KubeConfig, "/json/kubeconfig"),
+            (KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":0", "alpha"),
+            (KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":1", "beta"));
 
         var options = KubernetesMcpOptions.FromConfiguration(configuration);
 
         Assert.Equal("/json/kubeconfig", options.KubeConfig);
         Assert.Equal(["alpha", "beta"], options.AllowedNamespaces.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void FromConfiguration_BindsDownstreamAuthSection()
+    {
+        var config = BuildConfig(
+            (DownstreamAuthConventions.ConfigurationKeys.Required, "true"),
+            (DownstreamAuthConventions.ConfigurationKeys.Authority, DownstreamAuthority));
+
+        var options = KubernetesMcpOptions.FromConfiguration(config);
+
+        Assert.NotNull(options.DownstreamAuth);
+        Assert.True(options.DownstreamAuth!.Required);
+        Assert.Equal(DownstreamAuthority, options.DownstreamAuth.Authority);
+    }
+
+    [Fact]
+    public void FromConfiguration_AbsentDownstreamAuthSection_LeavesDownstreamAuthNull()
+    {
+        var config = BuildConfig(
+            (KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":0", "demo"));
+
+        var options = KubernetesMcpOptions.FromConfiguration(config);
+
+        Assert.Null(options.DownstreamAuth);
     }
 
     [Fact]
@@ -130,11 +171,10 @@ public sealed class KubernetesMcpOptionsTests
     [Fact]
     public void ProductionMode_WithDefaultKubeConfigFallback_RefusesStartup()
     {
-        using var environment = SetProductionEnvironment(
-            (KubernetesConventions.EnvironmentVariables.KubeConfig, null),
-            (KubernetesConventions.EnvironmentVariables.UseInClusterConfig, null));
+        var config = BuildProductionConfig(
+            (KubernetesConventions.ConfigurationKeys.KubeConfig, null));
 
-        var options = KubernetesMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromConfiguration(config);
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
         Assert.Contains(KubernetesConventions.EnvironmentVariables.KubeConfig, exception.Message);
@@ -144,10 +184,10 @@ public sealed class KubernetesMcpOptionsTests
     [Fact]
     public void ProductionMode_WithoutExplicitNamespaces_RefusesStartup()
     {
-        using var environment = SetProductionEnvironment(
-            (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null));
+        var config = BuildProductionConfig(
+            (KubernetesConventions.ConfigurationKeys.AllowedNamespaces + ":0", null));
 
-        var options = KubernetesMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromConfiguration(config);
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
         Assert.Contains(KubernetesConventions.EnvironmentVariables.AllowedNamespaces, exception.Message);
@@ -156,9 +196,9 @@ public sealed class KubernetesMcpOptionsTests
     [Fact]
     public void ValidateProductionSafety_WithValidProductionSettings_AllowsStartup()
     {
-        using var environment = SetProductionEnvironment();
+        var config = BuildProductionConfig();
 
-        var options = KubernetesMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromConfiguration(config);
         Exception? exception = Record.Exception(options.ValidateProductionSafety);
 
         Assert.Null(exception);
@@ -167,13 +207,10 @@ public sealed class KubernetesMcpOptionsTests
     [Fact]
     public void DevelopmentMode_AllowsLocalDefaults()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
-            (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null),
-            (KubernetesConventions.EnvironmentVariables.KubeConfig, null),
-            (KubernetesConventions.EnvironmentVariables.UseInClusterConfig, null));
+        var config = BuildConfig(
+            (RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development));
 
-        var options = KubernetesMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromConfiguration(config);
         Exception? exception = Record.Exception(options.ValidateProductionSafety);
 
         Assert.Null(exception);
@@ -182,10 +219,10 @@ public sealed class KubernetesMcpOptionsTests
     [Fact]
     public void ProductionMode_WithDownstreamAuthRequired_False_RefusesStartup()
     {
-        using var environment = SetProductionEnvironment(
-            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
+        var config = BuildProductionConfig(
+            (DownstreamAuthConventions.ConfigurationKeys.Required, "false"));
 
-        var options = KubernetesMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromConfiguration(config);
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
         Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.Required, exception.Message);
@@ -194,9 +231,9 @@ public sealed class KubernetesMcpOptionsTests
     [Fact]
     public void ProductionMode_WithValidDownstreamAuth_AllowsStartup()
     {
-        using var environment = SetProductionEnvironment();
+        var config = BuildProductionConfig();
 
-        var options = KubernetesMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromConfiguration(config);
         Exception? exception = Record.Exception(options.ValidateProductionSafety);
 
         Assert.Null(exception);
@@ -205,96 +242,32 @@ public sealed class KubernetesMcpOptionsTests
     [Fact]
     public void DevelopmentMode_WithDownstreamAuthRequired_False_AllowsStartup()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
-            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"),
-            (KubernetesConventions.EnvironmentVariables.AllowedNamespaces, null),
-            (KubernetesConventions.EnvironmentVariables.KubeConfig, null),
-            (KubernetesConventions.EnvironmentVariables.UseInClusterConfig, null));
+        var config = BuildConfig(
+            (RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
+            (DownstreamAuthConventions.ConfigurationKeys.Required, "false"));
 
-        var options = KubernetesMcpOptions.FromEnvironment();
+        var options = KubernetesMcpOptions.FromConfiguration(config);
         Exception? exception = Record.Exception(options.ValidateProductionSafety);
 
         Assert.Null(exception);
     }
 
     [Fact]
-    public void FromEnvironment_WithDownstreamAuthRequired_Absent_DefaultsToRequired()
-    {
-        using var environment = EnvironmentVariableScope.Set(
-            (DownstreamAuthConventions.EnvironmentVariables.Required, null));
-
-        var options = KubernetesMcpOptions.FromEnvironment();
-
-        Assert.True(options.DownstreamAuth?.Required);
-    }
-
-    [Fact]
-    public void FromEnvironment_PopulatesDownstreamAuth_FromEnvironment()
-    {
-        using var environment = EnvironmentVariableScope.Set(
-            (DownstreamAuthConventions.EnvironmentVariables.Required, "true"),
-            (DownstreamAuthConventions.EnvironmentVariables.Authority, DownstreamAuthority));
-
-        var options = KubernetesMcpOptions.FromEnvironment();
-
-        Assert.NotNull(options.DownstreamAuth);
-        Assert.True(options.DownstreamAuth.Required);
-        Assert.Equal(DownstreamAuthority, options.DownstreamAuth.Authority);
-    }
-
-    private static EnvironmentVariableScope SetProductionEnvironment(params (string Name, string? Value)[] overrides)
+    public void ProductionMode_BothKubeConfigAndInCluster_RefusesStartup()
     {
         string kubeConfig = Path.Combine(
             Path.GetPathRoot(Directory.GetCurrentDirectory()) ?? Path.DirectorySeparatorChar.ToString(),
             "var", "lib", "infra-gate-tests", "kubeconfig");
 
-        var variables = new Dictionary<string, string?>(StringComparer.Ordinal)
-        {
-            [RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment] =
-                RuntimeSafetyConventions.EnvironmentValues.Production,
-            [KubernetesConventions.EnvironmentVariables.AllowedNamespaces] = "mcp-nginx-demo",
-            [KubernetesConventions.EnvironmentVariables.KubeConfig] = kubeConfig,
-            [KubernetesConventions.EnvironmentVariables.UseInClusterConfig] = null,
-            [DownstreamAuthConventions.EnvironmentVariables.Required] = "true",
-            [DownstreamAuthConventions.EnvironmentVariables.Authority] = DownstreamAuthority
-        };
+        var config = BuildConfig(
+            (RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
+            (KubernetesConventions.ConfigurationKeys.KubeConfig, kubeConfig),
+            (KubernetesConventions.ConfigurationKeys.UseInClusterConfig, "true"));
 
-        foreach (var item in overrides)
-        {
-            variables[item.Name] = item.Value;
-        }
+        var options = KubernetesMcpOptions.FromConfiguration(config);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
-        return EnvironmentVariableScope.Set(variables.Select(item => (item.Key, item.Value)).ToArray());
-    }
-
-    private sealed class EnvironmentVariableScope : IDisposable
-    {
-        private readonly Dictionary<string, string?> previousValues;
-
-        private EnvironmentVariableScope(Dictionary<string, string?> previousValues)
-        {
-            this.previousValues = previousValues;
-        }
-
-        public static EnvironmentVariableScope Set(params (string Name, string? Value)[] variables)
-        {
-            var previousValues = new Dictionary<string, string?>(StringComparer.Ordinal);
-            foreach (var variable in variables)
-            {
-                previousValues[variable.Name] = Environment.GetEnvironmentVariable(variable.Name);
-                Environment.SetEnvironmentVariable(variable.Name, variable.Value);
-            }
-
-            return new EnvironmentVariableScope(previousValues);
-        }
-
-        public void Dispose()
-        {
-            foreach (var previousValue in previousValues)
-            {
-                Environment.SetEnvironmentVariable(previousValue.Key, previousValue.Value);
-            }
-        }
+        Assert.Contains(KubernetesConventions.EnvironmentVariables.KubeConfig, exception.Message);
+        Assert.Contains(KubernetesConventions.EnvironmentVariables.UseInClusterConfig, exception.Message);
     }
 }

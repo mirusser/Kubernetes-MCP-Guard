@@ -1,5 +1,5 @@
 # deploy/local-oauth/compose.release.yaml
-# Keycloak + MCP Gateway — published gateway image from GHCR.
+# Keycloak + PostgreSQL + MCP Gateway — published gateway image from GHCR.
 #
 # Override the release tag with: TAG=vX.Y.Z docker compose ...
 # Docker Hub alternate for the gateway image: mirusser/kubernetes-mcp-guard-gateway:${TAG}
@@ -29,22 +29,44 @@ services:
       retries: 12
       start_period: 10s
 
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: infra-gate
+      POSTGRES_USER: infra-gate
+      POSTGRES_PASSWORD: infra-gate-dev-password
+      INFRA_GATE_RUN_APPROVAL_MIGRATIONS: "true"
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../../src/InfraGate.Approvals.Postgres/Migrations:/var/approval-migrations:ro
+      - ../../scripts/persistence/run-compose-migrations.sh:/docker-entrypoint-initdb.d/00-run-approval-migrations.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U infra-gate -d infra-gate"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   mcp-gateway:
     image: ${INFRA_GATE_GATEWAY_IMAGE:-ghcr.io/mirusser/kubernetes-mcp-guard-gateway}:${TAG:-latest}
     depends_on:
       keycloak:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     env_file:
       # Compose --env-file supplies interpolation values; env_file passes the
       # same profile template into the gateway container runtime.
       - ${INFRA_GATE_GATEWAY_ENV_FILE:-release.env.example}
-    environment:
-      DOTNET_ENVIRONMENT: Development
     volumes:
-      - ${INFRA_GATE_CONFIG_HOST_PATH}:/app/config/appsettings.InfraGate.json:ro
       - ${INFRA_GATE_KUBECONFIG_HOST_PATH}:/run/kube/mcp-nginx-demo.compose.config:ro
       - ${INFRA_GATE_APPROVAL_HOST_PATH}:/data/approvals
       - ${INFRA_GATE_GUARD_AUDIT_HOST_PATH}:/data/guardrails
       - ${INFRA_GATE_DATA_PROTECTION_HOST_PATH}:/data/dataprotection-keys
     ports:
       - "${INFRA_GATE_BIND_ADDRESS:-127.0.0.1}:${INFRA_GATE_BIND_PORT:-3001}:3001"
+
+volumes:
+  pgdata:

@@ -71,7 +71,7 @@ Expected: `yes`, `yes`, `yes`, `yes`, `no`, then `no`.
 
 This is the supported local OAuth path. See [Keycloak local OAuth in the setup guide](setup-guide.md#keycloak-local-oauth) for full details, Codex CLI config, and tradeoff notes.
 
-Compose files under `deploy/local-oauth/` and `deploy/compose/` use `${VAR}` substitution; generate the env and appsettings files from the canonical run-profiles YAML first.
+Compose files under `deploy/local-oauth/` and `deploy/compose/` use `${VAR}` substitution; generate the env file from the canonical run-profiles YAML first.
 
 For published images (no local build):
 
@@ -90,7 +90,7 @@ docker compose --env-file deploy/generated/local-compose.env \
   -f deploy/local-oauth/compose.yaml up --build
 ```
 
-`scripts/generate-env.sh` compiles the profile from `deploy/run-profiles.yaml` and supplies absolute host paths for local build runs. The published-image path uses the committed no-SDK release env template and appsettings file. The smoke test scripts (`scripts/smoke-test-local.sh`, `scripts/smoke-test-release.sh`) generate and use their smoke-profile files automatically.
+`scripts/generate-env.sh` compiles the profile from `deploy/run-profiles.yaml` and supplies absolute host paths for local build runs. The published-image path uses the committed no-SDK release env template. The smoke test scripts (`scripts/smoke-test-local.sh`, `scripts/smoke-test-release.sh`) generate and use their smoke-profile files automatically.
 
 ### Docker image publishing
 
@@ -122,36 +122,38 @@ Image built: `kubernetes-mcp-guard-gateway`.
 The source-run gateway listens on `http://127.0.0.1:3001/mcp` by default, accepts OAuth JWT access tokens, serves browser approval pages under `/approvals`, and starts the downstream stdio server itself. For source-run OAuth debugging, start only Keycloak through the Compose path first:
 
 ```bash
-docker compose -f deploy/local-oauth/compose.yaml up keycloak
+./scripts/generate-env.sh local-compose
+docker compose --env-file deploy/generated/local-compose.env \
+  -f deploy/local-oauth/compose.yaml up keycloak postgres
 ```
 
 Then run the gateway with OAuth enabled:
 
 ```bash
 export REPO_ROOT="$(pwd)"
-export INFRA_GATE_ENVIRONMENT=Development
-export INFRA_GATE_OAUTH_AUTHORITY="http://127.0.0.1:3010/realms/infra-gate"
-export INFRA_GATE_OAUTH_METADATA_ADDRESS="http://127.0.0.1:3010/realms/infra-gate/.well-known/openid-configuration"
-export INFRA_GATE_OAUTH_RESOURCE="http://127.0.0.1:3001/mcp"
-export INFRA_GATE_OAUTH_SCOPE="mcp:tools"
-export INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false
-export INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID="infra-gate-approval-ui"
-export INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT="http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/auth"
-export INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT="http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token"
-export INFRA_GATE_APPROVAL_BASE_URL="http://127.0.0.1:3001"
-export INFRA_GATE_DOWNSTREAM_PROJECT="${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
-export KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config"
-export K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals"
-# The gateway also requires PostgreSQL (via InfraGate:Approval:Postgres:ConnectionString in
-# generated appsettings JSON, provided by the run-profiles generate command).
-export K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo
+export InfraGate__Runtime__Environment=Development
+export InfraGate__Auth__OAuthAuthority="http://127.0.0.1:3010/realms/infra-gate"
+export InfraGate__Auth__OAuthMetadataAddress="http://127.0.0.1:3010/realms/infra-gate/.well-known/openid-configuration"
+export InfraGate__Auth__OAuthResource="http://127.0.0.1:3001/mcp"
+export InfraGate__Auth__OAuthScope="mcp:tools"
+export InfraGate__Auth__OAuthRequireHttpsMetadata=false
+export InfraGate__Auth__ApprovalOAuthClientId="infra-gate-approval-ui"
+export InfraGate__Auth__ApprovalOAuthAuthorizationEndpoint="http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/auth"
+export InfraGate__Auth__ApprovalOAuthTokenEndpoint="http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token"
+export InfraGate__Approval__BaseUrl="http://127.0.0.1:3001"
+export InfraGate__Gateway__DownstreamProject="${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
+export InfraGate__Kubernetes__KubeConfig="${REPO_ROOT}/.kube/mcp-nginx-demo.config"
+export InfraGate__Approval__Root="${REPO_ROOT}/.mcp-approvals"
+export InfraGate__Approval__Postgres__ConnectionString="Host=localhost;Port=5432;Database=infra-gate;Username=infra-gate;Password=infra-gate-dev-password"
+export InfraGate__Approval__Postgres__RunMigrationsOnStartup=true
+export InfraGate__Kubernetes__AllowedNamespaces__0=mcp-nginx-demo
 
 dotnet run --project src/InfraGate.McpGateway/InfraGate.McpGateway.csproj
 ```
 
-Set `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` only for a localhost-only issuer during development.
+Set `InfraGate__Auth__OAuthRequireHttpsMetadata=false` only for a localhost-only issuer during development.
 
-For an external OAuth/OIDC issuer, use its issuer URL for `INFRA_GATE_OAUTH_AUTHORITY`. The gateway remains a resource server only; external issuer setup, users, clients, login, consent, PKCE policy, and token issuance stay outside the gateway. See [docs/production-oidc.md](production-oidc.md) for production OIDC guidance.
+For an external OAuth/OIDC issuer, use its issuer URL for `InfraGate__Auth__OAuthAuthority`. The gateway remains a resource server only; external issuer setup, users, clients, login, consent, PKCE policy, and token issuance stay outside the gateway. See [docs/production-oidc.md](production-oidc.md) for production OIDC guidance.
 
 For the supported Keycloak container path, the Compose file sets the internal metadata/token endpoints and approval redirect values for you.
 
@@ -159,28 +161,28 @@ For the supported Keycloak container path, the Compose file sets the internal me
 
 The gateway proves its identity to the downstream stdio server using a short-lived OAuth client-credentials token. This is a defense-in-depth measure — not the primary security boundary. The primary boundary is the trusted-launch model (containment, human approval, and per-action authorization described in the security controls section of `src/InfraGate.McpGateway/README.md`).
 
-The downstream auth settings are controlled by the `INFRA_GATE_DOWNSTREAM_AUTH_*` environment variables:
+The downstream auth settings bind from `InfraGate:DownstreamAuth` and use the framework `InfraGate__DownstreamAuth__*` environment variable shape:
 
 | Variable | Purpose |
 |---|---|
-| `INFRA_GATE_DOWNSTREAM_AUTH_REQUIRED` | Set to `true` to enforce. Set to `false` to opt out (development only). |
-| `INFRA_GATE_DOWNSTREAM_AUTH_AUTHORITY` | OIDC issuer URL (e.g. `http://127.0.0.1:3010/realms/infra-gate`). |
-| `INFRA_GATE_DOWNSTREAM_AUTH_METADATA_ADDRESS` | Optional alternative metadata address for container-internal access. |
-| `INFRA_GATE_DOWNSTREAM_AUTH_REQUIRE_HTTPS_METADATA` | Set to `false` for localhost-only issuers in development. |
-| `INFRA_GATE_DOWNSTREAM_AUTH_AUDIENCE` | Expected audience on the service token (default: `urn:infra-gate:mcp-server`). |
-| `INFRA_GATE_DOWNSTREAM_AUTH_SCOPE` | Scope to request (default: `mcp:downstream`). |
-| `INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_ID` | Gateway service client ID (gateway side only; never passed to the server subprocess). |
-| `INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET` | Gateway service client secret (gateway side only; never passed to the server subprocess). |
+| `InfraGate__DownstreamAuth__Required` | Set to `true` to enforce. Set to `false` to opt out (development only). |
+| `InfraGate__DownstreamAuth__Authority` | OIDC issuer URL (e.g. `http://127.0.0.1:3010/realms/infra-gate`). |
+| `InfraGate__DownstreamAuth__MetadataAddress` | Optional alternative metadata address for container-internal access. |
+| `InfraGate__DownstreamAuth__RequireHttpsMetadata` | Set to `false` for localhost-only issuers in development. |
+| `InfraGate__DownstreamAuth__Audience` | Expected audience on the service token (default: `urn:infra-gate:mcp-server`). |
+| `InfraGate__DownstreamAuth__Scope` | Scope to request (default: `mcp:downstream`). |
+| `InfraGate__DownstreamAuth__GatewayClientId` | Gateway service client ID (gateway side only; never passed to the server subprocess). |
+| `InfraGate__DownstreamAuth__GatewayClientSecret` | Gateway service client secret (gateway side only; never passed to the server subprocess). |
 
 To disable downstream auth for local development without Keycloak:
 
 ```bash
-export INFRA_GATE_DOWNSTREAM_AUTH_REQUIRED=false
+export InfraGate__DownstreamAuth__Required=false
 ```
 
-The gateway excludes `INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_ID` and `INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET` from the subprocess environment allowlist. The server subprocess never receives the gateway's client credentials. The server receives only the shared fields (`INFRA_GATE_DOWNSTREAM_AUTH_REQUIRED`, `AUTHORITY`, `AUDIENCE`, `SCOPE`, `REQUIRE_HTTPS_METADATA`) to configure its JWT validator.
+The gateway excludes `InfraGate__DownstreamAuth__GatewayClientId` and `InfraGate__DownstreamAuth__GatewayClientSecret` from the subprocess environment allowlist. The server subprocess never receives the gateway's client credentials. The server receives only the shared fields (`InfraGate__DownstreamAuth__Required`, `InfraGate__DownstreamAuth__Authority`, `InfraGate__DownstreamAuth__Audience`, `InfraGate__DownstreamAuth__Scope`, and `InfraGate__DownstreamAuth__RequireHttpsMetadata`) to configure its JWT validator.
 
-Token values are redacted from guardrail audit logs. The `GATEWAY_CLIENT_SECRET` is never emitted to server-side run profiles or logged.
+Token values are redacted from guardrail audit logs. `InfraGate__DownstreamAuth__GatewayClientSecret` is never emitted to server-side run profiles or logged.
 
 Codex CLI HTTP MCP config:
 
@@ -206,14 +208,11 @@ From the repo directory run:
 ```bash
 REPO_ROOT="$(pwd)"
 codex mcp add infra-gate \
-  --env INFRA_GATE_ENVIRONMENT=Development \
-  --env KUBECONFIG="${REPO_ROOT}/.kube/mcp-nginx-demo.config" \
-  --env K8S_MCP_APPROVAL_ROOT="${REPO_ROOT}/.mcp-approvals" \
-  --env K8S_MCP_ALLOWED_NAMESPACES=mcp-nginx-demo \
+  --env InfraGate__Runtime__Environment=Development \
+  --env InfraGate__Kubernetes__KubeConfig="${REPO_ROOT}/.kube/mcp-nginx-demo.config" \
+  --env InfraGate__Kubernetes__AllowedNamespaces__0=mcp-nginx-demo \
   -- dotnet run --project "${REPO_ROOT}/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
 ```
-
-The gateway requires PostgreSQL even for stdio mode (via `InfraGate:Approval:Postgres:ConnectionString` in generated appsettings JSON, provided by the run-profiles generate command).
 
 Next time, with the same environment, run:
 
@@ -236,17 +235,14 @@ Use this shape for a local stdio MCP client:
         "/absolute/path/to/infra-gate/src/InfraGate.McpServer/InfraGate.McpServer.csproj"
       ],
       "env": {
-        "INFRA_GATE_ENVIRONMENT": "Development",
-        "KUBECONFIG": "/absolute/path/to/infra-gate/.kube/mcp-nginx-demo.config",
-        "K8S_MCP_APPROVAL_ROOT": "/absolute/path/to/infra-gate/.mcp-approvals",
-        "K8S_MCP_ALLOWED_NAMESPACES": "mcp-nginx-demo"
+        "InfraGate__Runtime__Environment": "Development",
+        "InfraGate__Kubernetes__KubeConfig": "/absolute/path/to/infra-gate/.kube/mcp-nginx-demo.config",
+        "InfraGate__Kubernetes__AllowedNamespaces__0": "mcp-nginx-demo"
       }
     }
   }
 }
 ```
-
-The gateway requires PostgreSQL (via `InfraGate:Approval:Postgres:ConnectionString` in generated appsettings JSON, provided by the run-profiles generate command).
 
 ### Available MCP tools
 
@@ -293,8 +289,8 @@ The Anomaly Observer and Remediation Planner each write a separate per-component
 
 | Component | Environment variable |
 |---|---|
-| Anomaly Observer | `INFRA_GATE_OBSERVER_AUDIT_CONNECTION_STRING` |
-| Remediation Planner | `INFRA_GATE_PLANNER_AUDIT_CONNECTION_STRING` |
+| Anomaly Observer | `InfraGate__Observer__AuditConnectionString` |
+| Remediation Planner | `InfraGate__Planner__AuditConnectionString` |
 
 Each component runs `PostgresAuditOutboxMigrationRunner` on startup to apply its schema migration. The `approvals` schema migration (`0001-initial-approval-persistence.sql`) was retrofitted in place (ADR-0020) — if you have a local `approvals` schema from before this change, drop it before next startup:
 

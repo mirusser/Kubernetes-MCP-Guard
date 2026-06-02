@@ -6,7 +6,7 @@
 # Host-path defaults use REPO_ROOT; pass additional --set flags to override any of them.
 #
 # Usage:
-#   ./scripts/generate-env.sh <profile> [--output <env-path>] [--appsettings-output <path>] [--set section.field=value ...] [--force]
+#   ./scripts/generate-env.sh <profile> [--output <env-path>] [--set section.field=value ...] [--force]
 #
 # Examples:
 #   ./scripts/generate-env.sh local-compose
@@ -19,7 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 if [[ $# -lt 1 || "$1" == "--help" || "$1" == "-h" ]]; then
-  echo "Usage: $0 <profile> [--output <env-path>] [--appsettings-output <path>] [--set section.field=value ...] [--force]" >&2
+  echo "Usage: $0 <profile> [--output <env-path>] [--set section.field=value ...] [--force]" >&2
   echo ""                                                                                  >&2
   echo "Profiles:"                                                                         >&2
   dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- list 2>/dev/null | \
@@ -31,17 +31,12 @@ PROFILE="$1"
 shift
 
 OUTPUT="${REPO_ROOT}/deploy/generated/${PROFILE}.env"
-APPSETTINGS_OUTPUT=""
 EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --output)
       OUTPUT="$2"
-      shift 2
-      ;;
-    --appsettings-output)
-      APPSETTINGS_OUTPUT="$2"
       shift 2
       ;;
     *)
@@ -51,34 +46,37 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$APPSETTINGS_OUTPUT" ]]; then
-  if [[ "$OUTPUT" == *.env ]]; then
-    APPSETTINGS_OUTPUT="${OUTPUT%.env}.appsettings.json"
-  else
-    APPSETTINGS_OUTPUT="${OUTPUT}.appsettings.json"
-  fi
-fi
-
 mkdir -p "$(dirname "$OUTPUT")"
-mkdir -p "$(dirname "$APPSETTINGS_OUTPUT")"
 
-APPSETTINGS_HOST_PATH="$(cd "$(dirname "$APPSETTINGS_OUTPUT")" && pwd)/$(basename "$APPSETTINGS_OUTPUT")"
+downstream_gateway_secret="${InfraGate__DownstreamAuth__GatewayClientSecret:-${INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET:-}}"
+observer_client_secret="${InfraGate__Observer__ClientCredentials__ClientSecret:-${INFRA_GATE_OBSERVER_CLIENT_SECRET:-}}"
+observer_llm_api_key="${InfraGate__Observer__LlmApiKey:-${INFRA_GATE_OBSERVER_LLM_API_KEY:-}}"
+planner_client_secret="${InfraGate__Planner__ClientCredentials__ClientSecret:-${INFRA_GATE_PLANNER_CLIENT_SECRET:-}}"
+planner_llm_api_key="${InfraGate__Planner__LlmApiKey:-${INFRA_GATE_PLANNER_LLM_API_KEY:-}}"
+executor_client_secret="${InfraGate__Executor__ClientCredentials__ClientSecret:-${INFRA_GATE_EXECUTOR_CLIENT_SECRET:-}}"
+
+[[ -n "$downstream_gateway_secret" ]] &&
+  EXTRA_ARGS+=(--set "downstreamAuth.gatewayClientSecret=${downstream_gateway_secret}")
+[[ -n "$observer_client_secret" ]] &&
+  EXTRA_ARGS+=(--set "observer.clientSecret=${observer_client_secret}")
+[[ -n "$observer_llm_api_key" ]] &&
+  EXTRA_ARGS+=(--set "observer.llmApiKey=${observer_llm_api_key}")
+[[ -n "$planner_client_secret" ]] &&
+  EXTRA_ARGS+=(--set "planner.clientSecret=${planner_client_secret}")
+[[ -n "$planner_llm_api_key" ]] &&
+  EXTRA_ARGS+=(--set "planner.llmApiKey=${planner_llm_api_key}")
+[[ -n "$executor_client_secret" ]] &&
+  EXTRA_ARGS+=(--set "executor.clientSecret=${executor_client_secret}")
 
 dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- generate "$PROFILE" \
   --set "host.kubeconfigHostPath=${REPO_ROOT}/.kube/mcp-nginx-demo.compose.config" \
   --set "host.approvalHostPath=${REPO_ROOT}/.mcp-approvals" \
   --set "host.guardAuditHostPath=${REPO_ROOT}/.mcp-guardrails" \
   --set "host.dataProtectionHostPath=${REPO_ROOT}/.mcp-dataprotection-keys" \
-  --set "host.configHostPath=${APPSETTINGS_HOST_PATH}" \
   --set "observer.observerHostPath=${REPO_ROOT}/.mcp-observer/findings" \
   --set "planner.plannerHostPath=${REPO_ROOT}/.mcp-remediation/proposals" \
   ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
   --output "$OUTPUT"
-
-dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- generate "$PROFILE" \
-  --format appsettings \
-  ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
-  --output "$APPSETTINGS_OUTPUT"
 
 # Pre-create agent data directories owned by the current user so that containers
 # running as a non-root APP_UID can write to them. If Docker creates these

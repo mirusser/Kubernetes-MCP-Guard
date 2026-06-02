@@ -2,19 +2,19 @@
 
 ## Warning: Development vs. Production
 
-The setting `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` is for local development only. Do not use it in production environments.
+The setting `InfraGate__Auth__OAuthRequireHttpsMetadata=false` is for local development only. Do not use it in production environments.
 
-Set `INFRA_GATE_ENVIRONMENT=Production` for production deployments. In this mode the Gateway and downstream MCP server fail closed when development defaults are present.
+Set `InfraGate__Runtime__Environment=Production` for production deployments. In this mode the Gateway and downstream MCP server fail closed when development defaults are present.
 
 ## Gateway OIDC Contract
 
 To configure an external OIDC provider, the Gateway expects the following:
 
-- **Issuer**: Access tokens must have an `iss` claim matching `INFRA_GATE_OAUTH_AUTHORITY`.
+- **Issuer**: Access tokens must have an `iss` claim matching `InfraGate__Auth__OAuthAuthority`.
 - **JWKS/Discovery**: The issuer must expose `.well-known/openid-configuration` and JWKS metadata for signature validation.
 - **JWT validation**: Tokens must have a valid signature, lifetime (`exp` and related lifetime checks), issuer, and audience.
-- **Audience**: Tokens must include an `aud` value matching `INFRA_GATE_OAUTH_RESOURCE`; trailing slash differences are normalized by the gateway.
-- **Scopes**: Tokens must include `mcp:tools` in either the `scope` or `scp` claim, unless `INFRA_GATE_OAUTH_SCOPE` is changed.
+- **Audience**: Tokens must include an `aud` value matching `InfraGate__Auth__OAuthResource`; trailing slash differences are normalized by the gateway.
+- **Scopes**: Tokens must include `mcp:tools` in either the `scope` or `scp` claim, unless `InfraGate__Auth__OAuthScope` is changed.
 - **Identity binding**: Tokens must provide `sub` or `client_id`; the gateway uses that identity to bind browser approvals to the requester.
 
 For Keycloak, bind `aud` with an audience mapper on a client scope or client until Keycloak's MCP/resource-indicator support processes RFC 8707 `resource` values as this gateway requires. The gateway remains the enforcement point for issuer, signature, lifetime, audience, and scope.
@@ -23,7 +23,7 @@ For Keycloak, bind `aud` with an audience mapper on a client scope or client unt
 
 1. **Realm**: Create or use an existing Keycloak realm.
 2. **Client Scope**: Create a client scope named `mcp:tools`.
-3. **Audience Mapper**: Add an audience mapper for the scope (or the client) that emits the value of `INFRA_GATE_OAUTH_RESOURCE` into the token `aud` claim.
+3. **Audience Mapper**: Add an audience mapper for the scope (or the client) that emits the value of `InfraGate__Auth__OAuthResource` into the token `aud` claim.
 4. **MCP Client Registration**: Register the AI/MCP client in Keycloak, allowing it to request the `mcp:tools` scope.
 5. **Approval UI Client**: Register an authorization-code + PKCE client for the approval UI. Configure it to be public-client-compatible and set the redirect URI to `${gatewayBaseUrl}/approvals/oauth/callback` (for example, `https://gateway.example.com/approvals/oauth/callback`).
 
@@ -34,26 +34,26 @@ The current gateway does not expose a configurable approval OAuth client secret 
 When using Keycloak, set the following environment variables:
 
 ```bash
-export INFRA_GATE_OAUTH_AUTHORITY="https://your-keycloak-domain/realms/your-realm"
-export INFRA_GATE_OAUTH_RESOURCE="https://gateway.example.com/mcp"
-export INFRA_GATE_OAUTH_SCOPE="mcp:tools"
-export INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=true
-export INFRA_GATE_ENVIRONMENT=Production
-export INFRA_GATE_APPROVAL_BASE_URL="https://gateway.example.com"
-export INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID="infra-gate-approval-ui"
-export INFRA_GATE_APPROVAL_OAUTH_CALLBACK_PATH="/approvals/oauth/callback"
-export INFRA_GATE_GUARD_AUDIT_ROOT="/data/guardrails"
-export K8S_MCP_APPROVAL_ROOT="/data/approvals"
-export K8S_MCP_ALLOWED_NAMESPACES="mcp-nginx-demo"
+export InfraGate__Auth__OAuthAuthority="https://your-keycloak-domain/realms/your-realm"
+export InfraGate__Auth__OAuthResource="https://gateway.example.com/mcp"
+export InfraGate__Auth__OAuthScope="mcp:tools"
+export InfraGate__Auth__OAuthRequireHttpsMetadata=true
+export InfraGate__Runtime__Environment=Production
+export InfraGate__Approval__BaseUrl="https://gateway.example.com"
+export InfraGate__Auth__ApprovalOAuthClientId="infra-gate-approval-ui"
+export InfraGate__Auth__ApprovalOAuthCallbackPath="/approvals/oauth/callback"
+export InfraGate__Gateway__GuardAuditRoot="/data/guardrails"
+export InfraGate__Approval__Root="/data/approvals"
+export InfraGate__Kubernetes__AllowedNamespaces__0="mcp-nginx-demo"
 
 # Kubernetes auth: choose exactly one.
-export KUBECONFIG="/run/kube/infra-gate.config"
+export InfraGate__Kubernetes__KubeConfig="/run/kube/infra-gate.config"
 # or:
-# export K8S_MCP_USE_IN_CLUSTER=true
+# export InfraGate__Kubernetes__UseInClusterConfig=true
 
 # Keycloak-specific overrides:
-export INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT="${INFRA_GATE_OAUTH_AUTHORITY}/protocol/openid-connect/auth"
-export INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT="${INFRA_GATE_OAUTH_AUTHORITY}/protocol/openid-connect/token"
+export InfraGate__Auth__ApprovalOAuthAuthorizationEndpoint="${InfraGate__Auth__OAuthAuthority}/protocol/openid-connect/auth"
+export InfraGate__Auth__ApprovalOAuthTokenEndpoint="${InfraGate__Auth__OAuthAuthority}/protocol/openid-connect/token"
 ```
 
 For Docker host deployments, put the production values in `/etc/infra-gate/production.env` and run the gateway-only Compose file with the release tag:
@@ -114,7 +114,7 @@ TOKEN=$(curl -s -X POST \
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3001/mcp
 ```
 
-The demo Compose runs in `Development` mode because Keycloak's `start-dev` uses HTTP. For a production-like TLS setup, replace `keycloak.yaml` with your real Keycloak and update the env vars to `INFRA_GATE_ENVIRONMENT=Production` with HTTPS URLs.
+The demo Compose runs in `Development` mode because Keycloak's `start-dev` uses HTTP. For a production-like TLS setup, replace `keycloak.yaml` with your real Keycloak and update the env vars to `InfraGate__Runtime__Environment=Production` with HTTPS URLs.
 
 ## Production Checklist
 
@@ -125,10 +125,10 @@ Before moving to production, ensure you have:
 - [ ] Strict redirect URIs configured in the OIDC provider.
 - [ ] A secure token lifetime policy.
 - [ ] Strictly scoped Kubernetes RBAC (the Gateway enforces namespace limits, but RBAC is still required).
-- [ ] Explicit Kubernetes auth configured with either `KUBECONFIG` or `K8S_MCP_USE_IN_CLUSTER=true`.
-- [ ] Explicit `K8S_MCP_ALLOWED_NAMESPACES`, `K8S_MCP_APPROVAL_ROOT`, and `INFRA_GATE_GUARD_AUDIT_ROOT`.
+- [ ] Explicit Kubernetes auth configured with either `InfraGate__Kubernetes__KubeConfig` or `InfraGate__Kubernetes__UseInClusterConfig=true`.
+- [ ] Explicit `InfraGate__Kubernetes__AllowedNamespaces__0`, `InfraGate__Approval__Root`, and `InfraGate__Gateway__GuardAuditRoot`.
 - [ ] Durable approval and audit paths that are not temp paths, default dev paths, or group/other-writable.
-- [ ] Host Docker env file and appsettings file provisioned at `/etc/infra-gate/production.env` and `/etc/infra-gate/production.appsettings.json` when using the remote Compose deployment.
+- [ ] Host Docker env file provisioned at `/etc/infra-gate/production.env` when using the remote Compose deployment.
 - [ ] No opaque manual bearer values in MCP client configuration.
 
 ## Future Support

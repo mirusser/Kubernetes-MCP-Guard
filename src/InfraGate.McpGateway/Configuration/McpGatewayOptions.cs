@@ -31,65 +31,6 @@ public sealed record class McpGatewayOptions(
     private static readonly IReadOnlySet<string> DeniedGuardAuditRootNames =
         new HashSet<string>([McpGatewayConventions.Paths.DefaultGuardAuditRootDirectory], StringComparer.Ordinal);
 
-    public static McpGatewayOptions FromEnvironment()
-    {
-        var auth = GatewayAuthOptions.FromEnvironment();
-        var downstreamAuth = DownstreamAuthOptions.FromEnvironment();
-        RuntimeMode runtimeMode = RuntimeModeResolver.FromEnvironment();
-        string workingDirectory = Directory.GetCurrentDirectory();
-        string downstreamProject =
-            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.DownstreamProject) ??
-            Path.Combine(
-                workingDirectory,
-                McpGatewayConventions.Paths.SourceDirectory,
-                McpGatewayConventions.Paths.DefaultDownstreamProjectDirectory,
-                McpGatewayConventions.Paths.DefaultDownstreamProjectFileName);
-        string? downstreamAssembly =
-            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.DownstreamAssembly);
-        string? auditRootValue =
-            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.GuardAuditRoot);
-        bool isGuardAuditRootExplicit = !string.IsNullOrWhiteSpace(auditRootValue);
-        string auditRoot = auditRootValue ??
-            Path.Combine(workingDirectory, McpGatewayConventions.Paths.DefaultGuardAuditRootDirectory);
-        string? approvalRootValue =
-            Environment.GetEnvironmentVariable(ApprovalConventions.EnvironmentVariables.ApprovalRoot);
-        bool isApprovalRootExplicit = !string.IsNullOrWhiteSpace(approvalRootValue);
-        string approvalRoot = approvalRootValue ??
-            Path.Combine(workingDirectory, ApprovalConventions.Storage.DefaultRootDirectory);
-        string? approvalBaseUrl = Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl);
-        TimeSpan approvalChallengeTtl = ParseTimeSpanSeconds(
-            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.ApprovalChallengeTtlSeconds),
-            DefaultApprovalChallengeTtl);
-        string operatorGroup =
-            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.OperatorGroup) ??
-            McpGatewayConventions.DefaultOperatorGroup;
-        string? operatorEmail = Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.OperatorEmail);
-        var smtp = CreateSmtpOptions(
-            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpHost),
-            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpPort),
-            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpFrom),
-            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpUser),
-            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpPassword),
-            Environment.GetEnvironmentVariable(McpGatewayConventions.EnvironmentVariables.SmtpEnableSsl));
-
-        return new McpGatewayOptions(
-            auth,
-            downstreamProject,
-            auditRoot,
-            workingDirectory,
-            approvalRoot,
-            approvalBaseUrl,
-            approvalChallengeTtl,
-            downstreamAssembly,
-            runtimeMode,
-            isGuardAuditRootExplicit,
-            isApprovalRootExplicit,
-            downstreamAuth,
-            operatorGroup,
-            operatorEmail,
-            smtp);
-    }
-
     public static McpGatewayOptions FromConfiguration(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
@@ -162,8 +103,8 @@ public sealed record class McpGatewayOptions(
             return;
         }
 
-        var downstreamAuth = DownstreamAuth ?? new DownstreamAuthOptions();
-        if (!downstreamAuth.Required)
+        var downstreamAuth = DownstreamAuth;
+        if (downstreamAuth is null || !downstreamAuth.Required)
         {
             throw new InvalidOperationException(
                 $"{DownstreamAuthConventions.EnvironmentVariables.Required} must not be false in Production mode. " +

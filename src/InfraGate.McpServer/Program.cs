@@ -13,8 +13,8 @@ using ModelContextProtocol.Server;
 var builder = Host.CreateApplicationBuilder(args);
 AddInfraGateConfiguration(builder.Configuration, args);
 
-builder.Services.Configure<InfraGateKubernetesSettings>(
-    builder.Configuration.GetSection("InfraGate:Kubernetes"));
+builder.Services.Configure<KubernetesOptions>(
+    builder.Configuration.GetSection(KubernetesOptions.SectionName));
 
 var mcpOptions = KubernetesMcpOptions.FromConfiguration(builder.Configuration);
 
@@ -27,7 +27,7 @@ builder.AddInfraGateObservability(opt =>
 
 mcpOptions.ValidateProductionSafety();
 builder.Services.AddSingleton(mcpOptions);
-builder.Services.AddDownstreamAuth(mcpOptions.DownstreamAuth ?? InfraGate.DownstreamAuth.DownstreamAuthOptions.FromEnvironment());
+builder.Services.AddDownstreamAuth(mcpOptions.DownstreamAuth);
 builder.Services.AddSingleton<IKubernetes>(_ =>
 {
     var config = new KubernetesConfigProvider(mcpOptions).Create();
@@ -108,12 +108,8 @@ static void AddInfraGateConfiguration(IConfigurationBuilder configuration, strin
     if (!string.IsNullOrWhiteSpace(configPath))
     {
         configuration.AddJsonFile(configPath, optional: false, reloadOnChange: false);
-        configuration.AddInfraGateEnvironmentVariables(mappings =>
-        {
-            RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
-            KubernetesConventions.RegisterInfraGateEnvVarMappings(mappings);
-        });
-        configuration.AddEnvironmentVariables();
-        configuration.AddCommandLine(args);
     }
+
+    configuration.AddEnvironmentVariables();
+    configuration.AddCommandLine(args);
 }

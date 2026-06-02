@@ -3,11 +3,7 @@
 #
 # Run:
 #   dotnet run --project src/InfraGate.RunProfiles -- generate production \
-#     --set host.configHostPath=../generated/production.appsettings.json \
 #     --output deploy/generated/production.env
-#   dotnet run --project src/InfraGate.RunProfiles -- generate production \
-#     --format appsettings \
-#     --output deploy/generated/production.appsettings.json
 #   TAG=vX.Y.Z docker compose --env-file deploy/generated/production.env \
 #     -f deploy/compose/production.yaml up
 
@@ -20,7 +16,6 @@ services:
     env_file:
       - ${INFRA_GATE_GATEWAY_ENV_FILE:-../generated/production.env}
     volumes:
-      - ${INFRA_GATE_CONFIG_HOST_PATH:-/etc/infra-gate/production.appsettings.json}:/app/config/appsettings.InfraGate.json:ro
       - ${INFRA_GATE_KUBECONFIG_HOST_PATH:-/etc/infra-gate/production.kubeconfig}:/run/kube/infra-gate.config:ro
       - ${INFRA_GATE_APPROVAL_HOST_PATH:-/var/lib/infra-gate/production/approvals}:/data/approvals
       - ${INFRA_GATE_GUARD_AUDIT_HOST_PATH:-/var/lib/infra-gate/production/guardrails}:/data/guardrails

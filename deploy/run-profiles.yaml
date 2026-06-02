@@ -43,7 +43,6 @@ profiles:
       bindAddress: 127.0.0.1
       bindPort: "3001"
       gatewayImage: kubernetes-mcp-guard-gateway
-      configHostPath: ../generated/local-compose.appsettings.json
       kubeconfigHostPath: ../../.kube/mcp-nginx-demo.compose.config
       approvalHostPath: ../../.mcp-approvals
       guardAuditHostPath: ../../.mcp-guardrails
@@ -77,7 +76,6 @@ profiles:
       aspnetcoreUrls: http://0.0.0.0:3004
       gatewayBaseUrl: http://gateway:3001/mcp
       executorHandoffUrl: http://executor:3005/a2a/executor
-      tokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
       clientId: infra-gate-planner
       clientSecret: planner-secret
       oauthAuthority: http://keycloak:8080/realms/infra-gate
@@ -91,7 +89,6 @@ profiles:
     executor:
       aspnetcoreUrls: http://0.0.0.0:3005
       gatewayBaseUrl: http://gateway:3001/mcp
-      tokenEndpoint: http://keycloak:8080/realms/infra-gate/protocol/openid-connect/token
       clientId: infra-gate-executor
       clientSecret: executor-secret
       oauthAuthority: http://keycloak:8080/realms/infra-gate
@@ -112,6 +109,8 @@ profiles:
       oauthTokenEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token
     genericApprovalCore:
       approvalRoot: .mcp-approvals
+    downstreamAuth:
+      required: "false"
     domainAdapters:
       - name: kubernetesAdapter
         type: kubernetes
@@ -139,7 +138,6 @@ profiles:
       aspnetcoreUrls: http://0.0.0.0:3004
       gatewayBaseUrl: http://127.0.0.1:3001/mcp
       executorHandoffUrl: http://127.0.0.1:3005/a2a/executor
-      tokenEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token
       clientId: infra-gate-planner
       clientSecret: planner-secret
       oauthAuthority: http://127.0.0.1:3010/realms/infra-gate
@@ -152,7 +150,6 @@ profiles:
     executor:
       aspnetcoreUrls: http://0.0.0.0:3005
       gatewayBaseUrl: http://127.0.0.1:3001/mcp
-      tokenEndpoint: http://127.0.0.1:3010/realms/infra-gate/protocol/openid-connect/token
       clientId: infra-gate-executor
       clientSecret: executor-secret
       oauthAuthority: http://127.0.0.1:3010/realms/infra-gate
@@ -163,6 +160,8 @@ profiles:
     runtimeMode: Development
     genericApprovalCore:
       approvalRoot: .mcp-approvals
+    downstreamAuth:
+      required: "false"
     domainAdapters:
       - name: kubernetesAdapter
         type: kubernetes
@@ -188,11 +187,12 @@ profiles:
       approvalRoot: /data/approvals
       postgresConnectionString: "Host=postgres;Port=5432;Database=infra-gate;Username=infra-gate;Password=infra-gate-dev-password"
       runMigrationsOnStartup: "true"
+    downstreamAuth:
+      required: "false"
     host:
       bindAddress: 127.0.0.1
       bindPort: "3001"
       gatewayImage: ghcr.io/mirusser/kubernetes-mcp-guard-gateway
-      configHostPath: /etc/infra-gate/development.appsettings.json
       kubeconfigHostPath: /etc/infra-gate/development.kubeconfig
       approvalHostPath: /var/lib/infra-gate/development/approvals
       guardAuditHostPath: /var/lib/infra-gate/development/guardrails
@@ -224,7 +224,6 @@ profiles:
       bindAddress: 127.0.0.1
       bindPort: "3001"
       gatewayImage: ghcr.io/mirusser/kubernetes-mcp-guard-gateway
-      configHostPath: /etc/infra-gate/production.appsettings.json
       kubeconfigHostPath: /etc/infra-gate/production.kubeconfig
       approvalHostPath: /var/lib/infra-gate/production/approvals
       guardAuditHostPath: /var/lib/infra-gate/production/guardrails
@@ -242,6 +241,8 @@ profiles:
     runtimeMode: Development
     genericApprovalCore:
       approvalRoot: .mcp-approvals
+    downstreamAuth:
+      required: "false"
     domainAdapters:
       - name: kubernetesAdapter
         type: kubernetes
@@ -255,6 +256,8 @@ profiles:
     runtimeMode: Development
     genericApprovalCore:
       approvalRoot: .mcp-approvals
+    downstreamAuth:
+      required: "false"
     domainAdapters:
       - name: kubernetesAdapter
         type: kubernetes
@@ -268,6 +271,8 @@ profiles:
     runtimeMode: Development
     genericApprovalCore:
       approvalRoot: .mcp-approvals
+    downstreamAuth:
+      required: "false"
     domainAdapters:
       - name: kubernetesAdapter
         type: kubernetes
@@ -306,7 +311,6 @@ profiles:
       bindAddress: 127.0.0.1
       bindPort: "3001"
       gatewayImage: kubernetes-mcp-guard-gateway
-      configHostPath: ../generated/smoke-local.appsettings.json
       kubeconfigHostPath: ../../.kube/mcp-nginx-demo.compose.config
       approvalHostPath: ../../.mcp-approvals
       guardAuditHostPath: ../../.mcp-guardrails
@@ -349,7 +353,6 @@ profiles:
       bindAddress: 127.0.0.1
       bindPort: "3001"
       gatewayImage: ghcr.io/mirusser/kubernetes-mcp-guard-gateway
-      configHostPath: ./release.appsettings.json
       kubeconfigHostPath: ../../.kube/mcp-nginx-demo.compose.config
       approvalHostPath: ../../.mcp-approvals
       guardAuditHostPath: ../../.mcp-guardrails

@@ -1,25 +1,10 @@
 using InfraGate.DownstreamAuth;
+using Microsoft.Extensions.Configuration;
 
 namespace InfraGate.DownstreamAuth.Tests.UnitTests;
 
-public sealed class DownstreamAuthOptionsTests : IDisposable
+public sealed class DownstreamAuthOptionsTests
 {
-    private readonly List<string> envVarsSet = [];
-
-    public void Dispose()
-    {
-        foreach (string key in envVarsSet)
-        {
-            Environment.SetEnvironmentVariable(key, null);
-        }
-    }
-
-    private void SetEnv(string key, string value)
-    {
-        envVarsSet.Add(key);
-        Environment.SetEnvironmentVariable(key, value);
-    }
-
     private static DownstreamAuthOptions AllRequiredFields() => new()
     {
         Required = true,
@@ -179,19 +164,27 @@ public sealed class DownstreamAuthOptionsTests : IDisposable
     }
 
     [Fact]
-    public void FromEnvironment_ReadsAllEnvVars()
+    public void Bind_FullSection_PopulatesAllFields()
     {
-        SetEnv(DownstreamAuthConventions.EnvironmentVariables.Required, "true");
-        SetEnv(DownstreamAuthConventions.EnvironmentVariables.Authority, "https://auth.example.com");
-        SetEnv(DownstreamAuthConventions.EnvironmentVariables.MetadataAddress, "https://auth.example.com/.well-known/openid-configuration");
-        SetEnv(DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata, "false");
-        SetEnv(DownstreamAuthConventions.EnvironmentVariables.Audience, DownstreamAuthConventions.Defaults.Audience);
-        SetEnv(DownstreamAuthConventions.EnvironmentVariables.Scope, DownstreamAuthConventions.Defaults.Scope);
-        SetEnv(DownstreamAuthConventions.EnvironmentVariables.GatewayClientId, "infra-gate-gateway-service");
-        SetEnv(DownstreamAuthConventions.EnvironmentVariables.GatewayClientSecret, "supersecret");
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [DownstreamAuthConventions.ConfigurationKeys.Required] = "true",
+                [DownstreamAuthConventions.ConfigurationKeys.Authority] = "https://auth.example.com",
+                [DownstreamAuthConventions.ConfigurationKeys.MetadataAddress] = "https://auth.example.com/.well-known/openid-configuration",
+                [DownstreamAuthConventions.ConfigurationKeys.RequireHttpsMetadata] = "false",
+                [DownstreamAuthConventions.ConfigurationKeys.Audience] = DownstreamAuthConventions.Defaults.Audience,
+                [DownstreamAuthConventions.ConfigurationKeys.Scope] = DownstreamAuthConventions.Defaults.Scope,
+                [DownstreamAuthConventions.ConfigurationKeys.GatewayClientId] = "infra-gate-gateway-service",
+                [DownstreamAuthConventions.ConfigurationKeys.GatewayClientSecret] = "supersecret",
+            })
+            .Build();
 
-        var options = DownstreamAuthOptions.FromEnvironment();
+        var options = configuration
+            .GetSection("InfraGate:DownstreamAuth")
+            .Get<DownstreamAuthOptions>();
 
+        Assert.NotNull(options);
         Assert.True(options.Required);
         Assert.Equal("https://auth.example.com", options.Authority);
         Assert.Equal("https://auth.example.com/.well-known/openid-configuration", options.MetadataAddress);
@@ -203,9 +196,12 @@ public sealed class DownstreamAuthOptionsTests : IDisposable
     }
 
     [Fact]
-    public void FromEnvironment_UsesDefaultsWhenOptionalVarsAbsent()
+    public void Bind_AbsentSection_UsesSecureDefaults()
     {
-        var options = DownstreamAuthOptions.FromEnvironment();
+        var options = new ConfigurationBuilder()
+            .Build()
+            .GetSection("InfraGate:DownstreamAuth")
+            .Get<DownstreamAuthOptions>() ?? new DownstreamAuthOptions();
 
         Assert.True(options.Required);
         Assert.Equal(DownstreamAuthConventions.Defaults.Audience, options.Audience);

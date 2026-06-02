@@ -26,8 +26,7 @@ internal static class ExecutorConventions
     /// <summary>Configuration section bound to <see cref="ExecutorOptions"/> (recursive auto-binding).</summary>
     public const string SectionName = "InfraGate:Executor";
 
-    /// <summary>Standard ASP.NET Core URLs configuration key (framework-owned, not InfraGate-scoped).</summary>
-    public const string AspNetCoreUrlsKey = "ASPNETCORE_URLS";
+    public const string AspNetCoreUrlsKey = "InfraGate:Executor:AspNetCoreUrls";
 
     public static class ToolNames
     {

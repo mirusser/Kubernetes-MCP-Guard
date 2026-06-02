@@ -31,7 +31,6 @@ public sealed class EnvFileRendererTests
                 AspnetcoreUrls: "http://localhost:3004",
                 GatewayBaseUrl: "http://localhost:3001/mcp",
                 ExecutorHandoffUrl: "http://localhost:3005/a2a/executor",
-                TokenEndpoint: null,
                 ClientId: null,
                 ClientSecret: null,
                 OAuthAuthority: null,
@@ -63,7 +62,6 @@ public sealed class EnvFileRendererTests
             Executor = new ExecutorProfile(
                 AspnetcoreUrls: "http://localhost:3005",
                 GatewayBaseUrl: "http://localhost:3001/mcp",
-                TokenEndpoint: null,
                 ClientId: null,
                 ClientSecret: null,
                 OAuthAuthority: null,
@@ -119,7 +117,7 @@ public sealed class EnvFileRendererTests
         var profile = CreateMinimalProfile() with
         {
             Planner = new PlannerProfile(
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
         };
 
         string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
@@ -203,7 +201,7 @@ public sealed class EnvFileRendererTests
         string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
 
         Assert.Contains("# Generic Approval Core", result, StringComparison.Ordinal);
-        Assert.Contains($"{RunProfileConventions.Env.ApprovalRoot}=/data/approvals", result, StringComparison.Ordinal);
+        Assert.Contains("InfraGate__Approval__Root=/data/approvals", result, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -248,7 +246,7 @@ public sealed class EnvFileRendererTests
     {
         var profile = CreateMinimalProfile() with
         {
-            Host = new HostProfile("0.0.0.0", "8080", "infragate/gateway:latest", null, null, null, null, null)
+            Host = new HostProfile("0.0.0.0", "8080", "infragate/gateway:latest", null, null, null, null)
         };
 
         string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
@@ -264,14 +262,15 @@ public sealed class EnvFileRendererTests
         {
             Observer = new ObserverProfile(
                 "http://observer:3002",
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 ["default", "mcp-nginx-demo"])
         };
 
         string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
 
         Assert.Contains("# Observer", result, StringComparison.Ordinal);
-        Assert.Contains($"{RunProfileConventions.Env.ObserverAllowedNamespaces}=default,mcp-nginx-demo", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.ObserverAllowedNamespaces}__0=default", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.ObserverAllowedNamespaces}__1=mcp-nginx-demo", result, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -18,13 +18,13 @@ See [docs/tool-permissions.md](tool-permissions.md) for the per-tool Kubernetes 
 
 The HTTP gateway validates JWT issuer, resource-bound audience, lifetime, signature, and required scope before MCP tool calls reach the downstream server. Audience comparison normalizes a trailing slash so the configured resource and JWT audience can match consistently.
 
-The default required scope is `mcp:tools`, configurable through `INFRA_GATE_OAUTH_SCOPE`. A valid token without that scope receives HTTP 403 with a `WWW-Authenticate: Bearer error="insufficient_scope"` challenge.
+The default required scope is `mcp:tools`, configurable through `InfraGate__Auth__OAuthScope`. A valid token without that scope receives HTTP 403 with a `WWW-Authenticate: Bearer error="insufficient_scope"` challenge.
 
 See [`src/InfraGate.McpGateway.Auth/README.md`](../src/InfraGate.McpGateway.Auth/README.md) for gateway auth contracts and step-up challenge behavior. See [docs/MCP-compliance.md](MCP-compliance.md) for the OAuth 2.1, PKCE, protected-resource metadata, and RFC 8707 details.
 
 ### 1.3 Namespace Allow-list
 
-`K8S_MCP_ALLOWED_NAMESPACES` is a comma-separated namespace allow-list. It defaults to `mcp-nginx-demo`.
+`InfraGate__Kubernetes__AllowedNamespaces__0` is a comma-separated namespace allow-list. It defaults to `mcp-nginx-demo`.
 
 `InfraGate.McpServer` checks the allow-list before Kubernetes API calls, providing a second containment layer beyond Kubernetes RBAC.
 
@@ -63,7 +63,7 @@ Echoed manifest blocks are redacted to `[redacted: inspect the pending plan file
 
 ### 2.3 Guardrail Audit Logging
 
-Guardrail audit entries are written to `.mcp-guardrails/audit.jsonl` by default, configurable through `INFRA_GATE_GUARD_AUDIT_ROOT`. Entries include `toolName`, `direction`, `action` (`warn`, `warn_redact`, or `redact_manifest`), `categories`, `planId`, `subject`, and `authenticationType`.
+Guardrail audit entries are written to `.mcp-guardrails/audit.jsonl` by default, configurable through `InfraGate__Gateway__GuardAuditRoot`. Entries include `toolName`, `direction`, `action` (`warn`, `warn_redact`, or `redact_manifest`), `categories`, `planId`, `subject`, and `authenticationType`.
 
 Approval audit is separate and is persisted in PostgreSQL `approvals.audit_outbox`.
 
@@ -131,9 +131,9 @@ Must not be used in any production or shared environment.
 
 The local Keycloak realm runs via `start-dev` over HTTP and enables anonymous DCR only for loopback demo use. It is not suitable for production.
 
-### 5.2 `INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false`
+### 5.2 `InfraGate__Auth__OAuthRequireHttpsMetadata=false`
 
-`INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA=false` disables the HTTPS requirement for OIDC discovery metadata. It is acceptable only when the gateway points at a local HTTP issuer during development, such as the local Keycloak demo.
+`InfraGate__Auth__OAuthRequireHttpsMetadata=false` disables the HTTPS requirement for OIDC discovery metadata. It is acceptable only when the gateway points at a local HTTP issuer during development, such as the local Keycloak demo.
 
 See [`src/InfraGate.McpGateway.Auth/README.md`](../src/InfraGate.McpGateway.Auth/README.md).
 

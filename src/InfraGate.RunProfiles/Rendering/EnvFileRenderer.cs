@@ -124,6 +124,15 @@ internal static class EnvFileRenderer
         builder.AppendLine();
         builder.AppendLine("# Generic Approval Core");
         builder.AppendLine($"{RunProfileConventions.Env.ApprovalRoot}={profile.GenericApprovalCore.ApprovalRoot}");
+        AppendIfSet(
+            builder,
+            RunProfileConventions.Env.ApprovalPostgresConnectionString,
+            profile.GenericApprovalCore.PostgresConnectionString);
+        if (profile.GenericApprovalCore.RunMigrationsOnStartup is { } runMigrationsOnStartup)
+        {
+            builder.AppendLine(
+                $"{RunProfileConventions.Env.ApprovalPostgresRunMigrationsOnStartup}={(runMigrationsOnStartup ? "true" : "false")}");
+        }
     }
 
     private static void AppendDownstreamAuth(StringBuilder builder, RunProfile profile)
@@ -173,8 +182,7 @@ internal static class EnvFileRenderer
         builder.AppendLine();
         builder.AppendLine("# Kubernetes Adapter");
         builder.AppendLine($"{RunProfileConventions.Env.KubeConfig}={adapter.Kubernetes.KubeConfig}");
-        builder.AppendLine(
-            $"{RunProfileConventions.Env.AllowedNamespaces}={string.Join(',', adapter.Kubernetes.AllowedNamespaces)}");
+        AppendList(builder, RunProfileConventions.Env.AllowedNamespaces, adapter.Kubernetes.AllowedNamespaces);
     }
 
     private static void AppendHost(StringBuilder builder, RunProfile profile)
@@ -189,7 +197,6 @@ internal static class EnvFileRenderer
             !string.IsNullOrEmpty(host.BindAddress) ||
             !string.IsNullOrEmpty(host.BindPort) ||
             !string.IsNullOrEmpty(host.GatewayImage) ||
-            !string.IsNullOrEmpty(host.ConfigHostPath) ||
             !string.IsNullOrEmpty(host.KubeconfigHostPath) ||
             !string.IsNullOrEmpty(host.ApprovalHostPath) ||
             !string.IsNullOrEmpty(host.GuardAuditHostPath) ||
@@ -205,12 +212,6 @@ internal static class EnvFileRenderer
         AppendIfSet(builder, RunProfileConventions.Env.BindAddress, host.BindAddress);
         AppendIfSet(builder, RunProfileConventions.Env.BindPort, host.BindPort);
         AppendIfSet(builder, RunProfileConventions.Env.GatewayImage, host.GatewayImage);
-        if (!string.IsNullOrEmpty(host.ConfigHostPath))
-        {
-            builder.AppendLine($"{RunProfileConventions.Env.ConfigPath}={RunProfileConventions.RuntimeConfig.ContainerPath}");
-            builder.AppendLine($"{RunProfileConventions.Env.ConfigHostPath}={host.ConfigHostPath}");
-        }
-
         AppendIfSet(builder, RunProfileConventions.Env.KubeconfigHostPath, host.KubeconfigHostPath);
         AppendIfSet(builder, RunProfileConventions.Env.ApprovalHostPath, host.ApprovalHostPath);
         AppendIfSet(builder, RunProfileConventions.Env.GuardAuditHostPath, host.GuardAuditHostPath);
@@ -222,6 +223,14 @@ internal static class EnvFileRenderer
         if (!string.IsNullOrEmpty(value))
         {
             builder.AppendLine($"{key}={value}");
+        }
+    }
+
+    private static void AppendList(StringBuilder builder, string key, IReadOnlyList<string> values)
+    {
+        for (int i = 0; i < values.Count; i++)
+        {
+            builder.AppendLine($"{key}__{i}={values[i]}");
         }
     }
 
@@ -237,7 +246,6 @@ internal static class EnvFileRenderer
             !string.IsNullOrEmpty(planner.AspnetcoreUrls) ||
             !string.IsNullOrEmpty(planner.GatewayBaseUrl) ||
             !string.IsNullOrEmpty(planner.ExecutorHandoffUrl) ||
-            !string.IsNullOrEmpty(planner.TokenEndpoint) ||
             !string.IsNullOrEmpty(planner.ClientId) ||
             !string.IsNullOrEmpty(planner.ClientSecret) ||
             !string.IsNullOrEmpty(planner.OAuthAuthority) ||
@@ -261,7 +269,6 @@ internal static class EnvFileRenderer
         AppendIfSet(builder, RunProfileConventions.Env.PlannerAspnetcoreUrls, planner.AspnetcoreUrls);
         AppendIfSet(builder, RunProfileConventions.Env.PlannerGatewayBaseUrl, planner.GatewayBaseUrl);
         AppendIfSet(builder, RunProfileConventions.Env.PlannerExecutorHandoffUrl, planner.ExecutorHandoffUrl);
-        AppendIfSet(builder, RunProfileConventions.Env.PlannerTokenEndpoint, planner.TokenEndpoint);
         AppendIfSet(builder, RunProfileConventions.Env.PlannerClientId, planner.ClientId);
         AppendIfSet(builder, RunProfileConventions.Env.PlannerClientSecret, planner.ClientSecret);
         AppendIfSet(builder, RunProfileConventions.Env.PlannerOAuthAuthority, planner.OAuthAuthority);
@@ -287,7 +294,6 @@ internal static class EnvFileRenderer
         bool hasAnyValue =
             !string.IsNullOrEmpty(executor.AspnetcoreUrls) ||
             !string.IsNullOrEmpty(executor.GatewayBaseUrl) ||
-            !string.IsNullOrEmpty(executor.TokenEndpoint) ||
             !string.IsNullOrEmpty(executor.ClientId) ||
             !string.IsNullOrEmpty(executor.ClientSecret) ||
             !string.IsNullOrEmpty(executor.OAuthAuthority) ||
@@ -305,7 +311,6 @@ internal static class EnvFileRenderer
         builder.AppendLine("# Executor");
         AppendIfSet(builder, RunProfileConventions.Env.ExecutorAspnetcoreUrls, executor.AspnetcoreUrls);
         AppendIfSet(builder, RunProfileConventions.Env.ExecutorGatewayBaseUrl, executor.GatewayBaseUrl);
-        AppendIfSet(builder, RunProfileConventions.Env.ExecutorTokenEndpoint, executor.TokenEndpoint);
         AppendIfSet(builder, RunProfileConventions.Env.ExecutorClientId, executor.ClientId);
         AppendIfSet(builder, RunProfileConventions.Env.ExecutorClientSecret, executor.ClientSecret);
         AppendIfSet(builder, RunProfileConventions.Env.ExecutorOAuthAuthority, executor.OAuthAuthority);
@@ -326,7 +331,6 @@ internal static class EnvFileRenderer
         bool hasAnyValue =
             !string.IsNullOrEmpty(observer.AspnetcoreUrls) ||
             !string.IsNullOrEmpty(observer.GatewayBaseUrl) ||
-            !string.IsNullOrEmpty(observer.TokenEndpoint) ||
             !string.IsNullOrEmpty(observer.OAuthAuthority) ||
             !string.IsNullOrEmpty(observer.ClientId) ||
             !string.IsNullOrEmpty(observer.ClientSecret) ||
@@ -352,7 +356,6 @@ internal static class EnvFileRenderer
         builder.AppendLine("# Observer");
         AppendIfSet(builder, RunProfileConventions.Env.ObserverAspnetcoreUrls, observer.AspnetcoreUrls);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverGatewayBaseUrl, observer.GatewayBaseUrl);
-        AppendIfSet(builder, RunProfileConventions.Env.ObserverTokenEndpoint, observer.TokenEndpoint);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverOAuthAuthority, observer.OAuthAuthority);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverClientId, observer.ClientId);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverClientSecret, observer.ClientSecret);
@@ -370,8 +373,7 @@ internal static class EnvFileRenderer
 
         if (observer.AllowedNamespaces?.Count > 0)
         {
-            builder.AppendLine(
-                $"{RunProfileConventions.Env.ObserverAllowedNamespaces}={string.Join(',', observer.AllowedNamespaces)}");
+            AppendList(builder, RunProfileConventions.Env.ObserverAllowedNamespaces, observer.AllowedNamespaces);
         }
     }
 }

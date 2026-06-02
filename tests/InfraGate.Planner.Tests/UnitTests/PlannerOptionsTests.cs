@@ -1,5 +1,3 @@
-using InfraGate.Planner;
-
 namespace InfraGate.Planner.Tests.UnitTests;
 
 public sealed class PlannerOptionsTests

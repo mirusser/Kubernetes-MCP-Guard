@@ -15,9 +15,7 @@ internal static class DownstreamAuthServerExtensions
         this IServiceCollection services,
         DownstreamAuthOptions? options)
     {
-        var authOptions = options ?? new DownstreamAuthOptions();
-
-        if (!authOptions.Required)
+        if (options is null || !options.Required)
         {
             return services;
         }
@@ -25,7 +23,7 @@ internal static class DownstreamAuthServerExtensions
         services.AddSingleton(sp =>
         {
             var logger = sp.GetRequiredService<ILogger<DownstreamTokenValidator>>();
-            return new DownstreamTokenValidator(authOptions, logger);
+            return new DownstreamTokenValidator(options, logger);
         });
 
         return services;

@@ -110,21 +110,47 @@ public sealed class RunProfileDocumentTests
         var profile = MakeProfile("my-profile") with
         {
             Observer = new ObserverProfile(
-                "http://observer-local",
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+                AspnetcoreUrls: "http://observer-local",
+                GatewayBaseUrl: null,
+                OAuthAuthority: null,
+                ClientId: null,
+                ClientSecret: null,
+                Scope: null,
+                LlmProvider: null,
+                LlmModel: null,
+                LlmApiKey: null,
+                CycleCadenceSeconds: null,
+                CycleWallClockCapSeconds: null,
+                MaxToolIterations: null,
+                FileSinkRoot: null,
+                PlannerHandoffUrl: null,
+                ObserverHostPath: null,
+                AuditConnectionString: null,
+                AllowedNamespaces: null),
             Planner = new PlannerProfile(
-                null,
-                "http://gateway-local",
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+                AspnetcoreUrls: null,
+                GatewayBaseUrl: "http://gateway-local",
+                ExecutorHandoffUrl: null,
+                ClientId: null,
+                ClientSecret: null,
+                OAuthAuthority: null,
+                OAuthScope: null,
+                LlmProvider: null,
+                LlmModel: null,
+                LlmApiKey: null,
+                AnomalyWallClockCapSeconds: null,
+                BatchWallClockCapSeconds: null,
+                MaxToolIterations: null,
+                FileSinkRoot: null,
+                PlannerHostPath: null),
             Executor = new ExecutorProfile(
-                null, null, null, "executor-local", null, null, null, null, null, null)
+                null, null, "executor-local", null, null, null, null, null, null)
         };
         var defaults = new ProfileDefaults(
             null, null, null, null, null, null,
             new ObserverProfile(
                 "http://observer-default",
                 "http://gateway-default",
-                "http://token-default",
                 "http://authority-default",
                 "observer-client",
                 "observer-secret",
@@ -144,7 +170,6 @@ public sealed class RunProfileDocumentTests
                 "http://planner-default",
                 "http://planner-gateway-default",
                 "http://executor/handoff",
-                "http://planner/token",
                 "planner-client",
                 "planner-secret",
                 "http://planner-authority",
@@ -160,7 +185,6 @@ public sealed class RunProfileDocumentTests
             new ExecutorProfile(
                 "http://executor-default",
                 "http://executor-gateway-default",
-                "http://executor/token",
                 "executor-default",
                 "executor-secret",
                 "http://executor-authority",
@@ -188,11 +212,11 @@ public sealed class RunProfileDocumentTests
             null, null, null, null, null, null,
             new ObserverProfile(
                 "http://observer",
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
             new PlannerProfile(
                 "http://planner",
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
-            new ExecutorProfile("http://executor", null, null, null, null, null, null, null, null, null));
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+            new ExecutorProfile("http://executor", null, null, null, null, null, null, null, null));
         var doc = new RunProfileDocument([profile]);
 
         var merged = doc.FindProfileWithDefaults("my-profile", defaults);
@@ -245,11 +269,11 @@ public sealed class RunProfileDocumentTests
     {
         var profile = MakeProfile("my-profile") with
         {
-            Host = new HostProfile(null, null, null, null, null, null, null, null)
+            Host = new HostProfile(null, null, null, null, null, null, null)
         };
         var defaults = new ProfileDefaults(
             null, null, null, null,
-            new HostProfile("0.0.0.0", "8080", null, null, null, null, null, null),
+            new HostProfile("0.0.0.0", "8080", null, null, null, null, null),
             null, null, null, null);
         var doc = new RunProfileDocument([profile]);
 

@@ -17,7 +17,7 @@
 - Successful proposals are emitted as `RemediationProposalBatch` payloads through `IRemediationProposalSink`: logging is always on and JSON file output is opt-in. When configured, the Planner also sends each plan id to the Executor's A2A endpoint synchronously after persisting the Planner-owned task as `waiting`.
 - When PostgreSQL is configured, `PostgresTaskStore` persists Planner-owned A2A tasks. On startup, `PlannerTaskReconciler` loads `waiting` tasks, checks each approval plan status through `get_plan_status`, and re-dispatches only non-terminal plans to the Executor.
 - The Planner may inspect the cluster through the gateway's read-only tools, but it never calls execution tools.
-- If `INFRA_GATE_PLANNER_OBSERVER_BASE_URL` is set, the Planner exposes the `ask_observer_to_inspect` reverse context request to its planning agent through `IObserverChannel`. Planner progress is represented by the durable A2A task lifecycle.
+- If `InfraGate__Planner__ObserverBaseUrl` is set, the Planner exposes the `ask_observer_to_inspect` reverse context request to its planning agent through `IObserverChannel`. Planner progress is represented by the durable A2A task lifecycle.
 
 ## Guardrails
 
@@ -60,7 +60,7 @@ Four audit-worthy events are defined in `PlannerAuditEvents`:
 
 All emit uses the `AppendAsync(entry, ct)` convenience overload — Planner audit writes are not part of a larger state-mutation transaction.
 
-The `planner` schema is created on startup by `PostgresAuditOutboxMigrationRunner` reading `Migrations/0001-initial-planner-audit.sql`. Connection string: `INFRA_GATE_PLANNER_AUDIT_CONNECTION_STRING`.
+The `planner` schema is created on startup by `PostgresAuditOutboxMigrationRunner` reading `Migrations/0001-initial-planner-audit.sql`. Connection string: `InfraGate__Planner__AuditConnectionString`.
 
 Cross-stream joins: `propose_plan.succeeded` rows carry `plan_id` which matches `plan.created` rows in `approvals.audit_outbox`, enabling the full Observer→Planner→Approvals forensic timeline. See [InfraGate.AuditOutbox.Postgres README](../InfraGate.AuditOutbox.Postgres/README.md).
 

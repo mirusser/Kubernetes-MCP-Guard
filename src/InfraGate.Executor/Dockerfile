@@ -21,8 +21,8 @@ RUN dotnet publish src/InfraGate.Executor/InfraGate.Executor.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app/executor
 COPY --from=build /app/executor .
-ENV INFRA_GATE_ENVIRONMENT=Production
-ENV ASPNETCORE_URLS=http://+:3005
+ENV InfraGate__Runtime__Environment=Production
+ENV InfraGate__Executor__AspNetCoreUrls=http://+:3005
 EXPOSE 3005
 USER $APP_UID
 ENTRYPOINT ["dotnet", "InfraGate.Executor.dll"]

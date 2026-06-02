@@ -4,7 +4,6 @@ internal sealed record class PlannerProfile(
     string? AspnetcoreUrls,
     string? GatewayBaseUrl,
     string? ExecutorHandoffUrl,
-    string? TokenEndpoint,
     string? ClientId,
     string? ClientSecret,
     string? OAuthAuthority,

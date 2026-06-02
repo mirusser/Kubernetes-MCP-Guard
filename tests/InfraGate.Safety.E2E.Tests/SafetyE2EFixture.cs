@@ -42,6 +42,8 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
 {
     public const string EnableEnvVar = "INFRA_GATE_RUN_SAFETY_E2E";
     public const string KubeconfigEnvVar = "KUBECONFIG";
+    private const string KubernetesAllowedNamespacesEnvVar = "InfraGate__Kubernetes__AllowedNamespaces";
+    private const string KubernetesKubeConfigEnvVar = "InfraGate__Kubernetes__KubeConfig";
 
     private const string KeycloakImage = "quay.io/keycloak/keycloak:26.6.1";
     private const string RealmName = "infra-gate";
@@ -72,7 +74,8 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
         repoRoot = FindRepoRoot();
         approvalRoot = Path.Combine(Path.GetTempPath(), "infra-gate-safety-e2e", Guid.NewGuid().ToString("N"));
         guardAuditRoot = Path.Combine(approvalRoot, "guardrails");
-        namespaceName = Environment.GetEnvironmentVariable("K8S_MCP_ALLOWED_NAMESPACES") ?? DefaultNamespace;
+        namespaceName = Environment.GetEnvironmentVariable(
+            KubernetesAllowedNamespacesEnvVar + "__0") ?? DefaultNamespace;
         kubeconfigPath = ResolveKubeconfigPath(repoRoot);
         previousDownstreamAuthRequired = Environment.GetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.Required);
     }
@@ -111,7 +114,8 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
 
         // The downstream McpServer subprocess inherits these env vars when DownstreamMcpClient spawns it.
         Environment.SetEnvironmentVariable(ApprovalConventions.EnvironmentVariables.ApprovalRoot, approvalRoot);
-        Environment.SetEnvironmentVariable("K8S_MCP_ALLOWED_NAMESPACES", namespaceName);
+        Environment.SetEnvironmentVariable(KubernetesAllowedNamespacesEnvVar + "__0", namespaceName);
+        Environment.SetEnvironmentVariable(KubernetesKubeConfigEnvVar, kubeconfigPath);
         Environment.SetEnvironmentVariable(KubeconfigEnvVar, kubeconfigPath);
         Environment.SetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.Required, "false");
 

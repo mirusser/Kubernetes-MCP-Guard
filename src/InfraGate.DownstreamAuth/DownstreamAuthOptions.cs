@@ -1,8 +1,10 @@
+using InfraGate.ClientCredentials;
+
 namespace InfraGate.DownstreamAuth;
 
 public sealed class DownstreamAuthOptions
 {
-    public bool Required { get; init; }
+    public bool Required { get; init; } = true;
     public string Authority { get; init; } = string.Empty;
     public string? MetadataAddress { get; init; }
     public bool RequireHttpsMetadata { get; init; } = true;
@@ -11,28 +13,15 @@ public sealed class DownstreamAuthOptions
     public string GatewayClientId { get; init; } = string.Empty;
     public string? GatewayClientSecret { get; init; }
 
-    public static DownstreamAuthOptions FromEnvironment()
+    public ClientCredentialsTokenOptions ToClientCredentials() => new()
     {
-        return new DownstreamAuthOptions
-        {
-            Required = !string.Equals(
-                Environment.GetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.Required),
-                "false",
-                StringComparison.OrdinalIgnoreCase),
-            Authority = Environment.GetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.Authority) ?? string.Empty,
-            MetadataAddress = Environment.GetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.MetadataAddress),
-            RequireHttpsMetadata = !string.Equals(
-                Environment.GetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata),
-                "false",
-                StringComparison.OrdinalIgnoreCase),
-            Audience = Environment.GetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.Audience)
-                ?? DownstreamAuthConventions.Defaults.Audience,
-            Scope = Environment.GetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.Scope)
-                ?? DownstreamAuthConventions.Defaults.Scope,
-            GatewayClientId = Environment.GetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.GatewayClientId) ?? string.Empty,
-            GatewayClientSecret = Environment.GetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.GatewayClientSecret),
-        };
-    }
+        Authority = Authority,
+        MetadataAddress = MetadataAddress,
+        RequireHttpsMetadata = RequireHttpsMetadata,
+        ClientId = GatewayClientId,
+        ClientSecret = GatewayClientSecret,
+        Scope = Scope,
+    };
 
     public void Validate()
     {

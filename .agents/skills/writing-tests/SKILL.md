@@ -63,6 +63,10 @@ If the entry is missing, add it following the pattern used by other projects (e.
 
 Without this, tests that reference internal types fail at compile time with `CS0122: inaccessible due to its protection level`.
 
+## Standards/Conventions
+
+See skill: [code-standards](../code-standards/SKILL.md)
+
 ## Verification
 
 After adding or changing tests, run the narrowest useful test command:
@@ -71,8 +75,32 @@ After adding or changing tests, run the narrowest useful test command:
 dotnet test tests/<Project>.Tests/<Project>.Tests.csproj
 ```
 
+```bash
+# Run with coverage
+dotnet test --collect:"XPlat Code Coverage"
+
+# Filter by test name
+dotnet test --filter "FullyQualifiedName~OrderService"
+
+# Watch mode during development
+dotnet watch test --project tests/MyApp.UnitTests/
+```
+
 All pre-existing tests must continue to pass. New tests must pass too — do not commit failing tests.
 
 ## Mocking
 
 Never use mocks (Moq, NSubstitute) or any similar packages. Write integration tests using Testcontainers instead.
+
+
+## Common Anti-Patterns
+
+| Anti-Pattern | Fix |
+|---|---|
+| Testing implementation details | Test behavior and outcomes |
+| Shared mutable test state | Fresh instance per test (xUnit does this via constructors) |
+| `Thread.Sleep` in async tests | Use `Task.Delay` with timeout, or polling helpers |
+| Asserting on `ToString()` output | Assert on typed properties |
+| One giant assertion per test | One logical assertion per test |
+| Test names describing implementation | Name by behavior: `Method_ExpectedResult_WhenCondition` |
+| Ignoring `CancellationToken` | Always pass and verify cancellation |
