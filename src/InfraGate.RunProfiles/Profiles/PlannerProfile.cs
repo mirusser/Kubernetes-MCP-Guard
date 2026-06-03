@@ -10,7 +10,6 @@ internal sealed record class PlannerProfile(
     string? OAuthScope,
     string? LlmProvider,
     string? LlmModel,
-    string? LlmApiKey,
     string? AnomalyWallClockCapSeconds,
     string? BatchWallClockCapSeconds,
     string? MaxToolIterations,

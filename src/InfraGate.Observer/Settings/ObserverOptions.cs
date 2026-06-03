@@ -17,7 +17,6 @@ public sealed record class ObserverOptions
     public IReadOnlyList<string> AllowedNamespaces { get; init; } = [];
     public string LlmProvider { get; init; } = string.Empty;
     public string LlmModel { get; init; } = string.Empty;
-    public string LlmApiKey { get; init; } = string.Empty;
     public int DedupeSuppressionWindow { get; init; } = AnomalyObserverConventions.DefaultDedupeSuppressionWindow;
     public int DedupeResolutionThreshold { get; init; } = AnomalyObserverConventions.DefaultDedupeResolutionThreshold;
     public string FileSinkRoot { get; init; } = string.Empty;

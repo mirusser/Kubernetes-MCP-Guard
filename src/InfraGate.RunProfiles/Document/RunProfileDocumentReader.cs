@@ -24,6 +24,7 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.GenericApprovalCore,
                 RunProfileConventions.YamlKeys.Host,
                 RunProfileConventions.YamlKeys.IdentityProvider,
+                RunProfileConventions.YamlKeys.OpenRouter,
                 RunProfileConventions.YamlKeys.Observer,
                 RunProfileConventions.YamlKeys.Planner
             ],
@@ -41,6 +42,7 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.Host,
                 RunProfileConventions.YamlKeys.IdentityProvider,
                 RunProfileConventions.YamlKeys.Kind,
+                RunProfileConventions.YamlKeys.OpenRouter,
                 RunProfileConventions.YamlKeys.Observer,
                 RunProfileConventions.YamlKeys.Planner,
                 RunProfileConventions.YamlKeys.RuntimeMode
@@ -115,6 +117,13 @@ internal static class RunProfileDocumentReader
             ],
             StringComparer.Ordinal);
 
+    private static readonly IReadOnlySet<string> KnownOpenRouterKeys =
+        new HashSet<string>(
+            [
+                RunProfileConventions.YamlKeys.ApiKey
+            ],
+            StringComparer.Ordinal);
+
     private static readonly IReadOnlySet<string> KnownDomainAdapterKeys =
         new HashSet<string>(
             [
@@ -143,7 +152,6 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.CycleWallClockCapSeconds,
                 RunProfileConventions.YamlKeys.FileSinkRoot,
                 RunProfileConventions.YamlKeys.GatewayBaseUrl,
-                RunProfileConventions.YamlKeys.LlmApiKey,
                 RunProfileConventions.YamlKeys.LlmModel,
                 RunProfileConventions.YamlKeys.LlmProvider,
                 RunProfileConventions.YamlKeys.MaxToolIterations,
@@ -167,7 +175,6 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.ExecutorHandoffUrl,
                 RunProfileConventions.YamlKeys.FileSinkRoot,
                 RunProfileConventions.YamlKeys.GatewayBaseUrl,
-                RunProfileConventions.YamlKeys.LlmApiKey,
                 RunProfileConventions.YamlKeys.LlmModel,
                 RunProfileConventions.YamlKeys.LlmProvider,
                 RunProfileConventions.YamlKeys.MaxToolIterations,
@@ -237,6 +244,7 @@ internal static class RunProfileDocumentReader
             IReadOnlyList<DomainAdapterProfile> domainAdapters = ReadDomainAdapters(profileNode);
             HostProfile? host = ReadHost(profileNode);
             DownstreamAuthProfile? downstreamAuth = ReadDownstreamAuth(profileNode);
+            OpenRouterProfile? openRouter = ReadOpenRouter(profileNode);
 
             if (domainAdapters.Count != 1)
             {
@@ -259,6 +267,7 @@ internal static class RunProfileDocumentReader
                 domainAdapters,
                 host,
                 downstreamAuth,
+                openRouter,
                 observer,
                 planner,
                 executor));
@@ -290,6 +299,7 @@ internal static class RunProfileDocumentReader
             ReadGenericApprovalCore(mapping),
             ReadHost(mapping),
             ReadDownstreamAuth(mapping),
+            ReadOpenRouter(mapping),
             ReadObserver(mapping),
             ReadPlanner(mapping),
             ReadExecutor(mapping));
@@ -447,6 +457,25 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.DataProtectionHostPath));
     }
 
+    private static OpenRouterProfile? ReadOpenRouter(YamlMappingNode node)
+    {
+        if (!node.Children.TryGetValue(
+                new YamlScalarNode(RunProfileConventions.YamlKeys.OpenRouter),
+                out YamlNode? value))
+        {
+            return null;
+        }
+
+        if (value is not YamlMappingNode mapping)
+        {
+            throw new InvalidOperationException(
+                $"YAML key '{RunProfileConventions.YamlKeys.OpenRouter}' must be a mapping.");
+        }
+
+        ValidateKnownKeys(mapping, KnownOpenRouterKeys);
+        return new OpenRouterProfile(GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ApiKey));
+    }
+
     private static ObserverProfile? ReadObserver(YamlMappingNode node)
     {
         if (!node.Children.TryGetValue(
@@ -472,7 +501,6 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.Scope),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.LlmProvider),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.LlmModel),
-            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.LlmApiKey),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.CycleCadenceSeconds),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.CycleWallClockCapSeconds),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.MaxToolIterations),
@@ -510,7 +538,6 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.Scope),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.LlmProvider),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.LlmModel),
-            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.LlmApiKey),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.AnomalyWallClockCapSeconds),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.BatchWallClockCapSeconds),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.MaxToolIterations),

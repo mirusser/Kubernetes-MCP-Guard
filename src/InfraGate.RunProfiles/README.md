@@ -110,6 +110,9 @@ profiles:
           allowedNamespaces:
             - <namespace>
 
+    openRouter:
+      apiKey: <secret>
+
     observer:
       aspnetcoreUrls: <url>
       gatewayBaseUrl: <url>
@@ -119,7 +122,6 @@ profiles:
       scope: <scope>
       llmProvider: <provider>
       llmModel: <model>
-      llmApiKey: <secret>
       cycleCadenceSeconds: "<seconds>"
       cycleWallClockCapSeconds: "<seconds>"
       maxToolIterations: "<count>"
@@ -137,7 +139,6 @@ profiles:
       scope: <scope>
       llmProvider: <provider>
       llmModel: <model>
-      llmApiKey: <secret>
       anomalyWallClockCapSeconds: "<seconds>"
       batchWallClockCapSeconds: "<seconds>"
       maxToolIterations: "<count>"
@@ -181,6 +182,7 @@ profiles:
 | `genericApprovalCore` | `postgresConnectionString` |
 | `genericApprovalCore` | `runMigrationsOnStartup` |
 | `host` | `bindAddress`, `bindPort`, `gatewayImage`, `kubeconfigHostPath`, `approvalHostPath`, `guardAuditHostPath`, `dataProtectionHostPath` |
+| `openRouter` | `apiKey` |
 | `observer` | `gatewayBaseUrl`, `oauthAuthority`, `clientId`, `clientSecret`, `scope`, `llmModel`, `fileSinkRoot`, `plannerHandoffUrl`, `observerHostPath` |
 | `planner` | `gatewayBaseUrl`, `executorHandoffUrl`, `clientId`, `clientSecret`, `oauthAuthority`, `scope`, `llmModel`, `fileSinkRoot`, `plannerHostPath` |
 | `executor` | `gatewayBaseUrl`, `clientId`, `clientSecret`, `oauthAuthority`, `scope`, `concurrencyCap`, `watchTimeoutSeconds`, `executorHostPath` |
@@ -229,6 +231,9 @@ InfraGate__Approval__BaseUrl=...
 InfraGate__Approval__Root=...
 InfraGate__Approval__Postgres__ConnectionString=...
 InfraGate__Approval__Postgres__RunMigrationsOnStartup=true
+
+# OpenRouter
+InfraGate__OpenRouter__ApiKey=...
 
 # Kubernetes Adapter
 InfraGate__Kubernetes__KubeConfig=...

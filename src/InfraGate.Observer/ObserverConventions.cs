@@ -27,7 +27,6 @@ internal static class ObserverConventions
         public const string AllowedNamespaces = "InfraGate:Observer:AllowedNamespaces";
         public const string LlmProvider = "InfraGate:Observer:LlmProvider";
         public const string LlmModel = "InfraGate:Observer:LlmModel";
-        public const string LlmApiKey = "InfraGate:Observer:LlmApiKey";
         public const string DedupeSuppressionWindow = "InfraGate:Observer:DedupeSuppressionWindow";
         public const string DedupeResolutionThreshold = "InfraGate:Observer:DedupeResolutionThreshold";
         public const string FileSinkRoot = "InfraGate:Observer:FileSinkRoot";
@@ -46,7 +45,6 @@ internal static class ObserverConventions
         public const string AllowedNamespaces = "InfraGate__Observer__AllowedNamespaces";
         public const string LlmProvider = "InfraGate__Observer__LlmProvider";
         public const string LlmModel = "InfraGate__Observer__LlmModel";
-        public const string LlmApiKey = "InfraGate__Observer__LlmApiKey";
         public const string ClientId = "InfraGate__Observer__ClientCredentials__ClientId";
         public const string ClientSecret = "InfraGate__Observer__ClientCredentials__ClientSecret";
         public const string OAuthAuthority = "InfraGate__Observer__ClientCredentials__Authority";

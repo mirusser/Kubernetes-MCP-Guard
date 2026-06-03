@@ -8,7 +8,10 @@ using OpenAI.Chat;
 
 namespace InfraGate.Observer.Llm;
 
-internal sealed class ChatClientFactory(IOptions<ObserverOptions> options, ILoggerFactory? loggerFactory = null) : IChatClientFactory
+internal sealed class ChatClientFactory(
+    IOptions<ObserverOptions> options,
+    IOptions<OpenRouterOptions> openRouterOptions,
+    ILoggerFactory? loggerFactory = null) : IChatClientFactory
 {
     private const string OpenRouterApiEndpoint = "https://openrouter.ai/api/v1";
 
@@ -30,11 +33,11 @@ internal sealed class ChatClientFactory(IOptions<ObserverOptions> options, ILogg
 
     private IChatClient CreateOpenRouterClient()
     {
-        var apiKey = options.Value.LlmApiKey;
+        var apiKey = openRouterOptions.Value.ApiKey;
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             throw new InvalidOperationException(
-                $"LLM API key not configured. Set {ObserverConventions.EnvironmentVariables.LlmApiKey}.");
+                $"OpenRouter API key not configured. Set {OpenRouterOptions.ApiKeyEnvironmentVariable}.");
         }
 
         var model = string.IsNullOrWhiteSpace(options.Value.LlmModel)

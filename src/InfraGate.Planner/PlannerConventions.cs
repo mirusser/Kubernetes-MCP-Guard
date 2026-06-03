@@ -47,7 +47,6 @@ internal static class PlannerConventions
         public const string MaxToolIterations = "InfraGate__Planner__MaxToolIterations";
         public const string LlmProvider = "InfraGate__Planner__LlmProvider";
         public const string LlmModel = "InfraGate__Planner__LlmModel";
-        public const string LlmApiKey = "InfraGate__Planner__LlmApiKey";
         public const string ClientId = "InfraGate__Planner__ClientCredentials__ClientId";
         public const string ClientSecret = "InfraGate__Planner__ClientCredentials__ClientSecret";
         public const string OAuthAuthority = "InfraGate__Planner__ClientCredentials__Authority";
@@ -67,7 +66,6 @@ internal static class PlannerConventions
         public const string MaxToolIterations = "InfraGate:Planner:MaxToolIterations";
         public const string LlmProvider = "InfraGate:Planner:LlmProvider";
         public const string LlmModel = "InfraGate:Planner:LlmModel";
-        public const string LlmApiKey = "InfraGate:Planner:LlmApiKey";
         public const string FileSinkRoot = "InfraGate:Planner:FileSinkRoot";
         public const string AuditConnectionString = "InfraGate:Planner:AuditConnectionString";
     }

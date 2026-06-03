@@ -96,16 +96,15 @@ The containerized OAuth path uses Docker Compose:
 docker compose version
 ```
 
-### 4. Anthropic API key for local agents
+### 4. OpenRouter API key for local agents
 
-The local Compose stack starts the Observer and Planner by default. Both use the Anthropic provider unless you override the LLM configuration, so provide API keys through shell environment variables before `docker compose up`:
+The local Compose stack starts the Observer and Planner by default. Both use OpenRouter, so provide one shared API key through a shell environment variable before generating the Compose env file:
 
 ```bash
-export InfraGate__Observer__LlmApiKey="<anthropic-api-key>"
-export InfraGate__Planner__LlmApiKey="<anthropic-api-key>"
+export InfraGate__OpenRouter__ApiKey="<openrouter-api-key>"
 ```
 
-These secrets are not written by `scripts/generate-env.sh`.
+`scripts/generate-env.sh` writes the key only into the gitignored generated env file used by Compose.
 
 ### 5. Verify tools
 
@@ -225,15 +224,14 @@ codex mcp add infra-gate \
 Use this when you want the supported local OAuth setup with persistent user accounts and a real PKCE login flow. The realm is auto-imported from `deploy/keycloak/infra-gate-realm.json` on first start.
 
 ```bash
-export InfraGate__Observer__LlmApiKey="<anthropic-api-key>"
-export InfraGate__Planner__LlmApiKey="<anthropic-api-key>"
+export InfraGate__OpenRouter__ApiKey="<openrouter-api-key>"
 ./scripts/create-demo-kubeconfig.sh --compose
 ./scripts/generate-env.sh local-compose
 docker compose --env-file deploy/generated/local-compose.env \
   -f deploy/local-oauth/compose.yaml up --build
 ```
 
-`generate-env.sh` writes `deploy/generated/local-compose.env` from `deploy/run-profiles.yaml` (profile `local-compose`) and supplies absolute host paths via `--set` so the command is independent of the current working directory. The generated env file includes the gateway, downstream auth, Observer, Planner, and Executor local OAuth settings; LLM API keys still come from your shell environment so secrets are not committed or generated. Generated env files are gitignored; `deploy/local-oauth/release.env.example` is the committed no-SDK reference for the released profile.
+`generate-env.sh` writes `deploy/generated/local-compose.env` from `deploy/run-profiles.yaml` (profile `local-compose`) and supplies absolute host paths via `--set` so the command is independent of the current working directory. The generated env file includes the gateway, downstream auth, Observer, Planner, and Executor local OAuth settings; the OpenRouter API key still comes from your shell environment so secrets are not committed to the run profile. Generated env files are gitignored; `deploy/local-oauth/release.env.example` is the committed no-SDK reference for the released profile.
 
 Keycloak and PostgreSQL start first; Keycloak takes ~30s to pass its health check before the gateway and agents come up. No manual step is needed — the `depends_on` gates handle the ordering.
 
@@ -415,8 +413,7 @@ INFRA_GATE_RUN_SAFETY_E2E=1 dotnet test tests/InfraGate.Safety.E2E.Tests/InfraGa
 
 # Compose config validation
 ./scripts/generate-env.sh local-compose
-InfraGate__Observer__LlmApiKey=dummy \
-InfraGate__Planner__LlmApiKey=dummy \
+InfraGate__OpenRouter__ApiKey=dummy \
   docker compose --env-file deploy/generated/local-compose.env \
     -f deploy/local-oauth/compose.yaml config
 
@@ -499,7 +496,7 @@ The canonical environment variable, CI/CD, and release configuration reference i
 | Kubernetes API returns `Unauthorized` during integration tests | Stale or expired demo kubeconfig token | Re-run `./scripts/create-demo-kubeconfig.sh` for source tests, or `./scripts/create-demo-kubeconfig.sh --compose` for Compose flows |
 | Gateway returns `401 Unauthorized` | No `Authorization` header, invalid JWT, or no auth env vars set | Set OAuth vars and re-run MCP login |
 | `InfraGate__Auth__OAuthRequireHttpsMetadata` error | Trying to reach HTTP issuer with HTTPS check | Set to `false` only for local development issuers such as the Keycloak demo |
-| Observer or Planner exits with `LLM API key not configured` | The local Compose stack starts both LLM-backed agents and no API key was passed into the container | Export `InfraGate__Observer__LlmApiKey` and `InfraGate__Planner__LlmApiKey`, then restart the stack |
+| Observer or Planner exits with `OpenRouter API key not configured` | The local Compose stack starts both LLM-backed agents and no API key was passed into the container | Export `InfraGate__OpenRouter__ApiKey`, re-run `./scripts/generate-env.sh local-compose`, then restart the stack |
 | Observer exits with `Client credentials require Authority to be configured` | Generated env or Compose wiring is stale and did not provide `InfraGate__Observer__ClientCredentials__Authority` | Re-run `./scripts/generate-env.sh local-compose` after pulling the latest profile changes, then restart the stack |
 | `execute_approved_plan` refuses with hash mismatch | Plan changed after approval | Re-request the plan and re-approve |
 | Every MCP tool call returns `An error occurred invoking '<toolName>'` while gateway logs show `IsError = False` | The downstream MCP server failed during DI — usually because the gateway container (chiseled, UID 1654) cannot read the host-owned kubeconfig or write to the Data Protection keys volume (`.mcp-approvals/`) / `.mcp-guardrails/` | Re-run `./scripts/create-demo-kubeconfig.sh --compose`. The script grants the container UID an ACL on the kubeconfig file and on the persistence dirs (falling back to chmod 0644 only when `setfacl` is unavailable) |

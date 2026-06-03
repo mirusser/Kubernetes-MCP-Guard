@@ -41,7 +41,7 @@ public sealed class RunProfileDocumentTests
         };
         var defaults = new ProfileDefaults(
             Gateway: new GatewayProfile("http://localhost:3001", null, null),
-            null, null, null, null, null, null, null, null);
+            null, null, null, null, null, null, null, null, null);
         var doc = new RunProfileDocument([profile]);
 
         var merged = doc.FindProfileWithDefaults("my-profile", defaults);
@@ -58,7 +58,7 @@ public sealed class RunProfileDocumentTests
         };
         var defaults = new ProfileDefaults(
             Gateway: new GatewayProfile("http://localhost:3001", null, null),
-            null, null, null, null, null, null, null, null);
+            null, null, null, null, null, null, null, null, null);
         var doc = new RunProfileDocument([profile]);
 
         var merged = doc.FindProfileWithDefaults("my-profile", defaults);
@@ -72,7 +72,7 @@ public sealed class RunProfileDocumentTests
         var profile = MakeProfile("my-profile");
         var defaults = new ProfileDefaults(
             Gateway: new GatewayProfile("http://localhost:3001", null, null),
-            null, null, null, null, null, null, null, null);
+            null, null, null, null, null, null, null, null, null);
         var doc = new RunProfileDocument([profile]);
 
         var merged = doc.FindProfileWithDefaults("my-profile", defaults);
@@ -98,7 +98,7 @@ public sealed class RunProfileDocumentTests
     [Fact]
     public void Defaults_InitializerSetsDefaults()
     {
-        var defaults = new ProfileDefaults(null, null, null, null, null, null, null, null, null);
+        var defaults = new ProfileDefaults(null, null, null, null, null, null, null, null, null, null);
         var doc = new RunProfileDocument([MakeProfile("x")]) { Defaults = defaults };
 
         Assert.Same(defaults, doc.Defaults);
@@ -118,7 +118,6 @@ public sealed class RunProfileDocumentTests
                 Scope: null,
                 LlmProvider: null,
                 LlmModel: null,
-                LlmApiKey: null,
                 CycleCadenceSeconds: null,
                 CycleWallClockCapSeconds: null,
                 MaxToolIterations: null,
@@ -138,7 +137,6 @@ public sealed class RunProfileDocumentTests
                 OAuthScope: null,
                 LlmProvider: null,
                 LlmModel: null,
-                LlmApiKey: null,
                 AnomalyWallClockCapSeconds: null,
                 BatchWallClockCapSeconds: null,
                 MaxToolIterations: null,
@@ -148,7 +146,7 @@ public sealed class RunProfileDocumentTests
                 null, null, "executor-local", null, null, null, null, null, null)
         };
         var defaults = new ProfileDefaults(
-            null, null, null, null, null, null,
+            null, null, null, null, null, null, null,
             new ObserverProfile(
                 "http://observer-default",
                 "http://gateway-default",
@@ -158,7 +156,6 @@ public sealed class RunProfileDocumentTests
                 "mcp:tools.readonly",
                 "openai",
                 "gpt-test",
-                "observer-key",
                 "30",
                 "20",
                 "5",
@@ -178,7 +175,6 @@ public sealed class RunProfileDocumentTests
                 "mcp:tools.propose",
                 "openai",
                 "gpt-planner",
-                "planner-key",
                 "15",
                 "45",
                 "8",
@@ -211,13 +207,13 @@ public sealed class RunProfileDocumentTests
     {
         var profile = MakeProfile("my-profile");
         var defaults = new ProfileDefaults(
-            null, null, null, null, null, null,
+            null, null, null, null, null, null, null,
             new ObserverProfile(
                 "http://observer",
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
             new PlannerProfile(
                 "http://planner",
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+                null, null, null, null, null, null, null, null, null, null, null, null, null),
             new ExecutorProfile("http://executor", null, null, null, null, null, null, null, null));
         var doc = new RunProfileDocument([profile]);
 
@@ -238,7 +234,7 @@ public sealed class RunProfileDocumentTests
         var defaults = new ProfileDefaults(
             null,
             new IdentityProviderProfile(null, "http://auth:8080", null, null, null, null),
-            null, null, null, null, null, null, null);
+            null, null, null, null, null, null, null, null);
         var doc = new RunProfileDocument([profile]);
 
         var merged = doc.FindProfileWithDefaults("my-profile", defaults);
@@ -257,7 +253,7 @@ public sealed class RunProfileDocumentTests
         var defaults = new ProfileDefaults(
             null, null,
             new ApprovalAuthorityProfile("http://gateway.test", null, null, null, null),
-            null, null, null, null, null, null);
+            null, null, null, null, null, null, null);
         var doc = new RunProfileDocument([profile]);
 
         var merged = doc.FindProfileWithDefaults("my-profile", defaults);
@@ -276,7 +272,7 @@ public sealed class RunProfileDocumentTests
         var defaults = new ProfileDefaults(
             null, null, null, null,
             new HostProfile("0.0.0.0", "8080", null, null, null, null, null),
-            null, null, null, null);
+            null, null, null, null, null);
         var doc = new RunProfileDocument([profile]);
 
         var merged = doc.FindProfileWithDefaults("my-profile", defaults);
@@ -293,7 +289,7 @@ public sealed class RunProfileDocumentTests
         var defaults = new ProfileDefaults(
             null, null, null, null, null,
             new DownstreamAuthProfile("true", null, null, null, "audience-value", null, null, null),
-            null, null, null);
+            null, null, null, null);
         var doc = new RunProfileDocument([profile]);
 
         var merged = doc.FindProfileWithDefaults("my-profile", defaults);
@@ -310,7 +306,7 @@ public sealed class RunProfileDocumentTests
         var defaults = new ProfileDefaults(
             null, null, null,
             new GenericApprovalCoreProfile("/data/approvals", "Host=db;Database=test"),
-            null, null, null, null, null);
+            null, null, null, null, null, null);
         var doc = new RunProfileDocument([profile]);
 
         var merged = doc.FindProfileWithDefaults("my-profile", defaults);
@@ -321,5 +317,5 @@ public sealed class RunProfileDocumentTests
     }
 
     private static RunProfile MakeProfile(string name) =>
-        new(name, "mcp-stdio", null, null, null, null, null, [], null, null, null, null, null);
+        new(name, "mcp-stdio", null, null, null, null, null, [], null, null, null, null, null, null);
 }

@@ -41,8 +41,7 @@ public sealed class PlannerOptionsBindingTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["InfraGate:Planner:GatewayBaseUrl"] = "http://gateway:3001/mcp",
-                ["InfraGate:Planner:LlmApiKey"] = "key"
+                ["InfraGate:Planner:GatewayBaseUrl"] = "http://gateway:3001/mcp"
             })
             .Build();
 
