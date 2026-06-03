@@ -8,6 +8,8 @@ using SystemAssembly = System.Reflection.Assembly;
 
 namespace InfraGate.Architecture.Tests.UnitTests;
 
+#pragma warning disable CA1825, MA0005 // false positive: collection expressions with TheoryData<T> are not zero-length array allocations
+
 public sealed class ModuleDependencyRulesTests
 {
     private static readonly ArchArchitecture ArchitectureModel = new ArchLoader()
