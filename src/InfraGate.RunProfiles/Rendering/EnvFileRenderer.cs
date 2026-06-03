@@ -21,6 +21,7 @@ internal static class EnvFileRenderer
         AppendApprovalAuthority(builder, profile);
         AppendGenericApprovalCore(builder, profile);
         AppendDownstreamAuth(builder, profile);
+        AppendOpenRouter(builder, profile);
         AppendKubernetesAdapter(builder, profile);
         AppendHost(builder, profile);
         AppendObserver(builder, profile);
@@ -185,6 +186,18 @@ internal static class EnvFileRenderer
         AppendList(builder, RunProfileConventions.Env.AllowedNamespaces, adapter.Kubernetes.AllowedNamespaces);
     }
 
+    private static void AppendOpenRouter(StringBuilder builder, RunProfile profile)
+    {
+        if (profile.OpenRouter is null || string.IsNullOrEmpty(profile.OpenRouter.ApiKey))
+        {
+            return;
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("# OpenRouter");
+        builder.AppendLine($"{RunProfileConventions.Env.OpenRouterApiKey}={profile.OpenRouter.ApiKey}");
+    }
+
     private static void AppendHost(StringBuilder builder, RunProfile profile)
     {
         if (profile.Host is null)
@@ -252,7 +265,6 @@ internal static class EnvFileRenderer
             !string.IsNullOrEmpty(planner.OAuthScope) ||
             !string.IsNullOrEmpty(planner.LlmProvider) ||
             !string.IsNullOrEmpty(planner.LlmModel) ||
-            !string.IsNullOrEmpty(planner.LlmApiKey) ||
             !string.IsNullOrEmpty(planner.AnomalyWallClockCapSeconds) ||
             !string.IsNullOrEmpty(planner.BatchWallClockCapSeconds) ||
             !string.IsNullOrEmpty(planner.MaxToolIterations) ||
@@ -275,7 +287,6 @@ internal static class EnvFileRenderer
         AppendIfSet(builder, RunProfileConventions.Env.PlannerOAuthScope, planner.OAuthScope);
         AppendIfSet(builder, RunProfileConventions.Env.PlannerLlmProvider, planner.LlmProvider);
         AppendIfSet(builder, RunProfileConventions.Env.PlannerLlmModel, planner.LlmModel);
-        AppendIfSet(builder, RunProfileConventions.Env.PlannerLlmApiKey, planner.LlmApiKey);
         AppendIfSet(builder, RunProfileConventions.Env.PlannerAnomalyWallClockCapSeconds, planner.AnomalyWallClockCapSeconds);
         AppendIfSet(builder, RunProfileConventions.Env.PlannerBatchWallClockCapSeconds, planner.BatchWallClockCapSeconds);
         AppendIfSet(builder, RunProfileConventions.Env.PlannerMaxToolIterations, planner.MaxToolIterations);
@@ -337,7 +348,6 @@ internal static class EnvFileRenderer
             !string.IsNullOrEmpty(observer.Scope) ||
             !string.IsNullOrEmpty(observer.LlmProvider) ||
             !string.IsNullOrEmpty(observer.LlmModel) ||
-            !string.IsNullOrEmpty(observer.LlmApiKey) ||
             !string.IsNullOrEmpty(observer.CycleCadenceSeconds) ||
             !string.IsNullOrEmpty(observer.CycleWallClockCapSeconds) ||
             !string.IsNullOrEmpty(observer.MaxToolIterations) ||
@@ -363,7 +373,6 @@ internal static class EnvFileRenderer
         AppendIfSet(builder, RunProfileConventions.Env.ObserverScope, observer.Scope);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverLlmProvider, observer.LlmProvider);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverLlmModel, observer.LlmModel);
-        AppendIfSet(builder, RunProfileConventions.Env.ObserverLlmApiKey, observer.LlmApiKey);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverCycleIntervalSeconds, observer.CycleCadenceSeconds);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverCycleWallClockCapSeconds, observer.CycleWallClockCapSeconds);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverMaxToolIterations, observer.MaxToolIterations);

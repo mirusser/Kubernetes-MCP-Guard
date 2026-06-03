@@ -58,6 +58,38 @@ public sealed class RunProfileCliTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ValidateWithOpenRouterScalar_ReturnsError()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                openRouter: openrouter-key
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["validate", "--config", configPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Empty(output.ToString());
+        Assert.Contains("YAML key 'openRouter' must be a mapping.", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_GenerateLocalStdio_WritesDeterministicEnvFile()
     {
         string configPath = await WriteConfigAsync(
@@ -553,6 +585,46 @@ public sealed class RunProfileCliTests
         Assert.Contains("InfraGate__Auth__OAuthAuthority=http://127.0.0.1:3010/realms/infra-gate", content, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithOpenRouterDefaults_InheritsDefaultApiKey()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            defaults:
+              openRouter:
+                apiKey: default-openrouter-key
+            profiles:
+              local-compose:
+                kind: compose
+                openRouter: {}
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--output", outputPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        Assert.Contains(
+            $"{RunProfileConventions.Env.OpenRouterApiKey}=default-openrouter-key",
+            content,
+            StringComparison.Ordinal);
+    }
+
     private static readonly HashSet<string> ComposeStackProfileKeys =
         new(StringComparer.Ordinal)
         {
@@ -986,7 +1058,6 @@ public sealed class RunProfileCliTests
                 "--set", "observer.scope=mcp:tools.readonly",
                 "--set", "observer.llmProvider=openai",
                 "--set", "observer.llmModel=gpt-test",
-                "--set", "observer.llmApiKey=observer-key",
                 "--set", "observer.cycleCadenceSeconds=30",
                 "--set", "observer.cycleWallClockCapSeconds=20",
                 "--set", "observer.maxToolIterations=5",
@@ -1002,7 +1073,7 @@ public sealed class RunProfileCliTests
                 "--set", "planner.scope=mcp:tools.propose",
                 "--set", "planner.llmProvider=openai",
                 "--set", "planner.llmModel=gpt-planner",
-                "--set", "planner.llmApiKey=planner-key",
+                "--set", "openRouter.apiKey=openrouter-key",
                 "--set", "planner.anomalyWallClockCapSeconds=15",
                 "--set", "planner.batchWallClockCapSeconds=45",
                 "--set", "planner.maxToolIterations=8",
@@ -1035,7 +1106,7 @@ public sealed class RunProfileCliTests
             [RunProfileConventions.Env.ObserverScope] = "mcp:tools.readonly",
             [RunProfileConventions.Env.ObserverLlmProvider] = "openai",
             [RunProfileConventions.Env.ObserverLlmModel] = "gpt-test",
-            [RunProfileConventions.Env.ObserverLlmApiKey] = "observer-key",
+            [RunProfileConventions.Env.OpenRouterApiKey] = "openrouter-key",
             [RunProfileConventions.Env.ObserverCycleIntervalSeconds] = "30",
             [RunProfileConventions.Env.ObserverCycleWallClockCapSeconds] = "20",
             [RunProfileConventions.Env.ObserverMaxToolIterations] = "5",
@@ -1051,7 +1122,6 @@ public sealed class RunProfileCliTests
             [RunProfileConventions.Env.PlannerOAuthScope] = "mcp:tools.propose",
             [RunProfileConventions.Env.PlannerLlmProvider] = "openai",
             [RunProfileConventions.Env.PlannerLlmModel] = "gpt-planner",
-            [RunProfileConventions.Env.PlannerLlmApiKey] = "planner-key",
             [RunProfileConventions.Env.PlannerAnomalyWallClockCapSeconds] = "15",
             [RunProfileConventions.Env.PlannerBatchWallClockCapSeconds] = "45",
             [RunProfileConventions.Env.PlannerMaxToolIterations] = "8",
@@ -1293,6 +1363,40 @@ public sealed class RunProfileCliTests
 
         Assert.Equal(1, exitCode);
         Assert.Contains("unknown.field", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetUnknownOpenRouterField_ReturnsError()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-stdio:
+                kind: mcp-stdio
+                genericApprovalCore:
+                  approvalRoot: .mcp-approvals
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: .kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-stdio", "--config", configPath, "--output", outputPath,
+             "--set", "openRouter.unknownField=value"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("openRouter.unknownField", error.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

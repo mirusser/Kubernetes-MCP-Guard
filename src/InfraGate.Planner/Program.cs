@@ -27,6 +27,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<PlannerOptions>(
     builder.Configuration.GetSection(PlannerOptions.SectionName));
+builder.Services.Configure<OpenRouterOptions>(
+    builder.Configuration.GetSection(OpenRouterOptions.SectionName));
 
 builder.AddInfraGateObservability(opt =>
 {
@@ -69,6 +71,7 @@ builder.Services.AddSingleton<IChatClientFactory>(sp =>
 {
     return new ChatClientFactory(
         sp.GetRequiredService<IOptions<PlannerOptions>>(),
+        sp.GetRequiredService<IOptions<OpenRouterOptions>>(),
         sp.GetRequiredService<ILoggerFactory>());
 });
 builder.Services.AddSingleton<ToolCallingAgentFactory>();

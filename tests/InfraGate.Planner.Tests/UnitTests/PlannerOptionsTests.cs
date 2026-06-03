@@ -15,46 +15,18 @@ public sealed class PlannerOptionsTests
         var options = new PlannerOptions
         {
             GatewayBaseUrl = "http://localhost:3001/mcp",
-            LlmApiKey = "test-key",
         };
         var ex = Record.Exception(() => options.Validate());
         Assert.Null(ex);
     }
 
     [Fact]
-    public void Validate_MissingAnthropicApiKey_Throws()
-    {
-        var options = new PlannerOptions
-        {
-            GatewayBaseUrl = "http://localhost:3001/mcp",
-            LlmProvider = "anthropic",
-            LlmApiKey = "",
-        };
-
-        Assert.Throws<InvalidOperationException>(() => options.Validate());
-    }
-
-    [Fact]
-    public void Validate_OpenRouterProvider_MissingApiKey_Throws()
+    public void Validate_OpenRouterProvider_DoesNotRequireApiKey()
     {
         var options = new PlannerOptions
         {
             GatewayBaseUrl = "http://localhost:3001/mcp",
             LlmProvider = PlannerConventions.LlmProviders.OpenRouter,
-            LlmApiKey = "",
-        };
-
-        Assert.Throws<InvalidOperationException>(() => options.Validate());
-    }
-
-    [Fact]
-    public void Validate_OpenRouterProvider_WithApiKey_DoesNotThrow()
-    {
-        var options = new PlannerOptions
-        {
-            GatewayBaseUrl = "http://localhost:3001/mcp",
-            LlmProvider = PlannerConventions.LlmProviders.OpenRouter,
-            LlmApiKey = "test-key",
         };
 
         var ex = Record.Exception(() => options.Validate());
@@ -69,7 +41,6 @@ public sealed class PlannerOptionsTests
         var options = new PlannerOptions
         {
             GatewayBaseUrl = "http://localhost:3001/mcp",
-            LlmApiKey = "test-key",
             AnomalyWallClockCapSeconds = value,
         };
         Assert.Throws<InvalidOperationException>(() => options.Validate());
@@ -83,7 +54,6 @@ public sealed class PlannerOptionsTests
         var options = new PlannerOptions
         {
             GatewayBaseUrl = "http://localhost:3001/mcp",
-            LlmApiKey = "test-key",
             BatchWallClockCapSeconds = value,
         };
         Assert.Throws<InvalidOperationException>(() => options.Validate());
@@ -97,7 +67,6 @@ public sealed class PlannerOptionsTests
         var options = new PlannerOptions
         {
             GatewayBaseUrl = "http://localhost:3001/mcp",
-            LlmApiKey = "test-key",
             MaxToolIterations = value,
         };
         Assert.Throws<InvalidOperationException>(() => options.Validate());
@@ -111,7 +80,6 @@ public sealed class PlannerOptionsTests
         var options = new PlannerOptions
         {
             GatewayBaseUrl = "http://localhost:3001/mcp",
-            LlmApiKey = "test-key",
             AnomalyWallClockCapSeconds = value,
         };
         var ex = Record.Exception(() => options.Validate());
@@ -126,7 +94,6 @@ public sealed class PlannerOptionsTests
         var options = new PlannerOptions
         {
             GatewayBaseUrl = "http://localhost:3001/mcp",
-            LlmApiKey = "test-key",
             BatchWallClockCapSeconds = value,
         };
         var ex = Record.Exception(() => options.Validate());
@@ -141,7 +108,6 @@ public sealed class PlannerOptionsTests
         var options = new PlannerOptions
         {
             GatewayBaseUrl = "http://localhost:3001/mcp",
-            LlmApiKey = "test-key",
             MaxToolIterations = value,
         };
         var ex = Record.Exception(() => options.Validate());
@@ -154,7 +120,6 @@ public sealed class PlannerOptionsTests
         var options = new PlannerOptions
         {
             GatewayBaseUrl = "http://localhost:3001/mcp",
-            LlmApiKey = "test-key",
         };
 
         Assert.InRange(options.AnomalyWallClockCapSeconds,
@@ -169,13 +134,12 @@ public sealed class PlannerOptionsTests
     }
 
     [Fact]
-    public void Validate_NonAiProviderWithApiKey_DoesNotThrow()
+    public void Validate_NonAiProvider_DoesNotThrow()
     {
         var options = new PlannerOptions
         {
             GatewayBaseUrl = "http://localhost:3001/mcp",
             LlmProvider = "other-provider",
-            LlmApiKey = "test-key",
         };
 
         var ex = Record.Exception(() => options.Validate());

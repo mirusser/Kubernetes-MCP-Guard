@@ -66,7 +66,6 @@ public sealed class BatchProcessorTaskLifecycleTests
             new FakeOptionsMonitor<PlannerOptions>(new PlannerOptions
             {
                 GatewayBaseUrl = "http://gateway",
-                LlmApiKey = "test",
             }),
             queue ?? new AnomalyBatchQueue(),
             new ToolCallingAgentFactory(new FixtureChatClient("no-action")),

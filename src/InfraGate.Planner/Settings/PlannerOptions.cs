@@ -17,7 +17,6 @@ public sealed record class PlannerOptions
     public int MaxToolIterations { get; init; } = PlannerConventions.DefaultMaxToolIterations;
     public string LlmProvider { get; init; } = string.Empty;
     public string LlmModel { get; init; } = string.Empty;
-    public string LlmApiKey { get; init; } = string.Empty;
     public string FileSinkRoot { get; init; } = string.Empty;
     public string ObserverBaseUrl { get; init; } = string.Empty;
     public string AuditConnectionString { get; init; } = string.Empty;
@@ -34,12 +33,6 @@ public sealed record class PlannerOptions
         if (string.IsNullOrWhiteSpace(GatewayBaseUrl))
         {
             throw new InvalidOperationException("GatewayBaseUrl must be configured.");
-        }
-
-        if ((IsAnthropicProvider() || IsOpenRouterProvider()) && string.IsNullOrWhiteSpace(LlmApiKey))
-        {
-            throw new InvalidOperationException(
-                $"LlmApiKey must be configured for {LlmProvider} provider. Set {PlannerConventions.EnvironmentVariables.LlmApiKey}.");
         }
 
         if (AnomalyWallClockCapSeconds < PlannerConventions.MinAnomalyWallClockCapSeconds ||
@@ -64,14 +57,4 @@ public sealed record class PlannerOptions
         }
     }
 
-    private bool IsAnthropicProvider()
-    {
-        return string.IsNullOrWhiteSpace(LlmProvider) ||
-            LlmProvider.Equals(PlannerConventions.LlmProviders.Anthropic, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private bool IsOpenRouterProvider()
-    {
-        return LlmProvider.Equals(PlannerConventions.LlmProviders.OpenRouter, StringComparison.OrdinalIgnoreCase);
-    }
 }

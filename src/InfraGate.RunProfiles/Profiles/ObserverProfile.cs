@@ -9,7 +9,6 @@ internal sealed record class ObserverProfile(
     string? Scope,
     string? LlmProvider,
     string? LlmModel,
-    string? LlmApiKey,
     string? CycleCadenceSeconds,
     string? CycleWallClockCapSeconds,
     string? MaxToolIterations,

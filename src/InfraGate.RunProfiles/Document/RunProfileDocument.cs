@@ -27,6 +27,7 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             GenericApprovalCore = MergeGenericApprovalCore(profile.GenericApprovalCore, defaults.GenericApprovalCore),
             Host = MergeHost(profile.Host, defaults.Host),
             DownstreamAuth = MergeDownstreamAuth(profile.DownstreamAuth, defaults.DownstreamAuth),
+            OpenRouter = MergeOpenRouter(profile.OpenRouter, defaults.OpenRouter),
             Observer = MergeObserver(profile.Observer, defaults.Observer),
             Planner = MergePlanner(profile.Planner, defaults.Planner),
             Executor = MergeExecutor(profile.Executor, defaults.Executor)
@@ -126,6 +127,16 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
         };
     }
 
+    private static OpenRouterProfile? MergeOpenRouter(OpenRouterProfile? profile, OpenRouterProfile? defaults)
+    {
+        if (profile is null) return defaults;
+        if (defaults is null) return profile;
+        return profile with
+        {
+            ApiKey = profile.ApiKey ?? defaults.ApiKey
+        };
+    }
+
     private static ObserverProfile? MergeObserver(
         ObserverProfile? profile,
         ObserverProfile? defaults)
@@ -142,7 +153,6 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             Scope = profile.Scope ?? defaults.Scope,
             LlmProvider = profile.LlmProvider ?? defaults.LlmProvider,
             LlmModel = profile.LlmModel ?? defaults.LlmModel,
-            LlmApiKey = profile.LlmApiKey ?? defaults.LlmApiKey,
             CycleCadenceSeconds = profile.CycleCadenceSeconds ?? defaults.CycleCadenceSeconds,
             CycleWallClockCapSeconds = profile.CycleWallClockCapSeconds ?? defaults.CycleWallClockCapSeconds,
             MaxToolIterations = profile.MaxToolIterations ?? defaults.MaxToolIterations,
@@ -167,7 +177,6 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             OAuthScope = profile.OAuthScope ?? defaults.OAuthScope,
             LlmProvider = profile.LlmProvider ?? defaults.LlmProvider,
             LlmModel = profile.LlmModel ?? defaults.LlmModel,
-            LlmApiKey = profile.LlmApiKey ?? defaults.LlmApiKey,
             AnomalyWallClockCapSeconds = profile.AnomalyWallClockCapSeconds ?? defaults.AnomalyWallClockCapSeconds,
             BatchWallClockCapSeconds = profile.BatchWallClockCapSeconds ?? defaults.BatchWallClockCapSeconds,
             MaxToolIterations = profile.MaxToolIterations ?? defaults.MaxToolIterations,

@@ -351,15 +351,20 @@ internal static class RunProfileCli
                 Host = ApplyHostOverride(
                     profile.Host ?? new HostProfile(null, null, null, null, null, null, null), field, value, path)
             },
+            RunProfileConventions.YamlKeys.OpenRouter => profile with
+            {
+                OpenRouter = ApplyOpenRouterOverride(
+                    profile.OpenRouter ?? new OpenRouterProfile(null), field, value, path)
+            },
             RunProfileConventions.YamlKeys.Observer => profile with
             {
                 Observer = ApplyObserverOverride(
-                    profile.Observer ?? new ObserverProfile(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null), field, value, path)
+                    profile.Observer ?? new ObserverProfile(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null), field, value, path)
             },
             RunProfileConventions.YamlKeys.Planner => profile with
             {
                 Planner = ApplyPlannerOverride(
-                    profile.Planner ?? new PlannerProfile(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null), field, value, path)
+                    profile.Planner ?? new PlannerProfile(null, null, null, null, null, null, null, null, null, null, null, null, null, null), field, value, path)
             },
             RunProfileConventions.YamlKeys.Executor => profile with
             {
@@ -444,6 +449,14 @@ internal static class RunProfileCli
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };
 
+    private static OpenRouterProfile ApplyOpenRouterOverride(
+        OpenRouterProfile profile, string field, string value, string path) =>
+        field switch
+        {
+            RunProfileConventions.YamlKeys.ApiKey => profile with { ApiKey = value },
+            _ => throw new InvalidOperationException($"Unknown --set path: {path}")
+        };
+
     private static ObserverProfile ApplyObserverOverride(
         ObserverProfile profile, string field, string value, string path) =>
         field switch
@@ -456,7 +469,6 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.Scope => profile with { Scope = value },
             RunProfileConventions.YamlKeys.LlmProvider => profile with { LlmProvider = value },
             RunProfileConventions.YamlKeys.LlmModel => profile with { LlmModel = value },
-            RunProfileConventions.YamlKeys.LlmApiKey => profile with { LlmApiKey = value },
             RunProfileConventions.YamlKeys.CycleCadenceSeconds => profile with { CycleCadenceSeconds = value },
             RunProfileConventions.YamlKeys.CycleWallClockCapSeconds => profile with { CycleWallClockCapSeconds = value },
             RunProfileConventions.YamlKeys.MaxToolIterations => profile with { MaxToolIterations = value },
@@ -480,7 +492,6 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.Scope => profile with { OAuthScope = value },
             RunProfileConventions.YamlKeys.LlmProvider => profile with { LlmProvider = value },
             RunProfileConventions.YamlKeys.LlmModel => profile with { LlmModel = value },
-            RunProfileConventions.YamlKeys.LlmApiKey => profile with { LlmApiKey = value },
             RunProfileConventions.YamlKeys.AnomalyWallClockCapSeconds => profile with { AnomalyWallClockCapSeconds = value },
             RunProfileConventions.YamlKeys.BatchWallClockCapSeconds => profile with { BatchWallClockCapSeconds = value },
             RunProfileConventions.YamlKeys.MaxToolIterations => profile with { MaxToolIterations = value },

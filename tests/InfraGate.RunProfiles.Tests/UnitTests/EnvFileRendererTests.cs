@@ -37,7 +37,6 @@ public sealed class EnvFileRendererTests
                 OAuthScope: null,
                 LlmProvider: null,
                 LlmModel: null,
-                LlmApiKey: "sk-test",
                 AnomalyWallClockCapSeconds: null,
                 BatchWallClockCapSeconds: null,
                 MaxToolIterations: null,
@@ -51,7 +50,20 @@ public sealed class EnvFileRendererTests
         Assert.Contains($"{RunProfileConventions.Env.PlannerAspnetcoreUrls}=http://localhost:3004", result, StringComparison.Ordinal);
         Assert.Contains($"{RunProfileConventions.Env.PlannerGatewayBaseUrl}=http://localhost:3001/mcp", result, StringComparison.Ordinal);
         Assert.Contains($"{RunProfileConventions.Env.PlannerExecutorHandoffUrl}=http://localhost:3005/a2a/executor", result, StringComparison.Ordinal);
-        Assert.Contains($"{RunProfileConventions.Env.PlannerLlmApiKey}=sk-test", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Render_WithOpenRouterProfile_EmitsOpenRouterSection()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            OpenRouter = new OpenRouterProfile("sk-test"),
+        };
+
+        string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
+
+        Assert.Contains("# OpenRouter", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.OpenRouterApiKey}=sk-test", result, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -117,7 +129,7 @@ public sealed class EnvFileRendererTests
         var profile = CreateMinimalProfile() with
         {
             Planner = new PlannerProfile(
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null),
         };
 
         string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
@@ -262,7 +274,7 @@ public sealed class EnvFileRendererTests
         {
             Observer = new ObserverProfile(
                 "http://observer:3002",
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 ["default", "mcp-nginx-demo"])
         };
 
@@ -294,5 +306,5 @@ public sealed class EnvFileRendererTests
     }
 
     private static RunProfile CreateMinimalProfile() =>
-        new("test-profile", "mcp-stdio", null, null, null, null, null, [], null, null, null, null, null);
+        new("test-profile", "mcp-stdio", null, null, null, null, null, [], null, null, null, null, null, null);
 }

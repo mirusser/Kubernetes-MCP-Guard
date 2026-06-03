@@ -31,7 +31,7 @@ The `InfraGate.AgentGuardrails` meter is registered in the Observer's telemetry 
 - The Observer is a peer MCP client (not embedded in the gateway). It never calls mutation tools, never produces Plan Envelopes or Approval Grants, and never writes through `IApprovalAuditPublisher`.
 - Optional A2A handoff posts `AnomalyHandoffBatch` payloads to the Remediation Planner's `/a2a/planner` endpoint.
 - The Observer also acts as an A2A **server** at `/a2a/observer`. The Planner calls back to request read-only K8s tool executions (**Reverse Context Requests**). Planner progress is represented by the Planner-owned durable A2A task lifecycle. See [ADR-0028](../../docs/adr/0028-a2a-bidirectional-observer-planner-channel.md).
-- LLM provider is configurable via env vars. Supported provider: `openrouter` (OpenAI-compatible). `InfraGate__Observer__LlmApiKey` is required. Configuring `ANTHROPIC` as the provider throws `InvalidOperationException` at startup — use OpenRouter instead.
+- LLM provider is configurable via env vars. Supported provider: `openrouter` (OpenAI-compatible). `InfraGate__OpenRouter__ApiKey` is required. Configuring `ANTHROPIC` as the provider throws `InvalidOperationException` at startup — use OpenRouter instead.
 - `POST /observe-now` triggers a synchronous on-demand cycle (30s HTTP timeout) without resetting the scheduled tick. Concurrent calls serialise via a shared semaphore.
 
 ## Settings

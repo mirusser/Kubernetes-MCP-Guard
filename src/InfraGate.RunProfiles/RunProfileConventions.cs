@@ -32,6 +32,7 @@ internal static class RunProfileConventions
         public const string AllowedNamespaces = "allowedNamespaces";
         public const string ApprovalAuthority = "approvalAuthority";
         public const string ApprovalRoot = "approvalRoot";
+        public const string ApiKey = "apiKey";
         public const string PostgresConnectionString = "postgresConnectionString";
         public const string RunMigrationsOnStartup = "runMigrationsOnStartup";
         public const string AspnetcoreUrls = "aspnetcoreUrls";
@@ -65,6 +66,7 @@ internal static class RunProfileConventions
         public const string OauthCallbackPath = "oauthCallbackPath";
         public const string OauthClientId = "oauthClientId";
         public const string OauthTokenEndpoint = "oauthTokenEndpoint";
+        public const string OpenRouter = "openRouter";
         public const string Observer = "observer";
         public const string Planner = "planner";
         public const string Executor = "executor";
@@ -92,7 +94,6 @@ internal static class RunProfileConventions
         public const string CycleWallClockCapSeconds = "cycleWallClockCapSeconds";
         public const string FileSinkRoot = "fileSinkRoot";
         public const string GatewayBaseUrl = "gatewayBaseUrl";
-        public const string LlmApiKey = "llmApiKey";
         public const string LlmModel = "llmModel";
         public const string LlmProvider = "llmProvider";
         public const string MaxToolIterations = "maxToolIterations";
@@ -137,6 +138,7 @@ internal static class RunProfileConventions
         public const string OauthRequireHttpsMetadata = "InfraGate__Auth__OAuthRequireHttpsMetadata";
         public const string OauthResource = "InfraGate__Auth__OAuthResource";
         public const string OauthScope = "InfraGate__Auth__OAuthScope";
+        public const string OpenRouterApiKey = "InfraGate__OpenRouter__ApiKey";
         public const string ObserverAspnetcoreUrls = "InfraGate__Observer__AspNetCoreUrls";
         public const string ObserverClientId = "InfraGate__Observer__ClientCredentials__ClientId";
         public const string ObserverClientSecret = "InfraGate__Observer__ClientCredentials__ClientSecret";
@@ -145,7 +147,6 @@ internal static class RunProfileConventions
         public const string ObserverFileSinkRoot = "InfraGate__Observer__FileSinkRoot";
         public const string ObserverGatewayBaseUrl = "InfraGate__Observer__GatewayBaseUrl";
         public const string ObserverHostPath = "INFRA_GATE_OBSERVER_HOST_PATH";
-        public const string ObserverLlmApiKey = "InfraGate__Observer__LlmApiKey";
         public const string ObserverLlmModel = "InfraGate__Observer__LlmModel";
         public const string ObserverLlmProvider = "InfraGate__Observer__LlmProvider";
         public const string ObserverMaxToolIterations = "InfraGate__Observer__MaxToolIterations";
@@ -164,7 +165,6 @@ internal static class RunProfileConventions
         public const string PlannerOAuthScope = "InfraGate__Planner__ClientCredentials__Scope";
         public const string PlannerLlmProvider = "InfraGate__Planner__LlmProvider";
         public const string PlannerLlmModel = "InfraGate__Planner__LlmModel";
-        public const string PlannerLlmApiKey = "InfraGate__Planner__LlmApiKey";
         public const string PlannerAnomalyWallClockCapSeconds = "InfraGate__Planner__AnomalyWallClockCapSeconds";
         public const string PlannerBatchWallClockCapSeconds = "InfraGate__Planner__BatchWallClockCapSeconds";
         public const string PlannerMaxToolIterations = "InfraGate__Planner__MaxToolIterations";

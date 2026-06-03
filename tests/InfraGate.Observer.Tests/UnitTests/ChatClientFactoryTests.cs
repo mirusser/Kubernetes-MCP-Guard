@@ -9,15 +9,7 @@ public sealed class ChatClientFactoryTests
     [Fact]
     public void Create_DefaultProvider_ThrowsInvalidOperationException()
     {
-        var options = Substitute.For<IOptions<ObserverOptions>>();
-        options.Value.Returns(new ObserverOptions
-        {
-            LlmProvider = "",
-            LlmModel = "",
-            LlmApiKey = "test-key",
-        });
-
-        var factory = new ChatClientFactory(options);
+        var factory = CreateFactory(new ObserverOptions { LlmProvider = "", LlmModel = "" });
 
         Assert.Throws<InvalidOperationException>(() => factory.Create());
     }
@@ -28,15 +20,7 @@ public sealed class ChatClientFactoryTests
     [InlineData("ANTHROPIC")]
     public void Create_AnthropicProvider_ThrowsInvalidOperationException(string provider)
     {
-        var options = Substitute.For<IOptions<ObserverOptions>>();
-        options.Value.Returns(new ObserverOptions
-        {
-            LlmProvider = provider,
-            LlmModel = "",
-            LlmApiKey = "test-key",
-        });
-
-        var factory = new ChatClientFactory(options);
+        var factory = CreateFactory(new ObserverOptions { LlmProvider = provider, LlmModel = "" });
 
         var ex = Assert.Throws<InvalidOperationException>(() => factory.Create());
         Assert.Contains("OpenRouter", ex.Message, StringComparison.Ordinal);
@@ -46,14 +30,7 @@ public sealed class ChatClientFactoryTests
     public void Create_AnthropicProvider_MissingApiKey_StillThrowsGuardException()
     {
         // The Anthropic guard fires before the API key check.
-        var options = Substitute.For<IOptions<ObserverOptions>>();
-        options.Value.Returns(new ObserverOptions
-        {
-            LlmProvider = "anthropic",
-            LlmApiKey = "",
-        });
-
-        var factory = new ChatClientFactory(options);
+        var factory = CreateFactory(new ObserverOptions { LlmProvider = "anthropic" }, apiKey: "");
 
         var ex = Assert.Throws<InvalidOperationException>(() => factory.Create());
         Assert.Contains("OpenRouter", ex.Message, StringComparison.Ordinal);
@@ -66,14 +43,7 @@ public sealed class ChatClientFactoryTests
     [InlineData("ollama")]
     public void Create_UnsupportedProvider_ThrowsNotSupportedException(string provider)
     {
-        var options = Substitute.For<IOptions<ObserverOptions>>();
-        options.Value.Returns(new ObserverOptions
-        {
-            LlmProvider = provider,
-            LlmApiKey = "test-key",
-        });
-
-        var factory = new ChatClientFactory(options);
+        var factory = CreateFactory(new ObserverOptions { LlmProvider = provider });
 
         Assert.Throws<NotSupportedException>(() => factory.Create());
     }
@@ -81,14 +51,7 @@ public sealed class ChatClientFactoryTests
     [Fact]
     public void Create_OpenRouterProvider_ReturnsRateLimitRetryingChatClient()
     {
-        var options = Substitute.For<IOptions<ObserverOptions>>();
-        options.Value.Returns(new ObserverOptions
-        {
-            LlmProvider = ObserverConventions.LlmProviders.OpenRouter,
-            LlmApiKey = "test-key",
-        });
-
-        var factory = new ChatClientFactory(options);
+        var factory = CreateFactory(new ObserverOptions { LlmProvider = ObserverConventions.LlmProviders.OpenRouter });
         var client = factory.Create();
 
         Assert.IsType<RateLimitRetryingChatClient>(client);
@@ -97,14 +60,9 @@ public sealed class ChatClientFactoryTests
     [Fact]
     public void Create_OpenRouterProvider_MissingApiKey_ThrowsInvalidOperationException()
     {
-        var options = Substitute.For<IOptions<ObserverOptions>>();
-        options.Value.Returns(new ObserverOptions
-        {
-            LlmProvider = ObserverConventions.LlmProviders.OpenRouter,
-            LlmApiKey = "",
-        });
-
-        var factory = new ChatClientFactory(options);
+        var factory = CreateFactory(
+            new ObserverOptions { LlmProvider = ObserverConventions.LlmProviders.OpenRouter },
+            apiKey: "");
 
         Assert.Throws<InvalidOperationException>(() => factory.Create());
     }
@@ -112,15 +70,13 @@ public sealed class ChatClientFactoryTests
     [Fact]
     public void Create_OpenRouterProvider_WithCustomModel_FormsClient()
     {
-        var options = Substitute.For<IOptions<ObserverOptions>>();
-        options.Value.Returns(new ObserverOptions
-        {
-            LlmProvider = ObserverConventions.LlmProviders.OpenRouter,
-            LlmModel = "my-custom-model",
-            LlmApiKey = "test-key",
-        });
-
-        var factory = new ChatClientFactory(options, NullLoggerFactory.Instance);
+        var factory = CreateFactory(
+            new ObserverOptions
+            {
+                LlmProvider = ObserverConventions.LlmProviders.OpenRouter,
+                LlmModel = "my-custom-model",
+            },
+            loggerFactory: NullLoggerFactory.Instance);
         var client = factory.Create();
 
         Assert.IsType<RateLimitRetryingChatClient>(client);
@@ -129,16 +85,22 @@ public sealed class ChatClientFactoryTests
     [Fact]
     public void Create_OpenRouterProvider_WithLoggerFactory_FormsClient()
     {
-        var options = Substitute.For<IOptions<ObserverOptions>>();
-        options.Value.Returns(new ObserverOptions
-        {
-            LlmProvider = ObserverConventions.LlmProviders.OpenRouter,
-            LlmApiKey = "test-key",
-        });
-
-        var factory = new ChatClientFactory(options, NullLoggerFactory.Instance);
+        var factory = CreateFactory(
+            new ObserverOptions { LlmProvider = ObserverConventions.LlmProviders.OpenRouter },
+            loggerFactory: NullLoggerFactory.Instance);
         var client = factory.Create();
 
         Assert.IsType<RateLimitRetryingChatClient>(client);
+    }
+
+    private static ChatClientFactory CreateFactory(
+        ObserverOptions observerOptions,
+        string apiKey = "test-key",
+        ILoggerFactory? loggerFactory = null)
+    {
+        return new ChatClientFactory(
+            Options.Create(observerOptions),
+            Options.Create(new OpenRouterOptions { ApiKey = apiKey }),
+            loggerFactory);
     }
 }

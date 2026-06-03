@@ -50,21 +50,18 @@ mkdir -p "$(dirname "$OUTPUT")"
 
 downstream_gateway_secret="${InfraGate__DownstreamAuth__GatewayClientSecret:-${INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET:-}}"
 observer_client_secret="${InfraGate__Observer__ClientCredentials__ClientSecret:-${INFRA_GATE_OBSERVER_CLIENT_SECRET:-}}"
-observer_llm_api_key="${InfraGate__Observer__LlmApiKey:-${INFRA_GATE_OBSERVER_LLM_API_KEY:-}}"
+openrouter_api_key="${InfraGate__OpenRouter__ApiKey:-}"
 planner_client_secret="${InfraGate__Planner__ClientCredentials__ClientSecret:-${INFRA_GATE_PLANNER_CLIENT_SECRET:-}}"
-planner_llm_api_key="${InfraGate__Planner__LlmApiKey:-${INFRA_GATE_PLANNER_LLM_API_KEY:-}}"
 executor_client_secret="${InfraGate__Executor__ClientCredentials__ClientSecret:-${INFRA_GATE_EXECUTOR_CLIENT_SECRET:-}}"
 
 [[ -n "$downstream_gateway_secret" ]] &&
   EXTRA_ARGS+=(--set "downstreamAuth.gatewayClientSecret=${downstream_gateway_secret}")
 [[ -n "$observer_client_secret" ]] &&
   EXTRA_ARGS+=(--set "observer.clientSecret=${observer_client_secret}")
-[[ -n "$observer_llm_api_key" ]] &&
-  EXTRA_ARGS+=(--set "observer.llmApiKey=${observer_llm_api_key}")
+[[ -n "$openrouter_api_key" ]] &&
+  EXTRA_ARGS+=(--set "openRouter.apiKey=${openrouter_api_key}")
 [[ -n "$planner_client_secret" ]] &&
   EXTRA_ARGS+=(--set "planner.clientSecret=${planner_client_secret}")
-[[ -n "$planner_llm_api_key" ]] &&
-  EXTRA_ARGS+=(--set "planner.llmApiKey=${planner_llm_api_key}")
 [[ -n "$executor_client_secret" ]] &&
   EXTRA_ARGS+=(--set "executor.clientSecret=${executor_client_secret}")
 

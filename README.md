@@ -22,7 +22,7 @@
 <sub>![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?style=flat-square&logo=dotnet) ![Kubernetes](https://img.shields.io/badge/Kubernetes-Cloud--Native-326ce5?style=flat-square&logo=kubernetes) ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ed?style=flat-square&logo=docker) ![MCP](https://img.shields.io/badge/MCP-HTTP%20Gateway-black?style=flat-square) ![AI Agents](https://img.shields.io/badge/AI%20Agents-Observer%20%2F%20Planner%20%2F%20Executor-7c3aed?style=flat-square)</sub>
 
 
-### 📝 TL;DR
+## 📝 TL;DR
 **When something breaks, the system can collect evidence, propose a bounded fix, dry-run it, package it into a reviewable plan, and wait for a human to approve.**
 
 It is a security-first bridge between AI agents and Kubernetes, with out-of-band, OAuth-authenticated, human-in-the-loop (HITL), plan-based approval for every gateway-exposed mutation.
@@ -211,26 +211,29 @@ Prerequisites: [Docker Compose v2](https://docs.docker.com/compose/install/), [m
 git clone https://github.com/mirusser/Kubernetes-MCP-Guard.git
 cd Kubernetes-MCP-Guard
 
-./scripts/create-demo-kubeconfig.sh --compose
-
-TAG=latest docker compose --env-file deploy/local-oauth/release.env.example \
-  -f deploy/local-oauth/compose.release.yaml up
+./scripts/quickstart.sh published
 ```
 
-This starts the local Keycloak-backed OAuth path, PostgreSQL approval store, and the published gateway image. Replace `latest` with a release tag such as `v0.1.0` for a stable image. The committed no-SDK file comes from the `smoke-release` Run Profile: `release.env.example` supplies both Compose interpolation and `InfraGate__...` runtime settings.
+This starts the local Keycloak-backed OAuth path, PostgreSQL approval store, and the published gateway image. Use `./scripts/quickstart.sh published --tag v0.1.0` for a stable release tag. The committed no-SDK file comes from the `smoke-release` Run Profile: `release.env.example` supplies both Compose interpolation and `InfraGate__...` runtime settings.
 
 ### 🛠️ Build From Source
 
 Prerequisites: [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), [Docker Compose v2](https://docs.docker.com/compose/install/), [minikube](https://minikube.sigs.k8s.io/docs/start/), and [git](https://git-scm.com/).
 
 ```bash
-./scripts/create-demo-kubeconfig.sh --compose
-./scripts/generate-env.sh local-compose
-docker compose --env-file deploy/generated/local-compose.env \
-  -f deploy/local-oauth/compose.yaml up --build
+export InfraGate__OpenRouter__ApiKey="<openrouter-api-key>"
+./scripts/quickstart.sh source
 ```
 
-`generate-env.sh` writes `deploy/generated/local-compose.env` from `deploy/run-profiles.yaml`.
+The source quickstart generates `deploy/generated/local-compose.env` from `deploy/run-profiles.yaml` and starts the gateway, Observer, Planner, and Executor from local source builds.
+
+Optional Make aliases are available for the same flows:
+
+```bash
+make quickstart-source
+make quickstart-down
+make quickstart-logs
+```
 
 Other run modes and full setup details are in [docs/setup-guide.md](docs/setup-guide.md).
 

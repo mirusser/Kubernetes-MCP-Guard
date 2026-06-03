@@ -71,7 +71,6 @@ public sealed class ObserverConventionsTests
         Assert.Equal("InfraGate__Observer__AllowedNamespaces", ObserverConventions.EnvironmentVariables.AllowedNamespaces);
         Assert.Equal("InfraGate__Observer__LlmProvider", ObserverConventions.EnvironmentVariables.LlmProvider);
         Assert.Equal("InfraGate__Observer__LlmModel", ObserverConventions.EnvironmentVariables.LlmModel);
-        Assert.Equal("InfraGate__Observer__LlmApiKey", ObserverConventions.EnvironmentVariables.LlmApiKey);
         Assert.Equal("InfraGate__Observer__ClientCredentials__ClientId", ObserverConventions.EnvironmentVariables.ClientId);
         Assert.Equal("InfraGate__Observer__ClientCredentials__ClientSecret", ObserverConventions.EnvironmentVariables.ClientSecret);
         Assert.Equal("InfraGate__Observer__ClientCredentials__Authority", ObserverConventions.EnvironmentVariables.OAuthAuthority);

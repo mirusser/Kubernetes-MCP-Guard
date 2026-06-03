@@ -116,7 +116,6 @@ public sealed class PlannerConventionsTests
         Assert.Equal("InfraGate__Planner__ExecutorHandoffUrl", PlannerConventions.EnvironmentVariables.ExecutorHandoffUrl);
         Assert.Equal("InfraGate__Planner__LlmProvider", PlannerConventions.EnvironmentVariables.LlmProvider);
         Assert.Equal("InfraGate__Planner__LlmModel", PlannerConventions.EnvironmentVariables.LlmModel);
-        Assert.Equal("InfraGate__Planner__LlmApiKey", PlannerConventions.EnvironmentVariables.LlmApiKey);
         Assert.Equal("InfraGate__Planner__ClientCredentials__ClientId", PlannerConventions.EnvironmentVariables.ClientId);
         Assert.Equal("InfraGate__Planner__ClientCredentials__ClientSecret", PlannerConventions.EnvironmentVariables.ClientSecret);
         Assert.Equal("InfraGate__Planner__ClientCredentials__Authority", PlannerConventions.EnvironmentVariables.OAuthAuthority);

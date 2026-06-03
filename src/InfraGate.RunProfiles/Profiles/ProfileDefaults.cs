@@ -7,6 +7,7 @@ internal sealed record class ProfileDefaults(
     GenericApprovalCoreProfile? GenericApprovalCore,
     HostProfile? Host,
     DownstreamAuthProfile? DownstreamAuth,
+    OpenRouterProfile? OpenRouter,
     ObserverProfile? Observer,
     PlannerProfile? Planner,
     ExecutorProfile? Executor);
