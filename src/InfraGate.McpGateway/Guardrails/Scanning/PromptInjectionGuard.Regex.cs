@@ -149,4 +149,33 @@ public static partial class PromptInjectionGuard
         RegexOptions.CultureInvariant,
         matchTimeoutMilliseconds: 500)]
     private static partial Regex EmbeddedBase64Regex();
+
+    [GeneratedRegex(
+        @"\b(?:ignore|disregard|forget|override)\b.{0,80}\b(?:instructions?|rules?|prompts?|system prompt|developer prompt)\b|\b(?:instructions?|rules?|prompts?)\b.{0,80}\b(?:ignore|disregard|forget|override)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: McpGatewayConventions.RegexTimeoutMilliseconds)]
+    private static partial Regex IgnoreInstructionsRegex();
+
+    [GeneratedRegex(
+        @"\b(?:reveal|show|print|dump|display)\b.{0,80}\b(?:system|developer|hidden)\b.{0,80}\b(?:prompts?|instructions?|messages?)\b|\b(?:system|developer|hidden)\b.{0,80}\b(?:prompts?|instructions?|messages?)\b.{0,80}\b(?:reveal|show|print|dump|display)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: McpGatewayConventions.RegexTimeoutMilliseconds)]
+    private static partial Regex RevealPromptsRegex();
+
+    [GeneratedRegex(ToolUsePattern,
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: McpGatewayConventions.RegexTimeoutMilliseconds)]
+    private static partial Regex ToolUseRegex();
+
+    [GeneratedRegex(
+        @"\b(?:exfiltrate|leak|send|post|upload|copy)\b.{0,100}\b(?:secrets?|tokens?|passwords?|credentials?|kubeconfig|ssh|api\s*keys?|system prompt)\b|\b(?:secrets?|tokens?|passwords?|credentials?|kubeconfig|ssh|api\s*keys?|system prompt)\b.{0,100}\b(?:exfiltrate|leak|send|post|upload|copy)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: McpGatewayConventions.RegexTimeoutMilliseconds)]
+    private static partial Regex SecretExfiltrationRegex();
+
+    [GeneratedRegex(
+        @"\b(?:system|developer|highest priority|authoritative)\b.{0,80}\b(?:instructions?|messages?|prompts?)\b|\byou are now\b|\bact as (?:system|developer)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant,
+        matchTimeoutMilliseconds: McpGatewayConventions.RegexTimeoutMilliseconds)]
+    private static partial Regex AuthorityOverrideRegex();
 }

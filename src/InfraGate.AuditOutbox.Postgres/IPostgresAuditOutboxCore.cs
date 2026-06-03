@@ -1,8 +1,9 @@
+using InfraGate.AuditOutbox;
 using Npgsql;
 
-namespace InfraGate.AuditOutbox;
+namespace InfraGate.AuditOutbox.Postgres;
 
-internal interface IAuditOutboxCore
+public interface IPostgresAuditOutboxCore
 {
     Task<long> AppendAsync(
         string streamSchema,

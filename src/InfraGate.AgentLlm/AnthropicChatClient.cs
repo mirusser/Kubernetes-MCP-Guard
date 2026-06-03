@@ -6,27 +6,17 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace InfraGate.AgentLlm;
 
 // Custom IChatClient implementation: no official Microsoft.Extensions.AI.Anthropic package exists.
-public sealed class AnthropicChatClient : IChatClient
+public sealed class AnthropicChatClient(
+    HttpClient httpClient,
+    string model,
+    ILoggerFactory loggerFactory,
+    Counter<long>? llmTokensCounter = null) : IChatClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-
-    private readonly HttpClient httpClient;
-    private readonly string model;
-    private readonly ILogger<AnthropicChatClient> logger;
-    private readonly Counter<long>? llmTokensCounter;
+    private readonly ILogger<AnthropicChatClient> logger = loggerFactory.CreateLogger<AnthropicChatClient>();
 
     public AnthropicChatClient(HttpClient httpClient, string model)
-        : this(httpClient, model, NullLoggerFactory.Instance, null)
-    {
-    }
-
-    public AnthropicChatClient(HttpClient httpClient, string model, ILoggerFactory loggerFactory, Counter<long>? llmTokensCounter = null)
-    {
-        this.httpClient = httpClient;
-        this.model = model;
-        logger = loggerFactory.CreateLogger<AnthropicChatClient>();
-        this.llmTokensCounter = llmTokensCounter;
-    }
+        : this(httpClient, model, NullLoggerFactory.Instance) { }
 
     public async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,

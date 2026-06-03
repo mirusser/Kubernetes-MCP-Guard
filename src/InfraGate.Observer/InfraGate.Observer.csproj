@@ -33,6 +33,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\InfraGate.AgentGuardrails.AgentGovernanceToolkit\InfraGate.AgentGuardrails.AgentGovernanceToolkit.csproj" />
     <ProjectReference Include="..\InfraGate.AgentLlm\InfraGate.AgentLlm.csproj" />
     <ProjectReference Include="..\InfraGate.AgentMcp\InfraGate.AgentMcp.csproj" />
     <ProjectReference Include="..\InfraGate.Prompts\InfraGate.Prompts.csproj" />

@@ -32,33 +32,10 @@ public static partial class PromptInjectionGuard
 
     private static readonly (string Category, Regex Pattern)[] Patterns =
     [
-        (
-            McpGatewayConventions.GuardrailCategories.IgnoreInstructions,
-            new Regex(
-                @"\b(?:ignore|disregard|forget|override)\b.{0,80}\b(?:instructions?|rules?|prompts?|system prompt|developer prompt)\b|\b(?:instructions?|rules?|prompts?)\b.{0,80}\b(?:ignore|disregard|forget|override)\b",
-                RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant,
-                TimeSpan.FromMilliseconds(McpGatewayConventions.RegexTimeoutMilliseconds))),
-        (
-            McpGatewayConventions.GuardrailCategories.RevealPrompts,
-            new Regex(
-                @"\b(?:reveal|show|print|dump|display)\b.{0,80}\b(?:system|developer|hidden)\b.{0,80}\b(?:prompts?|instructions?|messages?)\b|\b(?:system|developer|hidden)\b.{0,80}\b(?:prompts?|instructions?|messages?)\b.{0,80}\b(?:reveal|show|print|dump|display)\b",
-                RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant,
-                TimeSpan.FromMilliseconds(McpGatewayConventions.RegexTimeoutMilliseconds))),
-        (
-            McpGatewayConventions.GuardrailCategories.ToolUse,
-            new Regex(ToolUsePattern, RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant,
-                TimeSpan.FromMilliseconds(McpGatewayConventions.RegexTimeoutMilliseconds))),
-        (
-            McpGatewayConventions.GuardrailCategories.SecretExfiltration,
-            new Regex(
-                @"\b(?:exfiltrate|leak|send|post|upload|copy)\b.{0,100}\b(?:secrets?|tokens?|passwords?|credentials?|kubeconfig|ssh|api\s*keys?|system prompt)\b|\b(?:secrets?|tokens?|passwords?|credentials?|kubeconfig|ssh|api\s*keys?|system prompt)\b.{0,100}\b(?:exfiltrate|leak|send|post|upload|copy)\b",
-                RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant,
-                TimeSpan.FromMilliseconds(McpGatewayConventions.RegexTimeoutMilliseconds))),
-        (
-            McpGatewayConventions.GuardrailCategories.AuthorityOverride,
-            new Regex(
-                @"\b(?:system|developer|highest priority|authoritative)\b.{0,80}\b(?:instructions?|messages?|prompts?)\b|\byou are now\b|\bact as (?:system|developer)\b",
-                RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant,
-                TimeSpan.FromMilliseconds(McpGatewayConventions.RegexTimeoutMilliseconds)))
+        (McpGatewayConventions.GuardrailCategories.IgnoreInstructions, IgnoreInstructionsRegex()),
+        (McpGatewayConventions.GuardrailCategories.RevealPrompts, RevealPromptsRegex()),
+        (McpGatewayConventions.GuardrailCategories.ToolUse, ToolUseRegex()),
+        (McpGatewayConventions.GuardrailCategories.SecretExfiltration, SecretExfiltrationRegex()),
+        (McpGatewayConventions.GuardrailCategories.AuthorityOverride, AuthorityOverrideRegex())
     ];
 }

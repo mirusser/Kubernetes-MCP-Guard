@@ -310,6 +310,162 @@ public sealed class WorkflowExecutorTests
         Assert.Equal("restart_deployment", decisionCtx.Decision.OperationType);
     }
 
+    [Fact]
+    public async Task DecideExecutor_WithAskObserverTool_GuardsToolResultThroughSharedFactory()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        const string redactedToolResult = "[safe observer result]";
+        string? capturedToolResult = null;
+
+        var chatClient = new FixtureChatClient((messages) =>
+        {
+            if (!messages.Skip(2).Any())
+            {
+                return new ChatResponse(new ChatMessage(ChatRole.Assistant, [
+                    new FunctionCallContent("call1", AskObserverTool.FunctionName, new Dictionary<string, object?>
+                    {
+                        ["toolName"] = "get_k8s_pods",
+                        ["argumentsJson"] = "{}"
+                    })
+                ]));
+            }
+
+            capturedToolResult = messages
+                .SelectMany(m => m.Contents)
+                .OfType<FunctionResultContent>()
+                .FirstOrDefault()?.Result as string;
+
+            return new ChatResponse(new ChatMessage(ChatRole.Assistant, """
+            {
+              "operationType": "restart_deployment",
+              "arguments": { "name": "nginx-demo", "namespace": "mcp-nginx-demo" }
+            }
+            """));
+        });
+        var toolResultGuard = new FakeDecideContentGuard(
+            ModelVisibleContentAction.Redact,
+            replacementText: redactedToolResult);
+        var agentFactory = new ToolCallingAgentFactory(chatClient, contentGuard: toolResultGuard);
+        var observerChannel = new FakeObserverChannel();
+        var askObserverTool = AskObserverTool.Create(observerChannel, "cycle-1");
+        var context = new FakeWorkflowContext();
+
+        var executor = new DecideExecutor(
+            "decide-7-tool-guard", agentFactory, "system prompt", [askObserverTool],
+            4, 30, null, NullLogger.Instance);
+
+        await executor.HandleAsync(report, context, CancellationToken.None);
+
+        Assert.Equal("simulated-response", toolResultGuard.LastSeenText);
+        Assert.Equal(ModelVisibleContentSource.AgentToolResult, toolResultGuard.LastSeenSource);
+        Assert.Equal(AskObserverTool.FunctionName, toolResultGuard.LastSeenToolName);
+        Assert.Equal(redactedToolResult, capturedToolResult);
+    }
+
+    // ------------------------------------------------------------------ //
+    // DecideExecutor — content guard
+    // ------------------------------------------------------------------ //
+
+    [Fact]
+    public async Task DecideExecutor_ContentGuardAllows_OriginalAnomalyTextReachesAgent()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        string? capturedUserContent = null;
+        var chatClient = new FixtureChatClient(messages =>
+        {
+            capturedUserContent = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Text;
+            return new ChatResponse(new ChatMessage(ChatRole.Assistant, """
+            { "operationType": "restart_deployment", "arguments": { "name": "nginx", "namespace": "default" } }
+            """));
+        });
+
+        var guard = new FakeDecideContentGuard(ModelVisibleContentAction.Allow, passthrough: true);
+        var executor = new DecideExecutor(
+            "decide-guard-allow", new ToolCallingAgentFactory(chatClient), "prompt", [], 4, 30,
+            null, NullLogger.Instance, contentGuard: guard);
+
+        var context = new FakeWorkflowContext();
+        await executor.HandleAsync(report, context, CancellationToken.None);
+
+        Assert.NotNull(guard.LastSeenText);
+        Assert.Equal(guard.LastSeenText, capturedUserContent);
+        Assert.Single(context.SentMessages);
+    }
+
+    [Fact]
+    public async Task DecideExecutor_ContentGuardRedacts_PlaceholderReachesAgent_NotAnomalyJson()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        const string redactedText = "[CONTENT REDACTED: potential injection pattern]";
+        string? capturedUserContent = null;
+        var chatClient = new FixtureChatClient(messages =>
+        {
+            capturedUserContent = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Text;
+            return new ChatResponse(new ChatMessage(ChatRole.Assistant, "{}"));
+        });
+
+        var guard = new FakeDecideContentGuard(ModelVisibleContentAction.Redact, replacementText: redactedText);
+        var executor = new DecideExecutor(
+            "decide-guard-redact", new ToolCallingAgentFactory(chatClient), "prompt", [], 4, 30,
+            null, NullLogger.Instance, contentGuard: guard);
+
+        var context = new FakeWorkflowContext();
+        await executor.HandleAsync(report, context, CancellationToken.None);
+
+        Assert.Equal(redactedText, capturedUserContent);
+        Assert.DoesNotContain(guard.LastSeenText!, capturedUserContent!);
+    }
+
+    [Fact]
+    public async Task DecideExecutor_ContentGuardQuarantines_QuarantinePlaceholderReachesAgent()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        string? capturedUserContent = null;
+        var chatClient = new FixtureChatClient(messages =>
+        {
+            capturedUserContent = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Text;
+            return new ChatResponse(new ChatMessage(ChatRole.Assistant, "{}"));
+        });
+
+        var guard = new FakeDecideContentGuard(
+            ModelVisibleContentAction.Quarantine,
+            replacementText: AgentGuardrailConventions.DefaultQuarantinePlaceholder);
+        var executor = new DecideExecutor(
+            "decide-guard-quarantine", new ToolCallingAgentFactory(chatClient), "prompt", [], 4, 30,
+            null, NullLogger.Instance, contentGuard: guard);
+
+        var context = new FakeWorkflowContext();
+        await executor.HandleAsync(report, context, CancellationToken.None);
+
+        Assert.Equal(AgentGuardrailConventions.DefaultQuarantinePlaceholder, capturedUserContent);
+        Assert.DoesNotContain(guard.LastSeenText!, capturedUserContent!);
+    }
+
+    [Fact]
+    public async Task DecideExecutor_ContentGuardBlocks_LlmNotCalled_NoDecisionForwarded()
+    {
+        var report = CreateAnomaly(AnomalyStatus.Active, AnomalyKind.DeploymentUnavailable);
+        bool chatClientCalled = false;
+        var chatClient = new FixtureChatClient(messages =>
+        {
+            chatClientCalled = true;
+            return new ChatResponse(new ChatMessage(ChatRole.Assistant, "{}"));
+        });
+
+        var guard = new FakeDecideContentGuard(
+            ModelVisibleContentAction.BlockModelIngestion,
+            replacementText: AgentGuardrailConventions.DefaultBlockedPlaceholder);
+        var executor = new DecideExecutor(
+            "decide-guard-block", new ToolCallingAgentFactory(chatClient), "prompt", [], 4, 30,
+            null, NullLogger.Instance, contentGuard: guard);
+
+        var context = new FakeWorkflowContext();
+        await executor.HandleAsync(report, context, CancellationToken.None);
+
+        Assert.False(chatClientCalled);
+        Assert.Empty(context.SentMessages);
+    }
+
     // ------------------------------------------------------------------ //
     // ValidateExecutor
     // ------------------------------------------------------------------ //
@@ -718,6 +874,27 @@ public sealed class WorkflowExecutorTests
             Task.FromResult(new CallToolResult { Content = [new TextContentBlock { Text = ResponseText }] });
         public Task<IReadOnlyList<AITool>> GetAgentToolsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<AITool>>([]);
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class FakeDecideContentGuard(
+        ModelVisibleContentAction action,
+        bool passthrough = false,
+        string? replacementText = null) : IModelVisibleContentGuard
+    {
+        public string? LastSeenText { get; private set; }
+        public ModelVisibleContentSource? LastSeenSource { get; private set; }
+        public string? LastSeenToolName { get; private set; }
+
+        public Task<ModelVisibleContentDecision> EvaluateAsync(
+            ModelVisibleContent content, CancellationToken cancellationToken)
+        {
+            LastSeenText = content.Text;
+            LastSeenSource = content.Source;
+            LastSeenToolName = content.ToolName;
+            string text = passthrough ? content.Text : (replacementText ?? content.Text);
+            return Task.FromResult(new ModelVisibleContentDecision(
+                action, text, [], AgentGuardrailConventions.Reasons.None));
+        }
     }
 
     private sealed class FakeObserverChannel : IObserverChannel

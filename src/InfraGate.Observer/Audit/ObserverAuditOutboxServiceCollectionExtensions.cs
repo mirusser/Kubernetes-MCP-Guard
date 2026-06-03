@@ -15,7 +15,7 @@ internal static class ObserverAuditOutboxServiceCollectionExtensions
 
         services.AddPostgresAuditOutbox(dataSource);
         services.AddSingleton<IObserverAuditOutbox>(sp =>
-            new ObserverAuditOutbox(sp.GetRequiredService<IAuditOutboxCore>(), dataSource));
+            new ObserverAuditOutbox(sp.GetRequiredService<IPostgresAuditOutboxCore>(), dataSource));
 
         return services;
     }

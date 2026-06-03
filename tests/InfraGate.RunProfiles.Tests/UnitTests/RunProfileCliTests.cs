@@ -851,7 +851,12 @@ public sealed class RunProfileCliTests
             "INFRA_GATE_KUBECONFIG_HOST_PATH",
             "INFRA_GATE_APPROVAL_HOST_PATH",
             "INFRA_GATE_GUARD_AUDIT_HOST_PATH",
-            "INFRA_GATE_DATA_PROTECTION_HOST_PATH"
+            "INFRA_GATE_DATA_PROTECTION_HOST_PATH",
+            "InfraGate__AgentGuardrails__ModelVisibleContent__Enabled",
+            "InfraGate__AgentGuardrails__ModelVisibleContent__SemanticClassifierEnabled",
+            "InfraGate__AgentGuardrails__ModelVisibleContent__RequestTimeoutMilliseconds",
+            "InfraGate__AgentGuardrails__ModelVisibleContent__MaximumInputCharacters",
+            "InfraGate__AgentGuardrails__ModelVisibleContent__UnavailableBehavior"
         };
 
     private static readonly HashSet<string> MinimalProfileKeys =

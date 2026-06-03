@@ -16,6 +16,7 @@ using InfraGate.AgentMcp;
 using InfraGate.Prompts;
 using ModelContextProtocol.Protocol;
 using InfraGate.Observability;
+using InfraGate.RuntimeSafety;
 using System.Reflection;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -29,6 +30,8 @@ builder.Services.Configure<PlannerOptions>(
     builder.Configuration.GetSection(PlannerOptions.SectionName));
 builder.Services.Configure<OpenRouterOptions>(
     builder.Configuration.GetSection(OpenRouterOptions.SectionName));
+builder.Services.Configure<ModelVisibleContentOptions>(
+    builder.Configuration.GetSection(ModelVisibleContentOptions.SectionName));
 
 builder.AddInfraGateObservability(opt =>
 {
@@ -47,10 +50,16 @@ ConfigureUrls(builder);
 var plannerOptions = builder.Configuration
     .GetSection(PlannerOptions.SectionName)
     .Get<PlannerOptions>() ?? new PlannerOptions();
+var modelVisibleContentOptions = builder.Configuration
+    .GetSection(ModelVisibleContentOptions.SectionName)
+    .Get<ModelVisibleContentOptions>() ?? new ModelVisibleContentOptions();
+RuntimeMode runtimeMode = RuntimeModeResolver.FromConfiguration(builder.Configuration);
 
 try
 {
     plannerOptions.Validate();
+    plannerOptions.ValidateProductionSafety(runtimeMode);
+    modelVisibleContentOptions.Validate();
 }
 catch (InvalidOperationException ex)
 {
@@ -75,7 +84,7 @@ builder.Services.AddSingleton<IChatClientFactory>(sp =>
         sp.GetRequiredService<ILoggerFactory>());
 });
 builder.Services.AddSingleton<ToolCallingAgentFactory>();
-builder.Services.AddAgentGuardrails();
+builder.Services.AddModelVisibleContentGuard(modelVisibleContentOptions);
 builder.Services.AddSingleton(_ =>
 {
     var allowedTools = new HashSet<string>(StringComparer.Ordinal)
@@ -202,13 +211,14 @@ builder.Services.AddKeyedSingleton<A2AServer>(PlannerConventions.A2AHandoffAgent
 #pragma warning restore MEAI001
 
 var jwtAuthority = plannerOptions.ClientCredentials.Authority;
+bool requireHttpsMetadata = plannerOptions.ClientCredentials.RequireHttpsMetadata;
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.Authority = jwtAuthority;
         options.MapInboundClaims = false;
-        options.RequireHttpsMetadata = false;
+        options.RequireHttpsMetadata = requireHttpsMetadata;
         // CA5404: suppressed — Planner is not a registered resource server; the Observer's tokens
         // carry the gateway as their audience. Security is enforced by the ObserverSender policy
         // which checks azp == infra-gate-observer on every inbound request.

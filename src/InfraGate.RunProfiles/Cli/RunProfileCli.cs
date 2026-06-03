@@ -371,6 +371,11 @@ internal static class RunProfileCli
                 Executor = ApplyExecutorOverride(
                     profile.Executor ?? new ExecutorProfile(null, null, null, null, null, null, null, null, null), field, value, path)
             },
+            RunProfileConventions.YamlKeys.AgentGuardrails => profile with
+            {
+                AgentGuardrails = ApplyAgentGuardrailsOverride(
+                    profile.AgentGuardrails ?? new AgentGuardrailsProfile(null), field, value, path)
+            },
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };
     }
@@ -513,6 +518,48 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.ConcurrencyCap => profile with { ConcurrencyCap = value },
             RunProfileConventions.YamlKeys.WatchTimeoutSeconds => profile with { WatchTimeoutSeconds = value },
             RunProfileConventions.YamlKeys.ExecutorHostPath => profile with { ExecutorHostPath = value },
+            _ => throw new InvalidOperationException($"Unknown --set path: {path}")
+        };
+
+    private static AgentGuardrailsProfile ApplyAgentGuardrailsOverride(
+        AgentGuardrailsProfile profile, string field, string value, string path)
+    {
+        int dot = field.IndexOf('.', StringComparison.Ordinal);
+        if (dot < 0)
+        {
+            throw new InvalidOperationException($"Unknown --set path: {path}");
+        }
+
+        string subSection = field[..dot];
+        string subField = field[(dot + 1)..];
+
+        if (subSection.Equals(RunProfileConventions.YamlKeys.ModelVisibleContent, StringComparison.Ordinal))
+        {
+            return profile with
+            {
+                ModelVisibleContent = ApplyModelVisibleContentOverride(
+                    profile.ModelVisibleContent ?? new ModelVisibleContentProfile(null, null, null, null, null),
+                    subField, value, path)
+            };
+        }
+
+        throw new InvalidOperationException($"Unknown --set path: {path}");
+    }
+
+    private static ModelVisibleContentProfile ApplyModelVisibleContentOverride(
+        ModelVisibleContentProfile profile, string field, string value, string path) =>
+        field switch
+        {
+            RunProfileConventions.YamlKeys.Enabled =>
+                profile with { Enabled = value },
+            RunProfileConventions.YamlKeys.SemanticClassifierEnabled =>
+                profile with { SemanticClassifierEnabled = value },
+            RunProfileConventions.YamlKeys.RequestTimeoutMilliseconds =>
+                profile with { RequestTimeoutMilliseconds = value },
+            RunProfileConventions.YamlKeys.MaximumInputCharacters =>
+                profile with { MaximumInputCharacters = value },
+            RunProfileConventions.YamlKeys.UnavailableBehavior =>
+                profile with { UnavailableBehavior = value },
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };
 }

@@ -1,6 +1,7 @@
 using InfraGate.Approvals;
 using InfraGate.Approvals.Audit;
 using InfraGate.AuditOutbox;
+using InfraGate.AuditOutbox.Postgres;
 using Npgsql;
 
 namespace InfraGate.Approvals.Postgres;
@@ -14,7 +15,7 @@ internal interface ITransactionalApprovalAuditOutbox : IApprovalAuditOutbox
         CancellationToken cancellationToken);
 }
 
-internal sealed class ApprovalAuditOutbox(IAuditOutboxCore core, NpgsqlDataSource dataSource)
+internal sealed class ApprovalAuditOutbox(IPostgresAuditOutboxCore core, NpgsqlDataSource dataSource)
     : ITransactionalApprovalAuditOutbox
 {
     private const string StreamSchema = AuditOutboxConventions.Streams.Approvals;

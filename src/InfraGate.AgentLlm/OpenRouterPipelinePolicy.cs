@@ -1,11 +1,9 @@
 using System.ClientModel.Primitives;
-using System.IO;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace InfraGate.AgentLlm;
 
-public sealed class OpenRouterPipelinePolicy : PipelinePolicy
+public sealed partial class OpenRouterPipelinePolicy : PipelinePolicy
 {
     private const string RefererHeaderName = "HTTP-Referer";
     private const string TitleHeaderName = "X-Title";
@@ -67,13 +65,7 @@ public sealed class OpenRouterPipelinePolicy : PipelinePolicy
 
     private static void ReplaceFinishReason(PipelineResponse response, string content)
     {
-        var modified = Regex.Replace(
-            content,
-            @"""finish_reason""\s*:\s*""(?!stop|length|content_filter|tool_calls|function_call)([^""]+)""",
-            @"""finish_reason"":""stop""",
-            RegexOptions.None,
-            TimeSpan.FromSeconds(1)
-        );
+        var modified = FinishReasonPattern().Replace(content, @"""finish_reason"":""stop""");
 
         if (!ReferenceEquals(content, modified) && modified.Length != content.Length || !string.Equals(content, modified, System.StringComparison.Ordinal))
         {
@@ -84,4 +76,7 @@ public sealed class OpenRouterPipelinePolicy : PipelinePolicy
             response.ContentStream!.Position = 0;
         }
     }
+
+    [GeneratedRegex(@"""finish_reason""\s*:\s*""(?!stop|length|content_filter|tool_calls|function_call)([^""]+)""", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex FinishReasonPattern();
 }

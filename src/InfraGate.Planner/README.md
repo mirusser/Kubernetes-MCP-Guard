@@ -29,6 +29,8 @@ The Planner is protected at two layers:
 
 Both layers feed the `InfraGate.AgentGuardrails` meter, registered in the Planner's telemetry pipeline. **Hallucination rate** = `decision{rejected,reason∈{invalid_operation,invalid_arguments}} / decision{accepted+rejected}`; `dedupe_in_batch` drops are excluded from the numerator.
 
+The Planner also enforces a **model-visible content guard** on each anomaly report before LLM ingestion. `DecideExecutor` evaluates the serialized `AnomalyReport` JSON through `IModelVisibleContentGuard`. If the guard returns `BlockModelIngestion`, the LLM path is skipped entirely — `DecideCoreAsync` returns `null` and no agent is invoked. `Redact` and `Quarantine` actions send safe placeholder text to the LLM instead of the original content. The guard uses the AGT deterministic adapter by default. See the [InfraGate.AgentGuardrails README](../InfraGate.AgentGuardrails/README.md) for the four actions and configuration.
+
 ## Important Contracts
 
 - **Input contract:** `InfraGate.Observer.Contracts.AnomalyHandoffBatch`.

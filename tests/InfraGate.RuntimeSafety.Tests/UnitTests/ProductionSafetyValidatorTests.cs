@@ -71,6 +71,31 @@ public sealed class ProductionSafetyValidatorTests
         Assert.Null(exception);
     }
 
+    [Theory]
+    [InlineData("openrouter/free")]
+    [InlineData("deepseek/deepseek-v4-flash:free")]
+    public void RequireExplicitNonDemoLlmRoute_WithFreeRoute_Throws(string model)
+    {
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => ProductionSafetyValidator.RequireExplicitNonDemoLlmRoute(
+                "openrouter",
+                model,
+                "Provider",
+                "Model"));
+
+        Assert.Contains("free", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RequireHttpsMetadataEnabled_WithFalseValue_Throws()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => ProductionSafetyValidator.RequireHttpsMetadataEnabled(false, SettingName));
+
+        Assert.Contains(SettingName, exception.Message);
+        Assert.Contains("true", exception.Message);
+    }
+
     [Fact]
     public void RequirePersistentDirectory_WithImplicitPath_Throws()
     {

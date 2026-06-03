@@ -6,6 +6,7 @@ using InfraGate.Executor.Handoff;
 using InfraGate.Executor.Mcp;
 using InfraGate.Executor.Watch;
 using InfraGate.Observability;
+using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -26,10 +27,12 @@ ConfigureUrls(builder);
 var executorOptions = builder.Configuration
     .GetSection(ExecutorConventions.SectionName)
     .Get<ExecutorOptions>() ?? new ExecutorOptions();
+RuntimeMode runtimeMode = RuntimeModeResolver.FromConfiguration(builder.Configuration);
 
 try
 {
     executorOptions.Validate();
+    executorOptions.ValidateProductionSafety(runtimeMode);
 }
 catch (InvalidOperationException ex)
 {
@@ -60,13 +63,14 @@ builder.Services.AddKeyedSingleton<A2AServer>(ExecutorConventions.A2AHandoffAgen
 #pragma warning restore MEAI001
 
 var jwtAuthority = executorOptions.ClientCredentials.Authority;
+bool requireHttpsMetadata = executorOptions.ClientCredentials.RequireHttpsMetadata;
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.Authority = jwtAuthority;
         options.MapInboundClaims = false;
-        options.RequireHttpsMetadata = false;
+        options.RequireHttpsMetadata = requireHttpsMetadata;
         // CA5404: suppressed — Executor is not a registered resource server; the Planner's tokens
         // carry the gateway as their audience. Security is enforced by the PlannerSender policy
         // which checks azp == infra-gate-planner on every inbound request.

@@ -1,5 +1,4 @@
 using System.Diagnostics.Metrics;
-using InfraGate.AgentGuardrails;
 using InfraGate.AgentLlm;
 using InfraGate.Planner.Audit;
 using InfraGate.Planner.Cycle.Workflow;
@@ -35,6 +34,7 @@ internal sealed class BatchProcessor : BackgroundService
     private readonly IObserverChannel? observerChannel;
     private readonly PlannerTaskLifecycle? taskLifecycle;
     private readonly IExecutorDispatchClient? executorDispatchClient;
+    private readonly IModelVisibleContentGuard? contentGuard;
 
     public BatchProcessor( // NOSONAR:S107 — orchestrator dependencies are explicit production seams.
         IOptionsMonitor<PlannerOptions> optionsMonitor,
@@ -51,7 +51,8 @@ internal sealed class BatchProcessor : BackgroundService
         AgentGuardrailMetrics? guardrailMetrics = null,
         IObserverChannel? observerChannel = null,
         PlannerTaskLifecycle? taskLifecycle = null,
-        IExecutorDispatchClient? executorDispatchClient = null)
+        IExecutorDispatchClient? executorDispatchClient = null,
+        IModelVisibleContentGuard? contentGuard = null)
     {
         this.optionsMonitor = optionsMonitor;
         this.queue = queue;
@@ -69,6 +70,7 @@ internal sealed class BatchProcessor : BackgroundService
         this.observerChannel = observerChannel;
         this.taskLifecycle = taskLifecycle;
         this.executorDispatchClient = executorDispatchClient;
+        this.contentGuard = contentGuard;
     }
 
     internal async Task<IReadOnlyList<RemediationProposal>> ProcessBatchAsync(
@@ -227,7 +229,7 @@ internal sealed class BatchProcessor : BackgroundService
             filterExecs.Add(new FilterExecutor(filterIds[i], dedupeStore, auditOutbox, logger));
             dedupeExecs.Add(new DedupeGateExecutor($"dedupe-{i}", dedupeStore, auditOutbox, logger));
             decideExecs.Add(new DecideExecutor($"decide-{i}", agentFactory, systemPrompt, tools,
-                opts.MaxToolIterations, opts.AnomalyWallClockCapSeconds, timeoutCounter, logger, guardrailPolicy, dedupeStore, auditOutbox));
+                opts.MaxToolIterations, opts.AnomalyWallClockCapSeconds, timeoutCounter, logger, guardrailPolicy, dedupeStore, auditOutbox, contentGuard));
             validateExecs.Add(new ValidateExecutor($"validate-{i}", batchOperationKeys, dedupeStore,
                 guardrailMetrics, logger, auditOutbox));
             proposeExecs.Add(new ProposeExecutor($"propose-{i}", mcpClient, dedupeStore,

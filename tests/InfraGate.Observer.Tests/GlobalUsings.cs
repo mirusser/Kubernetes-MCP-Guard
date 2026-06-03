@@ -1,4 +1,5 @@
 global using System.Text.Json;
+global using InfraGate.AgentGuardrails;
 global using InfraGate.AgentMcp;
 global using InfraGate.Observer;
 global using InfraGate.Observer.Contracts;

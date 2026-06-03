@@ -47,6 +47,8 @@ internal static class RunProfileConventions
         public const string DownstreamAssembly = "downstreamAssembly";
         public const string DownstreamAuth = "downstreamAuth";
         public const string Gateway = "gateway";
+        public const string AgentGuardrails = "agentGuardrails";
+        public const string ModelVisibleContent = "modelVisibleContent";
         public const string GatewayClientId = "gatewayClientId";
         public const string GatewayClientSecret = "gatewayClientSecret";
         public const string GatewayImage = "gatewayImage";
@@ -100,6 +102,12 @@ internal static class RunProfileConventions
         public const string ObserverAuditConnectionString = "auditConnectionString";
         public const string ObserverHostPath = "observerHostPath";
         public const string SkipCycleWhenNoWarningEvents = "skipCycleWhenNoWarningEvents";
+        public const string Enabled = "enabled";
+        public const string SemanticClassifierEnabled = "semanticClassifierEnabled";
+        public const string LocalClassifierBaseUrl = "localClassifierBaseUrl";
+        public const string RequestTimeoutMilliseconds = "requestTimeoutMilliseconds";
+        public const string MaximumInputCharacters = "maximumInputCharacters";
+        public const string UnavailableBehavior = "unavailableBehavior";
     }
 
     public static class Env
@@ -179,6 +187,11 @@ internal static class RunProfileConventions
         public const string ExecutorConcurrencyCap = "InfraGate__Executor__ConcurrencyCap";
         public const string ExecutorWatchTimeoutSeconds = "InfraGate__Executor__WatchTimeoutSeconds";
         public const string ExecutorHostPath = "INFRA_GATE_EXECUTOR_HOST_PATH";
+        public const string ModelVisibleContentEnabled = "InfraGate__AgentGuardrails__ModelVisibleContent__Enabled";
+        public const string ModelVisibleContentSemanticClassifierEnabled = "InfraGate__AgentGuardrails__ModelVisibleContent__SemanticClassifierEnabled";
+        public const string ModelVisibleContentRequestTimeoutMilliseconds = "InfraGate__AgentGuardrails__ModelVisibleContent__RequestTimeoutMilliseconds";
+        public const string ModelVisibleContentMaximumInputCharacters = "InfraGate__AgentGuardrails__ModelVisibleContent__MaximumInputCharacters";
+        public const string ModelVisibleContentUnavailableBehavior = "InfraGate__AgentGuardrails__ModelVisibleContent__UnavailableBehavior";
     }
 
     public static class DomainAdapterTypes

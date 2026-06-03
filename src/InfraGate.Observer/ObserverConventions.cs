@@ -33,6 +33,8 @@ internal static class ObserverConventions
         public const string PlannerHandoffUrl = "InfraGate:Observer:PlannerHandoffUrl";
         public const string AuditConnectionString = "InfraGate:Observer:AuditConnectionString";
         public const string SkipCycleWhenNoWarningEvents = "InfraGate:Observer:SkipCycleWhenNoWarningEvents";
+        public const string OAuthAuthority = "InfraGate:Observer:ClientCredentials:Authority";
+        public const string OAuthRequireHttpsMetadata = "InfraGate:Observer:ClientCredentials:RequireHttpsMetadata";
     }
 
     public static class EnvironmentVariables
@@ -49,6 +51,7 @@ internal static class ObserverConventions
         public const string ClientSecret = "InfraGate__Observer__ClientCredentials__ClientSecret";
         public const string OAuthAuthority = "InfraGate__Observer__ClientCredentials__Authority";
         public const string OAuthScope = "InfraGate__Observer__ClientCredentials__Scope";
+        public const string OAuthRequireHttpsMetadata = "InfraGate__Observer__ClientCredentials__RequireHttpsMetadata";
         public const string DedupeSuppressionWindow = "InfraGate__Observer__DedupeSuppressionWindow";
         public const string DedupeResolutionThreshold = "InfraGate__Observer__DedupeResolutionThreshold";
         public const string FileSinkRoot = "InfraGate__Observer__FileSinkRoot";

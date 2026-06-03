@@ -81,7 +81,7 @@ internal sealed class PlanStatusResourceHandler(
             throw InvalidPlanStatusUri(uri);
         }
 
-        string planId = uri.Substring(start, length);
+        string planId = uri[start..(start + length)];
         if (!IsSafePlanId(planId))
         {
             throw InvalidPlanStatusUri(uri);

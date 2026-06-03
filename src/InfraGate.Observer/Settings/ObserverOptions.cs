@@ -1,3 +1,5 @@
+using InfraGate.RuntimeSafety;
+
 namespace InfraGate.Observer.Settings;
 
 /// <summary>
@@ -72,5 +74,25 @@ public sealed record class ObserverOptions
         {
             throw new InvalidOperationException("GatewayBaseUrl must be configured.");
         }
+    }
+
+    public void ValidateProductionSafety(RuntimeMode runtimeMode)
+    {
+        if (runtimeMode != RuntimeMode.Production)
+        {
+            return;
+        }
+
+        ProductionSafetyValidator.RequireExplicitNonDemoLlmRoute(
+            LlmProvider,
+            LlmModel,
+            ObserverConventions.ConfigurationKeys.LlmProvider,
+            ObserverConventions.ConfigurationKeys.LlmModel);
+        ProductionSafetyValidator.RequireHttpsMetadataEnabled(
+            ClientCredentials.RequireHttpsMetadata,
+            ObserverConventions.ConfigurationKeys.OAuthRequireHttpsMetadata);
+        ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
+            ClientCredentials.Authority,
+            ObserverConventions.ConfigurationKeys.OAuthAuthority);
     }
 }

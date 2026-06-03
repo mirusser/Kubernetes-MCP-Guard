@@ -6,7 +6,7 @@
 
 ## Approval Audit Stream
 
-`ApprovalAuditOutbox` wraps `IAuditOutboxCore` and exposes two overloads:
+`ApprovalAuditOutbox` wraps `IPostgresAuditOutboxCore` and exposes two overloads:
 
 - `AppendAsync(ApprovalAuditEntry, CancellationToken)` — opens its own connection + transaction (convenience path, for call sites where audit is the only work in the transaction).
 - `AppendAsync(ApprovalAuditEntry, NpgsqlConnection, NpgsqlTransaction, CancellationToken)` — writes within the caller's transaction, preserving same-tx atomicity with the state mutation it describes. Used by the 8 audit call sites in `PostgresApprovalPersistence`.

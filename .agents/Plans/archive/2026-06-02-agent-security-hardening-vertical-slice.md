@@ -561,90 +561,21 @@ refactor rather than adding new mapping glue.
 
 ### Phase D: Local OSS semantic classifier
 
-#### Task D1: Run the local-classifier bakeoff
+> Extracted and deferred.
+>
+> See `.agents/Plans/loose/2026-06-03-local-semantic-classifier-research-plan.md` and
+> `docs/adr/0030-defer-local-semantic-classifier-sidecar.md`.
 
-**Description:** Build disposable local sidecars for Protect AI LLM Guard and InjecGuard/PIGuard. Run the Phase A
-corpus and a representative clean Kubernetes sample set. Record recall by attack tag, clean false-positive rate,
-p50/p95 latency, warm-up time, memory use, CPU use, image size, model provenance, model hash, and license review.
-Do not select a model from headline benchmark claims alone.
+The local semantic-classifier sidecar is intentionally not implemented in this vertical slice. The original
+candidates remain possible benchmarks, but candidate maintenance, model provenance, licensing, repo-specific
+measurements, and operational packaging must be researched before any adapter or runtime wiring starts.
 
-**Acceptance criteria:**
-- [ ] Both candidates run locally without Azure or another paid API.
-- [ ] Results distinguish lexical-only, semantic paraphrase, multilingual, encoded, and split-field cases.
-- [ ] The selected candidate and rejected candidate rationale are appended to this plan.
+### Checkpoint D: research gate before semantic layer implementation
+
+- [ ] Candidate shortlist is refreshed and reviewed.
+- [ ] Repo-specific corpus bakeoff is complete.
 - [ ] Model artifact source, revision, checksum, and license are recorded.
-
-**Verification:**
-- [ ] Run the corpus evaluation tool against both local sidecars.
-- [ ] Review the generated comparison table with a human before production wiring.
-
-**Dependencies:** Checkpoint C
-
-**Files likely touched:** disposable benchmark assets under `tools/guardrail-eval/**`
-
-**Estimated scope:** Medium
-
-#### Task D2: Add the selected local-classifier adapter
-
-**Description:** Add `InfraGate.AgentGuardrails.LocalClassifier` as an HTTP adapter for the selected sidecar.
-Enforce request-size bounds, timeout, cancellation, health/readiness, classifier-version capture, latency metrics,
-and explicit unavailable behavior. Keep retry count low or zero for synchronous model ingestion; a circuit breaker
-may suppress repeated calls during an outage, but it must not silently weaken Production policy.
-
-**Acceptance criteria:**
-- [ ] Adapter implements only `IModelVisibleContentGuard`.
-- [ ] Timeout, cancellation, malformed response, unavailable sidecar, and oversized input behavior are tested.
-- [ ] Production policy fails closed for model ingestion after configured fallback.
-- [ ] Development degraded mode is explicit, metered, and opt-in.
-
-**Verification:**
-- [ ] `dotnet test tests/InfraGate.AgentGuardrails.LocalClassifier.Tests/InfraGate.AgentGuardrails.LocalClassifier.Tests.csproj`
-- [ ] Run integration tests against the actual local sidecar container; do not mock the classifier HTTP contract.
-
-**Dependencies:** Task D1
-
-**Files likely touched:**
-- new `src/InfraGate.AgentGuardrails.LocalClassifier/**`
-- new `tests/InfraGate.AgentGuardrails.LocalClassifier.Tests/**`
-- `InfraGate.slnx`
-
-**Estimated scope:** Medium
-
-#### Task D3: Package and opt into the semantic sidecar
-
-**Description:** Package the selected classifier as a separately versioned local container. Add opt-in Compose and
-Run Profile wiring for local evaluation first. After measured acceptance, enable it in the production profile with
-explicit resource limits and readiness checks. Observer and Planner call only the adapter base URL; they do not
-embed Python/model dependencies.
-
-**Acceptance criteria:**
-- [ ] Sidecar image is pinned by digest or immutable tag.
-- [ ] Model revision and checksum are pinned.
-- [ ] Compose health check and resource limits exist.
-- [ ] Observer/Planner images remain .NET-only and do not contain model weights.
-- [ ] Run Profile validation catches semantic-classifier-enabled profiles without a base URL.
-
-**Verification:**
-- [ ] `dotnet test tests/InfraGate.RunProfiles.Tests/InfraGate.RunProfiles.Tests.csproj`
-- [ ] `dotnet run --project src/InfraGate.RunProfiles -- validate`
-- [ ] Local Compose smoke: stop the sidecar and verify the configured degraded/fail-closed behavior.
-
-**Dependencies:** Task D2
-
-**Files likely touched:**
-- `deploy/run-profiles.yaml`
-- Compose files under `deploy/**`
-- sidecar packaging under `tools/guardrail-classifier/**`
-- RunProfiles schema/rendering/tests in their post-refactor form
-
-**Estimated scope:** Medium
-
-### Checkpoint D: semantic layer measured and operational
-
-- [ ] AGT remains the deterministic first stage.
-- [ ] Semantic sidecar selection is backed by repo-specific measurements.
-- [ ] Sidecar outage policy is demonstrated.
-- [ ] No cloud safety dependency exists.
+- [ ] Human review approves implementation before `InfraGate.AgentGuardrails.LocalClassifier` is added.
 
 ### Phase E: Evaluate AGT auxiliary capabilities without widening ownership
 
@@ -704,18 +635,18 @@ and stop hard-coding `RequireHttpsMetadata = false`. Local Keycloak profiles rem
 explicitly disable HTTPS metadata checks.
 
 **Acceptance criteria:**
-- [ ] Production agent hosts reject free/demo model routes.
-- [ ] Production agent hosts require HTTPS metadata validation.
-- [ ] Development profiles still run with local Keycloak and local demo models.
-- [ ] No paid provider is required by the architecture; OpenRouter organization guardrails remain an optional
+- [x] Production agent hosts reject free/demo model routes.
+- [x] Production agent hosts require HTTPS metadata validation.
+- [x] Development profiles still run with local Keycloak and local demo models.
+- [x] No paid provider is required by the architecture; OpenRouter organization guardrails remain an optional
   provider-level overlay, not the InfraGate-owned boundary.
 
 **Verification:**
-- [ ] Add validator tests for Development and Production cases.
-- [ ] `dotnet test tests/InfraGate.Observer.Tests/InfraGate.Observer.Tests.csproj`
-- [ ] `dotnet test tests/InfraGate.Planner.Tests/InfraGate.Planner.Tests.csproj`
-- [ ] `dotnet test tests/InfraGate.Executor.Tests/InfraGate.Executor.Tests.csproj`
-- [ ] `dotnet run --project src/InfraGate.RunProfiles -- validate`
+- [x] Add validator tests for Development and Production cases.
+- [x] `dotnet test tests/InfraGate.Observer.Tests/InfraGate.Observer.Tests.csproj`
+- [x] `dotnet test tests/InfraGate.Planner.Tests/InfraGate.Planner.Tests.csproj`
+- [x] `dotnet test tests/InfraGate.Executor.Tests/InfraGate.Executor.Tests.csproj`
+- [x] `dotnet run --project src/InfraGate.RunProfiles -- validate`
 
 **Dependencies:** Coordinate with the appsettings-first configuration refactor; otherwise independent of Phase D
 
@@ -735,13 +666,13 @@ response, suppress a warning, or disrupt a legitimate downstream tool call. Log 
 failure separately. Preserve the scan/sanitize result.
 
 **Acceptance criteria:**
-- [ ] Request-audit write failure does not prevent the downstream tool call.
-- [ ] Response-audit write failure does not expose unsanitized content.
-- [ ] Audit storage failure is logged and metered.
+- [x] Request-audit write failure does not prevent the downstream tool call.
+- [x] Response-audit write failure does not expose unsanitized content.
+- [x] Audit storage failure is logged and metered.
 
 **Verification:**
-- [ ] Add throwing-audit-store tests in `GuardedToolRunnerTests`.
-- [ ] `dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj`
+- [x] Add throwing-audit-store tests in `GuardedToolRunnerTests`.
+- [x] `dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj`
 
 **Dependencies:** Independent; may be implemented early
 

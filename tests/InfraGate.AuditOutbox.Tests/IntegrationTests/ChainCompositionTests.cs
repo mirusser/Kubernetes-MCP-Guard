@@ -17,7 +17,7 @@ public sealed class ChainCompositionTests : IAsyncLifetime
 
     private PostgreSqlContainer? container;
     private NpgsqlDataSource? dataSource;
-    private IAuditOutboxCore? core;
+    private IPostgresAuditOutboxCore? core;
 
     public async Task InitializeAsync()
     {
@@ -32,7 +32,7 @@ public sealed class ChainCompositionTests : IAsyncLifetime
         var services = new ServiceCollection();
         services.AddPostgresAuditOutbox(dataSource);
         var sp = services.BuildServiceProvider();
-        core = sp.GetRequiredService<IAuditOutboxCore>();
+        core = sp.GetRequiredService<IPostgresAuditOutboxCore>();
     }
 
     public async Task DisposeAsync()

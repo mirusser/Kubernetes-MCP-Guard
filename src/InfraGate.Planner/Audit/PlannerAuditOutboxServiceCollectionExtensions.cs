@@ -15,7 +15,7 @@ internal static class PlannerAuditOutboxServiceCollectionExtensions
 
         services.AddPostgresAuditOutbox(dataSource);
         services.AddSingleton<IPlannerAuditOutbox>(sp =>
-            new PlannerAuditOutbox(sp.GetRequiredService<IAuditOutboxCore>(), dataSource));
+            new PlannerAuditOutbox(sp.GetRequiredService<IPostgresAuditOutboxCore>(), dataSource));
 
         return services;
     }

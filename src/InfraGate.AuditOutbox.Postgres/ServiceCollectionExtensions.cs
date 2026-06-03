@@ -13,7 +13,7 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(dataSource);
 
-        services.AddSingleton<IAuditOutboxCore, PostgresAuditOutboxCore>();
+        services.AddSingleton<IPostgresAuditOutboxCore, PostgresAuditOutboxCore>();
 
         return services;
     }

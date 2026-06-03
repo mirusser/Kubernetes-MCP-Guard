@@ -4,7 +4,7 @@ using Npgsql;
 
 namespace InfraGate.Planner.Audit;
 
-internal sealed class PlannerAuditOutbox(IAuditOutboxCore core, NpgsqlDataSource dataSource)
+internal sealed class PlannerAuditOutbox(IPostgresAuditOutboxCore core, NpgsqlDataSource dataSource)
     : IPlannerAuditOutbox
 {
     private const string StreamSchema = AuditOutboxConventions.Streams.Planner;

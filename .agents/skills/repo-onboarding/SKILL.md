@@ -9,7 +9,7 @@ Use this skill when you need to get oriented in `k8s-toolkit`, start a broad inv
 
 ## Workflow
 
-1. **Check codegraph health.** Run `codegraph_status` to confirm the index is available and roughly consistent (expect ~260 files, ~2670 nodes). If the index is missing or stale, fall back to file reads for all discovery steps below.
+1. **Check codegraph health.** Run `codegraph_status` to confirm the index is available and roughly consistent (expect ~670 files, ~9000 nodes). If the index is missing or stale, fall back to file reads for all discovery steps below.
 
 2. **Read `AGENTS.md`.** Follow its rules for surfacing assumptions, keeping changes simple, making surgical edits, and verifying the result.
 

@@ -51,6 +51,7 @@ internal static class PlannerConventions
         public const string ClientSecret = "InfraGate__Planner__ClientCredentials__ClientSecret";
         public const string OAuthAuthority = "InfraGate__Planner__ClientCredentials__Authority";
         public const string OAuthScope = "InfraGate__Planner__ClientCredentials__Scope";
+        public const string OAuthRequireHttpsMetadata = "InfraGate__Planner__ClientCredentials__RequireHttpsMetadata";
         public const string FileSinkRoot = "InfraGate__Planner__FileSinkRoot";
         public const string AuditConnectionString = "InfraGate__Planner__AuditConnectionString";
     }
@@ -68,6 +69,8 @@ internal static class PlannerConventions
         public const string LlmModel = "InfraGate:Planner:LlmModel";
         public const string FileSinkRoot = "InfraGate:Planner:FileSinkRoot";
         public const string AuditConnectionString = "InfraGate:Planner:AuditConnectionString";
+        public const string OAuthAuthority = "InfraGate:Planner:ClientCredentials:Authority";
+        public const string OAuthRequireHttpsMetadata = "InfraGate:Planner:ClientCredentials:RequireHttpsMetadata";
     }
 
     public static class Prompts

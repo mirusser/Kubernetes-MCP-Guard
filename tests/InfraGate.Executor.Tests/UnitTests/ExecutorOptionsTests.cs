@@ -1,3 +1,5 @@
+using InfraGate.RuntimeSafety;
+
 namespace InfraGate.Executor.Tests.UnitTests;
 
 public sealed class ExecutorOptionsTests
@@ -15,6 +17,55 @@ public sealed class ExecutorOptionsTests
         var options = new ExecutorOptions { GatewayBaseUrl = "http://localhost:3001/mcp" };
         var ex = Record.Exception(() => options.Validate());
         Assert.Null(ex);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithHttpsMetadataDisabled_Throws()
+    {
+        var options = CreateProductionOptions() with
+        {
+            ClientCredentials = new()
+            {
+                Authority = "https://idp.example.com/realms/infra-gate",
+                ClientId = ExecutorConventions.DefaultClientId,
+                Scope = ExecutorConventions.DefaultOAuthScope,
+                RequireHttpsMetadata = false,
+            }
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => options.ValidateProductionSafety(RuntimeMode.Production));
+
+        Assert.Contains("RequireHttpsMetadata", exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithHttpsMetadataEnabled_DoesNotThrow()
+    {
+        var options = CreateProductionOptions();
+
+        var exception = Record.Exception(() => options.ValidateProductionSafety(RuntimeMode.Production));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithDevelopmentMode_AllowsLocalMetadata()
+    {
+        var options = CreateProductionOptions() with
+        {
+            ClientCredentials = new()
+            {
+                Authority = "http://keycloak:8080/realms/infra-gate",
+                ClientId = ExecutorConventions.DefaultClientId,
+                Scope = ExecutorConventions.DefaultOAuthScope,
+                RequireHttpsMetadata = false,
+            }
+        };
+
+        var exception = Record.Exception(() => options.ValidateProductionSafety(RuntimeMode.Development));
+
+        Assert.Null(exception);
     }
 
     [Theory]
@@ -83,4 +134,17 @@ public sealed class ExecutorOptionsTests
             ExecutorConventions.MinWatchTimeoutSeconds,
             ExecutorConventions.MaxWatchTimeoutSeconds);
     }
+
+    private static ExecutorOptions CreateProductionOptions() =>
+        new()
+        {
+            GatewayBaseUrl = "https://gateway.example.com/mcp",
+            ClientCredentials = new()
+            {
+                Authority = "https://idp.example.com/realms/infra-gate",
+                ClientId = ExecutorConventions.DefaultClientId,
+                Scope = ExecutorConventions.DefaultOAuthScope,
+                RequireHttpsMetadata = true,
+            }
+        };
 }

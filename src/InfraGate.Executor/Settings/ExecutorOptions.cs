@@ -1,3 +1,5 @@
+using InfraGate.RuntimeSafety;
+
 namespace InfraGate.Executor.Settings;
 
 /// <summary>
@@ -41,5 +43,20 @@ public sealed record class ExecutorOptions
             throw new InvalidOperationException(
                 $"WatchTimeoutSeconds must be between {ExecutorConventions.MinWatchTimeoutSeconds} and {ExecutorConventions.MaxWatchTimeoutSeconds}. Configured: {WatchTimeoutSeconds}.");
         }
+    }
+
+    public void ValidateProductionSafety(RuntimeMode runtimeMode)
+    {
+        if (runtimeMode != RuntimeMode.Production)
+        {
+            return;
+        }
+
+        ProductionSafetyValidator.RequireHttpsMetadataEnabled(
+            ClientCredentials.RequireHttpsMetadata,
+            ExecutorConventions.ConfigurationKeys.OAuthRequireHttpsMetadata);
+        ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
+            ClientCredentials.Authority,
+            ExecutorConventions.ConfigurationKeys.OAuthAuthority);
     }
 }
