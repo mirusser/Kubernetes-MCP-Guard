@@ -59,25 +59,25 @@ public sealed class ObserverConventionsTests
         Assert.Equal("InfraGate:Observer:AllowedNamespaces", ObserverConventions.ConfigurationKeys.AllowedNamespaces);
         Assert.Equal("InfraGate:Observer:LlmProvider", ObserverConventions.ConfigurationKeys.LlmProvider);
         Assert.Equal("InfraGate:Observer:LlmModel", ObserverConventions.ConfigurationKeys.LlmModel);
-        Assert.Equal("InfraGate:Observer:FileSink:Root", ObserverConventions.ConfigurationKeys.FileSinkRoot);
+        Assert.Equal("InfraGate:Observer:FileSinkRoot", ObserverConventions.ConfigurationKeys.FileSinkRoot);
         Assert.Equal("InfraGate:Observer:PlannerHandoffUrl", ObserverConventions.ConfigurationKeys.PlannerHandoffUrl);
     }
 
     [Fact]
     public void EnvironmentVariables_ArePinned()
     {
-        Assert.Equal("ASPNETCORE_URLS", ObserverConventions.EnvironmentVariables.AspNetCoreUrls);
-        Assert.Equal("INFRA_GATE_OBSERVER_GATEWAY_BASE_URL", ObserverConventions.EnvironmentVariables.GatewayBaseUrl);
-        Assert.Equal("INFRA_GATE_OBSERVER_ALLOWED_NAMESPACES", ObserverConventions.EnvironmentVariables.AllowedNamespaces);
-        Assert.Equal("INFRA_GATE_OBSERVER_LLM_PROVIDER", ObserverConventions.EnvironmentVariables.LlmProvider);
-        Assert.Equal("INFRA_GATE_OBSERVER_LLM_MODEL", ObserverConventions.EnvironmentVariables.LlmModel);
-        Assert.Equal("INFRA_GATE_OBSERVER_LLM_API_KEY", ObserverConventions.EnvironmentVariables.LlmApiKey);
-        Assert.Equal("INFRA_GATE_OBSERVER_CLIENT_ID", ObserverConventions.EnvironmentVariables.ClientId);
-        Assert.Equal("INFRA_GATE_OBSERVER_CLIENT_SECRET", ObserverConventions.EnvironmentVariables.ClientSecret);
-        Assert.Equal("INFRA_GATE_OBSERVER_OAUTH_AUTHORITY", ObserverConventions.EnvironmentVariables.OAuthAuthority);
-        Assert.Equal("INFRA_GATE_OBSERVER_OAUTH_SCOPE", ObserverConventions.EnvironmentVariables.OAuthScope);
-        Assert.Equal("INFRA_GATE_OBSERVER_PLANNER_HANDOFF_URL", ObserverConventions.EnvironmentVariables.PlannerHandoffUrl);
-        Assert.Equal("INFRA_GATE_OBSERVER_FILE_SINK_ROOT", ObserverConventions.EnvironmentVariables.FileSinkRoot);
+        Assert.Equal("InfraGate__Observer__AspNetCoreUrls", ObserverConventions.EnvironmentVariables.AspNetCoreUrls);
+        Assert.Equal("InfraGate__Observer__GatewayBaseUrl", ObserverConventions.EnvironmentVariables.GatewayBaseUrl);
+        Assert.Equal("InfraGate__Observer__AllowedNamespaces", ObserverConventions.EnvironmentVariables.AllowedNamespaces);
+        Assert.Equal("InfraGate__Observer__LlmProvider", ObserverConventions.EnvironmentVariables.LlmProvider);
+        Assert.Equal("InfraGate__Observer__LlmModel", ObserverConventions.EnvironmentVariables.LlmModel);
+        Assert.Equal("InfraGate__Observer__LlmApiKey", ObserverConventions.EnvironmentVariables.LlmApiKey);
+        Assert.Equal("InfraGate__Observer__ClientCredentials__ClientId", ObserverConventions.EnvironmentVariables.ClientId);
+        Assert.Equal("InfraGate__Observer__ClientCredentials__ClientSecret", ObserverConventions.EnvironmentVariables.ClientSecret);
+        Assert.Equal("InfraGate__Observer__ClientCredentials__Authority", ObserverConventions.EnvironmentVariables.OAuthAuthority);
+        Assert.Equal("InfraGate__Observer__ClientCredentials__Scope", ObserverConventions.EnvironmentVariables.OAuthScope);
+        Assert.Equal("InfraGate__Observer__PlannerHandoffUrl", ObserverConventions.EnvironmentVariables.PlannerHandoffUrl);
+        Assert.Equal("InfraGate__Observer__FileSinkRoot", ObserverConventions.EnvironmentVariables.FileSinkRoot);
     }
 
     [Fact]

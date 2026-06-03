@@ -4,7 +4,6 @@ internal sealed record class HostProfile(
     string? BindAddress,
     string? BindPort,
     string? GatewayImage,
-    string? ConfigHostPath,
     string? KubeconfigHostPath,
     string? ApprovalHostPath,
     string? GuardAuditHostPath,

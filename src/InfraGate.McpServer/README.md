@@ -17,7 +17,7 @@
 - The server is plan-unaware. It exposes read-only evidence tools (`dry_run_*`, `diff_manifest`, `diff_deployment`, `check_live_drift`) and raw Destructive execution tools (`apply_manifest`, `delete_manifest`, `scale_deployment`, `restart_deployment`, `set_deployment_image`).
 - Plan creation, digest binding, approval grants, pre-execution gates, and applied markers live in the gateway plus `InfraGate.Approvals` and `InfraGate.KubernetesAdapter`.
 - Observability tools are read-only and bounded. They expose Events, Pod logs, focused summaries, and diagnostics, but not Secret values, ConfigMap values, raw manifests, exec, attach, or port-forward.
-- Allowed namespaces come from `K8S_MCP_ALLOWED_NAMESPACES`; unsupported namespaces are rejected before Kubernetes API calls.
+- Allowed namespaces come from `InfraGate__Kubernetes__AllowedNamespaces__0`; unsupported namespaces are rejected before Kubernetes API calls.
 - Do not rename MCP tool methods or tool-name constants without updating clients, tests, and README examples.
 
 ## Settings

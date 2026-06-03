@@ -15,6 +15,7 @@ internal static class ObserverConventions
     public const int OnDemandSlackWindowSeconds = 2;
     public const string DefaultClientId = "infra-gate-observer";
     public const string DefaultOAuthScope = "mcp:tools.readonly";
+    public const string AspNetCoreUrlsKey = "InfraGate:Observer:AspNetCoreUrls";
 
     public static class ConfigurationKeys
     {
@@ -29,31 +30,33 @@ internal static class ObserverConventions
         public const string LlmApiKey = "InfraGate:Observer:LlmApiKey";
         public const string DedupeSuppressionWindow = "InfraGate:Observer:DedupeSuppressionWindow";
         public const string DedupeResolutionThreshold = "InfraGate:Observer:DedupeResolutionThreshold";
-        public const string FileSinkRoot = "InfraGate:Observer:FileSink:Root";
+        public const string FileSinkRoot = "InfraGate:Observer:FileSinkRoot";
         public const string PlannerHandoffUrl = "InfraGate:Observer:PlannerHandoffUrl";
         public const string AuditConnectionString = "InfraGate:Observer:AuditConnectionString";
+        public const string SkipCycleWhenNoWarningEvents = "InfraGate:Observer:SkipCycleWhenNoWarningEvents";
     }
 
     public static class EnvironmentVariables
     {
-        public const string AspNetCoreUrls = "ASPNETCORE_URLS";
-        public const string CycleIntervalSeconds = "INFRA_GATE_OBSERVER_CYCLE_INTERVAL_SECONDS";
-        public const string WallClockCapSeconds = "INFRA_GATE_OBSERVER_WALL_CLOCK_CAP_SECONDS";
-        public const string MaxToolIterations = "INFRA_GATE_OBSERVER_MAX_TOOL_ITERATIONS";
-        public const string GatewayBaseUrl = "INFRA_GATE_OBSERVER_GATEWAY_BASE_URL";
-        public const string AllowedNamespaces = "INFRA_GATE_OBSERVER_ALLOWED_NAMESPACES";
-        public const string LlmProvider = "INFRA_GATE_OBSERVER_LLM_PROVIDER";
-        public const string LlmModel = "INFRA_GATE_OBSERVER_LLM_MODEL";
-        public const string LlmApiKey = "INFRA_GATE_OBSERVER_LLM_API_KEY";
-        public const string ClientId = "INFRA_GATE_OBSERVER_CLIENT_ID";
-        public const string ClientSecret = "INFRA_GATE_OBSERVER_CLIENT_SECRET";
-        public const string OAuthAuthority = "INFRA_GATE_OBSERVER_OAUTH_AUTHORITY";
-        public const string OAuthScope = "INFRA_GATE_OBSERVER_OAUTH_SCOPE";
-        public const string DedupeSuppressionWindow = "INFRA_GATE_OBSERVER_DEDUPE_SUPPRESSION_WINDOW";
-        public const string DedupeResolutionThreshold = "INFRA_GATE_OBSERVER_DEDUPE_RESOLUTION_THRESHOLD";
-        public const string FileSinkRoot = "INFRA_GATE_OBSERVER_FILE_SINK_ROOT";
-        public const string PlannerHandoffUrl = "INFRA_GATE_OBSERVER_PLANNER_HANDOFF_URL";
-        public const string AuditConnectionString = "INFRA_GATE_OBSERVER_AUDIT_CONNECTION_STRING";
+        public const string AspNetCoreUrls = "InfraGate__Observer__AspNetCoreUrls";
+        public const string CycleIntervalSeconds = "InfraGate__Observer__CycleIntervalSeconds";
+        public const string WallClockCapSeconds = "InfraGate__Observer__WallClockCapSeconds";
+        public const string MaxToolIterations = "InfraGate__Observer__MaxToolIterations";
+        public const string GatewayBaseUrl = "InfraGate__Observer__GatewayBaseUrl";
+        public const string AllowedNamespaces = "InfraGate__Observer__AllowedNamespaces";
+        public const string LlmProvider = "InfraGate__Observer__LlmProvider";
+        public const string LlmModel = "InfraGate__Observer__LlmModel";
+        public const string LlmApiKey = "InfraGate__Observer__LlmApiKey";
+        public const string ClientId = "InfraGate__Observer__ClientCredentials__ClientId";
+        public const string ClientSecret = "InfraGate__Observer__ClientCredentials__ClientSecret";
+        public const string OAuthAuthority = "InfraGate__Observer__ClientCredentials__Authority";
+        public const string OAuthScope = "InfraGate__Observer__ClientCredentials__Scope";
+        public const string DedupeSuppressionWindow = "InfraGate__Observer__DedupeSuppressionWindow";
+        public const string DedupeResolutionThreshold = "InfraGate__Observer__DedupeResolutionThreshold";
+        public const string FileSinkRoot = "InfraGate__Observer__FileSinkRoot";
+        public const string PlannerHandoffUrl = "InfraGate__Observer__PlannerHandoffUrl";
+        public const string AuditConnectionString = "InfraGate__Observer__AuditConnectionString";
+        public const string SkipCycleWhenNoWarningEvents = "InfraGate__Observer__SkipCycleWhenNoWarningEvents";
     }
 
     public static class LlmProviders

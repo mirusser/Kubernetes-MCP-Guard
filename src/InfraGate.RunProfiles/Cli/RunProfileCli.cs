@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace InfraGate.RunProfiles;
 
 internal static class RunProfileCli
@@ -111,12 +109,7 @@ internal static class RunProfileCli
         string generatedText;
         try
         {
-            generatedText = parsed.Format switch
-            {
-                RunProfileConventions.Formats.AppSettingJson => AppSettingsRenderer.Render(Path.GetFileName(configPath), parsed.Profile),
-                RunProfileConventions.Formats.DotEnv => EnvFileRenderer.Render(Path.GetFileName(configPath), parsed.Profile),
-                _ => throw new InvalidOperationException($"Unsupported format: {parsed.Format}")
-            };
+            generatedText = EnvFileRenderer.Render(Path.GetFileName(configPath), parsed.Profile);
         }
         catch (InvalidOperationException ex)
         {
@@ -138,7 +131,6 @@ internal static class RunProfileCli
     private sealed record class GenerateArgs(
         string ProfileName,
         string OutputPath,
-        string Format,
         bool Force,
         RunProfile Profile);
 
@@ -152,12 +144,12 @@ internal static class RunProfileCli
         {
             var profileName = GetRequiredProfileName(args);
             var outputPath = GetRequiredOption(args, RunProfileConventions.Options.Output);
-            var format = GetGenerateFormat(args);
+            RejectRemovedFormatOption(args);
             var force = HasFlag(args, RunProfileConventions.Options.Force);
             var setOverrides = GetSetOverrides(args);
             var profile = document.FindProfileWithDefaults(profileName, document.Defaults);
             profile = ApplySetOverrides(profile, setOverrides);
-            parsed = new GenerateArgs(profileName, outputPath, format, force, profile);
+            parsed = new GenerateArgs(profileName, outputPath, force, profile);
             return true;
         }
         catch (InvalidOperationException ex)
@@ -183,27 +175,19 @@ internal static class RunProfileCli
     private static bool HasFlag(IReadOnlyList<string> args, string flag) =>
         args.Any(arg => string.Equals(arg, flag, StringComparison.Ordinal));
 
-    private static string GetGenerateFormat(IReadOnlyList<string> args)
+    private static void RejectRemovedFormatOption(IReadOnlyList<string> args)
     {
-        string? format = GetOption(args, RunProfileConventions.Options.Format);
-        if (format is null)
+        if (GetOption(args, RunProfileConventions.Options.Format) is null)
         {
-            return RunProfileConventions.Formats.DotEnv;
-        }
-
-        if (string.Equals(format, RunProfileConventions.Formats.DotEnv, StringComparison.Ordinal) ||
-            string.Equals(format, RunProfileConventions.Formats.AppSettingJson, StringComparison.Ordinal))
-        {
-            return format;
+            return;
         }
 
         throw new InvalidOperationException(
-            $"{RunProfileConventions.Options.Format} must be '{RunProfileConventions.Formats.DotEnv}' or '{RunProfileConventions.Formats.AppSettingJson}'.");
+            $"{RunProfileConventions.Options.Format} is no longer supported; generate writes one env file.");
     }
 
     private static bool IsGeneratedForProfile(string content, string profileName) =>
-        IsGeneratedEnvForProfile(content, profileName) ||
-        IsGeneratedAppSettingsForProfile(content, profileName);
+        IsGeneratedEnvForProfile(content, profileName);
 
     private static bool IsGeneratedEnvForProfile(string content, string profileName)
     {
@@ -211,23 +195,6 @@ internal static class RunProfileCli
         string? firstLine = reader.ReadLine();
         return firstLine?.StartsWith(RunProfileConventions.GeneratedFile.HeaderLinePrefix, StringComparison.Ordinal) == true &&
             firstLine.EndsWith($"{RunProfileConventions.GeneratedFile.ProfileMarker}{profileName}", StringComparison.Ordinal);
-    }
-
-    private static bool IsGeneratedAppSettingsForProfile(string content, string profileName)
-    {
-        try
-        {
-            using JsonDocument document = JsonDocument.Parse(content);
-            return document.RootElement.TryGetProperty(
-                    RunProfileConventions.GeneratedFile.MetadataSection,
-                    out JsonElement metadata) &&
-                metadata.TryGetProperty(RunProfileConventions.GeneratedFile.MetadataProfile, out JsonElement profile) &&
-                string.Equals(profile.GetString(), profileName, StringComparison.Ordinal);
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
     }
 
     private static bool IsKnownCommand(string command) =>
@@ -382,7 +349,7 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.Host => profile with
             {
                 Host = ApplyHostOverride(
-                    profile.Host ?? new HostProfile(null, null, null, null, null, null, null, null), field, value, path)
+                    profile.Host ?? new HostProfile(null, null, null, null, null, null, null), field, value, path)
             },
             RunProfileConventions.YamlKeys.Observer => profile with
             {
@@ -392,12 +359,12 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.Planner => profile with
             {
                 Planner = ApplyPlannerOverride(
-                    profile.Planner ?? new PlannerProfile(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null), field, value, path)
+                    profile.Planner ?? new PlannerProfile(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null), field, value, path)
             },
             RunProfileConventions.YamlKeys.Executor => profile with
             {
                 Executor = ApplyExecutorOverride(
-                    profile.Executor ?? new ExecutorProfile(null, null, null, null, null, null, null, null, null, null), field, value, path)
+                    profile.Executor ?? new ExecutorProfile(null, null, null, null, null, null, null, null, null), field, value, path)
             },
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };
@@ -470,7 +437,6 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.BindAddress => profile with { BindAddress = value },
             RunProfileConventions.YamlKeys.BindPort => profile with { BindPort = value },
             RunProfileConventions.YamlKeys.GatewayImage => profile with { GatewayImage = value },
-            RunProfileConventions.YamlKeys.ConfigHostPath => profile with { ConfigHostPath = value },
             RunProfileConventions.YamlKeys.KubeconfigHostPath => profile with { KubeconfigHostPath = value },
             RunProfileConventions.YamlKeys.ApprovalHostPath => profile with { ApprovalHostPath = value },
             RunProfileConventions.YamlKeys.GuardAuditHostPath => profile with { GuardAuditHostPath = value },
@@ -484,7 +450,6 @@ internal static class RunProfileCli
         {
             RunProfileConventions.YamlKeys.AspnetcoreUrls => profile with { AspnetcoreUrls = value },
             RunProfileConventions.YamlKeys.GatewayBaseUrl => profile with { GatewayBaseUrl = value },
-            RunProfileConventions.YamlKeys.TokenEndpoint => profile with { TokenEndpoint = value },
             RunProfileConventions.YamlKeys.OAuthAuthority => profile with { OAuthAuthority = value },
             RunProfileConventions.YamlKeys.ClientId => profile with { ClientId = value },
             RunProfileConventions.YamlKeys.ClientSecret => profile with { ClientSecret = value },
@@ -509,7 +474,6 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.AspnetcoreUrls => profile with { AspnetcoreUrls = value },
             RunProfileConventions.YamlKeys.GatewayBaseUrl => profile with { GatewayBaseUrl = value },
             RunProfileConventions.YamlKeys.ExecutorHandoffUrl => profile with { ExecutorHandoffUrl = value },
-            RunProfileConventions.YamlKeys.TokenEndpoint => profile with { TokenEndpoint = value },
             RunProfileConventions.YamlKeys.ClientId => profile with { ClientId = value },
             RunProfileConventions.YamlKeys.ClientSecret => profile with { ClientSecret = value },
             RunProfileConventions.YamlKeys.OAuthAuthority => profile with { OAuthAuthority = value },
@@ -531,7 +495,6 @@ internal static class RunProfileCli
         {
             RunProfileConventions.YamlKeys.AspnetcoreUrls => profile with { AspnetcoreUrls = value },
             RunProfileConventions.YamlKeys.GatewayBaseUrl => profile with { GatewayBaseUrl = value },
-            RunProfileConventions.YamlKeys.TokenEndpoint => profile with { TokenEndpoint = value },
             RunProfileConventions.YamlKeys.ClientId => profile with { ClientId = value },
             RunProfileConventions.YamlKeys.ClientSecret => profile with { ClientSecret = value },
             RunProfileConventions.YamlKeys.OAuthAuthority => profile with { OAuthAuthority = value },

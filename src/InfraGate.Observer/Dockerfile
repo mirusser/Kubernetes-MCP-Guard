@@ -21,8 +21,8 @@ RUN dotnet publish src/InfraGate.Observer/InfraGate.Observer.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
 WORKDIR /app/observer
 COPY --from=build /app/observer .
-ENV INFRA_GATE_ENVIRONMENT=Production
-ENV ASPNETCORE_URLS=http://+:3003
+ENV InfraGate__Runtime__Environment=Production
+ENV InfraGate__Observer__AspNetCoreUrls=http://+:3003
 EXPOSE 3003
 USER $APP_UID
 ENTRYPOINT ["dotnet", "InfraGate.Observer.dll"]

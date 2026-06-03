@@ -1,7 +1,15 @@
-namespace InfraGate.Planner;
+namespace InfraGate.Planner.Settings;
 
+/// <summary>
+/// Strongly-typed Planner configuration bound from the <c>InfraGate:Planner</c> section
+/// (see <see cref="SectionName"/>). The framework binder matches property names to configuration
+/// keys recursively — <see cref="ClientCredentials"/> binds automatically from
+/// <c>InfraGate:Planner:ClientCredentials</c>; there is no manual env-var mapping or per-key reads.
+/// </summary>
 public sealed record class PlannerOptions
 {
+    public const string SectionName = "InfraGate:Planner";
+
     public string GatewayBaseUrl { get; init; } = string.Empty;
     public string ExecutorHandoffUrl { get; init; } = string.Empty;
     public int AnomalyWallClockCapSeconds { get; init; } = PlannerConventions.DefaultAnomalyWallClockCapSeconds;
@@ -12,6 +20,14 @@ public sealed record class PlannerOptions
     public string LlmApiKey { get; init; } = string.Empty;
     public string FileSinkRoot { get; init; } = string.Empty;
     public string ObserverBaseUrl { get; init; } = string.Empty;
+    public string AuditConnectionString { get; init; } = string.Empty;
+
+    /// <summary>
+    /// OAuth client-credentials the Planner uses to authenticate its outbound MCP calls.
+    /// Bound recursively from <c>InfraGate:Planner:ClientCredentials</c>; validated at startup by
+    /// <c>AddClientCredentialsTokenProvider</c>.
+    /// </summary>
+    public ClientCredentialsTokenOptions ClientCredentials { get; init; } = new();
 
     public void Validate()
     {

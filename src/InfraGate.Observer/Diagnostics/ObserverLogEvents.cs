@@ -66,6 +66,11 @@ internal static partial class ObserverLogEvents
     public static partial void LogCycleSkipped(ILogger logger);
 
     [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "observer.cycle.skipped_no_events cycleId={CycleId} — no Warning events in any namespace")]
+    public static partial void LogCycleSkippedNoEvents(ILogger logger, string cycleId);
+
+    [LoggerMessage(
         Level = LogLevel.Error,
         Message = "Unhandled exception in observation cycle")]
     public static partial void LogCycleError(ILogger logger, Exception ex);

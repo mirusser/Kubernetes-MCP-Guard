@@ -13,9 +13,8 @@ internal sealed class SmtpApprovalEmailSender(
         options.Validate();
 
         logger.LogInformation(
-            "Sending approval email: smtp={Host}:{Port} ssl={Ssl} from={From} to={To} subject={Subject}\n{Body}",
-            options.Host, options.Port, options.EnableSsl,
-            options.FromAddress, content.ToAddress, content.Subject, content.BodyPlaintext);
+            "smtp email queued host={Host}:{Port} ssl={Ssl}",
+            options.Host, options.Port, options.EnableSsl);
 
         using var message = new MailMessage(
             options.FromAddress,
@@ -26,6 +25,6 @@ internal sealed class SmtpApprovalEmailSender(
         using var client = smtpClientFactory.Create(options);
         await client.SendMailAsync(message, cancellationToken).ConfigureAwait(false);
 
-        logger.LogInformation("Approval email sent to {To}", content.ToAddress);
+        logger.LogInformation("smtp email sent");
     }
 }

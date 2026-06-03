@@ -19,9 +19,7 @@ internal sealed class DownstreamTokenValidator
     private readonly IConfigurationManager<OpenIdConnectConfiguration>? configurationManager;
     private readonly SecurityKey[]? staticKeys;
 
-    /// <summary>
-    /// Production constructor — fetches JWKS from the OIDC metadata endpoint.
-    /// </summary>
+    /// <summary>Production constructor — fetches JWKS from the OIDC metadata endpoint.</summary>
     internal DownstreamTokenValidator(
         DownstreamAuthOptions options,
         ILogger<DownstreamTokenValidator> logger)
@@ -42,9 +40,7 @@ internal sealed class DownstreamTokenValidator
         }
     }
 
-    /// <summary>
-    /// Test constructor — accepts pre-built static signing keys (no OIDC discovery).
-    /// </summary>
+    /// <summary>Test constructor — accepts pre-built static signing keys (no OIDC discovery).</summary>
     internal DownstreamTokenValidator(
         DownstreamAuthOptions options,
         ILogger<DownstreamTokenValidator> logger,

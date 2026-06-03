@@ -108,7 +108,6 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.ApprovalHostPath,
                 RunProfileConventions.YamlKeys.BindAddress,
                 RunProfileConventions.YamlKeys.BindPort,
-                RunProfileConventions.YamlKeys.ConfigHostPath,
                 RunProfileConventions.YamlKeys.DataProtectionHostPath,
                 RunProfileConventions.YamlKeys.GatewayImage,
                 RunProfileConventions.YamlKeys.GuardAuditHostPath,
@@ -153,7 +152,7 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.ObserverHostPath,
                 RunProfileConventions.YamlKeys.PlannerHandoffUrl,
                 RunProfileConventions.YamlKeys.Scope,
-                RunProfileConventions.YamlKeys.TokenEndpoint
+                RunProfileConventions.YamlKeys.SkipCycleWhenNoWarningEvents,
             ],
             StringComparer.Ordinal);
 
@@ -174,8 +173,7 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.MaxToolIterations,
                 RunProfileConventions.YamlKeys.OAuthAuthority,
                 RunProfileConventions.YamlKeys.PlannerHostPath,
-                RunProfileConventions.YamlKeys.Scope,
-                RunProfileConventions.YamlKeys.TokenEndpoint
+                RunProfileConventions.YamlKeys.Scope
             ],
             StringComparer.Ordinal);
 
@@ -190,7 +188,6 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.GatewayBaseUrl,
                 RunProfileConventions.YamlKeys.OAuthAuthority,
                 RunProfileConventions.YamlKeys.Scope,
-                RunProfileConventions.YamlKeys.TokenEndpoint,
                 RunProfileConventions.YamlKeys.WatchTimeoutSeconds
             ],
             StringComparer.Ordinal);
@@ -444,7 +441,6 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.BindAddress),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.BindPort),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.GatewayImage),
-            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ConfigHostPath),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.KubeconfigHostPath),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ApprovalHostPath),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.GuardAuditHostPath),
@@ -470,7 +466,6 @@ internal static class RunProfileDocumentReader
         return new ObserverProfile(
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.AspnetcoreUrls),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.GatewayBaseUrl),
-            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.TokenEndpoint),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.OAuthAuthority),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ClientId),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ClientSecret),
@@ -485,6 +480,7 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.PlannerHandoffUrl),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ObserverHostPath),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ObserverAuditConnectionString),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.SkipCycleWhenNoWarningEvents),
             GetOptionalScalarSequence(mapping, RunProfileConventions.YamlKeys.AllowedNamespaces));
     }
 
@@ -508,7 +504,6 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.AspnetcoreUrls),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.GatewayBaseUrl),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ExecutorHandoffUrl),
-            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.TokenEndpoint),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ClientId),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ClientSecret),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.OAuthAuthority),
@@ -542,7 +537,6 @@ internal static class RunProfileDocumentReader
         return new ExecutorProfile(
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.AspnetcoreUrls),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.GatewayBaseUrl),
-            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.TokenEndpoint),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ClientId),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ClientSecret),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.OAuthAuthority),

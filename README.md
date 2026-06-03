@@ -145,7 +145,7 @@ The [InfraGate.Planner](src/InfraGate.Planner/README.md) consumes Anomaly Report
 | Operation menu | Chooses only `restart_deployment`, `scale_deployment`, or `set_deployment_image` in v1. |
 | Plan proposal | Calls `propose_plan` to create a digest-bound Plan Envelope for operator approval. |
 | Approval notification | `propose_plan` creates an Approval Access Code and sends the configured operator email through the gateway SMTP sender when configured. |
-| Durable task lifecycle | One A2A Task per anomaly (keyed by `contextId`) tracks state from `Submitted` through `Working`, `AuthRequired` (awaiting operator approval), to `Completed`/`Failed`/`Rejected`. Persisted to PostgreSQL when `INFRA_GATE_PLANNER_AUDIT_CONNECTION_STRING` is set; otherwise in-memory. |
+| Durable task lifecycle | One A2A Task per anomaly (keyed by `contextId`) tracks state from `Submitted` through `Working`, `AuthRequired` (awaiting operator approval), to `Completed`/`Failed`/`Rejected`. Persisted to PostgreSQL when `InfraGate__Planner__AuditConnectionString` is set; otherwise in-memory. |
 | Scope boundary | Planner can propose plans and use read-only inspection tools; it cannot execute plans. |
 
 ### 🤖🛠️ Remediation Executor
@@ -217,7 +217,7 @@ TAG=latest docker compose --env-file deploy/local-oauth/release.env.example \
   -f deploy/local-oauth/compose.release.yaml up
 ```
 
-This starts the local Keycloak-backed OAuth path and the published gateway image. Replace `latest` with a release tag such as `v0.1.0` for a stable image. The committed no-SDK files come from the `smoke-release` Run Profile: `release.env.example` supplies Compose interpolation and bootstrap env vars, and `release.appsettings.json` is mounted into the gateway container.
+This starts the local Keycloak-backed OAuth path, PostgreSQL approval store, and the published gateway image. Replace `latest` with a release tag such as `v0.1.0` for a stable image. The committed no-SDK file comes from the `smoke-release` Run Profile: `release.env.example` supplies both Compose interpolation and `InfraGate__...` runtime settings.
 
 ### 🛠️ Build From Source
 
@@ -230,7 +230,7 @@ docker compose --env-file deploy/generated/local-compose.env \
   -f deploy/local-oauth/compose.yaml up --build
 ```
 
-`generate-env.sh` writes both `deploy/generated/local-compose.env` and `deploy/generated/local-compose.appsettings.json` from `deploy/run-profiles.yaml`.
+`generate-env.sh` writes `deploy/generated/local-compose.env` from `deploy/run-profiles.yaml`.
 
 Other run modes and full setup details are in [docs/setup-guide.md](docs/setup-guide.md).
 

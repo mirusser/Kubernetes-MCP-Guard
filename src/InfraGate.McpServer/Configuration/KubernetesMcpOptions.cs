@@ -20,31 +20,6 @@ public sealed record class KubernetesMcpOptions(
     public bool IsNamespaceAllowed(string namespaceName) =>
         AllowedNamespaces.Contains(namespaceName);
 
-    public static KubernetesMcpOptions FromEnvironment()
-    {
-        RuntimeMode runtimeMode = RuntimeModeResolver.FromEnvironment();
-        var downstreamAuth = DownstreamAuthOptions.FromEnvironment();
-
-        string? allowedNamespacesValue =
-            Environment.GetEnvironmentVariable(KubernetesConventions.EnvironmentVariables.AllowedNamespaces);
-        bool hasExplicitAllowedNamespaces = !string.IsNullOrWhiteSpace(allowedNamespacesValue);
-        IReadOnlySet<string> allowedNamespaces = ParseAllowedNamespaces(allowedNamespacesValue);
-        string? kubeConfig = Environment.GetEnvironmentVariable(KubernetesConventions.EnvironmentVariables.KubeConfig);
-        bool isInClusterConfigEnabled = ParseBooleanEnvironmentVariable(
-            Environment.GetEnvironmentVariable(KubernetesConventions.EnvironmentVariables.UseInClusterConfig),
-            defaultValue: false);
-        string? logPath = Environment.GetEnvironmentVariable(KubernetesConventions.EnvironmentVariables.LogPath);
-
-        return new KubernetesMcpOptions(
-            allowedNamespaces,
-            runtimeMode,
-            hasExplicitAllowedNamespaces,
-            kubeConfig,
-            isInClusterConfigEnabled,
-            logPath,
-            downstreamAuth);
-    }
-
     public static KubernetesMcpOptions FromConfiguration(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
@@ -55,26 +30,24 @@ public sealed record class KubernetesMcpOptions(
             .GetSection("InfraGate:DownstreamAuth")
             .Get<DownstreamAuthOptions>();
 
-        var k8sSettings = configuration
-            .GetSection("InfraGate:Kubernetes")
-            .Get<InfraGateKubernetesSettings>();
+        var k8sOptions = configuration
+            .GetSection(KubernetesOptions.SectionName)
+            .Get<KubernetesOptions>() ?? new KubernetesOptions();
 
-        string? allowedNamespacesValue = configuration[KubernetesConventions.EnvironmentVariables.AllowedNamespaces];
-        bool hasExplicitAllowedNamespaces = !string.IsNullOrWhiteSpace(allowedNamespacesValue) ||
-            (k8sSettings?.AllowedNamespaces is { Count: > 0 }) ||
-            !string.IsNullOrWhiteSpace(configuration[KubernetesConventions.ConfigurationKeys.AllowedNamespaces]);
-        IReadOnlySet<string> allowedNamespaces = ParseAllowedNamespaces(configuration, allowedNamespacesValue, k8sSettings);
-        string? kubeConfig = k8sSettings?.KubeConfig;
-        bool isInClusterConfigEnabled = k8sSettings?.UseInClusterConfig ?? false;
-        string? logPath = k8sSettings?.LogPath;
+        bool hasExplicitAllowedNamespaces = k8sOptions.AllowedNamespaces is { Count: > 0 };
+        IReadOnlySet<string> allowedNamespaces = hasExplicitAllowedNamespaces
+            ? k8sOptions.AllowedNamespaces
+                .Where(ns => !string.IsNullOrWhiteSpace(ns))
+                .ToHashSet(StringComparer.Ordinal)
+            : new HashSet<string>(StringComparer.Ordinal) { DefaultNamespace };
 
         return new KubernetesMcpOptions(
             allowedNamespaces,
             runtimeMode,
             hasExplicitAllowedNamespaces,
-            kubeConfig,
-            isInClusterConfigEnabled,
-            logPath,
+            k8sOptions.KubeConfig,
+            k8sOptions.UseInClusterConfig,
+            k8sOptions.LogPath,
             downstreamAuth);
     }
 
@@ -92,8 +65,8 @@ public sealed record class KubernetesMcpOptions(
             return;
         }
 
-        var downstreamAuth = DownstreamAuth ?? new DownstreamAuthOptions();
-        if (!downstreamAuth.Required)
+        var downstreamAuth = DownstreamAuth;
+        if (downstreamAuth is null || !downstreamAuth.Required)
         {
             throw new InvalidOperationException(
                 $"{DownstreamAuthConventions.EnvironmentVariables.Required} must not be false in Production mode. " +
@@ -126,41 +99,5 @@ public sealed record class KubernetesMcpOptions(
         return namespaces
             .Where(namespaceName => !string.IsNullOrWhiteSpace(namespaceName))
             .ToHashSet(StringComparer.Ordinal);
-    }
-
-    private static bool ParseBooleanEnvironmentVariable(string? value, bool defaultValue)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return defaultValue;
-        }
-
-        if (!bool.TryParse(value, out bool result))
-        {
-            throw new InvalidOperationException(
-                $"{KubernetesConventions.EnvironmentVariables.UseInClusterConfig} must be 'true' or 'false'; value '{value}' is not supported.");
-        }
-
-        return result;
-    }
-
-    private static IReadOnlySet<string> ParseAllowedNamespaces(
-        IConfiguration configuration,
-        string? environmentValue,
-        InfraGateKubernetesSettings? k8sSettings)
-    {
-        if (!string.IsNullOrWhiteSpace(environmentValue))
-        {
-            return ParseAllowedNamespaces(environmentValue);
-        }
-
-        if (k8sSettings?.AllowedNamespaces is { Count: > 0 })
-        {
-            return k8sSettings.AllowedNamespaces
-                .Where(namespaceName => !string.IsNullOrWhiteSpace(namespaceName))
-                .ToHashSet(StringComparer.Ordinal);
-        }
-
-        return ParseAllowedNamespaces(configuration[KubernetesConventions.ConfigurationKeys.AllowedNamespaces]);
     }
 }

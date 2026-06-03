@@ -22,4 +22,9 @@ internal static partial class AgentLogEvents
         Message = "llm.rate_limited: recovered on attempt {Attempt}/{MaxRetries} after {TotalDelaySeconds}s total wait")]
     internal static partial void LogRateLimitRecovered(ILogger logger, int attempt, int maxRetries, double totalDelaySeconds);
 
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "llm.pretty_print.parse_failed: message body is not valid JSON — logging raw text")]
+    internal static partial void LogPrettyPrintParseFailed(ILogger logger, Exception ex);
+
 }

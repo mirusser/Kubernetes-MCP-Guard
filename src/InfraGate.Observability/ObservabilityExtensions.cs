@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Formatting.Compact;
+using Serilog.Sinks.SystemConsole.Themes;
 
 namespace InfraGate.Observability;
 
@@ -21,14 +22,11 @@ public static class ObservabilityExtensions
 
         if (options.WriteToConsole)
         {
-            if (options.ConsoleToStandardError)
-            {
-                loggerConfig.WriteTo.Console(standardErrorFromLevel: Serilog.Events.LogEventLevel.Verbose);
-            }
-            else
-            {
-                loggerConfig.WriteTo.Console();
-            }
+            loggerConfig.WriteTo.Console(
+                theme: AnsiConsoleTheme.Code,
+                standardErrorFromLevel: options.ConsoleToStandardError
+                    ? Serilog.Events.LogEventLevel.Verbose
+                    : null);
         }
 
         if (!string.IsNullOrWhiteSpace(options.FilePath))

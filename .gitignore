@@ -4,6 +4,8 @@ obj/
 .mcp-approvals/
 .mcp-guardrails/
 .mcp-dataprotection-keys/
+.mcp-observer/
+.mcp-remediation/
 dataprotection-keys/
 TestResults/
 coverage-report/

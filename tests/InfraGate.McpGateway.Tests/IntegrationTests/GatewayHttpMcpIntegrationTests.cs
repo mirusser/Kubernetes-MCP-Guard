@@ -257,9 +257,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         await using var k8sApi = new TestKubernetesApi(_ => TestResponse.Json("{}"));
         var kubeconfig = await WriteKubeconfigAsync(testRoot, k8sApi.Url);
         using var environment = EnvironmentVariableScope.Set(
-            ("KUBECONFIG", kubeconfig),
-            ("K8S_MCP_APPROVAL_ROOT", Path.Combine(testRoot, "approvals")),
-            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            ("InfraGate__Kubernetes__KubeConfig", kubeconfig),
+            ("InfraGate__Approval__Root", Path.Combine(testRoot, "approvals")),
+            ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
         await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
@@ -298,9 +298,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             DownstreamAuthConventions.Defaults.Audience,
             DownstreamAuthConventions.Defaults.Scope);
         using var environment = EnvironmentVariableScope.Set(
-            ("KUBECONFIG", kubeconfig),
-            ("K8S_MCP_APPROVAL_ROOT", Path.Combine(testRoot, "approvals")),
-            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            ("InfraGate__Kubernetes__KubeConfig", kubeconfig),
+            ("InfraGate__Approval__Root", Path.Combine(testRoot, "approvals")),
+            ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "true"),
             (DownstreamAuthConventions.EnvironmentVariables.Authority, oidcServer.Url),
@@ -357,9 +357,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             DownstreamAuthConventions.Defaults.Audience,
             DownstreamAuthConventions.Defaults.Scope);
         using var environment = EnvironmentVariableScope.Set(
-            ("KUBECONFIG", kubeconfig),
-            ("K8S_MCP_APPROVAL_ROOT", Path.Combine(testRoot, "approvals")),
-            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            ("InfraGate__Kubernetes__KubeConfig", kubeconfig),
+            ("InfraGate__Approval__Root", Path.Combine(testRoot, "approvals")),
+            ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "true"),
             (DownstreamAuthConventions.EnvironmentVariables.Authority, oidcServer.Url),
@@ -416,9 +416,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         await using var oidcServer = new FakeOidcMetadataServer();
         var tokenProvider = new NoTokenDownstreamServiceTokenProvider();
         using var environment = EnvironmentVariableScope.Set(
-            ("KUBECONFIG", kubeconfig),
-            ("K8S_MCP_APPROVAL_ROOT", Path.Combine(testRoot, "approvals")),
-            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            ("InfraGate__Kubernetes__KubeConfig", kubeconfig),
+            ("InfraGate__Approval__Root", Path.Combine(testRoot, "approvals")),
+            ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "true"),
             (DownstreamAuthConventions.EnvironmentVariables.Authority, oidcServer.Url),
@@ -476,9 +476,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         await using var k8sApi = new TestKubernetesApi(HandleScaleKubernetesRequest);
         var kubeconfig = await WriteKubeconfigAsync(testRoot, k8sApi.Url);
         using var environment = EnvironmentVariableScope.Set(
-            ("KUBECONFIG", kubeconfig),
-            ("K8S_MCP_APPROVAL_ROOT", approvalRoot),
-            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            ("InfraGate__Kubernetes__KubeConfig", kubeconfig),
+            ("InfraGate__Approval__Root", approvalRoot),
+            ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
         await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
@@ -560,9 +560,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         await using var k8sApi = new TestKubernetesApi(HandleApplyDiffKubernetesRequest);
         var kubeconfig = await WriteKubeconfigAsync(testRoot, k8sApi.Url);
         using var environment = EnvironmentVariableScope.Set(
-            ("KUBECONFIG", kubeconfig),
-            ("K8S_MCP_APPROVAL_ROOT", approvalRoot),
-            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            ("InfraGate__Kubernetes__KubeConfig", kubeconfig),
+            ("InfraGate__Approval__Root", approvalRoot),
+            ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
         await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
@@ -599,9 +599,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         }
 
         using var environment = EnvironmentVariableScope.Set(
-            ("KUBECONFIG", kubeconfig),
-            ("K8S_MCP_APPROVAL_ROOT", approvalRoot),
-            ("K8S_MCP_ALLOWED_NAMESPACES", NamespaceName),
+            ("InfraGate__Kubernetes__KubeConfig", kubeconfig),
+            ("InfraGate__Approval__Root", approvalRoot),
+            ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
         await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);

@@ -14,16 +14,22 @@ The snapshot has this shape:
 
 ```json
 {
-  "namespace": "...",
+  "namespace": "mcp-nginx-demo",
   "toolResults": {
-    "get_k8s_status": "{ ... }",
-    "get_k8s_events": "{ ... }"
+    "get_k8s_status": {
+      "namespace": "mcp-nginx-demo",
+      "deployments": [...]
+    },
+    "get_k8s_events": {
+      "namespace": "mcp-nginx-demo",
+      "events": [...]
+    }
   },
   "capturedAt": "..."
 }
 ```
 
-Both tool-result values are JSON strings — parse them mentally as objects.
+Each value under `toolResults` is a fully-parsed JSON object — no string escaping.
 
 **Critical interpretation rules:**
 

@@ -8,7 +8,6 @@ internal static class ExecutorConventions
     private const string DefaultPort = "3005";
 
     public const string DefaultClientId = "infra-gate-executor";
-    public const string DefaultOAuthScope = "mcp:tools.execute";
     public const string DefaultUrl = LoopbackHttpScheme + UriSchemeSeparator + LoopbackHost + ":" + DefaultPort;
     public const string HealthEndpointPath = "/health";
     public const string A2AHandoffEndpointPath = "/a2a/executor";
@@ -24,25 +23,10 @@ internal static class ExecutorConventions
 
     public const int WaitForPlanApprovalPerCallTimeoutSeconds = 55;
 
-    public static class EnvironmentVariables
-    {
-        public const string AspNetCoreUrls = "ASPNETCORE_URLS";
-        public const string GatewayBaseUrl = "INFRA_GATE_EXECUTOR_GATEWAY_BASE_URL";
-        public const string ConcurrencyCap = "INFRA_GATE_EXECUTOR_CONCURRENCY_CAP";
-        public const string WatchTimeoutSeconds = "INFRA_GATE_EXECUTOR_WATCH_TIMEOUT_SECONDS";
-        public const string ClientId = "INFRA_GATE_EXECUTOR_CLIENT_ID";
-        public const string ClientSecret = "INFRA_GATE_EXECUTOR_CLIENT_SECRET";
-        public const string OAuthAuthority = "INFRA_GATE_EXECUTOR_OAUTH_AUTHORITY";
-        public const string OAuthScope = "INFRA_GATE_EXECUTOR_OAUTH_SCOPE";
-    }
+    /// <summary>Configuration section bound to <see cref="ExecutorOptions"/> (recursive auto-binding).</summary>
+    public const string SectionName = "InfraGate:Executor";
 
-    public static class ConfigurationKeys
-    {
-        public const string Executor = "InfraGate:Executor";
-        public const string GatewayBaseUrl = "InfraGate:Executor:GatewayBaseUrl";
-        public const string ConcurrencyCap = "InfraGate:Executor:ConcurrencyCap";
-        public const string WatchTimeoutSeconds = "InfraGate:Executor:WatchTimeoutSeconds";
-    }
+    public const string AspNetCoreUrlsKey = "InfraGate:Executor:AspNetCoreUrls";
 
     public static class ToolNames
     {

@@ -111,17 +111,17 @@ public sealed class PlannerConventionsTests
     [Fact]
     public void EnvironmentVariables_ArePinned()
     {
-        Assert.Equal("ASPNETCORE_URLS", PlannerConventions.EnvironmentVariables.AspNetCoreUrls);
-        Assert.Equal("INFRA_GATE_PLANNER_GATEWAY_BASE_URL", PlannerConventions.EnvironmentVariables.GatewayBaseUrl);
-        Assert.Equal("INFRA_GATE_PLANNER_EXECUTOR_HANDOFF_URL", PlannerConventions.EnvironmentVariables.ExecutorHandoffUrl);
-        Assert.Equal("INFRA_GATE_PLANNER_LLM_PROVIDER", PlannerConventions.EnvironmentVariables.LlmProvider);
-        Assert.Equal("INFRA_GATE_PLANNER_LLM_MODEL", PlannerConventions.EnvironmentVariables.LlmModel);
-        Assert.Equal("INFRA_GATE_PLANNER_LLM_API_KEY", PlannerConventions.EnvironmentVariables.LlmApiKey);
-        Assert.Equal("INFRA_GATE_PLANNER_CLIENT_ID", PlannerConventions.EnvironmentVariables.ClientId);
-        Assert.Equal("INFRA_GATE_PLANNER_CLIENT_SECRET", PlannerConventions.EnvironmentVariables.ClientSecret);
-        Assert.Equal("INFRA_GATE_PLANNER_OAUTH_AUTHORITY", PlannerConventions.EnvironmentVariables.OAuthAuthority);
-        Assert.Equal("INFRA_GATE_PLANNER_OAUTH_SCOPE", PlannerConventions.EnvironmentVariables.OAuthScope);
-        Assert.Equal("INFRA_GATE_PLANNER_FILE_SINK_ROOT", PlannerConventions.EnvironmentVariables.FileSinkRoot);
+        Assert.Equal("InfraGate__Planner__AspNetCoreUrls", PlannerConventions.EnvironmentVariables.AspNetCoreUrls);
+        Assert.Equal("InfraGate__Planner__GatewayBaseUrl", PlannerConventions.EnvironmentVariables.GatewayBaseUrl);
+        Assert.Equal("InfraGate__Planner__ExecutorHandoffUrl", PlannerConventions.EnvironmentVariables.ExecutorHandoffUrl);
+        Assert.Equal("InfraGate__Planner__LlmProvider", PlannerConventions.EnvironmentVariables.LlmProvider);
+        Assert.Equal("InfraGate__Planner__LlmModel", PlannerConventions.EnvironmentVariables.LlmModel);
+        Assert.Equal("InfraGate__Planner__LlmApiKey", PlannerConventions.EnvironmentVariables.LlmApiKey);
+        Assert.Equal("InfraGate__Planner__ClientCredentials__ClientId", PlannerConventions.EnvironmentVariables.ClientId);
+        Assert.Equal("InfraGate__Planner__ClientCredentials__ClientSecret", PlannerConventions.EnvironmentVariables.ClientSecret);
+        Assert.Equal("InfraGate__Planner__ClientCredentials__Authority", PlannerConventions.EnvironmentVariables.OAuthAuthority);
+        Assert.Equal("InfraGate__Planner__ClientCredentials__Scope", PlannerConventions.EnvironmentVariables.OAuthScope);
+        Assert.Equal("InfraGate__Planner__FileSinkRoot", PlannerConventions.EnvironmentVariables.FileSinkRoot);
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public sealed class PlannerConventionsTests
         Assert.Equal("InfraGate:Planner:ExecutorHandoffUrl", PlannerConventions.ConfigurationKeys.ExecutorHandoffUrl);
         Assert.Equal("InfraGate:Planner:LlmProvider", PlannerConventions.ConfigurationKeys.LlmProvider);
         Assert.Equal("InfraGate:Planner:LlmModel", PlannerConventions.ConfigurationKeys.LlmModel);
-        Assert.Equal("InfraGate:Planner:FileSink:Root", PlannerConventions.ConfigurationKeys.FileSinkRoot);
+        Assert.Equal("InfraGate:Planner:FileSinkRoot", PlannerConventions.ConfigurationKeys.FileSinkRoot);
     }
 
     [Fact]

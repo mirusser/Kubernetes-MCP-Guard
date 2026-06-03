@@ -36,7 +36,7 @@ The Plan Envelope's `ApprovalPolicy` field becomes a tagged union — `SameSubje
 
 `propose_plan` (ADR-0018) always declares `OperatorApproval { GroupName = configured-operator-group }`. The Planner does not pick the policy per call — it is unconditional for autonomous-originated plans.
 
-The configured group name lives in gateway configuration (env `INFRA_GATE_OPERATOR_GROUP`, default `kubernetes-operators`). The configured operator email lives in `INFRA_GATE_OPERATOR_EMAIL`. Both are gateway-side configuration, not Planner-side — the Planner has no operational knowledge of who its approvers are.
+The configured group name lives in gateway configuration (env `InfraGate__Approval__OperatorGroup`, default `kubernetes-operators`). The configured operator email lives in `InfraGate__Approval__OperatorEmail`. Both are gateway-side configuration, not Planner-side — the Planner has no operational knowledge of who its approvers are.
 
 Pre-execution Gate 4 (Authorization Check) for `OperatorApproval` plans is unchanged in shape — `SameSubjectAuthorizationCheck` is replaced with a per-policy `IAuthorizationCheck` resolver. The check still asks "is this caller authorised to execute this plan?" — the answer for `OperatorApproval` is "yes if the caller is the registered Executor Service Identity for plans whose approver was in the operator group." That separation keeps the **Approval Policy** ("who approves") distinct from the **Authorization Check** ("who executes") per CONTEXT.md.
 

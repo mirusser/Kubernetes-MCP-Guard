@@ -8,9 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace InfraGate.McpServer.Tests.UnitTests.DownstreamAuth;
 
-/// <summary>
-/// Tests for DownstreamTokenValidator using locally-signed JWTs (no real Keycloak).
-/// </summary>
+/// <summary>Tests for DownstreamTokenValidator using locally-signed JWTs (no real Keycloak).</summary>
 public sealed class DownstreamTokenValidatorTests : IDisposable
 {
     private const string TestIssuer = "https://auth.example.com/realms/test";

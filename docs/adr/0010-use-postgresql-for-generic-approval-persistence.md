@@ -7,7 +7,7 @@
 
 ## Context
 
-The Generic Approval Core currently persists Plan Envelopes, Approval Challenges, Approval Grants, applied markers, and approval audit events as JSON files and JSONL under `K8S_MCP_APPROVAL_ROOT`. That file layout helped prove the Mutation Approval Profile, but it leaves lifecycle transitions split across independent file writes, makes concurrency protection weak around `execute_approved_plan`, and ties approval audit inspection to local mounted storage.
+The Generic Approval Core currently persists Plan Envelopes, Approval Challenges, Approval Grants, applied markers, and approval audit events as JSON files and JSONL under `InfraGate__Approval__Root`. That file layout helped prove the Mutation Approval Profile, but it leaves lifecycle transitions split across independent file writes, makes concurrency protection weak around `execute_approved_plan`, and ties approval audit inspection to local mounted storage.
 
 InfraGate now needs a durable relational persistence layer for the approval lifecycle while preserving the existing ownership boundaries: the Generic Approval Core owns approval state and audit, Domain Adapters emit adapter payloads but do not persist the Audit Trail, the Gateway owns guardrail audit, and ASP.NET Data Protection remains platform infrastructure.
 
@@ -17,13 +17,13 @@ InfraGate will replace file-backed Generic Approval Core persistence with Postgr
 
 The first slice is PostgreSQL-only for approval runtime persistence. There will be no supported file-backed approval store, no dual-write migration path, and no approval `audit.jsonl` export in the first implementation. Existing pending file plans can be re-requested after the switch.
 
-Approval tables will live in an internal `approvals` schema in the same database as the gateway's configured runtime database. The schema name is not external configuration. The only new approval persistence runtime setting is the PostgreSQL connection string in generated JSON configuration from run profiles; no new approval persistence environment variable will be added.
+Approval tables will live in an internal `approvals` schema in the same database as the gateway's configured runtime database. The schema name is not external configuration. The approval persistence runtime setting is the PostgreSQL connection string emitted from run profiles as `InfraGate__Approval__Postgres__ConnectionString` in the generated env file.
 
 Approval records will be stored with explicit relational columns for approval-flow lookup, constraints, and safety checks, plus canonical JSON text for the full source records. The persistence contract will not depend on PostgreSQL `jsonb` behavior for canonicalization, integrity checks, or adapter payload semantics. The Generic Approval Core remains responsible for canonical text and hash generation so a future database swap stays plausible.
 
 ## Consequences
 
-- `K8S_MCP_APPROVAL_ROOT` remains for now as the existing file-backed ASP.NET Data Protection path anchor. It is no longer the approval state or approval audit store. This naming debt is intentional and should be cleaned up in a later platform configuration slice.
+- `InfraGate__Approval__Root` remains for now as the existing file-backed ASP.NET Data Protection path anchor. It is no longer the approval state or approval audit store. This naming debt is intentional and should be cleaned up in a later platform configuration slice.
 - Guardrail audit remains file-backed under Gateway ownership and is out of scope for this decision.
 - Serilog file logs remain operational telemetry and are out of scope.
 - `InfraGate.McpServer` must not receive approval database configuration and should not know about Generic Approval Core persistence. The downstream server remains a swappable domain execution substrate.
@@ -46,4 +46,4 @@ Approval records will be stored with explicit relational columns for approval-fl
 
 **Run migrations automatically at gateway startup.** Rejected because approval persistence is safety-critical infrastructure. Schema mutation should be an explicit deployment step, while the app should only validate compatibility at startup.
 
-**Amended 2026-05-22:** A `runMigrationsOnStartup` flag was added to `genericApprovalCore` in run-profiles so development, Compose, and smoke profiles can opt into automatic migration application during local bring-up. The production profile does not set this flag (defaults to `false`). The standalone migration CLI tool (`tools/approval-postgres-migrations/`) remains the canonical production migration path. The gateway reads `InfraGate:Approval:Postgres:RunMigrationsOnStartup` from generated appsettings JSON and only applies migrations when the value is `true`. This amendment reflects practical dev-experience needs without weakening the production safety posture.
+**Amended 2026-05-22:** A `runMigrationsOnStartup` flag was added to `genericApprovalCore` in run-profiles so development, Compose, and smoke profiles can opt into automatic migration application during local bring-up. The production profile does not set this flag (defaults to `false`). The standalone migration CLI tool (`tools/approval-postgres-migrations/`) remains the canonical production migration path. The gateway reads `InfraGate:Approval:Postgres:RunMigrationsOnStartup` from the generated env file (`InfraGate__Approval__Postgres__RunMigrationsOnStartup`) and only applies migrations when the value is `true`. This amendment reflects practical dev-experience needs without weakening the production safety posture.

@@ -13,6 +13,7 @@ internal static class PlannerConventions
     public const string DefaultLlmModel = "claude-sonnet-4-6";
     public const string DefaultOpenRouterLlmModel = "deepseek/deepseek-v4-flash:free";
     public const string HealthEndpointPath = "/health";
+    public const string AspNetCoreUrlsKey = "InfraGate:Planner:AspNetCoreUrls";
 
     // A2A endpoint replacing the legacy /handoff/anomalies HTTP POST
     public const string A2AHandoffEndpointPath = "/a2a/planner";
@@ -37,22 +38,22 @@ internal static class PlannerConventions
 
     public static class EnvironmentVariables
     {
-        public const string AspNetCoreUrls = "ASPNETCORE_URLS";
-        public const string GatewayBaseUrl = "INFRA_GATE_PLANNER_GATEWAY_BASE_URL";
-        public const string ExecutorHandoffUrl = "INFRA_GATE_PLANNER_EXECUTOR_HANDOFF_URL";
-        public const string ObserverBaseUrl = "INFRA_GATE_PLANNER_OBSERVER_BASE_URL";
-        public const string AnomalyWallClockCapSeconds = "INFRA_GATE_PLANNER_ANOMALY_WALL_CLOCK_CAP_SECONDS";
-        public const string BatchWallClockCapSeconds = "INFRA_GATE_PLANNER_BATCH_WALL_CLOCK_CAP_SECONDS";
-        public const string MaxToolIterations = "INFRA_GATE_PLANNER_MAX_TOOL_ITERATIONS";
-        public const string LlmProvider = "INFRA_GATE_PLANNER_LLM_PROVIDER";
-        public const string LlmModel = "INFRA_GATE_PLANNER_LLM_MODEL";
-        public const string LlmApiKey = "INFRA_GATE_PLANNER_LLM_API_KEY";
-        public const string ClientId = "INFRA_GATE_PLANNER_CLIENT_ID";
-        public const string ClientSecret = "INFRA_GATE_PLANNER_CLIENT_SECRET";
-        public const string OAuthAuthority = "INFRA_GATE_PLANNER_OAUTH_AUTHORITY";
-        public const string OAuthScope = "INFRA_GATE_PLANNER_OAUTH_SCOPE";
-        public const string FileSinkRoot = "INFRA_GATE_PLANNER_FILE_SINK_ROOT";
-        public const string AuditConnectionString = "INFRA_GATE_PLANNER_AUDIT_CONNECTION_STRING";
+        public const string AspNetCoreUrls = "InfraGate__Planner__AspNetCoreUrls";
+        public const string GatewayBaseUrl = "InfraGate__Planner__GatewayBaseUrl";
+        public const string ExecutorHandoffUrl = "InfraGate__Planner__ExecutorHandoffUrl";
+        public const string ObserverBaseUrl = "InfraGate__Planner__ObserverBaseUrl";
+        public const string AnomalyWallClockCapSeconds = "InfraGate__Planner__AnomalyWallClockCapSeconds";
+        public const string BatchWallClockCapSeconds = "InfraGate__Planner__BatchWallClockCapSeconds";
+        public const string MaxToolIterations = "InfraGate__Planner__MaxToolIterations";
+        public const string LlmProvider = "InfraGate__Planner__LlmProvider";
+        public const string LlmModel = "InfraGate__Planner__LlmModel";
+        public const string LlmApiKey = "InfraGate__Planner__LlmApiKey";
+        public const string ClientId = "InfraGate__Planner__ClientCredentials__ClientId";
+        public const string ClientSecret = "InfraGate__Planner__ClientCredentials__ClientSecret";
+        public const string OAuthAuthority = "InfraGate__Planner__ClientCredentials__Authority";
+        public const string OAuthScope = "InfraGate__Planner__ClientCredentials__Scope";
+        public const string FileSinkRoot = "InfraGate__Planner__FileSinkRoot";
+        public const string AuditConnectionString = "InfraGate__Planner__AuditConnectionString";
     }
 
     public static class ConfigurationKeys
@@ -67,7 +68,7 @@ internal static class PlannerConventions
         public const string LlmProvider = "InfraGate:Planner:LlmProvider";
         public const string LlmModel = "InfraGate:Planner:LlmModel";
         public const string LlmApiKey = "InfraGate:Planner:LlmApiKey";
-        public const string FileSinkRoot = "InfraGate:Planner:FileSink:Root";
+        public const string FileSinkRoot = "InfraGate:Planner:FileSinkRoot";
         public const string AuditConnectionString = "InfraGate:Planner:AuditConnectionString";
     }
 

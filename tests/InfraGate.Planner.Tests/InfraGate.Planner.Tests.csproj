@@ -25,6 +25,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <Using Include="Xunit" />
     <Using Include="NSubstitute" />
+    <Using Include="InfraGate.Planner.Settings" />
   </ItemGroup>
 
   <ItemGroup>

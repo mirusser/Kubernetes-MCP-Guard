@@ -1,6 +1,3 @@
-using InfraGate.Approvals;
-using InfraGate.Approvals.Plan;
-using InfraGate.DownstreamAuth;
 using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpGateway;
@@ -46,60 +43,20 @@ internal static class McpGatewayConventions
 
     public static class EnvironmentVariables
     {
-        public const string AspNetCoreUrls = "ASPNETCORE_URLS";
-        public const string DownstreamAssembly = "INFRA_GATE_DOWNSTREAM_ASSEMBLY";
-        public const string DownstreamProject = "INFRA_GATE_DOWNSTREAM_PROJECT";
-        public const string GuardAuditRoot = "INFRA_GATE_GUARD_AUDIT_ROOT";
-        public const string ApprovalBaseUrl = "INFRA_GATE_APPROVAL_BASE_URL";
-        public const string ApprovalChallengeTtlSeconds = "INFRA_GATE_APPROVAL_CHALLENGE_TTL_SECONDS";
-        public const string OperatorEmail = "INFRA_GATE_OPERATOR_EMAIL";
-        public const string OperatorGroup = "INFRA_GATE_OPERATOR_GROUP";
-        public const string SmtpHost = "INFRA_GATE_GATEWAY_SMTP_HOST";
-        public const string SmtpPort = "INFRA_GATE_GATEWAY_SMTP_PORT";
-        public const string SmtpFrom = "INFRA_GATE_GATEWAY_SMTP_FROM";
-        public const string SmtpUser = "INFRA_GATE_GATEWAY_SMTP_USER";
-        public const string SmtpPassword = "INFRA_GATE_GATEWAY_SMTP_PASSWORD";
-        public const string SmtpEnableSsl = "INFRA_GATE_GATEWAY_SMTP_ENABLE_SSL";
-    }
-
-    public static void RegisterInfraGateEnvVarMappings(InfraGateEnvVarMappings mappings)
-    {
-        ArgumentNullException.ThrowIfNull(mappings);
-        mappings.Map(EnvironmentVariables.AspNetCoreUrls, ConfigurationKeys.AspNetCoreUrls);
-        mappings.Map(EnvironmentVariables.DownstreamAssembly, ConfigurationKeys.DownstreamAssembly);
-        mappings.Map(EnvironmentVariables.DownstreamProject, ConfigurationKeys.DownstreamProject);
-        mappings.Map(EnvironmentVariables.GuardAuditRoot, ConfigurationKeys.GuardAuditRoot);
-        mappings.Map(EnvironmentVariables.ApprovalBaseUrl, ConfigurationKeys.ApprovalBaseUrl);
-        mappings.Map(EnvironmentVariables.ApprovalChallengeTtlSeconds, ConfigurationKeys.ApprovalChallengeTtlSeconds);
-        mappings.Map(EnvironmentVariables.OperatorGroup, ConfigurationKeys.OperatorGroup);
-        mappings.Map(EnvironmentVariables.OperatorEmail, ConfigurationKeys.OperatorEmail);
-        mappings.Map(EnvironmentVariables.SmtpHost, ConfigurationKeys.SmtpHost);
-        mappings.Map(EnvironmentVariables.SmtpPort, ConfigurationKeys.SmtpPort);
-        mappings.Map(EnvironmentVariables.SmtpFrom, ConfigurationKeys.SmtpFrom);
-        mappings.Map(EnvironmentVariables.SmtpUser, ConfigurationKeys.SmtpUser);
-        mappings.Map(EnvironmentVariables.SmtpPassword, ConfigurationKeys.SmtpPassword);
-        mappings.Map(EnvironmentVariables.SmtpEnableSsl, ConfigurationKeys.SmtpEnableSsl);
-        RegisterDownstreamAuthMappings(mappings);
-    }
-
-    private static void RegisterDownstreamAuthMappings(InfraGateEnvVarMappings mappings)
-    {
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Required,
-            DownstreamAuthConventions.ConfigurationKeys.Required);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Authority,
-            DownstreamAuthConventions.ConfigurationKeys.Authority);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.MetadataAddress,
-            DownstreamAuthConventions.ConfigurationKeys.MetadataAddress);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata,
-            DownstreamAuthConventions.ConfigurationKeys.RequireHttpsMetadata);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Audience,
-            DownstreamAuthConventions.ConfigurationKeys.Audience);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Scope,
-            DownstreamAuthConventions.ConfigurationKeys.Scope);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.GatewayClientId,
-            DownstreamAuthConventions.ConfigurationKeys.GatewayClientId);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.GatewayClientSecret,
-            DownstreamAuthConventions.ConfigurationKeys.GatewayClientSecret);
+        public const string AspNetCoreUrls = "InfraGate__Gateway__AspNetCoreUrls";
+        public const string DownstreamAssembly = "InfraGate__Gateway__DownstreamAssembly";
+        public const string DownstreamProject = "InfraGate__Gateway__DownstreamProject";
+        public const string GuardAuditRoot = "InfraGate__Gateway__GuardAuditRoot";
+        public const string ApprovalBaseUrl = "InfraGate__Approval__BaseUrl";
+        public const string ApprovalChallengeTtlSeconds = "InfraGate__Approval__ChallengeTtlSeconds";
+        public const string OperatorEmail = "InfraGate__Approval__OperatorEmail";
+        public const string OperatorGroup = "InfraGate__Approval__OperatorGroup";
+        public const string SmtpHost = "InfraGate__Approval__Smtp__Host";
+        public const string SmtpPort = "InfraGate__Approval__Smtp__Port";
+        public const string SmtpFrom = "InfraGate__Approval__Smtp__From";
+        public const string SmtpUser = "InfraGate__Approval__Smtp__User";
+        public const string SmtpPassword = "InfraGate__Approval__Smtp__Password";
+        public const string SmtpEnableSsl = "InfraGate__Approval__Smtp__EnableSsl";
     }
 
     public static class Paths
@@ -122,6 +79,7 @@ internal static class McpGatewayConventions
         /// Explicit allowlist of environment variable names that are safe to pass to the downstream server subprocess.
         /// An allowlist is used (rather than a denylist) so that new secrets added to the gateway in the future
         /// are excluded by default rather than leaking automatically.
+        /// Uses InfraGate__ framework-convention names; old K8S_MCP_* names are hard-cut (Task 2 stdio migration).
         /// </summary>
         public static readonly IReadOnlySet<string> AllowedEnvironmentVariables =
             new HashSet<string>(StringComparer.Ordinal)
@@ -136,29 +94,35 @@ internal static class McpGatewayConventions
                 "TEMP",
 
                 // Runtime environment signals — server reads these to determine its mode
-                RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment,
+                "InfraGate__Runtime__Environment",
                 RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment,
                 RuntimeSafetyConventions.EnvironmentVariables.AspNetCoreEnvironment,
                 RuntimeSafetyConventions.EnvironmentVariables.ConfigPath,
 
-                // Kubernetes access — server needs these to connect to the cluster
-                "KUBECONFIG",
-                "K8S_MCP_USE_IN_CLUSTER",
+                // Server domain config — InfraGate:Kubernetes section (__ convention)
+                "InfraGate__Kubernetes__KubeConfig",
+                "InfraGate__Kubernetes__UseInClusterConfig",
+                "InfraGate__Kubernetes__LogPath",
+                "InfraGate__Kubernetes__AllowedNamespaces__0",
+                "InfraGate__Kubernetes__AllowedNamespaces__1",
+                "InfraGate__Kubernetes__AllowedNamespaces__2",
+                "InfraGate__Kubernetes__AllowedNamespaces__3",
+                "InfraGate__Kubernetes__AllowedNamespaces__4",
+                "InfraGate__Kubernetes__AllowedNamespaces__5",
+                "InfraGate__Kubernetes__AllowedNamespaces__6",
+                "InfraGate__Kubernetes__AllowedNamespaces__7",
+                "InfraGate__Kubernetes__AllowedNamespaces__8",
+                "InfraGate__Kubernetes__AllowedNamespaces__9",
 
-                // Server domain config — approval root, namespaces, logging
-                ApprovalConventions.EnvironmentVariables.ApprovalRoot,
-                "K8S_MCP_ALLOWED_NAMESPACES",
-                "K8S_MCP_LOG_PATH",
-
-                // Downstream auth (server-side validation config only — no gateway credentials)
-                DownstreamAuthConventions.EnvironmentVariables.Required,
-                DownstreamAuthConventions.EnvironmentVariables.Authority,
-                DownstreamAuthConventions.EnvironmentVariables.MetadataAddress,
-                DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata,
-                DownstreamAuthConventions.EnvironmentVariables.Audience,
-                DownstreamAuthConventions.EnvironmentVariables.Scope,
+                // Downstream auth — InfraGate:DownstreamAuth section (server-side validation only)
                 // GatewayClientId and GatewayClientSecret are intentionally excluded:
                 // they are gateway-only credentials and must never reach the server subprocess.
+                "InfraGate__DownstreamAuth__Required",
+                "InfraGate__DownstreamAuth__Authority",
+                "InfraGate__DownstreamAuth__MetadataAddress",
+                "InfraGate__DownstreamAuth__RequireHttpsMetadata",
+                "InfraGate__DownstreamAuth__Audience",
+                "InfraGate__DownstreamAuth__Scope",
             };
     }
 

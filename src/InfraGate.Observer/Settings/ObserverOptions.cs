@@ -1,12 +1,20 @@
-namespace InfraGate.Observer;
+namespace InfraGate.Observer.Settings;
 
+/// <summary>
+/// Strongly-typed Observer configuration bound from the <c>InfraGate:Observer</c> section
+/// (see <see cref="SectionName"/>). The framework binder matches property names to configuration
+/// keys recursively — <see cref="ClientCredentials"/> binds automatically from
+/// <c>InfraGate:Observer:ClientCredentials</c>; there is no manual env-var mapping or per-key reads.
+/// </summary>
 public sealed record class ObserverOptions
 {
+    public const string SectionName = "InfraGate:Observer";
+
     public int CycleIntervalSeconds { get; init; } = AnomalyObserverConventions.DefaultCadenceSeconds;
     public int WallClockCapSeconds { get; init; } = AnomalyObserverConventions.WallClockCapSeconds;
     public int MaxToolIterations { get; init; } = AnomalyObserverConventions.MaxToolIterations;
     public string GatewayBaseUrl { get; init; } = string.Empty;
-    public IReadOnlyList<string> AllowedNamespaces { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> AllowedNamespaces { get; init; } = [];
     public string LlmProvider { get; init; } = string.Empty;
     public string LlmModel { get; init; } = string.Empty;
     public string LlmApiKey { get; init; } = string.Empty;
@@ -15,6 +23,14 @@ public sealed record class ObserverOptions
     public string FileSinkRoot { get; init; } = string.Empty;
     public string PlannerHandoffUrl { get; init; } = string.Empty;
     public string AuditConnectionString { get; init; } = string.Empty;
+    public bool SkipCycleWhenNoWarningEvents { get; init; } = true;
+
+    /// <summary>
+    /// OAuth client-credentials the Observer uses to authenticate its outbound MCP calls.
+    /// Bound recursively from <c>InfraGate:Observer:ClientCredentials</c>; validated at startup by
+    /// <c>AddClientCredentialsTokenProvider</c>.
+    /// </summary>
+    public ClientCredentialsTokenOptions ClientCredentials { get; init; } = new();
 
     public void Validate()
     {
@@ -55,8 +71,7 @@ public sealed record class ObserverOptions
 
         if (string.IsNullOrWhiteSpace(GatewayBaseUrl))
         {
-            throw new InvalidOperationException(
-                $"GatewayBaseUrl must be configured.");
+            throw new InvalidOperationException("GatewayBaseUrl must be configured.");
         }
     }
 }

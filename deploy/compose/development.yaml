@@ -6,11 +6,7 @@
 #     --set identityProvider.authority=http://127.0.0.1:3010/realms/infra-gate \
 #     --set identityProvider.metadataAddress=http://172.17.0.1:3010/realms/infra-gate/.well-known/openid-configuration \
 #     --set approvalAuthority.oauthTokenEndpoint=http://172.17.0.1:3010/realms/infra-gate/protocol/openid-connect/token \
-#     --set host.configHostPath=../generated/development.appsettings.json \
 #     --output deploy/generated/development.env
-#   dotnet run --project src/InfraGate.RunProfiles -- generate development \
-#     --format appsettings \
-#     --output deploy/generated/development.appsettings.json
 #   docker compose --env-file deploy/generated/development.env \
 #     -f deploy/compose/development.yaml up
 
@@ -46,7 +42,6 @@ services:
     env_file:
       - ${INFRA_GATE_GATEWAY_ENV_FILE:-../generated/development.env}
     volumes:
-      - ${INFRA_GATE_CONFIG_HOST_PATH:-/etc/infra-gate/development.appsettings.json}:/app/config/appsettings.InfraGate.json:ro
       - ${INFRA_GATE_KUBECONFIG_HOST_PATH:-/etc/infra-gate/development.kubeconfig}:/run/kube/infra-gate.config:ro
       - ${INFRA_GATE_APPROVAL_HOST_PATH:-/var/lib/infra-gate/development/approvals}:/data/approvals
       - ${INFRA_GATE_GUARD_AUDIT_HOST_PATH:-/var/lib/infra-gate/development/guardrails}:/data/guardrails

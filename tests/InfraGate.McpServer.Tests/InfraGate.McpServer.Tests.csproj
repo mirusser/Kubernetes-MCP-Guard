@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="InfraGate.McpServer.Settings" />
   </ItemGroup>
 
   <ItemGroup>

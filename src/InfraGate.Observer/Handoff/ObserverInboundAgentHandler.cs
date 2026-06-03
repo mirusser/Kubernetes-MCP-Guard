@@ -58,16 +58,14 @@ internal sealed class ObserverInboundAgentHandler(
         AgentEventQueue eventQueue,
         CancellationToken cancellationToken) => Task.CompletedTask;
 
+#pragma warning disable S3776 // linear guard-chain; complexity comes from essential multi-guard dispatch
     private async Task<string> HandleToolRequestAsync(
         ObserverInboundEnvelope envelope,
         CancellationToken cancellationToken)
     {
         var request = envelope.ToolRequest;
         if (request is null)
-        {
-            var missingPayload = new ToolResponsePayload { IsError = true, ResultJson = "error: missing tool request payload" };
-            return JsonSerializer.Serialize(missingPayload);
-        }
+            return ErrorResponse("error: missing tool request payload");
 
         bool allowed = guardrailPolicy is not null &&
                        guardrailPolicy.AllowedToolNames.Contains(request.ToolName);
@@ -75,27 +73,20 @@ internal sealed class ObserverInboundAgentHandler(
         if (!allowed)
         {
             ObserverLogEvents.LogInboundToolDenied(logger, request.ToolName);
-            if (auditOutbox is not null)
-            {
-                await auditOutbox.AppendAsync(
-                    new ObserverAuditEntry(
-                        EventName: ObserverAuditEvents.HandoffToolDenied,
-                        Payload: new { toolName = request.ToolName },
-                        CycleId: envelope.CycleId,
-                        ActorSubject: ObserverAuditEvents.Subjects.Planner,
-                        Outcome: ObserverAuditEvents.Outcomes.Denied),
-                    cancellationToken).ConfigureAwait(false);
-            }
+            await AppendAuditAsync(
+                new ObserverAuditEntry(
+                    EventName: ObserverAuditEvents.HandoffToolDenied,
+                    Payload: new { toolName = request.ToolName },
+                    CycleId: envelope.CycleId,
+                    ActorSubject: ObserverAuditEvents.Subjects.Planner,
+                    Outcome: ObserverAuditEvents.Outcomes.Denied),
+                cancellationToken).ConfigureAwait(false);
 
-            var deniedPayload = new ToolResponsePayload { IsError = true, ResultJson = "error: tool not permitted by observer whitelist" };
-            return JsonSerializer.Serialize(deniedPayload);
+            return ErrorResponse("error: tool not permitted by observer whitelist");
         }
 
         if (mcpToolset is null)
-        {
-            var unavailablePayload = new ToolResponsePayload { IsError = true, ResultJson = "error: MCP toolset unavailable" };
-            return JsonSerializer.Serialize(unavailablePayload);
-        }
+            return ErrorResponse("error: MCP toolset unavailable");
 
         IReadOnlyDictionary<string, object?>? args = null;
         if (request.ArgumentsJson is not null)
@@ -106,8 +97,7 @@ internal sealed class ObserverInboundAgentHandler(
             }
             catch (JsonException ex)
             {
-                var badArgsPayload = new ToolResponsePayload { IsError = true, ResultJson = $"error: malformed arguments json - {ex.Message}" };
-                return JsonSerializer.Serialize(badArgsPayload);
+                return ErrorResponse($"error: malformed arguments json - {ex.Message}");
             }
         }
 
@@ -120,12 +110,12 @@ internal sealed class ObserverInboundAgentHandler(
         catch (Exception ex)
         {
             ObserverLogEvents.LogInboundToolCallFailed(logger, request.ToolName, ex);
-            var callErrorPayload = new ToolResponsePayload { IsError = true, ResultJson = $"error: tool execution failed - {ex.Message}" };
-            return JsonSerializer.Serialize(callErrorPayload);
+            return ErrorResponse($"error: tool execution failed - {ex.Message}");
         }
 
         return await BuildToolResultResponseAsync(result, request.ToolName, envelope.CycleId, cancellationToken).ConfigureAwait(false);
     }
+#pragma warning restore S3776
 
     private async Task<string> BuildToolResultResponseAsync(
         CallToolResult result,
@@ -143,20 +133,26 @@ internal sealed class ObserverInboundAgentHandler(
         else
             ObserverLogEvents.LogMcpToolError(logger, toolName);
 
-        if (auditOutbox is not null)
-        {
-            await auditOutbox.AppendAsync(
-                new ObserverAuditEntry(
-                    EventName: ObserverAuditEvents.HandoffToolServed,
-                    Payload: new { toolName, isError },
-                    CycleId: cycleId,
-                    ActorSubject: ObserverAuditEvents.Subjects.Planner,
-                    Outcome: isError ? ObserverAuditEvents.Outcomes.ToolError : ObserverAuditEvents.Outcomes.Served),
-                cancellationToken).ConfigureAwait(false);
-        }
+        await AppendAuditAsync(
+            new ObserverAuditEntry(
+                EventName: ObserverAuditEvents.HandoffToolServed,
+                Payload: new { toolName, isError },
+                CycleId: cycleId,
+                ActorSubject: ObserverAuditEvents.Subjects.Planner,
+                Outcome: isError ? ObserverAuditEvents.Outcomes.ToolError : ObserverAuditEvents.Outcomes.Served),
+            cancellationToken).ConfigureAwait(false);
 
         var payload = new ToolResponsePayload { IsError = isError, ResultJson = resultText };
         return JsonSerializer.Serialize(payload);
+    }
+
+    private static string ErrorResponse(string message)
+        => JsonSerializer.Serialize(new ToolResponsePayload { IsError = true, ResultJson = message });
+
+    private async ValueTask AppendAuditAsync(ObserverAuditEntry entry, CancellationToken ct)
+    {
+        if (auditOutbox is not null)
+            await auditOutbox.AppendAsync(entry, ct).ConfigureAwait(false);
     }
 }
 #pragma warning restore MEAI001

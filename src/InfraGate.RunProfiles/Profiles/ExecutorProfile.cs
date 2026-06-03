@@ -3,7 +3,6 @@ namespace InfraGate.RunProfiles;
 internal sealed record class ExecutorProfile(
     string? AspnetcoreUrls,
     string? GatewayBaseUrl,
-    string? TokenEndpoint,
     string? ClientId,
     string? ClientSecret,
     string? OAuthAuthority,

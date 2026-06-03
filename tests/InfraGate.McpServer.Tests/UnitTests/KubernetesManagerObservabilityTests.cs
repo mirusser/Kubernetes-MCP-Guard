@@ -12,7 +12,7 @@ public sealed class KubernetesManagerObservabilityTests
     {
         var manager = CreateManager();
 
-        var result = await manager.GetEventsAsync("other", null, null, 50, CancellationToken.None);
+        var result = await manager.GetEventsAsync("other", null, null, 50, null, CancellationToken.None);
 
         Assert.Contains("Namespace 'other' is not allowed", result);
     }
@@ -22,7 +22,7 @@ public sealed class KubernetesManagerObservabilityTests
     {
         var manager = CreateManager();
 
-        var result = await manager.GetEventsAsync("demo", null, null, 101, CancellationToken.None);
+        var result = await manager.GetEventsAsync("demo", null, null, 101, null, CancellationToken.None);
 
         Assert.Contains("Limit must be between 1 and 100", result);
     }
@@ -32,7 +32,7 @@ public sealed class KubernetesManagerObservabilityTests
     {
         var manager = CreateManager();
 
-        var result = await manager.GetEventsAsync("demo", null, null, 0, CancellationToken.None);
+        var result = await manager.GetEventsAsync("demo", null, null, 0, null, CancellationToken.None);
 
         Assert.Contains("Limit must be between 1 and 100", result);
     }
@@ -112,6 +112,7 @@ public sealed class KubernetesManagerObservabilityTests
             "app=demo",
             "regarding.name=demo-pod",
             2,
+            null,
             CancellationToken.None);
 
         using var document = JsonDocument.Parse(result);
@@ -293,7 +294,7 @@ public sealed class KubernetesManagerObservabilityTests
             TestResponse.Json(StatusJson("InternalError", 500), statusCode: 500));
         var manager = CreateManager(api);
 
-        var result = await manager.GetEventsAsync("demo", null, null, 50, CancellationToken.None);
+        var result = await manager.GetEventsAsync("demo", null, null, 50, null, CancellationToken.None);
 
         Assert.Contains("Event read failed", result);
         Assert.Contains("500", result);
@@ -433,7 +434,7 @@ public sealed class KubernetesManagerObservabilityTests
                                                                             """));
         var manager = CreateManager(api);
 
-        var result = await manager.GetEventsAsync("demo", null, null, 50, CancellationToken.None);
+        var result = await manager.GetEventsAsync("demo", null, null, 50, null, CancellationToken.None);
 
         Assert.Contains("demo-event", result);
     }

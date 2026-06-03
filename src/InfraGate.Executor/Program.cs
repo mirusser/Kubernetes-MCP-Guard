@@ -6,21 +6,14 @@ using InfraGate.Executor.Handoff;
 using InfraGate.Executor.Mcp;
 using InfraGate.Executor.Watch;
 using InfraGate.Observability;
-using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Configuration.AddInfraGateEnvironmentVariables(mappings =>
-{
-    mappings.Map(ExecutorConventions.EnvironmentVariables.GatewayBaseUrl, ExecutorConventions.ConfigurationKeys.GatewayBaseUrl);
-    mappings.Map(ExecutorConventions.EnvironmentVariables.ConcurrencyCap, ExecutorConventions.ConfigurationKeys.ConcurrencyCap);
-    mappings.Map(ExecutorConventions.EnvironmentVariables.WatchTimeoutSeconds, ExecutorConventions.ConfigurationKeys.WatchTimeoutSeconds);
-    RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
-});
-
+// Executor configuration binds from the single InfraGate:Executor section (appsettings.json +
+// InfraGate__Executor__* environment overrides). No manual env-var mapping or per-key reads.
 builder.Services.Configure<ExecutorOptions>(
-    builder.Configuration.GetSection(ExecutorConventions.ConfigurationKeys.Executor));
+    builder.Configuration.GetSection(ExecutorConventions.SectionName));
 
 builder.AddInfraGateObservability(opt =>
 {
@@ -31,7 +24,7 @@ builder.AddInfraGateObservability(opt =>
 ConfigureUrls(builder);
 
 var executorOptions = builder.Configuration
-    .GetSection(ExecutorConventions.ConfigurationKeys.Executor)
+    .GetSection(ExecutorConventions.SectionName)
     .Get<ExecutorOptions>() ?? new ExecutorOptions();
 
 try
@@ -44,15 +37,9 @@ catch (InvalidOperationException ex)
     return 1;
 }
 
-var authOptions = new ClientCredentialsTokenOptions
-{
-    Authority = builder.Configuration[ExecutorConventions.EnvironmentVariables.OAuthAuthority] ?? string.Empty,
-    ClientId = builder.Configuration[ExecutorConventions.EnvironmentVariables.ClientId] ?? ExecutorConventions.DefaultClientId,
-    ClientSecret = builder.Configuration[ExecutorConventions.EnvironmentVariables.ClientSecret],
-    Scope = builder.Configuration[ExecutorConventions.EnvironmentVariables.OAuthScope] ?? ExecutorConventions.DefaultOAuthScope,
-    RequireHttpsMetadata = false,
-};
-builder.Services.AddClientCredentialsTokenProvider(authOptions);
+// ClientCredentials binds recursively from InfraGate:Executor:ClientCredentials — no manual mapping.
+// AddClientCredentialsTokenProvider validates the bound options (Authority/ClientId/Scope) at startup.
+builder.Services.AddClientCredentialsTokenProvider(executorOptions.ClientCredentials);
 
 builder.Services.AddSingleton<IExecutorMcpClient, ExecutorMcpClient>();
 builder.Services.AddSingleton<IExecutorDedupeStore, ExecutorDedupeStore>();
@@ -72,7 +59,7 @@ builder.Services.AddKeyedSingleton<A2AServer>(ExecutorConventions.A2AHandoffAgen
 });
 #pragma warning restore MEAI001
 
-var jwtAuthority = builder.Configuration[ExecutorConventions.EnvironmentVariables.OAuthAuthority] ?? string.Empty;
+var jwtAuthority = executorOptions.ClientCredentials.Authority;
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -100,7 +87,7 @@ builder.Services
 
 var app = builder.Build();
 
-await ConnectExecutorMcpClientAsync(app).ConfigureAwait(false);
+await ConnectExecutorMcpClientAsync(app, executorOptions).ConfigureAwait(false);
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -126,19 +113,22 @@ return 0;
 
 static void ConfigureUrls(WebApplicationBuilder builder)
 {
-    string? configuredUrls = builder.Configuration[ExecutorConventions.EnvironmentVariables.AspNetCoreUrls];
-    if (string.IsNullOrWhiteSpace(configuredUrls))
+    string? configuredUrls = builder.Configuration[ExecutorConventions.AspNetCoreUrlsKey];
+    if (!string.IsNullOrWhiteSpace(configuredUrls))
+    {
+        builder.WebHost.UseUrls(configuredUrls);
+    }
+    else
     {
         builder.WebHost.UseUrls(ExecutorConventions.DefaultUrl);
     }
 }
 
-static async Task ConnectExecutorMcpClientAsync(WebApplication app)
+static async Task ConnectExecutorMcpClientAsync(WebApplication app, ExecutorOptions options)
 {
     var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
     var logger = loggerFactory.CreateLogger("InfraGate.Executor.Startup");
     var mcpClient = app.Services.GetRequiredService<IExecutorMcpClient>();
-    var configuration = app.Services.GetRequiredService<IConfiguration>();
 
     try
     {
@@ -147,9 +137,11 @@ static async Task ConnectExecutorMcpClientAsync(WebApplication app)
     }
     catch (Exception ex)
     {
-        var authority = configuration[ExecutorConventions.EnvironmentVariables.OAuthAuthority] ?? "(not set)";
-        var scope = configuration[ExecutorConventions.EnvironmentVariables.OAuthScope] ?? ExecutorConventions.DefaultOAuthScope;
-        var clientId = configuration[ExecutorConventions.EnvironmentVariables.ClientId] ?? ExecutorConventions.DefaultClientId;
+        var authority = string.IsNullOrEmpty(options.ClientCredentials.Authority)
+            ? "(not set)"
+            : options.ClientCredentials.Authority;
+        var scope = options.ClientCredentials.Scope;
+        var clientId = options.ClientCredentials.ClientId;
 
         ExecutorLogEvents.LogStartupConnectionFailed(
             logger,

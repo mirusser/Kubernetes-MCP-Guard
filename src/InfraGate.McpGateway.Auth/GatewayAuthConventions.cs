@@ -1,23 +1,7 @@
-using InfraGate.RuntimeSafety;
-
 namespace InfraGate.McpGateway.Auth;
 
 public static class GatewayAuthConventions
 {
-    public static void RegisterInfraGateEnvVarMappings(InfraGateEnvVarMappings mappings)
-    {
-        ArgumentNullException.ThrowIfNull(mappings);
-        mappings.Map(EnvironmentVariables.OAuthAuthority, ConfigurationKeys.OAuthAuthority);
-        mappings.Map(EnvironmentVariables.OAuthMetadataAddress, ConfigurationKeys.OAuthMetadataAddress);
-        mappings.Map(EnvironmentVariables.OAuthResource, ConfigurationKeys.OAuthResource);
-        mappings.Map(EnvironmentVariables.OAuthScope, ConfigurationKeys.OAuthScope);
-        mappings.Map(EnvironmentVariables.OAuthRequireHttpsMetadata, ConfigurationKeys.OAuthRequireHttpsMetadata);
-        mappings.Map(EnvironmentVariables.ApprovalOAuthClientId, ConfigurationKeys.ApprovalOAuthClientId);
-        mappings.Map(EnvironmentVariables.ApprovalOAuthCallbackPath, ConfigurationKeys.ApprovalOAuthCallbackPath);
-        mappings.Map(EnvironmentVariables.ApprovalOAuthAuthorizationEndpoint, ConfigurationKeys.ApprovalOAuthAuthorizationEndpoint);
-        mappings.Map(EnvironmentVariables.ApprovalOAuthTokenEndpoint, ConfigurationKeys.ApprovalOAuthTokenEndpoint);
-    }
-
     public const string DefaultOAuthResource = "http://127.0.0.1:3001/mcp";
     public const string DefaultOAuthScope = "mcp:tools";
     public const string DefaultReadOnlyOAuthScope = "mcp:tools.readonly";
@@ -28,15 +12,15 @@ public static class GatewayAuthConventions
 
     public static class EnvironmentVariables
     {
-        public const string OAuthAuthority = "INFRA_GATE_OAUTH_AUTHORITY";
-        public const string OAuthMetadataAddress = "INFRA_GATE_OAUTH_METADATA_ADDRESS";
-        public const string OAuthResource = "INFRA_GATE_OAUTH_RESOURCE";
-        public const string OAuthScope = "INFRA_GATE_OAUTH_SCOPE";
-        public const string OAuthRequireHttpsMetadata = "INFRA_GATE_OAUTH_REQUIRE_HTTPS_METADATA";
-        public const string ApprovalOAuthClientId = "INFRA_GATE_APPROVAL_OAUTH_CLIENT_ID";
-        public const string ApprovalOAuthAuthorizationEndpoint = "INFRA_GATE_APPROVAL_OAUTH_AUTHORIZATION_ENDPOINT";
-        public const string ApprovalOAuthTokenEndpoint = "INFRA_GATE_APPROVAL_OAUTH_TOKEN_ENDPOINT";
-        public const string ApprovalOAuthCallbackPath = "INFRA_GATE_APPROVAL_OAUTH_CALLBACK_PATH";
+        public const string OAuthAuthority = "InfraGate__Auth__OAuthAuthority";
+        public const string OAuthMetadataAddress = "InfraGate__Auth__OAuthMetadataAddress";
+        public const string OAuthResource = "InfraGate__Auth__OAuthResource";
+        public const string OAuthScope = "InfraGate__Auth__OAuthScope";
+        public const string OAuthRequireHttpsMetadata = "InfraGate__Auth__OAuthRequireHttpsMetadata";
+        public const string ApprovalOAuthClientId = "InfraGate__Auth__ApprovalOAuthClientId";
+        public const string ApprovalOAuthAuthorizationEndpoint = "InfraGate__Auth__ApprovalOAuthAuthorizationEndpoint";
+        public const string ApprovalOAuthTokenEndpoint = "InfraGate__Auth__ApprovalOAuthTokenEndpoint";
+        public const string ApprovalOAuthCallbackPath = "InfraGate__Auth__ApprovalOAuthCallbackPath";
     }
 
     public static class ConfigurationKeys

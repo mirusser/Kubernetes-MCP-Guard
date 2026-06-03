@@ -23,52 +23,51 @@ public sealed class McpGatewayOptionsTests
     private const string DownstreamClientId = "infra-gate-gateway";
 
     [Fact]
-    public void FromEnvironment_UsesDownstreamAssembly_WhenSet()
+    public void FromConfiguration_UsesDownstreamAssembly_WhenSet()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
-            (McpGatewayConventions.EnvironmentVariables.DownstreamAssembly, DownstreamAssembly));
+        var configuration = BuildConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority),
+            (McpGatewayConventions.ConfigurationKeys.DownstreamAssembly, DownstreamAssembly));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
 
         Assert.Equal(DownstreamAssembly, options.DownstreamAssembly);
     }
 
     [Fact]
-    public void FromEnvironment_LeavesDownstreamAssemblyNull_WhenUnset()
+    public void FromConfiguration_LeavesDownstreamAssemblyNull_WhenUnset()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
-            (McpGatewayConventions.EnvironmentVariables.DownstreamAssembly, null));
+        var configuration = BuildConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
 
         Assert.Null(options.DownstreamAssembly);
     }
 
     [Fact]
-    public void FromEnvironment_WithSmtpEnableSslFalse_ConfiguresSmtpWithoutTls()
+    public void FromConfiguration_WithSmtpEnableSslFalse_ConfiguresSmtpWithoutTls()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
-            (McpGatewayConventions.EnvironmentVariables.SmtpHost, "mailpit"),
-            (McpGatewayConventions.EnvironmentVariables.SmtpFrom, "infragate@example.local"),
-            (McpGatewayConventions.EnvironmentVariables.SmtpEnableSsl, "false"));
+        var configuration = BuildConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority),
+            (McpGatewayConventions.ConfigurationKeys.SmtpHost, "mailpit"),
+            (McpGatewayConventions.ConfigurationKeys.SmtpFrom, "infragate@example.local"),
+            (McpGatewayConventions.ConfigurationKeys.SmtpEnableSsl, "false"));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
 
         Assert.NotNull(options.Smtp);
         Assert.False(options.Smtp.EnableSsl);
     }
 
     [Fact]
-    public void FromEnvironment_WithSmtpHostOnly_ConfiguresSmtpWithDefaultPort()
+    public void FromConfiguration_WithSmtpHostOnly_ConfiguresSmtpWithDefaultPort()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
-            (McpGatewayConventions.EnvironmentVariables.SmtpHost, "mailpit"));
+        var configuration = BuildConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority),
+            (McpGatewayConventions.ConfigurationKeys.SmtpHost, "mailpit"));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
 
         Assert.NotNull(options.Smtp);
         Assert.Equal("mailpit", options.Smtp.Host);
@@ -77,99 +76,93 @@ public sealed class McpGatewayOptionsTests
     }
 
     [Fact]
-    public void FromEnvironment_WithSmtpFromOnly_ConfiguresSmtp()
+    public void FromConfiguration_WithSmtpFromOnly_ConfiguresSmtp()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
-            (McpGatewayConventions.EnvironmentVariables.SmtpFrom, "infragate@example.local"));
+        var configuration = BuildConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority),
+            (McpGatewayConventions.ConfigurationKeys.SmtpFrom, "infragate@example.local"));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
 
         Assert.NotNull(options.Smtp);
         Assert.Equal("infragate@example.local", options.Smtp.FromAddress);
     }
 
     [Fact]
-    public void FromEnvironment_WithSmtpPort_ConfiguresSmtpWithCustomPort()
+    public void FromConfiguration_WithSmtpPort_ConfiguresSmtpWithCustomPort()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
-            (McpGatewayConventions.EnvironmentVariables.SmtpHost, "mailpit"),
-            (McpGatewayConventions.EnvironmentVariables.SmtpFrom, "infragate@example.local"),
-            (McpGatewayConventions.EnvironmentVariables.SmtpPort, "2525"));
+        var configuration = BuildConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority),
+            (McpGatewayConventions.ConfigurationKeys.SmtpHost, "mailpit"),
+            (McpGatewayConventions.ConfigurationKeys.SmtpFrom, "infragate@example.local"),
+            (McpGatewayConventions.ConfigurationKeys.SmtpPort, "2525"));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
 
         Assert.NotNull(options.Smtp);
         Assert.Equal(2525, options.Smtp.Port);
     }
 
     [Fact]
-    public void FromEnvironment_WithSmtpHostAndUser_CreatesSmtpOptions()
+    public void FromConfiguration_WithSmtpHostAndUser_CreatesSmtpOptions()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
-            (McpGatewayConventions.EnvironmentVariables.SmtpHost, "mailpit"),
-            (McpGatewayConventions.EnvironmentVariables.SmtpFrom, "infragate@example.local"),
-            (McpGatewayConventions.EnvironmentVariables.SmtpUser, "user"));
+        var configuration = BuildConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority),
+            (McpGatewayConventions.ConfigurationKeys.SmtpHost, "mailpit"),
+            (McpGatewayConventions.ConfigurationKeys.SmtpFrom, "infragate@example.local"),
+            (McpGatewayConventions.ConfigurationKeys.SmtpUser, "user"));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
 
         Assert.NotNull(options.Smtp);
         Assert.Equal("user", options.Smtp.Username);
     }
 
     [Fact]
-    public void FromEnvironment_NoSmtpHostOrFrom_LeavesSmtpNull()
+    public void FromConfiguration_NoSmtpHostOrFrom_LeavesSmtpNull()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority));
+        var configuration = BuildConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
 
         Assert.Null(options.Smtp);
     }
 
     [Fact]
-    public void FromEnvironment_UsesInfraGateEnvironmentOverStandardEnvironment()
+    public void FromConfiguration_InfraGateEnvironmentOverDotNet_UsesDevelopment()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
-            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
+        var configuration = BuildConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority),
+            (RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
             (RuntimeSafetyConventions.EnvironmentVariables.DotNetEnvironment, RuntimeSafetyConventions.EnvironmentValues.Production));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
 
         Assert.Equal(RuntimeMode.Development, options.RuntimeMode);
     }
 
     [Fact]
-    public void FromEnvironment_WithUnsupportedInfraGateEnvironment_Throws()
+    public void FromConfiguration_WithUnsupportedInfraGateEnvironment_Throws()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
-            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, "Staging"));
+        var configuration = BuildConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority),
+            (RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment, "Staging"));
 
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(McpGatewayOptions.FromEnvironment);
-
-        Assert.Contains(RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, exception.Message);
+        Assert.Throws<InvalidOperationException>(() => McpGatewayOptions.FromConfiguration(configuration));
     }
 
     [Fact]
     public void FromConfiguration_UsesGeneratedAppSettingsValues()
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                [GatewayAuthConventions.ConfigurationKeys.OAuthAuthority] = OAuthAuthority,
-                [McpGatewayConventions.ConfigurationKeys.DownstreamAssembly] = DownstreamAssembly,
-                [McpGatewayConventions.ConfigurationKeys.GuardAuditRoot] = GuardAuditRoot,
-                [McpGatewayConventions.ConfigurationKeys.ApprovalRoot] = ApprovalRoot,
-                [McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl] = ApprovalBaseUrl,
-                [RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment] =
-                    RuntimeSafetyConventions.EnvironmentValues.Production
-            })
-            .Build();
+        var configuration = BuildConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority),
+            (McpGatewayConventions.ConfigurationKeys.DownstreamAssembly, DownstreamAssembly),
+            (McpGatewayConventions.ConfigurationKeys.GuardAuditRoot, GuardAuditRoot),
+            (McpGatewayConventions.ConfigurationKeys.ApprovalRoot, ApprovalRoot),
+            (McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl, ApprovalBaseUrl),
+            (RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment,
+                RuntimeSafetyConventions.EnvironmentValues.Production));
 
         var options = McpGatewayOptions.FromConfiguration(configuration);
 
@@ -185,14 +178,10 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void FromConfiguration_BindsFromGatewayAndApprovalSections()
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                [GatewayAuthConventions.ConfigurationKeys.OAuthAuthority] = OAuthAuthority,
-                [McpGatewayConventions.ConfigurationKeys.DownstreamAssembly] = "/app/server.dll",
-                [McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl] = "https://gateway.example.com"
-            })
-            .Build();
+        var configuration = BuildConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority),
+            (McpGatewayConventions.ConfigurationKeys.DownstreamAssembly, "/app/server.dll"),
+            (McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl, "https://gateway.example.com"));
 
         var options = McpGatewayOptions.FromConfiguration(configuration);
 
@@ -261,9 +250,9 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void ValidateProductionSafety_WithValidExternalSettings_AllowsStartup()
     {
-        using var environment = SetProductionEnvironment();
+        var configuration = BuildProductionConfig();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
 
-        var options = McpGatewayOptions.FromEnvironment();
         var exception = Record.Exception(options.ValidateProductionSafety);
 
         Assert.Null(exception);
@@ -272,10 +261,10 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void ProductionMode_WithHttpMetadata_RefusesStartup()
     {
-        using var environment = SetProductionEnvironment(
-            (GatewayAuthConventions.EnvironmentVariables.OAuthRequireHttpsMetadata, "false"));
+        var configuration = BuildProductionConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthRequireHttpsMetadata, "false"));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
         Assert.Contains(GatewayAuthConventions.EnvironmentVariables.OAuthRequireHttpsMetadata, exception.Message);
@@ -284,10 +273,10 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void ValidateProductionSafety_WithHttpMetadataAddress_RefusesStartup()
     {
-        using var environment = SetProductionEnvironment(
-            (GatewayAuthConventions.EnvironmentVariables.OAuthMetadataAddress, "http://issuer.example.com/.well-known/openid-configuration"));
+        var configuration = BuildProductionConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthMetadataAddress, "http://issuer.example.com/.well-known/openid-configuration"));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
         Assert.Contains(GatewayAuthConventions.EnvironmentVariables.OAuthMetadataAddress, exception.Message);
@@ -296,10 +285,10 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void ValidateProductionSafety_WithLocalhostOAuthResource_RefusesStartup()
     {
-        using var environment = SetProductionEnvironment(
-            (GatewayAuthConventions.EnvironmentVariables.OAuthResource, "https://127.0.0.1:3001/mcp"));
+        var configuration = BuildProductionConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthResource, "https://127.0.0.1:3001/mcp"));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
         Assert.Contains(GatewayAuthConventions.EnvironmentVariables.OAuthResource, exception.Message);
@@ -308,10 +297,10 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void ValidateProductionSafety_WithoutApprovalBaseUrl_RefusesStartup()
     {
-        using var environment = SetProductionEnvironment(
-            (McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl, null));
+        var configuration = BuildProductionConfig(
+            (McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl, null));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
         Assert.Contains(McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl, exception.Message);
@@ -320,10 +309,10 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void ValidateProductionSafety_WithHttpApprovalBaseUrl_RefusesStartup()
     {
-        using var environment = SetProductionEnvironment(
-            (McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl, "http://gateway.example.com"));
+        var configuration = BuildProductionConfig(
+            (McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl, "http://gateway.example.com"));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
         Assert.Contains(McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl, exception.Message);
@@ -332,10 +321,10 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void ValidateProductionSafety_WithTempApprovalRoot_RefusesStartup()
     {
-        using var environment = SetProductionEnvironment(
-            (ApprovalConventions.EnvironmentVariables.ApprovalRoot, Path.Combine(Path.GetTempPath(), "infra-gate-approvals")));
+        var configuration = BuildProductionConfig(
+            (McpGatewayConventions.ConfigurationKeys.ApprovalRoot, Path.Combine(Path.GetTempPath(), "infra-gate-approvals")));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
         Assert.Contains(ApprovalConventions.EnvironmentVariables.ApprovalRoot, exception.Message);
@@ -344,10 +333,10 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void ValidateProductionSafety_WithDefaultGuardAuditRoot_RefusesStartup()
     {
-        using var environment = SetProductionEnvironment(
-            (McpGatewayConventions.EnvironmentVariables.GuardAuditRoot, null));
+        var configuration = BuildProductionConfig(
+            (McpGatewayConventions.ConfigurationKeys.GuardAuditRoot, null));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
         Assert.Contains(McpGatewayConventions.EnvironmentVariables.GuardAuditRoot, exception.Message);
@@ -356,10 +345,10 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void ProductionMode_WithDownstreamAuthRequired_False_RefusesStartup()
     {
-        using var environment = SetProductionEnvironment(
-            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
+        var configuration = BuildProductionConfig(
+            (DownstreamAuthConventions.ConfigurationKeys.Required, "false"));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
 
         Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.Required, exception.Message);
@@ -368,9 +357,9 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void ProductionMode_WithValidDownstreamAuth_AllowsStartup()
     {
-        using var environment = SetProductionEnvironment();
+        var configuration = BuildProductionConfig();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
 
-        var options = McpGatewayOptions.FromEnvironment();
         Exception? exception = Record.Exception(options.ValidateProductionSafety);
 
         Assert.Null(exception);
@@ -379,39 +368,51 @@ public sealed class McpGatewayOptionsTests
     [Fact]
     public void DevelopmentMode_WithDownstreamAuthRequired_False_AllowsStartup()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
-            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
-            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
+        var configuration = BuildConfig(
+            (RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority),
+            (DownstreamAuthConventions.ConfigurationKeys.Required, "false"));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
         Exception? exception = Record.Exception(options.ValidateProductionSafety);
 
         Assert.Null(exception);
     }
 
     [Fact]
-    public void FromEnvironment_WithDownstreamAuthRequired_Absent_DefaultsToRequired()
+    public void FromConfiguration_WithDownstreamAuthSectionAbsent_LeavesDownstreamAuthNull()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
-            (DownstreamAuthConventions.EnvironmentVariables.Required, null));
+        var configuration = BuildConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
 
-        Assert.True(options.DownstreamAuth?.Required);
+        Assert.Null(options.DownstreamAuth);
     }
 
     [Fact]
-    public void FromEnvironment_PopulatesDownstreamAuth_FromEnvironment()
+    public void FromConfiguration_WithDownstreamAuthSectionPresent_NoRequiredKey_DefaultsToRequired()
     {
-        using var environment = EnvironmentVariableScope.Set(
-            (GatewayAuthConventions.EnvironmentVariables.OAuthAuthority, OAuthAuthority),
-            (DownstreamAuthConventions.EnvironmentVariables.Required, "true"),
-            (DownstreamAuthConventions.EnvironmentVariables.Authority, DownstreamAuthority),
-            (DownstreamAuthConventions.EnvironmentVariables.GatewayClientId, DownstreamClientId));
+        var configuration = BuildConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority),
+            (DownstreamAuthConventions.ConfigurationKeys.Authority, DownstreamAuthority));
 
-        var options = McpGatewayOptions.FromEnvironment();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+
+        Assert.NotNull(options.DownstreamAuth);
+        Assert.True(options.DownstreamAuth.Required);
+    }
+
+    [Fact]
+    public void FromConfiguration_PopulatesDownstreamAuth_FromSection()
+    {
+        var configuration = BuildConfig(
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority),
+            (DownstreamAuthConventions.ConfigurationKeys.Required, "true"),
+            (DownstreamAuthConventions.ConfigurationKeys.Authority, DownstreamAuthority),
+            (DownstreamAuthConventions.ConfigurationKeys.GatewayClientId, DownstreamClientId));
+
+        var options = McpGatewayOptions.FromConfiguration(configuration);
 
         Assert.NotNull(options.DownstreamAuth);
         Assert.True(options.DownstreamAuth.Required);
@@ -430,33 +431,42 @@ public sealed class McpGatewayOptionsTests
             McpGatewayOptions.DefaultApprovalChallengeTtl,
             downstreamAssembly);
 
-    private static EnvironmentVariableScope SetProductionEnvironment(params (string Name, string? Value)[] overrides)
+    private static IConfiguration BuildConfig(params (string Key, string? Value)[] entries)
     {
-        var variables = new Dictionary<string, string?>(StringComparer.Ordinal)
+        return new ConfigurationBuilder()
+            .AddInMemoryCollection(entries.ToDictionary(e => e.Key, e => e.Value))
+            .Build();
+    }
+
+    private static IConfiguration BuildProductionConfig(params (string Key, string? Value)[] overrides)
+    {
+        var entries = new Dictionary<string, string?>
         {
-            [RuntimeSafetyConventions.EnvironmentVariables.InfraGateEnvironment] =
+            [RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment] =
                 RuntimeSafetyConventions.EnvironmentValues.Production,
-            [GatewayAuthConventions.EnvironmentVariables.OAuthAuthority] = OAuthAuthority,
-            [GatewayAuthConventions.EnvironmentVariables.OAuthMetadataAddress] = null,
-            [GatewayAuthConventions.EnvironmentVariables.OAuthResource] = GatewayResource,
-            [GatewayAuthConventions.EnvironmentVariables.OAuthScope] = GatewayAuthConventions.DefaultOAuthScope,
-            [GatewayAuthConventions.EnvironmentVariables.OAuthRequireHttpsMetadata] = "true",
-            [GatewayAuthConventions.EnvironmentVariables.ApprovalOAuthAuthorizationEndpoint] = OAuthAuthority + "/authorize",
-            [GatewayAuthConventions.EnvironmentVariables.ApprovalOAuthTokenEndpoint] = OAuthAuthority + "/token",
-            [McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl] = ApprovalBaseUrl,
-            [McpGatewayConventions.EnvironmentVariables.GuardAuditRoot] = ProductionPath("guardrails"),
-            [ApprovalConventions.EnvironmentVariables.ApprovalRoot] = ProductionPath("approvals"),
-            [DownstreamAuthConventions.EnvironmentVariables.Required] = "true",
-            [DownstreamAuthConventions.EnvironmentVariables.Authority] = DownstreamAuthority,
-            [DownstreamAuthConventions.EnvironmentVariables.GatewayClientId] = DownstreamClientId
+            [GatewayAuthConventions.ConfigurationKeys.OAuthAuthority] = OAuthAuthority,
+            [GatewayAuthConventions.ConfigurationKeys.OAuthMetadataAddress] = null,
+            [GatewayAuthConventions.ConfigurationKeys.OAuthResource] = GatewayResource,
+            [GatewayAuthConventions.ConfigurationKeys.OAuthScope] = GatewayAuthConventions.DefaultOAuthScope,
+            [GatewayAuthConventions.ConfigurationKeys.OAuthRequireHttpsMetadata] = "true",
+            [GatewayAuthConventions.ConfigurationKeys.ApprovalOAuthAuthorizationEndpoint] = OAuthAuthority + "/authorize",
+            [GatewayAuthConventions.ConfigurationKeys.ApprovalOAuthTokenEndpoint] = OAuthAuthority + "/token",
+            [McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl] = ApprovalBaseUrl,
+            [McpGatewayConventions.ConfigurationKeys.GuardAuditRoot] = ProductionPath("guardrails"),
+            [McpGatewayConventions.ConfigurationKeys.ApprovalRoot] = ProductionPath("approvals"),
+            [DownstreamAuthConventions.ConfigurationKeys.Required] = "true",
+            [DownstreamAuthConventions.ConfigurationKeys.Authority] = DownstreamAuthority,
+            [DownstreamAuthConventions.ConfigurationKeys.GatewayClientId] = DownstreamClientId,
         };
 
-        foreach (var item in overrides)
+        foreach (var (key, value) in overrides)
         {
-            variables[item.Name] = item.Value;
+            entries[key] = value;
         }
 
-        return EnvironmentVariableScope.Set(variables.Select(item => (item.Key, item.Value)).ToArray());
+        return new ConfigurationBuilder()
+            .AddInMemoryCollection(entries)
+            .Build();
     }
 
     private static string ProductionPath(string directoryName)
@@ -464,35 +474,5 @@ public sealed class McpGatewayOptionsTests
         string root = Path.GetPathRoot(Directory.GetCurrentDirectory()) ?? Path.DirectorySeparatorChar.ToString();
 
         return Path.Combine(root, "var", "lib", "infra-gate-tests", directoryName);
-    }
-
-    private sealed class EnvironmentVariableScope : IDisposable
-    {
-        private readonly Dictionary<string, string?> previousValues;
-
-        private EnvironmentVariableScope(Dictionary<string, string?> previousValues)
-        {
-            this.previousValues = previousValues;
-        }
-
-        public static EnvironmentVariableScope Set(params (string Name, string? Value)[] variables)
-        {
-            var previousValues = new Dictionary<string, string?>(StringComparer.Ordinal);
-            foreach (var variable in variables)
-            {
-                previousValues[variable.Name] = Environment.GetEnvironmentVariable(variable.Name);
-                Environment.SetEnvironmentVariable(variable.Name, variable.Value);
-            }
-
-            return new EnvironmentVariableScope(previousValues);
-        }
-
-        public void Dispose()
-        {
-            foreach (var previousValue in previousValues)
-            {
-                Environment.SetEnvironmentVariable(previousValue.Key, previousValue.Value);
-            }
-        }
     }
 }

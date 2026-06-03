@@ -26,17 +26,11 @@ internal static class ConfigurationExtensions
             string? configPath =
                 Environment.GetEnvironmentVariable(RuntimeSafetyConventions.EnvironmentVariables.ConfigPath);
 
-            if (string.IsNullOrWhiteSpace(configPath)) return;
-
-            configuration.AddJsonFile(configPath, optional: false, reloadOnChange: false);
-            configuration.AddInfraGateEnvironmentVariables(mappings =>
+            if (!string.IsNullOrWhiteSpace(configPath))
             {
-                mappings.RegisterInfraGateEnvVarMappings();
-                McpGatewayConventions.RegisterInfraGateEnvVarMappings(mappings);
-                GatewayAuthConventions.RegisterInfraGateEnvVarMappings(mappings);
-                mappings.Map(ApprovalConventions.EnvironmentVariables.ApprovalRoot,
-                    McpGatewayConventions.ConfigurationKeys.ApprovalRoot);
-            });
+                configuration.AddJsonFile(configPath, optional: false, reloadOnChange: false);
+            }
+
             configuration.AddEnvironmentVariables();
             configuration.AddCommandLine(args);
         }
@@ -137,24 +131,15 @@ internal static class ConfigurationExtensions
     {
         private void RegisterDownstreamAuth(McpGatewayOptions options)
         {
-            var downstreamAuth = options.DownstreamAuth ?? new DownstreamAuthOptions();
-            if (!downstreamAuth.Required)
+            var downstreamAuth = options.DownstreamAuth;
+            if (downstreamAuth is null || !downstreamAuth.Required)
             {
                 services.AddSingleton<IDownstreamServiceTokenProvider, NullDownstreamServiceTokenProvider>();
                 return;
             }
 
             services.AddSingleton(downstreamAuth);
-            var clientOptions = new ClientCredentialsTokenOptions
-            {
-                Authority = downstreamAuth.Authority,
-                MetadataAddress = downstreamAuth.MetadataAddress,
-                RequireHttpsMetadata = downstreamAuth.RequireHttpsMetadata,
-                ClientId = downstreamAuth.GatewayClientId,
-                ClientSecret = downstreamAuth.GatewayClientSecret,
-                Scope = downstreamAuth.Scope
-            };
-            services.AddClientCredentialsTokenProvider(clientOptions);
+            services.AddClientCredentialsTokenProvider(downstreamAuth.ToClientCredentials());
             services.AddSingleton<IDownstreamServiceTokenProvider>(sp =>
                 new ClientCredentialsDownstreamServiceTokenProvider(
                     sp.GetRequiredService<IClientCredentialsTokenProvider>()));

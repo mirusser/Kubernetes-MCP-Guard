@@ -21,8 +21,8 @@
 
 The controls below are ordered by importance. The downstream service token (in-progress) is intentionally last; a stolen bearer token must not bypass the controls above it.
 
-1. **Trusted launch** — production starts the downstream server from a configured built artifact (`INFRA_GATE_DOWNSTREAM_ASSEMBLY=/app/server/InfraGate.McpServer.dll`), not `dotnet run --project`. The `dotnet run --project` fallback is development-only and must not be used in production images.
-2. **Containment** — the downstream subprocess receives only an explicit allowlist of environment variables (`McpGatewayConventions.DownstreamProcess.AllowedEnvironmentVariables`), not the full gateway environment. Gateway-only secrets such as `INFRA_GATE_DOWNSTREAM_AUTH_GATEWAY_CLIENT_SECRET` are intentionally excluded.
+1. **Trusted launch** — production starts the downstream server from a configured built artifact (`InfraGate__Gateway__DownstreamAssembly=/app/server/InfraGate.McpServer.dll`), not `dotnet run --project`. The `dotnet run --project` fallback is development-only and must not be used in production images.
+2. **Containment** — the downstream subprocess receives only an explicit allowlist of environment variables (`McpGatewayConventions.DownstreamProcess.AllowedEnvironmentVariables`), not the full gateway environment. Gateway-only secrets such as `InfraGate__DownstreamAuth__GatewayClientSecret` are intentionally excluded.
 3. **Human approval** — destructive downstream tools are reachable only through the gateway's approval-bound execution path; the MCP client cannot trigger them directly.
 4. **Per-action authorization** — request and execution checks use trusted requester identity from the gateway JWT; downstream service-token validation is not a substitute for these checks.
 5. **Downstream service token** (defense-in-depth) — proves gateway service identity for audit and forward-compatibility. Not the primary boundary.
@@ -44,7 +44,7 @@ The controls below are ordered by importance. The downstream service token (in-p
 - Browser approval pages render the stored Kubernetes server-side dry-run status, Intent Digest, Review Digest, and adapter review evidence. Manifest plans require diff evidence; narrow Deployment operations may be dry-run-only.
 - Browser approval pages expose semantic `data-section`, `data-field`, and `data-action` attributes for tests and tooling; visible copy remains presentation text.
 - Approval challenges are bound to plan id, intent/review digests, requester subject, expiry, and Single-Execution status. The gateway recomputes the plan file hash and digest bindings at challenge creation and approval time to detect drift between the stored plan and the challenge bindings. Repeated execution requests reuse a matching still-pending challenge URL. Approved challenges issue Approval Grants consumed by the generic pre-execution gate.
-- Approval state and audit are persisted in PostgreSQL. The connection string is configured via `InfraGate:Approval:Postgres:ConnectionString` in the generated run-profile appsettings JSON. The gateway validates schema compatibility and applies pending migrations on startup.
+- Approval state and audit are persisted in PostgreSQL. The connection string is configured via `InfraGate:Approval:Postgres:ConnectionString`, emitted by run profiles as `InfraGate__Approval__Postgres__ConnectionString` in the generated env file. The gateway validates schema compatibility and applies pending migrations on startup when `InfraGate__Approval__Postgres__RunMigrationsOnStartup=true`.
 - Guardrail audit entries must not include bearer tokens or raw credentials.
 
 ## Settings

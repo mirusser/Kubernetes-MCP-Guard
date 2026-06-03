@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="InfraGate.Planner.Settings" />
   </ItemGroup>
 
   <ItemGroup>

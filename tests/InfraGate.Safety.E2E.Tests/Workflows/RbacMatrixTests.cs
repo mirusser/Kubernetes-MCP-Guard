@@ -11,6 +11,10 @@ namespace InfraGate.Safety.E2E.Tests.Workflows;
 [Collection(SafetyE2ECollection.Name)]
 public sealed class RbacMatrixTests(SafetyE2EFixture fixture)
 {
+    private const string RuntimeEnvironmentEnvVar = "InfraGate__Runtime__Environment";
+    private const string KubernetesAllowedNamespacesEnvVar = "InfraGate__Kubernetes__AllowedNamespaces";
+    private const string KubernetesKubeConfigEnvVar = "InfraGate__Kubernetes__KubeConfig";
+
     [Fact]
     public async Task ApplyApprovedPlan_WithReadOnlyServiceAccount_ReturnsK8sForbidden()
     {
@@ -36,10 +40,10 @@ public sealed class RbacMatrixTests(SafetyE2EFixture fixture)
             WorkingDirectory = repoRoot,
             EnvironmentVariables = new Dictionary<string, string?>
             {
-                ["INFRA_GATE_ENVIRONMENT"] = "Development",
-                ["K8S_MCP_APPROVAL_ROOT"] = fixture.ApprovalRoot,
-                ["K8S_MCP_ALLOWED_NAMESPACES"] = fixture.Namespace,
-                ["KUBECONFIG"] = viewKubeconfig
+                [RuntimeEnvironmentEnvVar] = "Development",
+                [ApprovalConventions.EnvironmentVariables.ApprovalRoot] = fixture.ApprovalRoot,
+                [KubernetesAllowedNamespacesEnvVar + "__0"] = fixture.Namespace,
+                [KubernetesKubeConfigEnvVar] = viewKubeconfig
             },
             ShutdownTimeout = TimeSpan.FromSeconds(10)
         });

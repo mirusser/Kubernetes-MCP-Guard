@@ -20,7 +20,6 @@ using InfraGate.Observer.Llm;
 using InfraGate.Observer.Snapshot;
 using InfraGate.Observer.State;
 using InfraGate.Prompts;
-using InfraGate.RuntimeSafety;
 using ModelContextProtocol.Protocol;
 using Npgsql;
 using Microsoft.Agents.AI.A2A;
@@ -28,26 +27,8 @@ using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Configuration.AddInfraGateEnvironmentVariables(mappings =>
-{
-    mappings.Map(ObserverConventions.EnvironmentVariables.GatewayBaseUrl, ObserverConventions.ConfigurationKeys.GatewayBaseUrl);
-    mappings.Map(ObserverConventions.EnvironmentVariables.CycleIntervalSeconds, ObserverConventions.ConfigurationKeys.CycleIntervalSeconds);
-    mappings.Map(ObserverConventions.EnvironmentVariables.WallClockCapSeconds, ObserverConventions.ConfigurationKeys.WallClockCapSeconds);
-    mappings.Map(ObserverConventions.EnvironmentVariables.MaxToolIterations, ObserverConventions.ConfigurationKeys.MaxToolIterations);
-    mappings.MapList(ObserverConventions.EnvironmentVariables.AllowedNamespaces, ObserverConventions.ConfigurationKeys.AllowedNamespaces);
-    mappings.Map(ObserverConventions.EnvironmentVariables.LlmProvider, ObserverConventions.ConfigurationKeys.LlmProvider);
-    mappings.Map(ObserverConventions.EnvironmentVariables.LlmModel, ObserverConventions.ConfigurationKeys.LlmModel);
-    mappings.Map(ObserverConventions.EnvironmentVariables.LlmApiKey, ObserverConventions.ConfigurationKeys.LlmApiKey);
-    mappings.Map(ObserverConventions.EnvironmentVariables.DedupeSuppressionWindow, ObserverConventions.ConfigurationKeys.DedupeSuppressionWindow);
-    mappings.Map(ObserverConventions.EnvironmentVariables.DedupeResolutionThreshold, ObserverConventions.ConfigurationKeys.DedupeResolutionThreshold);
-    mappings.Map(ObserverConventions.EnvironmentVariables.FileSinkRoot, ObserverConventions.ConfigurationKeys.FileSinkRoot);
-    mappings.Map(ObserverConventions.EnvironmentVariables.PlannerHandoffUrl, ObserverConventions.ConfigurationKeys.PlannerHandoffUrl);
-    mappings.Map(ObserverConventions.EnvironmentVariables.AuditConnectionString, ObserverConventions.ConfigurationKeys.AuditConnectionString);
-    RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
-});
-
 builder.Services.Configure<ObserverOptions>(
-    builder.Configuration.GetSection(ObserverConventions.ConfigurationKeys.Observer));
+    builder.Configuration.GetSection(ObserverOptions.SectionName));
 
 builder.AddInfraGateObservability(opt =>
 {
@@ -64,7 +45,7 @@ builder.AddInfraGateTelemetry(opt =>
 ConfigureUrls(builder);
 
 var observerOptions = builder.Configuration
-    .GetSection(ObserverConventions.ConfigurationKeys.Observer)
+    .GetSection(ObserverOptions.SectionName)
     .Get<ObserverOptions>() ?? new ObserverOptions();
 
 try
@@ -77,20 +58,14 @@ catch (InvalidOperationException ex)
     return 1;
 }
 
-var authOptions = new ClientCredentialsTokenOptions
-{
-    Authority = builder.Configuration[ObserverConventions.EnvironmentVariables.OAuthAuthority] ?? string.Empty,
-    ClientId = builder.Configuration[ObserverConventions.EnvironmentVariables.ClientId] ?? ObserverConventions.DefaultClientId,
-    ClientSecret = builder.Configuration[ObserverConventions.EnvironmentVariables.ClientSecret],
-    Scope = builder.Configuration[ObserverConventions.EnvironmentVariables.OAuthScope] ?? ObserverConventions.DefaultOAuthScope,
-    RequireHttpsMetadata = false,
-};
-builder.Services.AddClientCredentialsTokenProvider(authOptions);
+// ClientCredentials binds recursively from InfraGate:Observer:ClientCredentials — no manual mapping.
+// AddClientCredentialsTokenProvider validates the bound options (Authority/ClientId/Scope) at startup.
+builder.Services.AddClientCredentialsTokenProvider(observerOptions.ClientCredentials);
 
 builder.Services.AddHttpClient(ObserverConventions.HttpClients.PlannerHandoff)
     .AddClientCredentialsBearerHandler();
 
-var jwtAuthority = builder.Configuration[ObserverConventions.EnvironmentVariables.OAuthAuthority] ?? string.Empty;
+var jwtAuthority = observerOptions.ClientCredentials.Authority;
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -105,7 +80,7 @@ builder.Services
             ValidAudiences =
             [
                 ObserverConventions.ServiceClients.Planner,
-                builder.Configuration[ObserverConventions.EnvironmentVariables.ClientId] ?? ObserverConventions.DefaultClientId,
+                observerOptions.ClientCredentials.ClientId,
                 "account" // Standard Keycloak token audience
             ]
         };
@@ -237,7 +212,7 @@ builder.Services.AddKeyedSingleton<A2AServer>(ObserverConventions.A2AInboundAgen
 });
 #pragma warning restore MEAI001
 
-string? auditConnectionString = builder.Configuration[ObserverConventions.ConfigurationKeys.AuditConnectionString];
+string? auditConnectionString = observerOptions.AuditConnectionString.Length > 0 ? observerOptions.AuditConnectionString : null;
 if (!string.IsNullOrWhiteSpace(auditConnectionString))
 {
     var auditDataSource = NpgsqlDataSource.Create(auditConnectionString);
@@ -249,7 +224,7 @@ if (!string.IsNullOrWhiteSpace(auditConnectionString))
 
 var app = builder.Build();
 
-await ConnectObserverMcpClientAsync(app).ConfigureAwait(false);
+await ConnectObserverMcpClientAsync(app, observerOptions).ConfigureAwait(false);
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -276,8 +251,12 @@ return 0;
 
 static void ConfigureUrls(WebApplicationBuilder builder)
 {
-    string? configuredUrls = builder.Configuration[ObserverConventions.EnvironmentVariables.AspNetCoreUrls];
-    if (string.IsNullOrWhiteSpace(configuredUrls))
+    string? configuredUrls = builder.Configuration[ObserverConventions.AspNetCoreUrlsKey];
+    if (!string.IsNullOrWhiteSpace(configuredUrls))
+    {
+        builder.WebHost.UseUrls(configuredUrls);
+    }
+    else
     {
         builder.WebHost.UseUrls(ObserverConventions.DefaultUrl);
     }
@@ -291,12 +270,11 @@ static async Task<string> LoadEmbeddedResourceAsync(Assembly assembly, string re
     return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
 }
 
-static async Task ConnectObserverMcpClientAsync(WebApplication app)
+static async Task ConnectObserverMcpClientAsync(WebApplication app, ObserverOptions options)
 {
     var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
     var logger = loggerFactory.CreateLogger("InfraGate.Observer.Startup");
     var mcpClient = app.Services.GetRequiredService<IAgentMcpToolset>();
-    var configuration = app.Services.GetRequiredService<IConfiguration>();
 
     try
     {
@@ -317,9 +295,9 @@ static async Task ConnectObserverMcpClientAsync(WebApplication app)
     }
     catch (Exception ex)
     {
-        var authority = configuration[ObserverConventions.EnvironmentVariables.OAuthAuthority] ?? "(not set)";
-        var scope = configuration[ObserverConventions.EnvironmentVariables.OAuthScope] ?? ObserverConventions.DefaultOAuthScope;
-        var clientId = configuration[ObserverConventions.EnvironmentVariables.ClientId] ?? ObserverConventions.DefaultClientId;
+        var authority = string.IsNullOrEmpty(options.ClientCredentials.Authority) ? "(not set)" : options.ClientCredentials.Authority;
+        var scope = options.ClientCredentials.Scope;
+        var clientId = options.ClientCredentials.ClientId;
 
         ObserverLogEvents.LogStartupConnectionFailed(
             logger,

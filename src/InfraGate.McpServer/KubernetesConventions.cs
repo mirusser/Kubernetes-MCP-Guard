@@ -1,31 +1,10 @@
 using InfraGate.DownstreamAuth;
 using InfraGate.McpServer.Models;
-using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpServer;
 
 internal static class KubernetesConventions
 {
-    public static void RegisterInfraGateEnvVarMappings(InfraGateEnvVarMappings mappings)
-    {
-        ArgumentNullException.ThrowIfNull(mappings);
-        mappings.Map(EnvironmentVariables.KubeConfig, ConfigurationKeys.KubeConfig);
-        mappings.Map(EnvironmentVariables.UseInClusterConfig, ConfigurationKeys.UseInClusterConfig);
-        mappings.Map(EnvironmentVariables.AllowedNamespaces, ConfigurationKeys.AllowedNamespaces);
-        mappings.Map(EnvironmentVariables.LogPath, ConfigurationKeys.LogPath);
-        RegisterDownstreamAuthMappings(mappings);
-    }
-
-    private static void RegisterDownstreamAuthMappings(InfraGateEnvVarMappings mappings)
-    {
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Required, DownstreamAuthConventions.ConfigurationKeys.Required);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Authority, DownstreamAuthConventions.ConfigurationKeys.Authority);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.MetadataAddress, DownstreamAuthConventions.ConfigurationKeys.MetadataAddress);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata, DownstreamAuthConventions.ConfigurationKeys.RequireHttpsMetadata);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Audience, DownstreamAuthConventions.ConfigurationKeys.Audience);
-        mappings.Map(DownstreamAuthConventions.EnvironmentVariables.Scope, DownstreamAuthConventions.ConfigurationKeys.Scope);
-    }
-
     public const string ServiceName = "infra-gate-mcp";
     public const string DefaultNamespace = "mcp-nginx-demo";
     public const int MaxReplicas = 5;
@@ -38,10 +17,10 @@ internal static class KubernetesConventions
 
     public static class EnvironmentVariables
     {
-        public const string KubeConfig = "KUBECONFIG";
-        public const string UseInClusterConfig = "K8S_MCP_USE_IN_CLUSTER";
-        public const string AllowedNamespaces = "K8S_MCP_ALLOWED_NAMESPACES";
-        public const string LogPath = "K8S_MCP_LOG_PATH";
+        public const string KubeConfig = "InfraGate__Kubernetes__KubeConfig";
+        public const string UseInClusterConfig = "InfraGate__Kubernetes__UseInClusterConfig";
+        public const string AllowedNamespaces = "InfraGate__Kubernetes__AllowedNamespaces";
+        public const string LogPath = "InfraGate__Kubernetes__LogPath";
     }
 
     public static class ConfigurationKeys

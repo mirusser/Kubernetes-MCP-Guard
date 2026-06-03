@@ -78,7 +78,7 @@ if $DOTNET_OK; then
     mkdir -p "${REPO_ROOT}/deploy/generated"
     if dotnet run --project "${REPO_ROOT}/src/InfraGate.RunProfiles" -- generate test-integration \
         --output "${REPO_ROOT}/deploy/generated/test-integration.env" >/dev/null 2>&1; then
-        raw_kube="$(grep '^KUBECONFIG=' "${REPO_ROOT}/deploy/generated/test-integration.env" 2>/dev/null | cut -d= -f2-)"
+        raw_kube="$(grep '^InfraGate__Kubernetes__KubeConfig=' "${REPO_ROOT}/deploy/generated/test-integration.env" 2>/dev/null | cut -d= -f2-)"
         if [[ -n "$raw_kube" && "$raw_kube" != /* ]]; then
             PROFILE_KUBECONFIG="${REPO_ROOT}/${raw_kube}"
         else

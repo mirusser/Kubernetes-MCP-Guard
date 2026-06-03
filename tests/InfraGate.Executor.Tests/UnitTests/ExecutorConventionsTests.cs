@@ -67,12 +67,6 @@ public sealed class ExecutorConventionsTests
     }
 
     [Fact]
-    public void DefaultOAuthScope_IsPinned()
-    {
-        Assert.Equal("mcp:tools.execute", ExecutorConventions.DefaultOAuthScope);
-    }
-
-    [Fact]
     public void WaitForPlanApprovalPerCallTimeoutSeconds_IsLessThanMinWatchTimeout()
     {
         Assert.True(ExecutorConventions.WaitForPlanApprovalPerCallTimeoutSeconds > 0);
@@ -95,25 +89,9 @@ public sealed class ExecutorConventionsTests
     }
 
     [Fact]
-    public void EnvironmentVariables_ArePinned()
+    public void SectionName_IsPinned()
     {
-        Assert.Equal("ASPNETCORE_URLS", ExecutorConventions.EnvironmentVariables.AspNetCoreUrls);
-        Assert.Equal("INFRA_GATE_EXECUTOR_GATEWAY_BASE_URL", ExecutorConventions.EnvironmentVariables.GatewayBaseUrl);
-        Assert.Equal("INFRA_GATE_EXECUTOR_CONCURRENCY_CAP", ExecutorConventions.EnvironmentVariables.ConcurrencyCap);
-        Assert.Equal("INFRA_GATE_EXECUTOR_WATCH_TIMEOUT_SECONDS", ExecutorConventions.EnvironmentVariables.WatchTimeoutSeconds);
-        Assert.Equal("INFRA_GATE_EXECUTOR_CLIENT_ID", ExecutorConventions.EnvironmentVariables.ClientId);
-        Assert.Equal("INFRA_GATE_EXECUTOR_CLIENT_SECRET", ExecutorConventions.EnvironmentVariables.ClientSecret);
-        Assert.Equal("INFRA_GATE_EXECUTOR_OAUTH_AUTHORITY", ExecutorConventions.EnvironmentVariables.OAuthAuthority);
-        Assert.Equal("INFRA_GATE_EXECUTOR_OAUTH_SCOPE", ExecutorConventions.EnvironmentVariables.OAuthScope);
-    }
-
-    [Fact]
-    public void ConfigurationKeys_ArePinned()
-    {
-        Assert.Equal("InfraGate:Executor", ExecutorConventions.ConfigurationKeys.Executor);
-        Assert.Equal("InfraGate:Executor:GatewayBaseUrl", ExecutorConventions.ConfigurationKeys.GatewayBaseUrl);
-        Assert.Equal("InfraGate:Executor:ConcurrencyCap", ExecutorConventions.ConfigurationKeys.ConcurrencyCap);
-        Assert.Equal("InfraGate:Executor:WatchTimeoutSeconds", ExecutorConventions.ConfigurationKeys.WatchTimeoutSeconds);
+        Assert.Equal("InfraGate:Executor", ExecutorConventions.SectionName);
     }
 
     [Fact]

@@ -18,7 +18,6 @@ using ModelContextProtocol.Protocol;
 using InfraGate.Observability;
 using System.Reflection;
 using System.Text;
-using InfraGate.RuntimeSafety;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Agents.AI.A2A;
 using Microsoft.Extensions.AI;
@@ -26,24 +25,8 @@ using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Configuration.AddInfraGateEnvironmentVariables(mappings =>
-{
-    mappings.Map(PlannerConventions.EnvironmentVariables.GatewayBaseUrl, PlannerConventions.ConfigurationKeys.GatewayBaseUrl);
-    mappings.Map(PlannerConventions.EnvironmentVariables.ExecutorHandoffUrl, PlannerConventions.ConfigurationKeys.ExecutorHandoffUrl);
-    mappings.Map(PlannerConventions.EnvironmentVariables.AnomalyWallClockCapSeconds, PlannerConventions.ConfigurationKeys.AnomalyWallClockCapSeconds);
-    mappings.Map(PlannerConventions.EnvironmentVariables.BatchWallClockCapSeconds, PlannerConventions.ConfigurationKeys.BatchWallClockCapSeconds);
-    mappings.Map(PlannerConventions.EnvironmentVariables.MaxToolIterations, PlannerConventions.ConfigurationKeys.MaxToolIterations);
-    mappings.Map(PlannerConventions.EnvironmentVariables.LlmProvider, PlannerConventions.ConfigurationKeys.LlmProvider);
-    mappings.Map(PlannerConventions.EnvironmentVariables.LlmModel, PlannerConventions.ConfigurationKeys.LlmModel);
-    mappings.Map(PlannerConventions.EnvironmentVariables.LlmApiKey, PlannerConventions.ConfigurationKeys.LlmApiKey);
-    mappings.Map(PlannerConventions.EnvironmentVariables.FileSinkRoot, PlannerConventions.ConfigurationKeys.FileSinkRoot);
-    mappings.Map(PlannerConventions.EnvironmentVariables.AuditConnectionString, PlannerConventions.ConfigurationKeys.AuditConnectionString);
-    mappings.Map(PlannerConventions.EnvironmentVariables.ObserverBaseUrl, PlannerConventions.ConfigurationKeys.ObserverBaseUrl);
-    RuntimeSafetyConventions.RegisterInfraGateEnvVarMappings(mappings);
-});
-
 builder.Services.Configure<PlannerOptions>(
-    builder.Configuration.GetSection(PlannerConventions.ConfigurationKeys.Planner));
+    builder.Configuration.GetSection(PlannerOptions.SectionName));
 
 builder.AddInfraGateObservability(opt =>
 {
@@ -60,7 +43,7 @@ builder.AddInfraGateTelemetry(opt =>
 ConfigureUrls(builder);
 
 var plannerOptions = builder.Configuration
-    .GetSection(PlannerConventions.ConfigurationKeys.Planner)
+    .GetSection(PlannerOptions.SectionName)
     .Get<PlannerOptions>() ?? new PlannerOptions();
 
 try
@@ -73,15 +56,9 @@ catch (InvalidOperationException ex)
     return 1;
 }
 
-var authOptions = new ClientCredentialsTokenOptions
-{
-    Authority = builder.Configuration[PlannerConventions.EnvironmentVariables.OAuthAuthority] ?? string.Empty,
-    ClientId = builder.Configuration[PlannerConventions.EnvironmentVariables.ClientId] ?? PlannerConventions.DefaultClientId,
-    ClientSecret = builder.Configuration[PlannerConventions.EnvironmentVariables.ClientSecret],
-    Scope = builder.Configuration[PlannerConventions.EnvironmentVariables.OAuthScope] ?? PlannerConventions.DefaultOAuthScope,
-    RequireHttpsMetadata = false,
-};
-builder.Services.AddClientCredentialsTokenProvider(authOptions);
+// ClientCredentials binds recursively from InfraGate:Planner:ClientCredentials — no manual mapping.
+// AddClientCredentialsTokenProvider validates the bound options (Authority/ClientId/Scope) at startup.
+builder.Services.AddClientCredentialsTokenProvider(plannerOptions.ClientCredentials);
 
 builder.Services.AddInfraGateAgentMcp(new AgentMcpOptions
 {
@@ -168,7 +145,7 @@ builder.Services.AddSingleton<IRemediationProposalSink>(sp =>
     var logger = sp.GetRequiredService<ILogger<CompositeRemediationProposalSink>>();
     return new CompositeRemediationProposalSink(sinks, logger);
 });
-string? auditConnectionString = builder.Configuration[PlannerConventions.ConfigurationKeys.AuditConnectionString];
+string? auditConnectionString = plannerOptions.AuditConnectionString.Length > 0 ? plannerOptions.AuditConnectionString : null;
 IPlannerTaskStore plannerTaskStore = new InMemoryPlannerTaskStore();
 if (!string.IsNullOrWhiteSpace(auditConnectionString))
 {
@@ -221,7 +198,7 @@ builder.Services.AddKeyedSingleton<A2AServer>(PlannerConventions.A2AHandoffAgent
 });
 #pragma warning restore MEAI001
 
-var jwtAuthority = builder.Configuration[PlannerConventions.EnvironmentVariables.OAuthAuthority] ?? string.Empty;
+var jwtAuthority = plannerOptions.ClientCredentials.Authority;
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -249,7 +226,7 @@ builder.Services
 
 var app = builder.Build();
 
-await ConnectPlannerMcpClientAsync(app).ConfigureAwait(false);
+await ConnectPlannerMcpClientAsync(app, plannerOptions).ConfigureAwait(false);
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -275,8 +252,12 @@ return 0;
 
 static void ConfigureUrls(WebApplicationBuilder builder)
 {
-    string? configuredUrls = builder.Configuration[PlannerConventions.EnvironmentVariables.AspNetCoreUrls];
-    if (string.IsNullOrWhiteSpace(configuredUrls))
+    string? configuredUrls = builder.Configuration[PlannerConventions.AspNetCoreUrlsKey];
+    if (!string.IsNullOrWhiteSpace(configuredUrls))
+    {
+        builder.WebHost.UseUrls(configuredUrls);
+    }
+    else
     {
         builder.WebHost.UseUrls(PlannerConventions.DefaultUrl);
     }
@@ -290,12 +271,11 @@ static async Task<string> LoadEmbeddedResourceAsync(Assembly assembly, string re
     return await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
 }
 
-static async Task ConnectPlannerMcpClientAsync(WebApplication app)
+static async Task ConnectPlannerMcpClientAsync(WebApplication app, PlannerOptions options)
 {
     var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
     var logger = loggerFactory.CreateLogger("InfraGate.Planner.Startup");
     var mcpClient = app.Services.GetRequiredService<IAgentMcpToolset>();
-    var configuration = app.Services.GetRequiredService<IConfiguration>();
 
     try
     {
@@ -316,9 +296,9 @@ static async Task ConnectPlannerMcpClientAsync(WebApplication app)
     }
     catch (Exception ex)
     {
-        var authority = configuration[PlannerConventions.EnvironmentVariables.OAuthAuthority] ?? "(not set)";
-        var scope = configuration[PlannerConventions.EnvironmentVariables.OAuthScope] ?? PlannerConventions.DefaultOAuthScope;
-        var clientId = configuration[PlannerConventions.EnvironmentVariables.ClientId] ?? PlannerConventions.DefaultClientId;
+        var authority = string.IsNullOrEmpty(options.ClientCredentials.Authority) ? "(not set)" : options.ClientCredentials.Authority;
+        var scope = options.ClientCredentials.Scope;
+        var clientId = options.ClientCredentials.ClientId;
 
         PlannerLogEvents.LogStartupConnectionFailed(
             logger,

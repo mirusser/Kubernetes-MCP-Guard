@@ -1,4 +1,6 @@
 using InfraGate.RuntimeSafety;
+using Microsoft.Extensions.Configuration.CommandLine;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
 using Microsoft.Extensions.Configuration;
 
 namespace InfraGate.McpGateway.Tests.UnitTests;
@@ -6,7 +8,7 @@ namespace InfraGate.McpGateway.Tests.UnitTests;
 public sealed class ConfigurationExtensionsTests
 {
     [Fact]
-    public void AddInfraGateConfiguration_WhenConfigPathNotSet_AddsNoSources()
+    public void AddInfraGateConfiguration_WhenConfigPathNotSet_AddsEnvironmentAndCommandLineSources()
     {
         var previous = Environment.GetEnvironmentVariable(RuntimeSafetyConventions.EnvironmentVariables.ConfigPath);
         try
@@ -16,7 +18,10 @@ public sealed class ConfigurationExtensionsTests
 
             ConfigurationExtensions.AddInfraGateConfiguration(builder, []);
 
-            Assert.Empty(builder.Sources);
+            Assert.Collection(
+                builder.Sources,
+                source => Assert.IsType<EnvironmentVariablesConfigurationSource>(source),
+                source => Assert.IsType<CommandLineConfigurationSource>(source));
         }
         finally
         {
@@ -25,7 +30,7 @@ public sealed class ConfigurationExtensionsTests
     }
 
     [Fact]
-    public void AddInfraGateConfiguration_WhenConfigPathIsWhitespace_AddsNoSources()
+    public void AddInfraGateConfiguration_WhenConfigPathIsWhitespace_AddsEnvironmentAndCommandLineSources()
     {
         var previous = Environment.GetEnvironmentVariable(RuntimeSafetyConventions.EnvironmentVariables.ConfigPath);
         try
@@ -35,7 +40,10 @@ public sealed class ConfigurationExtensionsTests
 
             ConfigurationExtensions.AddInfraGateConfiguration(builder, []);
 
-            Assert.Empty(builder.Sources);
+            Assert.Collection(
+                builder.Sources,
+                source => Assert.IsType<EnvironmentVariablesConfigurationSource>(source),
+                source => Assert.IsType<CommandLineConfigurationSource>(source));
         }
         finally
         {

@@ -50,6 +50,7 @@ internal sealed class ProposeExecutor(
         await context.YieldOutputAsync(proposal, cancellationToken).ConfigureAwait(false);
     }
 
+#pragma warning disable S3776 // linear propose + audit flow; complexity inherent to structured error handling
     private async Task<string?> ProposePlanAsync(AnomalyReport report, RemediationDecision decision, CancellationToken cancellationToken)
     {
         try
@@ -72,18 +73,15 @@ internal sealed class ProposeExecutor(
             }
 
             PlannerLogEvents.LogProposePlanSucceeded(logger, report.AnomalyId, planId);
-            if (auditOutbox is not null)
-            {
-                await auditOutbox.AppendAsync(
-                    new PlannerAuditEntry(
-                        EventName: PlannerAuditEvents.ProposePlanSucceeded,
-                        Payload: new { operationType = decision.OperationType, arguments = decision.Arguments },
-                        AnomalyId: report.AnomalyId,
-                        PlanId: planId,
-                        ActorSubject: PlannerConventions.Audit.ServicePlannerSubject,
-                        Outcome: PlannerConventions.Audit.Outcomes.Succeeded),
-                    cancellationToken).ConfigureAwait(false);
-            }
+            await AppendAuditAsync(
+                new PlannerAuditEntry(
+                    EventName: PlannerAuditEvents.ProposePlanSucceeded,
+                    Payload: new { operationType = decision.OperationType, arguments = decision.Arguments },
+                    AnomalyId: report.AnomalyId,
+                    PlanId: planId,
+                    ActorSubject: PlannerConventions.Audit.ServicePlannerSubject,
+                    Outcome: PlannerConventions.Audit.Outcomes.Succeeded),
+                cancellationToken).ConfigureAwait(false);
             return planId;
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException)
@@ -94,6 +92,7 @@ internal sealed class ProposeExecutor(
                 .ConfigureAwait(false);
         }
     }
+#pragma warning restore S3776
 
     private static string? ExtractPlanIdFromResponse(CallToolResult callResult)
     {
@@ -117,19 +116,22 @@ internal sealed class ProposeExecutor(
         CancellationToken cancellationToken)
     {
         proposeFailedCounter?.Add(1);
-        if (auditOutbox is not null)
-        {
-            await auditOutbox.AppendAsync(
-                new PlannerAuditEntry(
-                    EventName: PlannerAuditEvents.ProposePlanFailed,
-                    Payload: new { reasonCode, errorClass, statusCode },
-                    AnomalyId: report.AnomalyId,
-                    ActorSubject: PlannerConventions.Audit.ServicePlannerSubject,
-                    Outcome: PlannerConventions.Audit.Outcomes.Failed,
-                    Reason: errorClass ?? reasonCode),
-                cancellationToken).ConfigureAwait(false);
-        }
+        await AppendAuditAsync(
+            new PlannerAuditEntry(
+                EventName: PlannerAuditEvents.ProposePlanFailed,
+                Payload: new { reasonCode, errorClass, statusCode },
+                AnomalyId: report.AnomalyId,
+                ActorSubject: PlannerConventions.Audit.ServicePlannerSubject,
+                Outcome: PlannerConventions.Audit.Outcomes.Failed,
+                Reason: errorClass ?? reasonCode),
+            cancellationToken).ConfigureAwait(false);
         return null;
+    }
+
+    private async ValueTask AppendAuditAsync(PlannerAuditEntry entry, CancellationToken ct)
+    {
+        if (auditOutbox is not null)
+            await auditOutbox.AppendAsync(entry, ct).ConfigureAwait(false);
     }
 
     private static bool TryExtractPlanId(string response, out string planId)

@@ -17,9 +17,7 @@ internal sealed class RegisteredPrompt
 
     internal void ValidateRequired(IReadOnlyDictionary<string, object?> arguments)
     {
-        var missing = RequiredVariables
-            .Where(v => !arguments.ContainsKey(v))
-            .ToList();
+        var missing = RequiredVariables.Except(arguments.Keys, StringComparer.Ordinal).ToList();
 
         if (missing.Count > 0)
             throw new ArgumentException(

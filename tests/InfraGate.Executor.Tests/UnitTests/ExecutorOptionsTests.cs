@@ -1,5 +1,3 @@
-using InfraGate.Executor;
-
 namespace InfraGate.Executor.Tests.UnitTests;
 
 public sealed class ExecutorOptionsTests
