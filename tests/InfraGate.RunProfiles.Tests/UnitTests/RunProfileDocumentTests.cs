@@ -316,6 +316,73 @@ public sealed class RunProfileDocumentTests
         Assert.Equal("Host=db;Database=test", merged.GenericApprovalCore!.PostgresConnectionString);
     }
 
+    [Fact]
+    public void FindProfileWithDefaults_OpenRouterProfileMissing_UsesDefaults()
+    {
+        var profile = MakeProfile("my-profile") with { OpenRouter = null };
+        var defaults = new ProfileDefaults(
+            null, null, null, null, null, null,
+            new OpenRouterProfile("default-openrouter-key"),
+            null, null, null);
+        var doc = new RunProfileDocument([profile]);
+
+        var merged = doc.FindProfileWithDefaults("my-profile", defaults);
+
+        Assert.NotNull(merged.OpenRouter);
+        Assert.Equal("default-openrouter-key", merged.OpenRouter!.ApiKey);
+    }
+
+    [Fact]
+    public void FindProfileWithDefaults_OpenRouterDefaults_ProfileValueTakesPrecedence()
+    {
+        var profile = MakeProfile("my-profile") with
+        {
+            OpenRouter = new OpenRouterProfile("profile-openrouter-key")
+        };
+        var defaults = new ProfileDefaults(
+            null, null, null, null, null, null,
+            new OpenRouterProfile("default-openrouter-key"),
+            null, null, null);
+        var doc = new RunProfileDocument([profile]);
+
+        var merged = doc.FindProfileWithDefaults("my-profile", defaults);
+
+        Assert.Equal("profile-openrouter-key", merged.OpenRouter?.ApiKey);
+    }
+
+    [Fact]
+    public void FindProfileWithDefaults_OpenRouterDefaults_MergesMissingApiKey()
+    {
+        var profile = MakeProfile("my-profile") with
+        {
+            OpenRouter = new OpenRouterProfile(null)
+        };
+        var defaults = new ProfileDefaults(
+            null, null, null, null, null, null,
+            new OpenRouterProfile("default-openrouter-key"),
+            null, null, null);
+        var doc = new RunProfileDocument([profile]);
+
+        var merged = doc.FindProfileWithDefaults("my-profile", defaults);
+
+        Assert.Equal("default-openrouter-key", merged.OpenRouter?.ApiKey);
+    }
+
+    [Fact]
+    public void FindProfileWithDefaults_OpenRouterDefaultsMissing_ReturnsProfileValue()
+    {
+        var profile = MakeProfile("my-profile") with
+        {
+            OpenRouter = new OpenRouterProfile("profile-openrouter-key")
+        };
+        var defaults = new ProfileDefaults(null, null, null, null, null, null, null, null, null, null);
+        var doc = new RunProfileDocument([profile]);
+
+        var merged = doc.FindProfileWithDefaults("my-profile", defaults);
+
+        Assert.Same(profile.OpenRouter, merged.OpenRouter);
+    }
+
     private static RunProfile MakeProfile(string name) =>
         new(name, "mcp-stdio", null, null, null, null, null, [], null, null, null, null, null, null);
 }

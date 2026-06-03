@@ -58,6 +58,38 @@ public sealed class RunProfileCliTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ValidateWithOpenRouterScalar_ReturnsError()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                openRouter: openrouter-key
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["validate", "--config", configPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Empty(output.ToString());
+        Assert.Contains("YAML key 'openRouter' must be a mapping.", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_GenerateLocalStdio_WritesDeterministicEnvFile()
     {
         string configPath = await WriteConfigAsync(
@@ -551,6 +583,46 @@ public sealed class RunProfileCliTests
         Assert.Contains("InfraGate__Gateway__AspNetCoreUrls=http://0.0.0.0:3001", content, StringComparison.Ordinal);
         Assert.Contains("InfraGate__Auth__OAuthScope=mcp:tools", content, StringComparison.Ordinal);
         Assert.Contains("InfraGate__Auth__OAuthAuthority=http://127.0.0.1:3010/realms/infra-gate", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithOpenRouterDefaults_InheritsDefaultApiKey()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            defaults:
+              openRouter:
+                apiKey: default-openrouter-key
+            profiles:
+              local-compose:
+                kind: compose
+                openRouter: {}
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--output", outputPath],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        Assert.Contains(
+            $"{RunProfileConventions.Env.OpenRouterApiKey}=default-openrouter-key",
+            content,
+            StringComparison.Ordinal);
     }
 
     private static readonly HashSet<string> ComposeStackProfileKeys =
@@ -1291,6 +1363,40 @@ public sealed class RunProfileCliTests
 
         Assert.Equal(1, exitCode);
         Assert.Contains("unknown.field", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetUnknownOpenRouterField_ReturnsError()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-stdio:
+                kind: mcp-stdio
+                genericApprovalCore:
+                  approvalRoot: .mcp-approvals
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: .kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-stdio", "--config", configPath, "--output", outputPath,
+             "--set", "openRouter.unknownField=value"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("openRouter.unknownField", error.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

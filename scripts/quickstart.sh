@@ -100,7 +100,7 @@ compose_has_containers() {
   local compose_file="$2"
   local container_ids
 
-  container_ids="$(docker compose --env-file "${env_file}" -f "${compose_file}" ps -q 2>/dev/null || true)"
+  container_ids="$(docker compose --env-file "${env_file}" -f "${compose_file}" ps --status=running -q 2>/dev/null || true)"
   [[ -n "${container_ids}" ]]
 }
 
@@ -113,7 +113,8 @@ run_down() {
 
   if [[ -f "${SOURCE_ENV_FILE}" ]]; then
     docker compose --env-file "${SOURCE_ENV_FILE}" \
-      -f "${SOURCE_COMPOSE_FILE}" down --remove-orphans
+      -f "${SOURCE_COMPOSE_FILE}" down --remove-orphans ||
+      echo "Warning: Failed to stop source stack." >&2
   fi
 
   TAG="${TAG:-latest}" docker compose --env-file "${RELEASE_ENV_FILE}" \
