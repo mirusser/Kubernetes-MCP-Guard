@@ -1,43 +1,68 @@
+# ── Build artifacts ──────────────────────────────────────────────────────────
 bin/
 obj/
+
+# ── Test & coverage ──────────────────────────────────────────────────────────
+TestResults/
+coverage-report/
+expected-*.txt
+
+# ── Generated files ──────────────────────────────────────────────────────────
+/deploy/generated
+deploy/generated/*.env
+*-generated.txt
+generated-keys.txt
+
+# ── Secrets & environment ────────────────────────────────────────────────────
+*.env
+test-*.env
+
+# ── Kubernetes ───────────────────────────────────────────────────────────────
 .kube/
+
+# ── MCP / InfraGate runtime ──────────────────────────────────────────────────
+.mcp.json
 .mcp-approvals/
-.mcp-guardrails/
 .mcp-dataprotection-keys/
+.mcp-guardrails/
+.mcp-logs/
 .mcp-observer/
 .mcp-remediation/
 dataprotection-keys/
-TestResults/
-coverage-report/
-deploy/generated/*.env
-*.env
-*-generated.txt
-generated-keys.txt
-test-*.env
-expected-*.txt
-.sonarqube/
-.sonarqube-local/
-actions-runner/
-.mcp.json
-.idea/
 src/InfraGate.McpGateway/.mcp-guardrails/audit.jsonl
-.agents/Reports/sonarcloud-report.json
-.mcp-logs/mcp-server.log
-.agents/Reports/sonarcloud-report.zip
-/deploy/generated
-.claude/
-.claire/
-.claude.json
-.codegraph/
+
+# ── Data store ───────────────────────────────────────────────────────────────
 data/state_store.db/mem%3Ahealth.bin
 data/state_store.db/mem%3Aindex%3Abm25.bin
-.codex/
-.opencode/
-.antigravitycli/99c4f199-94c1-4e4f-a6a9-b9178ea863e4.json
+
+# ── Quality & analysis ───────────────────────────────────────────────────────
+.sonarqube/
+.sonarqube-local/
+.agents/Reports/sonarcloud-report.json
+.agents/Reports/sonarcloud-report.zip
+
+# ── CI / CD ──────────────────────────────────────────────────────────────────
+actions-runner/
 .act/
+
+# ── IDE & editor ─────────────────────────────────────────────────────────────
+.idea/
 InfraGate.sln.DotSettings.user
-.agents/tmp/
+
+# ── AI / agent tooling ───────────────────────────────────────────────────────
+.antigravitycli/
+.claude/
+.claude.json
+.claire/
+.codegraph/
+.codex/
+.gemini/
+.junie/
+.opencode/
+
+# ── Agent runtime & skills ───────────────────────────────────────────────────
 agents/
+.agents/tmp/
 .agents/skills/analyzer-config
 .agents/skills/analyzing-dotnet-performance
 .agents/skills/android-tombstone-symbolication

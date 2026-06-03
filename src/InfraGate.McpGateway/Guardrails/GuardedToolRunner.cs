@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using System.Text.RegularExpressions;
 using InfraGate.McpGateway.Auth;
 
@@ -9,6 +10,12 @@ public sealed partial class GuardedToolRunner(
     IHttpContextAccessor? httpContextAccessor,
     ILogger<GuardedToolRunner> logger)
 {
+    private static readonly Meter Meter = new(
+        McpGatewayConventions.Telemetry.MeterName,
+        McpGatewayConventions.Telemetry.MeterVersion);
+    private static readonly Counter<long> AuditWriteFailedCounter =
+        Meter.CreateCounter<long>(McpGatewayConventions.Telemetry.GuardrailAuditWriteFailedCounterName);
+
     internal const string Warning =
         "Guardrail warning: Potential prompt-injection content was detected. Model-visible high-risk text was redacted where applicable.";
 
@@ -56,7 +63,7 @@ public sealed partial class GuardedToolRunner(
         }
 
         var auditIdentity = GetAuditIdentity();
-        await auditStore.WriteAsync(
+        await TryWriteAuditAsync(
             new GuardrailAuditEvent(
                 toolName,
                 McpGatewayConventions.GuardrailAudit.RequestDirection,
@@ -81,7 +88,7 @@ public sealed partial class GuardedToolRunner(
         if (response.HasFindings || response.ManifestRedacted)
         {
             var auditIdentity = GetAuditIdentity();
-            await auditStore.WriteAsync(
+            await TryWriteAuditAsync(
                 new GuardrailAuditEvent(
                     toolName,
                     McpGatewayConventions.GuardrailAudit.ResponseDirection,
@@ -99,6 +106,29 @@ public sealed partial class GuardedToolRunner(
         }
 
         return response;
+    }
+
+    private async Task TryWriteAuditAsync(
+        GuardrailAuditEvent auditEvent,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await auditStore.WriteAsync(auditEvent, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(
+                ex,
+                "Guardrail audit write failed for {ToolName} {Direction} {Action}.",
+                auditEvent.ToolName,
+                auditEvent.Direction,
+                auditEvent.Action);
+            AuditWriteFailedCounter.Add(1,
+                new KeyValuePair<string, object?>(McpGatewayConventions.Telemetry.Tags.ToolName, auditEvent.ToolName),
+                new KeyValuePair<string, object?>(McpGatewayConventions.Telemetry.Tags.GuardrailDirection, auditEvent.Direction),
+                new KeyValuePair<string, object?>(McpGatewayConventions.Telemetry.Tags.GuardrailAction, auditEvent.Action));
+        }
     }
 
     internal static string FormatWarningResponse(string text) =>

@@ -30,7 +30,7 @@ public sealed class CrossStreamForensicTests : IAsyncLifetime
 
     private PostgreSqlContainer? container;
     private NpgsqlDataSource? dataSource;
-    private IAuditOutboxCore? core;
+    private IPostgresAuditOutboxCore? core;
 
     public async Task InitializeAsync()
     {
@@ -48,7 +48,7 @@ public sealed class CrossStreamForensicTests : IAsyncLifetime
 
         var services = new ServiceCollection();
         services.AddPostgresAuditOutbox(dataSource);
-        core = services.BuildServiceProvider().GetRequiredService<IAuditOutboxCore>();
+        core = services.BuildServiceProvider().GetRequiredService<IPostgresAuditOutboxCore>();
     }
 
     public async Task DisposeAsync()

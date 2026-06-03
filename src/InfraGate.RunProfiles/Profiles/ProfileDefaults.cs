@@ -10,4 +10,5 @@ internal sealed record class ProfileDefaults(
     OpenRouterProfile? OpenRouter,
     ObserverProfile? Observer,
     PlannerProfile? Planner,
-    ExecutorProfile? Executor);
+    ExecutorProfile? Executor,
+    AgentGuardrailsProfile? AgentGuardrails = null);

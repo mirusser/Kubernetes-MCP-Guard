@@ -40,13 +40,11 @@ jobs:
         run: dotnet tool restore
 
       - name: Begin Sonar scan
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           dotnet tool run dotnet-sonarscanner begin \
             /k:"${{ vars.SONAR_PROJECT_KEY }}" \
             /o:"${{ vars.SONAR_ORGANIZATION }}" \
-            /d:sonar.token="$SONAR_TOKEN" \
+            /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
             /d:sonar.host.url="https://sonarcloud.io" \
             /d:sonar.coverage.exclusions="**/Program.cs,**/PromptInjectionGuard.Regex.cs" \
             /d:sonar.cs.opencover.reportsPaths="TestResults/coverage/**/coverage.opencover.xml"
@@ -64,9 +62,7 @@ jobs:
         run: find TestResults/coverage -name coverage.opencover.xml | grep .
 
       - name: End Sonar scan
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: dotnet tool run dotnet-sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+        run: dotnet tool run dotnet-sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
 
       - name: Wait for SonarCloud CE task
         env:

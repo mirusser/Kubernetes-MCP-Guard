@@ -2,6 +2,7 @@ global using System.Collections.Concurrent;
 global using System.Globalization;
 global using System.Text;
 global using System.Text.Json;
+global using InfraGate.AgentGuardrails;
 global using InfraGate.ClientCredentials;
 global using InfraGate.Observer.Contracts;
 global using InfraGate.Observer.Settings;

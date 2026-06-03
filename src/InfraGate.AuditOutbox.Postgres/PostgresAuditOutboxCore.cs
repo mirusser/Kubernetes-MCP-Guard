@@ -7,7 +7,7 @@ namespace InfraGate.AuditOutbox.Postgres;
 // PostgresAuditOutboxCore is instantiated by DI via ServiceCollectionExtensions.AddPostgresAuditOutbox.
 // The reflection-based factory pattern is not visible to the CA1812 static analyzer.
 #pragma warning disable CA1812
-internal sealed class PostgresAuditOutboxCore : IAuditOutboxCore
+internal sealed class PostgresAuditOutboxCore : IPostgresAuditOutboxCore
 #pragma warning restore CA1812
 {
     public async Task<long> AppendAsync(

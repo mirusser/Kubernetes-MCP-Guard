@@ -17,6 +17,7 @@ internal static class RunProfileDocumentReader
     private static readonly IReadOnlySet<string> KnownDefaultsKeys =
         new HashSet<string>(
             [
+                RunProfileConventions.YamlKeys.AgentGuardrails,
                 RunProfileConventions.YamlKeys.ApprovalAuthority,
                 RunProfileConventions.YamlKeys.DownstreamAuth,
                 RunProfileConventions.YamlKeys.Executor,
@@ -33,6 +34,7 @@ internal static class RunProfileDocumentReader
     private static readonly IReadOnlySet<string> KnownProfileKeys =
         new HashSet<string>(
             [
+                RunProfileConventions.YamlKeys.AgentGuardrails,
                 RunProfileConventions.YamlKeys.ApprovalAuthority,
                 RunProfileConventions.YamlKeys.DomainAdapters,
                 RunProfileConventions.YamlKeys.DownstreamAuth,
@@ -199,6 +201,25 @@ internal static class RunProfileDocumentReader
             ],
             StringComparer.Ordinal);
 
+    private static readonly IReadOnlySet<string> KnownAgentGuardrailsKeys =
+        new HashSet<string>(
+            [
+                RunProfileConventions.YamlKeys.ModelVisibleContent
+            ],
+            StringComparer.Ordinal);
+
+    private static readonly IReadOnlySet<string> KnownModelVisibleContentKeys =
+        new HashSet<string>(
+            [
+                RunProfileConventions.YamlKeys.Enabled,
+                RunProfileConventions.YamlKeys.SemanticClassifierEnabled,
+                RunProfileConventions.YamlKeys.LocalClassifierBaseUrl,
+                RunProfileConventions.YamlKeys.RequestTimeoutMilliseconds,
+                RunProfileConventions.YamlKeys.MaximumInputCharacters,
+                RunProfileConventions.YamlKeys.UnavailableBehavior
+            ],
+            StringComparer.Ordinal);
+
     public static async Task<RunProfileDocument> ReadAsync(string path, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -255,6 +276,7 @@ internal static class RunProfileDocumentReader
             ObserverProfile? observer = ReadObserver(profileNode);
             PlannerProfile? planner = ReadPlanner(profileNode);
             ExecutorProfile? executor = ReadExecutor(profileNode);
+            AgentGuardrailsProfile? agentGuardrails = ReadAgentGuardrails(profileNode);
 
             profiles.Add(new RunProfile(
                 profileName,
@@ -270,7 +292,8 @@ internal static class RunProfileDocumentReader
                 openRouter,
                 observer,
                 planner,
-                executor));
+                executor,
+                agentGuardrails));
         }
 
         return new RunProfileDocument(profiles) { Defaults = defaults };
@@ -302,7 +325,8 @@ internal static class RunProfileDocumentReader
             ReadOpenRouter(mapping),
             ReadObserver(mapping),
             ReadPlanner(mapping),
-            ReadExecutor(mapping));
+            ReadExecutor(mapping),
+            ReadAgentGuardrails(mapping));
     }
 
     private static DownstreamAuthProfile? ReadDownstreamAuth(YamlMappingNode node)
@@ -571,6 +595,49 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ConcurrencyCap),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.WatchTimeoutSeconds),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ExecutorHostPath));
+    }
+
+    private static AgentGuardrailsProfile? ReadAgentGuardrails(YamlMappingNode node)
+    {
+        if (!node.Children.TryGetValue(
+                new YamlScalarNode(RunProfileConventions.YamlKeys.AgentGuardrails),
+                out YamlNode? value))
+        {
+            return null;
+        }
+
+        if (value is not YamlMappingNode mapping)
+        {
+            throw new InvalidOperationException(
+                $"YAML key '{RunProfileConventions.YamlKeys.AgentGuardrails}' must be a mapping.");
+        }
+
+        ValidateKnownKeys(mapping, KnownAgentGuardrailsKeys);
+        return new AgentGuardrailsProfile(ReadModelVisibleContent(mapping));
+    }
+
+    private static ModelVisibleContentProfile? ReadModelVisibleContent(YamlMappingNode node)
+    {
+        if (!node.Children.TryGetValue(
+                new YamlScalarNode(RunProfileConventions.YamlKeys.ModelVisibleContent),
+                out YamlNode? value))
+        {
+            return null;
+        }
+
+        if (value is not YamlMappingNode mapping)
+        {
+            throw new InvalidOperationException(
+                $"YAML key '{RunProfileConventions.YamlKeys.ModelVisibleContent}' must be a mapping.");
+        }
+
+        ValidateKnownKeys(mapping, KnownModelVisibleContentKeys);
+        return new ModelVisibleContentProfile(
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.Enabled),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.SemanticClassifierEnabled),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.RequestTimeoutMilliseconds),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.MaximumInputCharacters),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.UnavailableBehavior));
     }
 
     private static IReadOnlyList<DomainAdapterProfile> ReadDomainAdapters(YamlMappingNode profileNode)

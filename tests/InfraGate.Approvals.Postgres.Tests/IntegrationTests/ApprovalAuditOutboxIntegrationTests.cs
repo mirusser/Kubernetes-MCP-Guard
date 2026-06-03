@@ -15,7 +15,7 @@ public sealed class ApprovalAuditOutboxIntegrationTests : IAsyncLifetime
 {
     private PostgreSqlContainer? container;
     private NpgsqlDataSource? dataSource;
-    private IAuditOutboxCore? core;
+    private IPostgresAuditOutboxCore? core;
     private IApprovalAuditOutbox? outbox;
 
     public async Task InitializeAsync()
@@ -28,7 +28,7 @@ public sealed class ApprovalAuditOutboxIntegrationTests : IAsyncLifetime
 
         var services = new ServiceCollection();
         services.AddPostgresAuditOutbox(dataSource);
-        core = services.BuildServiceProvider().GetRequiredService<IAuditOutboxCore>();
+        core = services.BuildServiceProvider().GetRequiredService<IPostgresAuditOutboxCore>();
         outbox = new ApprovalAuditOutbox(core, dataSource);
     }
 

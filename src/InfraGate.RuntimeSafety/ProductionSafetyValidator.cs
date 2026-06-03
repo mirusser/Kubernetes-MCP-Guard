@@ -2,6 +2,9 @@ namespace InfraGate.RuntimeSafety;
 
 public static class ProductionSafetyValidator
 {
+    private const string FreeModelSuffix = ":free";
+    private const string OpenRouterFreeRoute = "openrouter/free";
+
     private static readonly UnixFileMode GroupOrOtherWrite =
         UnixFileMode.GroupWrite | UnixFileMode.OtherWrite;
 
@@ -25,6 +28,39 @@ public static class ProductionSafetyValidator
         if (uri.IsLoopback)
         {
             throw new InvalidOperationException($"{settingName} must not point at a loopback host in Production mode.");
+        }
+    }
+
+    public static void RequireExplicitNonDemoLlmRoute(
+        string? provider,
+        string? model,
+        string providerSettingName,
+        string modelSettingName)
+    {
+        if (string.IsNullOrWhiteSpace(provider))
+        {
+            throw new InvalidOperationException($"{providerSettingName} must be explicitly configured in Production mode.");
+        }
+
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            throw new InvalidOperationException($"{modelSettingName} must be explicitly configured in Production mode.");
+        }
+
+        if (IsFreeOpenRouterRoute(provider) ||
+            IsFreeOpenRouterRoute(model) ||
+            model.Trim().EndsWith(FreeModelSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"{modelSettingName} must not use free or demo OpenRouter routes in Production mode.");
+        }
+    }
+
+    public static void RequireHttpsMetadataEnabled(bool requireHttpsMetadata, string settingName)
+    {
+        if (!requireHttpsMetadata)
+        {
+            throw new InvalidOperationException($"{settingName} must be true in Production mode.");
         }
     }
 
@@ -118,4 +154,7 @@ public static class ProductionSafetyValidator
 
         return normalizedPath.StartsWith(normalizedParent, StringComparison.Ordinal);
     }
+
+    private static bool IsFreeOpenRouterRoute(string value) =>
+        string.Equals(value.Trim(), OpenRouterFreeRoute, StringComparison.OrdinalIgnoreCase);
 }

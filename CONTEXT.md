@@ -225,6 +225,18 @@ _Avoid_: PlannerMetrics, ObserverMetrics, ad-hoc counter
 The decision-layer ratio `rejected{reason=invalid_operation,invalid_arguments} / (accepted+rejected)` computed from the **Guardrail Metric**. The `dedupe_in_batch` reason is excluded from the numerator because it represents an operational drop, not a hallucination. The tool-block rate uses `tool_call.blocked` divided by the allowed-call span count from §4's per-function spans.
 _Avoid_: Agent error rate, task failure rate
 
+**Model-Visible Content Guard**:
+The `IModelVisibleContentGuard` seam in `InfraGate.AgentGuardrails` that evaluates text before LLM ingestion. Composed into `SnapshotExecutor` (Observer) and `DecideExecutor` (Planner). Returns one of four actions: `Allow` (pass through), `Redact` (replace with safe placeholder), `Quarantine` (withhold content, send placeholder, record forensic digest), or `BlockModelIngestion` (skip LLM entirely, record forensic digest).
+_Avoid_: Tool-call guardrail, gateway permission check
+
+**Model-Visible Content**:
+Any text consumed by an LLM that passes through the **Model-Visible Content Guard** — snapshot JSON, anomaly JSON, tool result text.
+_Avoid_: Prompt template, system prompt, tool name
+
+**Quarantine**:
+A **Model-Visible Content Guard** action that replaces suspicious content with a bounded safe placeholder and records a SHA-256 digest for forensic investigation. The original text is never sent to the LLM.
+_Avoid_: Block, Redact, Reject
+
 
 ### Anomaly Observation
 

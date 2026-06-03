@@ -7,7 +7,10 @@ namespace InfraGate.AgentLlm;
 /// Builds a <see cref="ChatClientAgent"/> with native function invocation, a per-call iterations cap,
 /// and a counter that tracks how many tool calls the agent makes across a single run.
 /// </summary>
-public sealed class ToolCallingAgentFactory(IChatClientFactory chatClientFactory, AgentGuardrailMetrics? guardrailMetrics = null)
+public sealed class ToolCallingAgentFactory(
+    IChatClientFactory chatClientFactory,
+    AgentGuardrailMetrics? guardrailMetrics = null,
+    IModelVisibleContentGuard? contentGuard = null)
 {
     /// <summary>
     /// Creates a <see cref="ChatClientAgent"/> whose underlying <see cref="IChatClient"/> pipeline
@@ -53,6 +56,11 @@ public sealed class ToolCallingAgentFactory(IChatClientFactory chatClientFactory
         if (guardrailPolicy is not null && guardrailMetrics is not null)
         {
             agentBuilder = agentBuilder.UseToolCallGuardrail(guardrailPolicy, guardrailMetrics, name);
+        }
+
+        if (contentGuard is not null)
+        {
+            agentBuilder = agentBuilder.UseModelVisibleContentGuard(contentGuard, name);
         }
 
         agent = agentBuilder.Build();

@@ -1,3 +1,5 @@
+using InfraGate.RuntimeSafety;
+
 namespace InfraGate.Planner.Settings;
 
 /// <summary>
@@ -57,4 +59,23 @@ public sealed record class PlannerOptions
         }
     }
 
+    public void ValidateProductionSafety(RuntimeMode runtimeMode)
+    {
+        if (runtimeMode != RuntimeMode.Production)
+        {
+            return;
+        }
+
+        ProductionSafetyValidator.RequireExplicitNonDemoLlmRoute(
+            LlmProvider,
+            LlmModel,
+            PlannerConventions.ConfigurationKeys.LlmProvider,
+            PlannerConventions.ConfigurationKeys.LlmModel);
+        ProductionSafetyValidator.RequireHttpsMetadataEnabled(
+            ClientCredentials.RequireHttpsMetadata,
+            PlannerConventions.ConfigurationKeys.OAuthRequireHttpsMetadata);
+        ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
+            ClientCredentials.Authority,
+            PlannerConventions.ConfigurationKeys.OAuthAuthority);
+    }
 }

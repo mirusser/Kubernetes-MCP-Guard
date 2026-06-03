@@ -16,6 +16,20 @@ Defaults below come from the current source code and workflows. Paths shown as `
 
 ## McpServer
 
+## InfraGate.AgentGuardrails.ModelVisibleContent
+
+Model-visible content guard configuration. Controls whether text is inspected before LLM ingestion.
+
+| Variable | Component | Required | Default | Example | Description | Production guidance |
+| --- | --- | :---: | --- | --- | --- | --- |
+| `InfraGate__AgentGuardrails__ModelVisibleContent__Enabled` | Observer, Planner | No | `true` | `false` | Enables the model-visible content guard. When `false`, all content passes through unchanged. | Keep enabled in production. |
+| `InfraGate__AgentGuardrails__ModelVisibleContent__SemanticClassifierEnabled` | Observer, Planner | No | `false` | `false` | Enables the local semantic classifier. Currently unsupported — setting to `true` fails startup. | Do not enable until the local classifier adapter is implemented (Phase D). |
+| `InfraGate__AgentGuardrails__ModelVisibleContent__LocalClassifierBaseUrl` | Observer, Planner | No | `""` | `http://localhost:8080` | Base URL for the local semantic classifier endpoint. | Must be an absolute URI when set. |
+| `InfraGate__AgentGuardrails__ModelVisibleContent__RequestTimeoutMilliseconds` | Observer, Planner | No | `1000` | `1000` | Timeout in milliseconds for classifier requests. | Keep tight to avoid blocking the LLM pipeline. |
+| `InfraGate__AgentGuardrails__ModelVisibleContent__MaximumInputCharacters` | Observer, Planner | No | `100000` | `50000` | Maximum input characters before content is quarantined. Exceeding this bound quarantines the content without adaptive evaluation. | Tune based on expected snapshot/anomaly JSON sizes. |
+| `InfraGate__AgentGuardrails__ModelVisibleContent__UnavailableBehavior` | Observer, Planner | No | `FailClosed` | `FailClosed` | Behavior when a guard adapter is unavailable. `FailClosed` quarantines content; `FailOpen` allows all content. | Keep `FailClosed` in production. |
+| `InfraGate__AgentGuardrails__ModelVisibleContent__QuarantinePlaceholder` | Observer, Planner | No | `[CONTENT QUARANTINED: suspicious content was withheld before model processing]` | `[QUARANTINED]` | Placeholder text sent to the LLM when content is quarantined. | Keep informative but non-revealing. |
+
 | Variable | Component | Required | Default | Example | Description | Production guidance |
 | --- | --- | :---: | --- | --- | --- | --- |
 | `InfraGate__Kubernetes__KubeConfig` | `InfraGate.McpServer` | Required in Production unless `InfraGate__Kubernetes__UseInClusterConfig=true` | Development only: Kubernetes client default discovery | `/run/kube/infra-gate.config` | Optional kubeconfig path used by the Kubernetes client. | Use a least-privilege kubeconfig backed by namespace-scoped RBAC, not an admin kubeconfig. Do not rely on default discovery in Production. |

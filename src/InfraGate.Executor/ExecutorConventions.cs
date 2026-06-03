@@ -8,6 +8,7 @@ internal static class ExecutorConventions
     private const string DefaultPort = "3005";
 
     public const string DefaultClientId = "infra-gate-executor";
+    public const string DefaultOAuthScope = "mcp:tools.execute";
     public const string DefaultUrl = LoopbackHttpScheme + UriSchemeSeparator + LoopbackHost + ":" + DefaultPort;
     public const string HealthEndpointPath = "/health";
     public const string A2AHandoffEndpointPath = "/a2a/executor";
@@ -27,6 +28,12 @@ internal static class ExecutorConventions
     public const string SectionName = "InfraGate:Executor";
 
     public const string AspNetCoreUrlsKey = "InfraGate:Executor:AspNetCoreUrls";
+
+    public static class ConfigurationKeys
+    {
+        public const string OAuthAuthority = "InfraGate:Executor:ClientCredentials:Authority";
+        public const string OAuthRequireHttpsMetadata = "InfraGate:Executor:ClientCredentials:RequireHttpsMetadata";
+    }
 
     public static class ToolNames
     {

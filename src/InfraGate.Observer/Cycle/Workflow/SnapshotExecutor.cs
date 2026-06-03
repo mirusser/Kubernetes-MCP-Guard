@@ -10,6 +10,7 @@ internal sealed class SnapshotExecutor(
     string id,
     string namespaceName,
     ISnapshotFetcher snapshotFetcher,
+    IModelVisibleContentGuard contentGuard,
     ILogger logger) : Executor<CycleWorkflowInput>(id)
 {
     public override async ValueTask HandleAsync(
@@ -29,7 +30,22 @@ internal sealed class SnapshotExecutor(
             snapshotJson = "{}";
         }
 
-        await context.SendMessageAsync(new ChatMessage(ChatRole.User, snapshotJson), cancellationToken: cancellationToken)
+        var guardContent = new ModelVisibleContent(
+            snapshotJson,
+            ModelVisibleContentSource.ObserverSnapshot,
+            $"observer-{namespaceName}");
+
+        var decision = await contentGuard.EvaluateAsync(guardContent, cancellationToken).ConfigureAwait(false);
+
+        if (decision.Action == ModelVisibleContentAction.BlockModelIngestion)
+        {
+            await context.SendMessageAsync(
+                new ChatMessage(ChatRole.Assistant, AgentGuardrailConventions.DefaultBlockedPlaceholder),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await context.SendMessageAsync(new ChatMessage(ChatRole.User, decision.Text), cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         await context.SendMessageAsync(new TurnToken(emitEvents: false), cancellationToken: cancellationToken)
             .ConfigureAwait(false);

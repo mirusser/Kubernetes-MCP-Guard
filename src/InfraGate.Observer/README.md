@@ -21,6 +21,8 @@ The Observer agent is protected by a **tool-call guardrail** from `InfraGate.Age
 
 The `InfraGate.AgentGuardrails` meter is registered in the Observer's telemetry pipeline and exports through the existing Serilog span bridge / opt-in OTLP.
 
+The Observer also enforces a **model-visible content guard** on each snapshot before LLM ingestion. `SnapshotExecutor` evaluates the serialized `SnapshotDocument` JSON through `IModelVisibleContentGuard`. If the guard returns `BlockModelIngestion`, the LLM never receives the content — the branch completes with a safe placeholder and the cycle continues with zero reports for that namespace. `Redact` and `Quarantine` actions send safe placeholder text to the LLM instead of the original content. The guard uses the AGT deterministic adapter by default. See the [InfraGate.AgentGuardrails README](../InfraGate.AgentGuardrails/README.md) for the four actions and configuration.
+
 ## Important Contracts
 
 - **AnomalyKind** — four-bucket enum: `PodUnhealthy`, `DeploymentUnavailable`, `ServiceNoEndpoints`, `WarningEvent`. Sub-classification lives in `Annotations["PodCondition"]`.

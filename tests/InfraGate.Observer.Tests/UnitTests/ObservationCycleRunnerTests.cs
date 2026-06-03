@@ -35,6 +35,148 @@ public sealed class ObservationCycleRunnerTests
         };
     }
 
+    // ── Content guard test doubles ────────────────────────────────
+
+    private sealed class FakeContentGuard(ModelVisibleContentAction action, string decisionText)
+        : IModelVisibleContentGuard
+    {
+        public string? LastSeenText { get; private set; }
+
+        public Task<ModelVisibleContentDecision> EvaluateAsync(
+            ModelVisibleContent content, CancellationToken cancellationToken)
+        {
+            LastSeenText = content.Text;
+            return Task.FromResult(new ModelVisibleContentDecision(
+                action, decisionText, [], AgentGuardrailConventions.Reasons.None));
+        }
+    }
+
+    private sealed class PassthroughCapturingGuard : IModelVisibleContentGuard
+    {
+        public string? LastSeenText { get; private set; }
+
+        public Task<ModelVisibleContentDecision> EvaluateAsync(
+            ModelVisibleContent content, CancellationToken cancellationToken)
+        {
+            LastSeenText = content.Text;
+            return Task.FromResult(new ModelVisibleContentDecision(
+                ModelVisibleContentAction.Allow,
+                content.Text,
+                [],
+                AgentGuardrailConventions.Reasons.None));
+        }
+    }
+
+    private static ObservationCycleRunner BuildRunnerWithGuard(
+        FixtureChatClient chatClient,
+        IModelVisibleContentGuard contentGuard,
+        ObserverOptions? opts = null)
+    {
+        var options = opts ?? DefaultOptions();
+        var optionsMonitor = Substitute.For<IOptionsMonitor<ObserverOptions>>();
+        optionsMonitor.CurrentValue.Returns(options);
+
+        var snapshotFetcher = Substitute.For<ISnapshotFetcher>();
+        snapshotFetcher.FetchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new SnapshotDocument(
+                "default",
+                new Dictionary<string, JsonNode?> { ["get_k8s_status"] = JsonNode.Parse("{}"), ["get_k8s_events"] = JsonNode.Parse("{}") },
+                DateTimeOffset.UtcNow)));
+
+        return new ObservationCycleRunner(
+            optionsMonitor,
+            snapshotFetcher,
+            BuildTestPromptLibrary(),
+            new ToolCallingAgentFactory(chatClient),
+            new SeverityClassifier(),
+            new TestAgentMcpToolset(),
+            new AnomalyDedupeStore(),
+            Substitute.For<IAnomalyHandoffSink>(),
+            NullLogger<ObservationCycleRunner>.Instance,
+            contentGuard: contentGuard);
+    }
+
+    // ── Content guard action tests ────────────────────────────────
+
+    [Fact]
+    public async Task RunAsync_ContentGuardAllows_OriginalSnapshotTextReachesAgent()
+    {
+        string? capturedUserContent = null;
+        var chatClient = new FixtureChatClient(messages =>
+        {
+            capturedUserContent = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Text;
+            return new ChatResponse(new ChatMessage(ChatRole.Assistant, ValidLlmJson()));
+        });
+
+        var guard = new PassthroughCapturingGuard();
+        var runner = BuildRunnerWithGuard(chatClient, guard);
+        await runner.RunAsync(CancellationToken.None);
+
+        Assert.NotNull(guard.LastSeenText);
+        Assert.Equal(guard.LastSeenText, capturedUserContent);
+    }
+
+    [Fact]
+    public async Task RunAsync_ContentGuardRedacts_PlaceholderReachesAgent_NotOriginalContent()
+    {
+        const string redactedPlaceholder = "[CONTENT REDACTED: potential injection pattern detected by deterministic filter]";
+        string? capturedUserContent = null;
+        var chatClient = new FixtureChatClient(messages =>
+        {
+            capturedUserContent = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Text;
+            return new ChatResponse(new ChatMessage(ChatRole.Assistant, "[]"));
+        });
+
+        var guard = new FakeContentGuard(ModelVisibleContentAction.Redact, redactedPlaceholder);
+        var runner = BuildRunnerWithGuard(chatClient, guard);
+        var result = await runner.RunAsync(CancellationToken.None);
+
+        Assert.Equal(redactedPlaceholder, capturedUserContent);
+        Assert.DoesNotContain(guard.LastSeenText!, capturedUserContent!);
+        Assert.Empty(result.Reports);
+    }
+
+    [Fact]
+    public async Task RunAsync_ContentGuardQuarantines_QuarantinePlaceholderReachesAgent()
+    {
+        string? capturedUserContent = null;
+        var chatClient = new FixtureChatClient(messages =>
+        {
+            capturedUserContent = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Text;
+            return new ChatResponse(new ChatMessage(ChatRole.Assistant, "[]"));
+        });
+
+        var guard = new FakeContentGuard(
+            ModelVisibleContentAction.Quarantine,
+            AgentGuardrailConventions.DefaultQuarantinePlaceholder);
+        var runner = BuildRunnerWithGuard(chatClient, guard);
+        var result = await runner.RunAsync(CancellationToken.None);
+
+        Assert.Equal(AgentGuardrailConventions.DefaultQuarantinePlaceholder, capturedUserContent);
+        Assert.DoesNotContain(guard.LastSeenText!, capturedUserContent!);
+        Assert.Empty(result.Reports);
+    }
+
+    [Fact]
+    public async Task RunAsync_ContentGuardBlocks_BlockedPlaceholderReachesAgent_EmptyReports()
+    {
+        string? capturedUserContent = null;
+        var chatClient = new FixtureChatClient(messages =>
+        {
+            capturedUserContent = messages.LastOrDefault(m => m.Role == ChatRole.User)?.Text;
+            return new ChatResponse(new ChatMessage(ChatRole.Assistant, "[]"));
+        });
+
+        var guard = new FakeContentGuard(
+            ModelVisibleContentAction.BlockModelIngestion,
+            AgentGuardrailConventions.DefaultBlockedPlaceholder);
+        var runner = BuildRunnerWithGuard(chatClient, guard);
+        var result = await runner.RunAsync(CancellationToken.None);
+
+        Assert.Null(capturedUserContent);
+        Assert.Empty(result.Reports);
+    }
+
     private static IObservationCycleRunner CreateRunner(
         string llmResponseJson,
         ObserverOptions? opts = null,

@@ -1,5 +1,4 @@
 using System.Diagnostics.Metrics;
-using InfraGate.AgentGuardrails;
 using InfraGate.AgentLlm;
 using InfraGate.Planner.Audit;
 using InfraGate.Planner.Decision;
@@ -23,7 +22,8 @@ internal sealed class DecideExecutor( // NOSONAR:S107 — DI constructor; all pa
     ILogger logger,
     AgentGuardrailPolicy? guardrailPolicy = null,
     PlannerDedupeStore? dedupeStore = null,
-    IPlannerAuditOutbox? auditOutbox = null) : Executor<AnomalyReport>(id)
+    IPlannerAuditOutbox? auditOutbox = null,
+    IModelVisibleContentGuard? contentGuard = null) : Executor<AnomalyReport>(id)
 {
     private static readonly JsonSerializerOptions anomalyJsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -97,10 +97,22 @@ internal sealed class DecideExecutor( // NOSONAR:S107 — DI constructor; all pa
     {
         string anomalyJson = JsonSerializer.Serialize(message, anomalyJsonOptions);
         string agentId = $"{PlannerConventions.A2AHandoff.AgentIdPrefix}{message.AnomalyId[..Math.Min(8, message.AnomalyId.Length)]}";
+
+        var guardContent = new ModelVisibleContent(
+            anomalyJson,
+            ModelVisibleContentSource.PlannerAnomaly,
+            agentId);
+
+        var guard = contentGuard ?? AllowAllModelVisibleContentGuard.Instance;
+        var guardDecision = await guard.EvaluateAsync(guardContent, cancellationToken).ConfigureAwait(false);
+
+        if (guardDecision.Action == ModelVisibleContentAction.BlockModelIngestion)
+            return null;
+
         (AIAgent agent, _) = agentFactory.Create(agentId, systemPrompt, tools,
             maxToolIterations, decisionResponseFormat, guardrailPolicy);
 
-        AgentResponse response = await agent.RunAsync(anomalyJson, cancellationToken: cancellationToken).ConfigureAwait(false);
+        AgentResponse response = await agent.RunAsync(guardDecision.Text, cancellationToken: cancellationToken).ConfigureAwait(false);
         string responseText = response.Text ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(responseText)) return null;
@@ -158,6 +170,9 @@ internal sealed class DecideExecutor( // NOSONAR:S107 — DI constructor; all pa
         _ => element.Clone(),
     };
 
+    // LlmDecisionOutput is a schema-only DTO discovered by ChatResponseFormat.ForJsonSchema().
+    // Its properties are never accessed by imperative code — the unused-setter and
+    // unused-property warnings are intentional.
 #pragma warning disable S1144, S3459
     private sealed record class LlmDecisionOutput
     {

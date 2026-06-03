@@ -142,4 +142,128 @@ public sealed class ToolCallingAgentFactoryTests
         Assert.True(executed);
         Assert.Equal(1, getCount()); // Allowed tools invoke the CountingAiFunction
     }
+
+    // ── Tool result content guard ─────────────────────────────────────────
+
+    [Fact]
+    public async Task Create_ToolResultGuardAllows_OriginalToolResultReachesModel()
+    {
+        const string toolOutput = "pod status: running";
+        var client = new ToolResultCapturingChatClient("probe_tool");
+        var guard = new FakeToolResultGuard(ModelVisibleContentAction.Allow, passthrough: true);
+        var sut = new ToolCallingAgentFactory(new FakeChatClientFactory(client), contentGuard: guard);
+        var tool = AIFunctionFactory.Create(() => toolOutput, "probe_tool");
+
+        var (agent, _) = sut.Create("test-agent", "instructions", [tool], 4);
+        await agent.RunAsync("hello");
+
+        Assert.Equal(toolOutput, guard.LastSeenText);
+        Assert.Equal(toolOutput, client.CapturedToolResult);
+    }
+
+    [Fact]
+    public async Task Create_ToolResultGuardRedacts_PlaceholderReachesModel_NotOriginalResult()
+    {
+        const string toolOutput = "hostile tool output";
+        const string redactedText = "[CONTENT REDACTED: potential injection]";
+        var client = new ToolResultCapturingChatClient("probe_tool");
+        var guard = new FakeToolResultGuard(ModelVisibleContentAction.Redact, replacementText: redactedText);
+        var sut = new ToolCallingAgentFactory(new FakeChatClientFactory(client), contentGuard: guard);
+        var tool = AIFunctionFactory.Create(() => toolOutput, "probe_tool");
+
+        var (agent, _) = sut.Create("test-agent", "instructions", [tool], 4);
+        await agent.RunAsync("hello");
+
+        Assert.Equal(toolOutput, guard.LastSeenText);
+        Assert.Equal(redactedText, client.CapturedToolResult);
+        Assert.DoesNotContain(toolOutput, client.CapturedToolResult!);
+    }
+
+    [Fact]
+    public async Task Create_ToolResultGuardQuarantines_QuarantinePlaceholderReachesModel()
+    {
+        const string toolOutput = "suspicious tool output";
+        var client = new ToolResultCapturingChatClient("probe_tool");
+        var guard = new FakeToolResultGuard(
+            ModelVisibleContentAction.Quarantine,
+            replacementText: AgentGuardrailConventions.DefaultQuarantinePlaceholder);
+        var sut = new ToolCallingAgentFactory(new FakeChatClientFactory(client), contentGuard: guard);
+        var tool = AIFunctionFactory.Create(() => toolOutput, "probe_tool");
+
+        var (agent, _) = sut.Create("test-agent", "instructions", [tool], 4);
+        await agent.RunAsync("hello");
+
+        Assert.Equal(AgentGuardrailConventions.DefaultQuarantinePlaceholder, client.CapturedToolResult);
+        Assert.DoesNotContain(toolOutput, client.CapturedToolResult!);
+    }
+
+    [Fact]
+    public async Task Create_ToolResultGuardBlocks_BlockedPlaceholderReachesModel_NotHostileContent()
+    {
+        const string toolOutput = "critically hostile tool output";
+        var client = new ToolResultCapturingChatClient("probe_tool");
+        var guard = new FakeToolResultGuard(
+            ModelVisibleContentAction.BlockModelIngestion,
+            replacementText: AgentGuardrailConventions.DefaultBlockedPlaceholder);
+        var sut = new ToolCallingAgentFactory(new FakeChatClientFactory(client), contentGuard: guard);
+        var tool = AIFunctionFactory.Create(() => toolOutput, "probe_tool");
+
+        var (agent, _) = sut.Create("test-agent", "instructions", [tool], 4);
+        await agent.RunAsync("hello");
+
+        Assert.Equal(AgentGuardrailConventions.DefaultBlockedPlaceholder, client.CapturedToolResult);
+        Assert.DoesNotContain(toolOutput, client.CapturedToolResult!);
+    }
+
+    // ── Tool-result guard test doubles ────────────────────────────────────
+
+    private sealed class FakeToolResultGuard(
+        ModelVisibleContentAction action,
+        bool passthrough = false,
+        string? replacementText = null) : IModelVisibleContentGuard
+    {
+        public string? LastSeenText { get; private set; }
+
+        public Task<ModelVisibleContentDecision> EvaluateAsync(
+            ModelVisibleContent content, CancellationToken cancellationToken)
+        {
+            LastSeenText = content.Text;
+            string text = passthrough ? content.Text : (replacementText ?? content.Text);
+            return Task.FromResult(new ModelVisibleContentDecision(
+                action, text, [], AgentGuardrailConventions.Reasons.None));
+        }
+    }
+
+    private sealed class ToolResultCapturingChatClient(string toolToCall) : IChatClient
+    {
+        private int callCount;
+        public string? CapturedToolResult { get; private set; }
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref callCount) == 1)
+            {
+                return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant,
+                    [new FunctionCallContent("call-1", toolToCall, new Dictionary<string, object?>(StringComparer.Ordinal))])));
+            }
+
+            CapturedToolResult = messages
+                .SelectMany(m => m.Contents)
+                .OfType<FunctionResultContent>()
+                .FirstOrDefault()?.Result as string;
+
+            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "done")));
+        }
+
+        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+        public void Dispose() { }
+    }
 }

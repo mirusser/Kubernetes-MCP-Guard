@@ -27,6 +27,7 @@ internal static class EnvFileRenderer
         AppendObserver(builder, profile);
         AppendPlanner(builder, profile);
         AppendExecutor(builder, profile);
+        AppendAgentGuardrails(builder, profile);
 
         return builder.ToString();
     }
@@ -386,5 +387,33 @@ internal static class EnvFileRenderer
         {
             AppendList(builder, RunProfileConventions.Env.ObserverAllowedNamespaces, observer.AllowedNamespaces);
         }
+    }
+
+    private static void AppendAgentGuardrails(StringBuilder builder, RunProfile profile)
+    {
+        if (profile.AgentGuardrails?.ModelVisibleContent is not { } mvc)
+        {
+            return;
+        }
+
+        bool hasAnyValue =
+            !string.IsNullOrEmpty(mvc.Enabled) ||
+            !string.IsNullOrEmpty(mvc.SemanticClassifierEnabled) ||
+            !string.IsNullOrEmpty(mvc.RequestTimeoutMilliseconds) ||
+            !string.IsNullOrEmpty(mvc.MaximumInputCharacters) ||
+            !string.IsNullOrEmpty(mvc.UnavailableBehavior);
+
+        if (!hasAnyValue)
+        {
+            return;
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("# Agent Guardrails — Model-Visible Content Guard");
+        AppendIfSet(builder, RunProfileConventions.Env.ModelVisibleContentEnabled, mvc.Enabled);
+        AppendIfSet(builder, RunProfileConventions.Env.ModelVisibleContentSemanticClassifierEnabled, mvc.SemanticClassifierEnabled);
+        AppendIfSet(builder, RunProfileConventions.Env.ModelVisibleContentRequestTimeoutMilliseconds, mvc.RequestTimeoutMilliseconds);
+        AppendIfSet(builder, RunProfileConventions.Env.ModelVisibleContentMaximumInputCharacters, mvc.MaximumInputCharacters);
+        AppendIfSet(builder, RunProfileConventions.Env.ModelVisibleContentUnavailableBehavior, mvc.UnavailableBehavior);
     }
 }

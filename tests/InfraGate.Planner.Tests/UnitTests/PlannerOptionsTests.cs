@@ -1,3 +1,5 @@
+using InfraGate.RuntimeSafety;
+
 namespace InfraGate.Planner.Tests.UnitTests;
 
 public sealed class PlannerOptionsTests
@@ -31,6 +33,72 @@ public sealed class PlannerOptionsTests
 
         var ex = Record.Exception(() => options.Validate());
         Assert.Null(ex);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithFreeOpenRouterRoute_Throws()
+    {
+        var options = CreateProductionOptions() with
+        {
+            LlmProvider = PlannerConventions.LlmProviders.OpenRouter,
+            LlmModel = "deepseek/deepseek-v4-flash:free"
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => options.ValidateProductionSafety(RuntimeMode.Production));
+
+        Assert.Contains("free", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithHttpsMetadataDisabled_Throws()
+    {
+        var options = CreateProductionOptions() with
+        {
+            ClientCredentials = new()
+            {
+                Authority = "https://idp.example.com/realms/infra-gate",
+                ClientId = PlannerConventions.DefaultClientId,
+                Scope = PlannerConventions.DefaultOAuthScope,
+                RequireHttpsMetadata = false,
+            }
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => options.ValidateProductionSafety(RuntimeMode.Production));
+
+        Assert.Contains("RequireHttpsMetadata", exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithExplicitNonDemoRouteAndHttpsMetadata_DoesNotThrow()
+    {
+        var options = CreateProductionOptions();
+
+        var exception = Record.Exception(() => options.ValidateProductionSafety(RuntimeMode.Production));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithDevelopmentMode_AllowsLocalDemoSettings()
+    {
+        var options = CreateProductionOptions() with
+        {
+            LlmProvider = PlannerConventions.LlmProviders.OpenRouter,
+            LlmModel = "openrouter/free",
+            ClientCredentials = new()
+            {
+                Authority = "http://keycloak:8080/realms/infra-gate",
+                ClientId = PlannerConventions.DefaultClientId,
+                Scope = PlannerConventions.DefaultOAuthScope,
+                RequireHttpsMetadata = false,
+            }
+        };
+
+        var exception = Record.Exception(() => options.ValidateProductionSafety(RuntimeMode.Development));
+
+        Assert.Null(exception);
     }
 
     [Theory]
@@ -145,4 +213,19 @@ public sealed class PlannerOptionsTests
         var ex = Record.Exception(() => options.Validate());
         Assert.Null(ex);
     }
+
+    private static PlannerOptions CreateProductionOptions() =>
+        new()
+        {
+            GatewayBaseUrl = "https://gateway.example.com/mcp",
+            LlmProvider = PlannerConventions.LlmProviders.OpenRouter,
+            LlmModel = "anthropic/claude-sonnet-4.5",
+            ClientCredentials = new()
+            {
+                Authority = "https://idp.example.com/realms/infra-gate",
+                ClientId = PlannerConventions.DefaultClientId,
+                Scope = PlannerConventions.DefaultOAuthScope,
+                RequireHttpsMetadata = true,
+            }
+        };
 }

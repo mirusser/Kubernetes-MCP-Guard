@@ -1,6 +1,6 @@
 # InfraGate.AuditOutbox
 
-`InfraGate.AuditOutbox` is the generic audit-outbox engine for InfraGate. It defines the core interface, canonical row shape, stream names, lock conventions, and hash-chain helpers used by all per-component audit streams.
+`InfraGate.AuditOutbox` is the generic audit-outbox engine for InfraGate. It defines the canonical row shape, stream names, lock conventions, and hash-chain helpers used by all per-component audit streams.
 
 **Owns:** audit-outbox contracts and conventions (no Postgres dependency)
 
@@ -37,9 +37,7 @@ Canonical row shape. Every stream writes rows of this type.
 - `Streams` — `const string` names for the three built-in streams: `approvals`, `observer`, `planner`.
 - `ColumnNames` — `const string` names for every top-level column; per-stream migrations reference the same names.
 
-### `IAuditOutboxCore`
-
-Internal interface. The Postgres implementation lives in `InfraGate.AuditOutbox.Postgres`. Per-stream wrappers (`ApprovalAuditOutbox`, `ObserverAuditOutbox`, `PlannerAuditOutbox`) call this interface — callers should not reference it directly.
+The transaction-aware writer interface is Postgres-specific and lives in `InfraGate.AuditOutbox.Postgres`. The generic module deliberately does not reference Npgsql or any database adapter package.
 
 ## Per-Stream Wrappers
 

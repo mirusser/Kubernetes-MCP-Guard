@@ -11,7 +11,7 @@ public sealed class PlannerPostgresFixture : IAsyncLifetime
 {
     private PostgreSqlContainer? container;
     public NpgsqlDataSource? DataSource { get; private set; }
-    internal IAuditOutboxCore? Core { get; private set; }
+    internal IPostgresAuditOutboxCore? Core { get; private set; }
 
     public async Task InitializeAsync()
     {
@@ -35,7 +35,7 @@ public sealed class PlannerPostgresFixture : IAsyncLifetime
 
         var services = new ServiceCollection();
         services.AddPostgresAuditOutbox(DataSource);
-        Core = services.BuildServiceProvider().GetRequiredService<IAuditOutboxCore>();
+        Core = services.BuildServiceProvider().GetRequiredService<IPostgresAuditOutboxCore>();
     }
 
     public async Task DisposeAsync()

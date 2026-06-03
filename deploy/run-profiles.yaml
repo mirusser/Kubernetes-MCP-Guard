@@ -174,6 +174,13 @@ profiles:
     kind: compose-deploy
     runtimeMode: Development
     gateway: {}
+    agentGuardrails:
+      modelVisibleContent:
+        enabled: "true"
+        semanticClassifierEnabled: "false"
+        requestTimeoutMilliseconds: "1000"
+        maximumInputCharacters: "100000"
+        unavailableBehavior: "FailClosed"
     identityProvider:
       realmImport: deploy/keycloak/infra-gate-realm.json
       authority: http://127.0.0.1:3010/realms/infra-gate

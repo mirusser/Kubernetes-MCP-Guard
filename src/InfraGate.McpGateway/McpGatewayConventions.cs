@@ -16,6 +16,20 @@ internal static class McpGatewayConventions
     public const int DefaultLogTailLines = 200;
     internal const int RegexTimeoutMilliseconds = 1000;
 
+    public static class Telemetry
+    {
+        public const string MeterName = "InfraGate.McpGateway";
+        public const string MeterVersion = "1.0";
+        public const string GuardrailAuditWriteFailedCounterName = "infragate.gateway.guardrail.audit_write.failed";
+
+        public static class Tags
+        {
+            public const string ToolName = "tool.name";
+            public const string GuardrailDirection = "guardrail.direction";
+            public const string GuardrailAction = "guardrail.action";
+        }
+    }
+
     public static class ConfigurationKeys
     {
         public const string ApprovalBaseUrl = "InfraGate:Approval:BaseUrl";

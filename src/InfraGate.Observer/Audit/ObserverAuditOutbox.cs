@@ -4,7 +4,7 @@ using Npgsql;
 
 namespace InfraGate.Observer.Audit;
 
-internal sealed class ObserverAuditOutbox(IAuditOutboxCore core, NpgsqlDataSource dataSource)
+internal sealed class ObserverAuditOutbox(IPostgresAuditOutboxCore core, NpgsqlDataSource dataSource)
     : IObserverAuditOutbox
 {
     private const string StreamSchema = AuditOutboxConventions.Streams.Observer;

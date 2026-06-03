@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using InfraGate.AgentGuardrails;
 using InfraGate.AgentLlm;
 using InfraGate.Observer.Audit;
 using InfraGate.Observer.Classification;
@@ -63,6 +62,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
     private readonly Counter<long>? reportsEmittedCounter;
     private readonly Histogram<double>? cycleDurationHistogram;
     private readonly AgentGuardrailPolicy? guardrailPolicy;
+    private readonly IModelVisibleContentGuard contentGuard;
 
     public ObservationCycleRunner( // NOSONAR:S107 — DI constructor; all params are required services.
         IOptionsMonitor<ObserverOptions> optionsMonitor,
@@ -76,7 +76,8 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         ILogger<ObservationCycleRunner> logger,
         Meter? meter = null,
         IObserverAuditOutbox? auditOutbox = null,
-        AgentGuardrailPolicy? guardrailPolicy = null)
+        AgentGuardrailPolicy? guardrailPolicy = null,
+        IModelVisibleContentGuard? contentGuard = null)
     {
         this.optionsMonitor = optionsMonitor;
         this.snapshotFetcher = snapshotFetcher;
@@ -89,6 +90,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         this.auditOutbox = auditOutbox;
         this.logger = logger;
         this.guardrailPolicy = guardrailPolicy;
+        this.contentGuard = contentGuard ?? AllowAllModelVisibleContentGuard.Instance;
 
         cycleCountCounter = ObserverMetrics.CreateCycleCountCounter(meter);
         toolCallsCounter = ObserverMetrics.CreateToolCallsCounter(meter);
@@ -222,7 +224,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
                 observerResponseFormat, guardrailPolicy);
             var agentBinding = agent.BindAsExecutor(new AIAgentHostOptions { ForwardIncomingMessages = false });
 
-            ExecutorBinding snap = new SnapshotExecutor($"snapshot-{i}", ns, snapshotFetcher, logger);
+            ExecutorBinding snap = new SnapshotExecutor($"snapshot-{i}", ns, snapshotFetcher, contentGuard, logger);
             ExecutorBinding parse = new AnomalyParseExecutor(
                 $"parse-{i}", ns, cycleId,
                 getCount,
@@ -302,7 +304,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
                         return true;
                 }
             }
-            catch
+            catch (Exception)
             {
                 // If we can't check, err on the side of running the cycle.
                 return true;

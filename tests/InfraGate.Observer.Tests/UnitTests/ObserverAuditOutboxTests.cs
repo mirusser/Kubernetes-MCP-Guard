@@ -1,4 +1,5 @@
 using InfraGate.AuditOutbox;
+using InfraGate.AuditOutbox.Postgres;
 using InfraGate.Observer.Audit;
 using Npgsql;
 using NSubstitute;
@@ -10,7 +11,7 @@ public sealed class ObserverAuditOutboxTests
     [Fact]
     public async Task AppendAsync_PrimaryOverload_WithNullEntry_ThrowsArgumentNullException()
     {
-        var core = Substitute.For<IAuditOutboxCore>();
+        var core = Substitute.For<IPostgresAuditOutboxCore>();
         var dataSource = NpgsqlDataSource.Create("Host=localhost");
         var outbox = new ObserverAuditOutbox(core, dataSource);
 
@@ -21,7 +22,7 @@ public sealed class ObserverAuditOutboxTests
     [Fact]
     public async Task AppendAsync_TransactionOverload_WithNullEntry_ThrowsArgumentNullException()
     {
-        var core = Substitute.For<IAuditOutboxCore>();
+        var core = Substitute.For<IPostgresAuditOutboxCore>();
         var dataSource = NpgsqlDataSource.Create("Host=localhost");
         var outbox = new ObserverAuditOutbox(core, dataSource);
 
@@ -32,7 +33,7 @@ public sealed class ObserverAuditOutboxTests
     [Fact]
     public async Task AppendAsync_TransactionOverload_ExtractsCorrelationColumnsToCanonicalFormat()
     {
-        var core = Substitute.For<IAuditOutboxCore>();
+        var core = Substitute.For<IPostgresAuditOutboxCore>();
         var dataSource = NpgsqlDataSource.Create("Host=localhost");
         var outbox = new ObserverAuditOutbox(core, dataSource);
 

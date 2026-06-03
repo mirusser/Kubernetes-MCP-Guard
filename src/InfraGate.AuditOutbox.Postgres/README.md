@@ -37,7 +37,7 @@ await PostgresAuditOutboxMigrationRunner.ApplyAsync(
 services.AddPostgresAuditOutbox(dataSource);
 ```
 
-Registers `IAuditOutboxCore` (internal). Per-stream wrappers call their own extension method which chains onto this registration.
+Registers `IPostgresAuditOutboxCore`. Per-stream wrappers call their own extension method which chains onto this registration.
 
 ## Verifying the Chain
 

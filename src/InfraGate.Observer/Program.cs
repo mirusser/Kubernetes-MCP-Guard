@@ -20,6 +20,7 @@ using InfraGate.Observer.Llm;
 using InfraGate.Observer.Snapshot;
 using InfraGate.Observer.State;
 using InfraGate.Prompts;
+using InfraGate.RuntimeSafety;
 using ModelContextProtocol.Protocol;
 using Npgsql;
 using Microsoft.Agents.AI.A2A;
@@ -31,6 +32,8 @@ builder.Services.Configure<ObserverOptions>(
     builder.Configuration.GetSection(ObserverOptions.SectionName));
 builder.Services.Configure<OpenRouterOptions>(
     builder.Configuration.GetSection(OpenRouterOptions.SectionName));
+builder.Services.Configure<ModelVisibleContentOptions>(
+    builder.Configuration.GetSection(ModelVisibleContentOptions.SectionName));
 
 builder.AddInfraGateObservability(opt =>
 {
@@ -49,10 +52,16 @@ ConfigureUrls(builder);
 var observerOptions = builder.Configuration
     .GetSection(ObserverOptions.SectionName)
     .Get<ObserverOptions>() ?? new ObserverOptions();
+var modelVisibleContentOptions = builder.Configuration
+    .GetSection(ModelVisibleContentOptions.SectionName)
+    .Get<ModelVisibleContentOptions>() ?? new ModelVisibleContentOptions();
+RuntimeMode runtimeMode = RuntimeModeResolver.FromConfiguration(builder.Configuration);
 
 try
 {
     observerOptions.Validate();
+    observerOptions.ValidateProductionSafety(runtimeMode);
+    modelVisibleContentOptions.Validate();
 }
 catch (InvalidOperationException ex)
 {
@@ -68,13 +77,14 @@ builder.Services.AddHttpClient(ObserverConventions.HttpClients.PlannerHandoff)
     .AddClientCredentialsBearerHandler();
 
 var jwtAuthority = observerOptions.ClientCredentials.Authority;
+bool requireHttpsMetadata = observerOptions.ClientCredentials.RequireHttpsMetadata;
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.Authority = jwtAuthority;
         options.MapInboundClaims = false;
-        options.RequireHttpsMetadata = false;
+        options.RequireHttpsMetadata = requireHttpsMetadata;
 
         options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
         {
@@ -129,7 +139,7 @@ builder.Services.AddSingleton<IChatClient>(sp =>
 });
 builder.Services.AddSingleton<IAnomalyDedupeStore, AnomalyDedupeStore>();
 builder.Services.AddSingleton<ToolCallingAgentFactory>();
-builder.Services.AddAgentGuardrails();
+builder.Services.AddModelVisibleContentGuard(modelVisibleContentOptions);
 builder.Services.AddSingleton(_ =>
 {
     var allowedTools = new HashSet<string>(StringComparer.Ordinal)
@@ -159,7 +169,8 @@ builder.Services.AddSingleton<IObservationCycleRunner>(sp =>
         sp.GetRequiredService<ILogger<ObservationCycleRunner>>(),
         ObserverMetrics.Meter,
         sp.GetService<IObserverAuditOutbox>(),
-        sp.GetService<AgentGuardrailPolicy>());
+        sp.GetService<AgentGuardrailPolicy>(),
+        sp.GetRequiredService<IModelVisibleContentGuard>());
 });
 builder.Services.AddSingleton<CycleSerialisation>();
 builder.Services.AddHostedService<ObservationCycleLoop>();
