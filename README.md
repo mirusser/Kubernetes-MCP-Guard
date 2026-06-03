@@ -211,26 +211,29 @@ Prerequisites: [Docker Compose v2](https://docs.docker.com/compose/install/), [m
 git clone https://github.com/mirusser/Kubernetes-MCP-Guard.git
 cd Kubernetes-MCP-Guard
 
-./scripts/create-demo-kubeconfig.sh --compose
-
-TAG=latest docker compose --env-file deploy/local-oauth/release.env.example \
-  -f deploy/local-oauth/compose.release.yaml up
+./scripts/quickstart.sh published
 ```
 
-This starts the local Keycloak-backed OAuth path, PostgreSQL approval store, and the published gateway image. Replace `latest` with a release tag such as `v0.1.0` for a stable image. The committed no-SDK file comes from the `smoke-release` Run Profile: `release.env.example` supplies both Compose interpolation and `InfraGate__...` runtime settings.
+This starts the local Keycloak-backed OAuth path, PostgreSQL approval store, and the published gateway image. Use `./scripts/quickstart.sh published --tag v0.1.0` for a stable release tag. The committed no-SDK file comes from the `smoke-release` Run Profile: `release.env.example` supplies both Compose interpolation and `InfraGate__...` runtime settings.
 
 ### 🛠️ Build From Source
 
 Prerequisites: [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), [Docker Compose v2](https://docs.docker.com/compose/install/), [minikube](https://minikube.sigs.k8s.io/docs/start/), and [git](https://git-scm.com/).
 
 ```bash
-./scripts/create-demo-kubeconfig.sh --compose
-./scripts/generate-env.sh local-compose
-docker compose --env-file deploy/generated/local-compose.env \
-  -f deploy/local-oauth/compose.yaml up --build
+export InfraGate__OpenRouter__ApiKey="<openrouter-api-key>"
+./scripts/quickstart.sh source
 ```
 
-`generate-env.sh` writes `deploy/generated/local-compose.env` from `deploy/run-profiles.yaml`.
+The source quickstart generates `deploy/generated/local-compose.env` from `deploy/run-profiles.yaml` and starts the gateway, Observer, Planner, and Executor from local source builds.
+
+Optional Make aliases are available for the same flows:
+
+```bash
+make quickstart-source
+make quickstart-down
+make quickstart-logs
+```
 
 Other run modes and full setup details are in [docs/setup-guide.md](docs/setup-guide.md).
 
