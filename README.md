@@ -22,7 +22,7 @@
 <sub>![.NET 10](https://img.shields.io/badge/.NET-10-512bd4?style=flat-square&logo=dotnet) ![Kubernetes](https://img.shields.io/badge/Kubernetes-Cloud--Native-326ce5?style=flat-square&logo=kubernetes) ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ed?style=flat-square&logo=docker) ![MCP](https://img.shields.io/badge/MCP-HTTP%20Gateway-black?style=flat-square) ![AI Agents](https://img.shields.io/badge/AI%20Agents-Observer%20%2F%20Planner%20%2F%20Executor-7c3aed?style=flat-square)</sub>
 
 
-### 📝 TL;DR
+## 📝 TL;DR
 **When something breaks, the system can collect evidence, propose a bounded fix, dry-run it, package it into a reviewable plan, and wait for a human to approve.**
 
 It is a security-first bridge between AI agents and Kubernetes, with out-of-band, OAuth-authenticated, human-in-the-loop (HITL), plan-based approval for every gateway-exposed mutation.
