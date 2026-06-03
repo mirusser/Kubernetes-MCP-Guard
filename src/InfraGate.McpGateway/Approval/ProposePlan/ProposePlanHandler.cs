@@ -116,7 +116,7 @@ internal sealed class ProposePlanHandler( // NOSONAR:S107 - Handler composes exp
         if (string.IsNullOrWhiteSpace(options.OperatorEmail))
         {
             EmailFailedCounter.Add(1);
-            logger.LogError("approval email for plan '{PlanId}' not sent — operator email is not configured", planId);
+            logger.LogWarning("approval email for plan '{PlanId}' not sent — operator email is not configured", planId);
             return false;
         }
 

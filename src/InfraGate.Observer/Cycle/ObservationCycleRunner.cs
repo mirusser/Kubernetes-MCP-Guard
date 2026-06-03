@@ -293,8 +293,14 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
                     continue;
 
                 string text = string.Concat(result.Content.OfType<TextContentBlock>().Select(c => c.Text));
-                if (!string.IsNullOrEmpty(text) && !text.Contains("\"events\":[]", StringComparison.Ordinal))
-                    return true;
+                if (!string.IsNullOrEmpty(text))
+                {
+                    using var doc = JsonDocument.Parse(text);
+                    if (doc.RootElement.TryGetProperty("events", out var eventsProp)
+                        && eventsProp.ValueKind == JsonValueKind.Array
+                        && eventsProp.GetArrayLength() > 0)
+                        return true;
+                }
             }
             catch
             {

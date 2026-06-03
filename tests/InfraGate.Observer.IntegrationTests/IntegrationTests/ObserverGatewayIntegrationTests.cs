@@ -188,6 +188,7 @@ public sealed class ObserverGatewayIntegrationTests
             MaxToolIterations = 8,
             DedupeSuppressionWindow = 5,
             DedupeResolutionThreshold = 2,
+            SkipCycleWhenNoWarningEvents = false,
         };
     }
 

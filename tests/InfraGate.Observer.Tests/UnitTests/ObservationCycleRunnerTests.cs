@@ -31,6 +31,7 @@ public sealed class ObservationCycleRunnerTests
             AllowedNamespaces = DefaultNamespaces,
             WallClockCapSeconds = 20,
             MaxToolIterations = 8,
+            SkipCycleWhenNoWarningEvents = false,
         };
     }
 

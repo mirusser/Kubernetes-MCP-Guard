@@ -40,7 +40,7 @@ public sealed partial class KubernetesManager
                 namespaceName,
                 fieldSelector: fieldSelector,
                 labelSelector: labelSelector,
-                limit: excludeSet is null ? limit : null, // Fetch all when filtering locally; use API limit otherwise
+                limit: excludeSet is null ? limit : KubernetesConventions.MaxEventLimit,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
             var filtered = events.Items.AsEnumerable();
