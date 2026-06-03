@@ -11,12 +11,25 @@ using InfraGate.KubernetesAdapter.PlanBuilding;
 
 namespace InfraGate.KubernetesAdapter.Execution;
 
-public sealed class KubernetesPlanExecutor(
-    IToolCaller toolCaller,
-    IApprovalAuditOutbox? auditOutbox = null) : IDomainPlanExecutor
+public sealed class KubernetesPlanExecutor : IDomainPlanExecutor
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private readonly IApprovalAuditOutbox auditOutbox = auditOutbox ?? NullApprovalAuditOutbox.Instance;
+    private static readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly IToolCaller toolCaller;
+    private readonly IKubernetesEvidenceService evidenceService;
+    private readonly IApprovalAuditOutbox auditOutbox;
+
+    internal KubernetesPlanExecutor(
+        IToolCaller toolCaller,
+        IKubernetesEvidenceService evidenceService,
+        IApprovalAuditOutbox? auditOutbox = null)
+    {
+        ArgumentNullException.ThrowIfNull(toolCaller);
+        ArgumentNullException.ThrowIfNull(evidenceService);
+
+        this.toolCaller = toolCaller;
+        this.evidenceService = evidenceService;
+        this.auditOutbox = auditOutbox ?? NullApprovalAuditOutbox.Instance;
+    }
 
     public async Task<DomainPlanExecutionResult> CheckPreExecutionAsync(PlanEnvelope envelope, CancellationToken ct)
     {
@@ -32,8 +45,21 @@ public sealed class KubernetesPlanExecutor(
         var driftBlock = await CheckLiveDriftAsync(plan, payload, ct).ConfigureAwait(false);
         if (driftBlock is not null)
         {
-            var audit = ApplyDriftDetectedAudit(plan, driftBlock.Message, payload);
+            var audit = KubernetesAuditHelper.ApplyDriftDetected(
+                plan.Id,
+                plan.Operation,
+                payload.Namespace,
+                driftBlock.Message);
             return DomainPlanExecutionResult.Blocked(driftBlock.Message, audit, driftBlock.ReasonCode);
+        }
+
+        var storedPolicyBlock = CheckStoredPolicyFindings(plan, payload);
+        if (storedPolicyBlock is not null)
+        {
+            return DomainPlanExecutionResult.Blocked(
+                storedPolicyBlock.Message,
+                KubernetesAuditHelper.ApplyDenied(plan.Id, storedPolicyBlock.Message),
+                storedPolicyBlock.ReasonCode);
         }
 
         var policyBlock = CheckSetDeploymentImagePolicy(plan, payload);
@@ -41,17 +67,20 @@ public sealed class KubernetesPlanExecutor(
         {
             return DomainPlanExecutionResult.Blocked(
                 policyBlock.Message,
-                new ApprovalAuditEntry(
-                    ApprovalConventions.AuditEvents.ApplyDenied,
-                    new ApplyDeniedPayload(plan.Id, policyBlock.Message),
-                    PlanId: plan.Id),
+                KubernetesAuditHelper.ApplyDenied(plan.Id, policyBlock.Message),
                 policyBlock.ReasonCode);
         }
 
         var dryRunBlock = await RunPreExecuteDryRunAsync(plan, payload, ct).ConfigureAwait(false);
         if (dryRunBlock is not null)
         {
-            var audit = DryRunFailedAudit(plan, dryRunBlock.Message, payload);
+            var audit = KubernetesAuditHelper.DryRunFailed(
+                KubernetesAdapterConventions.AuditPhases.PreApply,
+                plan.Id,
+                plan.Operation,
+                payload.Namespace,
+                FormatObjects(payload),
+                dryRunBlock.Message);
             return DomainPlanExecutionResult.Blocked(dryRunBlock.Message, audit, dryRunBlock.ReasonCode);
         }
 
@@ -67,7 +96,7 @@ public sealed class KubernetesPlanExecutor(
                             payload.Namespace,
                             FormatObjects(payload),
                             plan.Envelope.FreshnessPolicy.Checks.Select(check => check.Type).ToArray()),
-                        JsonOptions)),
+                        jsonOptions)),
                 PlanId: plan.Id),
             ct).ConfigureAwait(false);
 
@@ -97,7 +126,7 @@ public sealed class KubernetesPlanExecutor(
                             payload.Namespace,
                             FormatObjects(payload),
                             payload.Parameters),
-                        JsonOptions)),
+                        jsonOptions)),
                 PlanId: plan.Id),
             ct).ConfigureAwait(false);
 
@@ -111,7 +140,7 @@ public sealed class KubernetesPlanExecutor(
             return null;
         }
 
-        var diffsJson = JsonSerializer.Serialize(payload.Diffs, JsonOptions);
+        var diffsJson = JsonSerializer.Serialize(payload.Diffs, jsonOptions);
         var result = await toolCaller.CallAsync(
             KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift,
             new Dictionary<string, object?>(StringComparer.Ordinal)
@@ -129,56 +158,45 @@ public sealed class KubernetesPlanExecutor(
                 KubernetesAdapterConventions.ResultReasonCodes.LiveDrift);
     }
 
-    private async Task<ResultFailure?> RunPreExecuteDryRunAsync(KubernetesPlan plan, KubernetesPlanPayload payload, CancellationToken ct) =>
-        plan.Operation switch
+    private async Task<ResultFailure?> RunPreExecuteDryRunAsync(KubernetesPlan plan, KubernetesPlanPayload payload, CancellationToken ct)
+    {
+        if (!OperationDispatchMap.TryGetValue(plan.Operation, out var dispatch) || dispatch is null)
         {
-            KubernetesAdapterConventions.PlanOperations.Apply =>
-                await CheckApplyDryRunAsync(plan.Id, payload, ct).ConfigureAwait(false),
-            KubernetesAdapterConventions.PlanOperations.Delete =>
-                await CheckSimpleDryRunAsync(
-                    KubernetesAdapterConventions.EvidenceTools.DryRunDeleteManifest,
-                    new Dictionary<string, object?>(StringComparer.Ordinal)
-                    {
-                        [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
-                        [KubernetesAdapterConventions.EvidenceArguments.Manifest] = payload.Manifest ?? string.Empty
-                    },
-                    plan.Id,
-                    ct).ConfigureAwait(false),
-            KubernetesAdapterConventions.PlanOperations.Scale =>
-                await CheckSimpleDryRunAsync(
-                    KubernetesAdapterConventions.EvidenceTools.DryRunScaleDeployment,
-                    new Dictionary<string, object?>(StringComparer.Ordinal)
-                    {
-                        [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
-                        [KubernetesAdapterConventions.EvidenceArguments.Name] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Name, string.Empty),
-                        [KubernetesAdapterConventions.EvidenceArguments.Replicas] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Replicas, "0")
-                    },
-                    plan.Id,
-                    ct).ConfigureAwait(false),
-            KubernetesAdapterConventions.PlanOperations.Restart =>
-                await CheckSimpleDryRunAsync(
-                    KubernetesAdapterConventions.EvidenceTools.DryRunRestartDeployment,
-                    new Dictionary<string, object?>(StringComparer.Ordinal)
-                    {
-                        [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
-                        [KubernetesAdapterConventions.EvidenceArguments.Name] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Name, string.Empty)
-                    },
-                    plan.Id,
-                    ct).ConfigureAwait(false),
-            KubernetesAdapterConventions.PlanOperations.SetImage =>
-                await CheckSimpleDryRunAsync(
-                    KubernetesAdapterConventions.EvidenceTools.DryRunSetDeploymentImage,
-                    new Dictionary<string, object?>(StringComparer.Ordinal)
-                    {
-                        [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
-                        [KubernetesAdapterConventions.EvidenceArguments.Name] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Name, string.Empty),
-                        [KubernetesAdapterConventions.EvidenceArguments.Container] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Container, string.Empty),
-                        [KubernetesAdapterConventions.EvidenceArguments.Image] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Image, string.Empty)
-                    },
-                    plan.Id,
-                    ct).ConfigureAwait(false),
-            _ => null
-        };
+            return null;
+        }
+
+        if (plan.Operation is KubernetesAdapterConventions.PlanOperations.Apply)
+        {
+            var evidence = await evidenceService.CheckApplyDryRunAsync(
+                payload.Namespace,
+                payload.Manifest ?? string.Empty,
+                ct).ConfigureAwait(false);
+
+            if (evidence is null)
+            {
+                return new ResultFailure(
+                    $"Pre-execute dry-run for plan '{plan.Id}' returned an empty result.",
+                    KubernetesAdapterConventions.ResultReasonCodes.PreExecuteDryRunFailed);
+            }
+
+            return evidence.PolicyBlocked
+                ? new ResultFailure(
+                    $"Plan '{plan.Id}' blocked by policy:{Environment.NewLine}{evidence.PolicyRefusal}",
+                    KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked)
+                : null;
+        }
+
+        var dryRun = await evidenceService.GetDryRunAsync(
+            dispatch.DryRunTool,
+            dispatch.ArgsBuilder(payload),
+            ct).ConfigureAwait(false);
+
+        return dryRun is null
+            ? new ResultFailure(
+                $"Pre-execute dry-run failed for plan '{plan.Id}'.",
+                KubernetesAdapterConventions.ResultReasonCodes.PreExecuteDryRunFailed)
+            : null;
+    }
 
     private static ResultFailure? CheckSetDeploymentImagePolicy(KubernetesPlan plan, KubernetesPlanPayload payload)
     {
@@ -201,72 +219,23 @@ public sealed class KubernetesPlanExecutor(
             : null;
     }
 
-    private async Task<ResultFailure?> CheckApplyDryRunAsync(string planId, KubernetesPlanPayload payload, CancellationToken ct)
+    private static ResultFailure? CheckStoredPolicyFindings(KubernetesPlan plan, KubernetesPlanPayload payload)
     {
-        var evidenceJson = await toolCaller.CallAsync(
-            KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
-            new Dictionary<string, object?>(StringComparer.Ordinal)
-            {
-                [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
-                [KubernetesAdapterConventions.EvidenceArguments.Manifest] = payload.Manifest ?? string.Empty
-            },
-            ct).ConfigureAwait(false);
+        var deniedFindings = payload.PolicyFindings
+            .Where(f => string.Equals(f.Severity, KubernetesAdapterConventions.PolicySeverities.Deny, StringComparison.Ordinal))
+            .ToArray();
 
-        KubernetesApplyEvidence? evidence;
-        try
-        {
-            evidence = JsonSerializer.Deserialize<KubernetesApplyEvidence>(evidenceJson, JsonOptions);
-        }
-        catch (JsonException)
-        {
-            return new ResultFailure(
-                $"Pre-execute dry-run failed for plan '{planId}': {evidenceJson}",
-                KubernetesAdapterConventions.ResultReasonCodes.PreExecuteDryRunFailed);
-        }
-
-        if (evidence is null)
-        {
-            return new ResultFailure(
-                $"Pre-execute dry-run for plan '{planId}' returned an empty result.",
-                KubernetesAdapterConventions.ResultReasonCodes.PreExecuteDryRunFailed);
-        }
-
-        if (evidence.PolicyBlocked)
-        {
-            return new ResultFailure(
-                $"Plan '{planId}' blocked by policy:{Environment.NewLine}{evidence.PolicyRefusal}",
+        return deniedFindings.Length == 0
+            ? null
+            : new ResultFailure(
+                $"Plan '{plan.Id}' blocked by policy:{Environment.NewLine}{FormatPolicyFindings(deniedFindings)}",
                 KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked);
-        }
-
-        return null;
     }
 
-    private async Task<ResultFailure?> CheckSimpleDryRunAsync(
-        string toolName,
-        IReadOnlyDictionary<string, object?> arguments,
-        string planId,
-        CancellationToken ct)
-    {
-        var dryRunJson = await toolCaller.CallAsync(toolName, arguments, ct).ConfigureAwait(false);
-
-        KubernetesPlanDryRun? dryRun;
-        try
-        {
-            dryRun = JsonSerializer.Deserialize<KubernetesPlanDryRun>(dryRunJson, JsonOptions);
-        }
-        catch (JsonException)
-        {
-            return new ResultFailure(
-                $"Pre-execute dry-run failed for plan '{planId}': {dryRunJson}",
-                KubernetesAdapterConventions.ResultReasonCodes.PreExecuteDryRunFailed);
-        }
-
-        return dryRun is null
-            ? new ResultFailure(
-                $"Pre-execute dry-run failed for plan '{planId}': {dryRunJson}",
-                KubernetesAdapterConventions.ResultReasonCodes.PreExecuteDryRunFailed)
-            : null;
-    }
+    private static string FormatPolicyFindings(IReadOnlyList<KubernetesPlanPolicyFinding> findings) =>
+        string.Join(
+            Environment.NewLine,
+            findings.Select(f => $"[{f.Code}] {f.ObjectRef}: {f.Message}"));
 
     private async Task<DomainPlanExecutionResult> DispatchAsync(string operation, KubernetesPlanPayload payload, CancellationToken ct)
     {
@@ -280,83 +249,12 @@ public sealed class KubernetesPlanExecutor(
     }
 
     private Task<string> DispatchMutationAsync(string operation, KubernetesPlanPayload payload, CancellationToken ct) =>
-        operation switch
-        {
-            KubernetesAdapterConventions.PlanOperations.Apply =>
-                toolCaller.CallAsync(
-                    KubernetesAdapterConventions.MutationTools.ApplyManifest,
-                    new Dictionary<string, object?>(StringComparer.Ordinal)
-                    {
-                        [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
-                        [KubernetesAdapterConventions.EvidenceArguments.Manifest] = payload.Manifest ?? string.Empty
-                    },
-                    ct),
-            KubernetesAdapterConventions.PlanOperations.Delete =>
-                toolCaller.CallAsync(
-                    KubernetesAdapterConventions.MutationTools.DeleteManifest,
-                    new Dictionary<string, object?>(StringComparer.Ordinal)
-                    {
-                        [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
-                        [KubernetesAdapterConventions.EvidenceArguments.Manifest] = payload.Manifest ?? string.Empty
-                    },
-                    ct),
-            KubernetesAdapterConventions.PlanOperations.Scale =>
-                toolCaller.CallAsync(
-                    KubernetesAdapterConventions.MutationTools.ScaleDeployment,
-                    new Dictionary<string, object?>(StringComparer.Ordinal)
-                    {
-                        [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
-                        [KubernetesAdapterConventions.EvidenceArguments.Name] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Name, string.Empty),
-                        [KubernetesAdapterConventions.EvidenceArguments.Replicas] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Replicas, "0")
-                    },
-                    ct),
-            KubernetesAdapterConventions.PlanOperations.Restart =>
-                toolCaller.CallAsync(
-                    KubernetesAdapterConventions.MutationTools.RestartDeployment,
-                    new Dictionary<string, object?>(StringComparer.Ordinal)
-                    {
-                        [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
-                        [KubernetesAdapterConventions.EvidenceArguments.Name] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Name, string.Empty)
-                    },
-                    ct),
-            KubernetesAdapterConventions.PlanOperations.SetImage =>
-                toolCaller.CallAsync(
-                    KubernetesAdapterConventions.MutationTools.SetDeploymentImage,
-                    new Dictionary<string, object?>(StringComparer.Ordinal)
-                    {
-                        [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
-                        [KubernetesAdapterConventions.EvidenceArguments.Name] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Name, string.Empty),
-                        [KubernetesAdapterConventions.EvidenceArguments.Container] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Container, string.Empty),
-                        [KubernetesAdapterConventions.EvidenceArguments.Image] = payload.Parameters.GetValueOrDefault(KubernetesAdapterConventions.PlanParameters.Image, string.Empty)
-                    },
-                    ct),
-            _ => Task.FromResult($"Unsupported operation '{operation}'.")
-        };
+        OperationDispatchMap.TryGetValue(operation, out var dispatch) && dispatch is not null
+            ? toolCaller.CallAsync(dispatch.MutationTool, dispatch.ArgsBuilder(payload), ct)
+            : Task.FromResult($"Unsupported operation '{operation}'.");
 
     private static bool IsUnsupportedOperationMessage(string message) =>
         message.StartsWith("Unsupported operation ", StringComparison.Ordinal);
-
-    private static ApprovalAuditEntry DryRunFailedAudit(KubernetesPlan plan, string message, KubernetesPlanPayload payload) =>
-        new(
-            ApprovalConventions.AuditEvents.DryRunFailed,
-            new InfraGate.Approvals.AuditPayloads.DryRunFailedPayload(
-                "pre-apply",
-                plan.Id,
-                plan.Operation,
-                payload.Namespace,
-                payload.Objects.Select(obj => $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}").ToArray(),
-                message),
-            PlanId: plan.Id);
-
-    private static ApprovalAuditEntry ApplyDriftDetectedAudit(KubernetesPlan plan, string message, KubernetesPlanPayload payload) =>
-        new(
-            ApprovalConventions.AuditEvents.ApplyDriftDetected,
-            new InfraGate.Approvals.AuditPayloads.ApplyDriftDetectedPayload(
-                plan.Id,
-                plan.Operation,
-                payload.Namespace,
-                message),
-            PlanId: plan.Id);
 
     private static string[] FormatObjects(KubernetesPlanPayload payload) =>
         payload.Objects.Select(obj => $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}").ToArray();

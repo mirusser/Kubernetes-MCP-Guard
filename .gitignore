@@ -58,6 +58,7 @@ InfraGate.sln.DotSettings.user
 .codex/
 .gemini/
 .junie/
+.omo/
 .opencode/
 
 # ── Agent runtime & skills ───────────────────────────────────────────────────

@@ -43,7 +43,16 @@ public sealed class KubernetesPlanExecutorTests
     private static string ApplyEvidenceJson(KubernetesPlanDryRun dryRun) =>
         JsonSerializer.Serialize(new KubernetesApplyEvidence(dryRun, [], false, null), JsonOptions);
 
-    private static PlanEnvelope BuildApplyEnvelope(KubernetesPlanDiff[] diffs, string ns = "demo", string name = "nginx")
+    private static KubernetesPlanExecutor CreateExecutor(
+        FakeToolCaller toolCaller,
+        IApprovalAuditOutbox? auditOutbox = null) =>
+        new(toolCaller, new KubernetesEvidenceService(toolCaller), auditOutbox);
+
+    private static PlanEnvelope BuildApplyEnvelope(
+        KubernetesPlanDiff[] diffs,
+        string ns = "demo",
+        string name = "nginx",
+        KubernetesPlanPolicyFinding[]? policyFindings = null)
     {
         var payload = new KubernetesPlanPayload(
             ns,
@@ -53,7 +62,8 @@ public sealed class KubernetesPlanExecutorTests
         {
             Manifest = "apiVersion: apps/v1",
             DryRun = MakeDryRun(ns, name),
-            Diffs = diffs
+            Diffs = diffs,
+            PolicyFindings = policyFindings ?? []
         };
 
         var freshnessPolicy = new FreshnessPolicy(
@@ -134,6 +144,13 @@ public sealed class KubernetesPlanExecutorTests
                 freshnessPolicy: freshnessPolicy));
     }
 
+    private static KubernetesPlanPolicyFinding MakeDenyFinding(string ns = "demo", string name = "nginx") =>
+        new(
+            KubernetesAdapterConventions.PolicySeverities.Deny,
+            KubernetesAdapterConventions.PolicyCodes.DeploymentPrivilegedContainer,
+            $"Deployment {ns}/{name}",
+            "Privileged container detected.");
+
     [Fact]
     public async Task ExecuteAsync_ApplyManifest_HappyPath_DispatchesToApplyTool()
     {
@@ -146,7 +163,7 @@ public sealed class KubernetesPlanExecutorTests
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest, ApplyEvidenceJson(dryRun))
             .With(KubernetesAdapterConventions.MutationTools.ApplyManifest, "Applied successfully.");
 
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.ExecuteAsync(envelope, CancellationToken.None);
 
         Assert.True(result.IsSuccessful);
@@ -165,7 +182,7 @@ public sealed class KubernetesPlanExecutorTests
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunScaleDeployment, DryRunJson(dryRun))
             .With(KubernetesAdapterConventions.MutationTools.ScaleDeployment, "Scaled to 3 replicas.");
 
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.ExecuteAsync(envelope, CancellationToken.None);
 
         Assert.True(result.IsSuccessful);
@@ -181,7 +198,7 @@ public sealed class KubernetesPlanExecutorTests
             .With(KubernetesAdapterConventions.MutationTools.ScaleDeployment, "Scaled to 3 replicas.");
         var outbox = new RecordingApprovalAuditOutbox(() => toolCaller.CalledTools.ToArray());
 
-        var executor = new KubernetesPlanExecutor(toolCaller, outbox);
+        var executor = CreateExecutor(toolCaller, outbox);
         var result = await executor.ExecuteAsync(envelope, CancellationToken.None);
 
         Assert.True(result.IsSuccessful);
@@ -205,7 +222,7 @@ public sealed class KubernetesPlanExecutorTests
         var toolCaller = new FakeToolCaller()
             .With(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift, "Replica count changed from 2 to 4.");
 
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
@@ -225,7 +242,7 @@ public sealed class KubernetesPlanExecutorTests
             .With(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift, KubernetesAdapterConventions.DriftCheckResults.NoDrift)
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest, "Server-side dry-run failed: webhook rejected");
 
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
@@ -239,7 +256,7 @@ public sealed class KubernetesPlanExecutorTests
     public async Task CheckPreExecutionAsync_PolicyBlockedAtExecution_BlocksExecution()
     {
         var diff = MakeDiff("demo", "nginx");
-        var envelope = BuildApplyEnvelope([diff]);
+        var envelope = BuildApplyEnvelope([diff], policyFindings: [MakeDenyFinding()]);
         var dryRun = MakeDryRun("demo", "nginx");
 
         var toolCaller = new FakeToolCaller()
@@ -249,12 +266,13 @@ public sealed class KubernetesPlanExecutorTests
                     new KubernetesApplyEvidence(dryRun, [], true, "[PRIVILEGED_CONTAINER] Privileged container detected"),
                     JsonOptions));
 
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
         Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked, result.ReasonCode);
         Assert.DoesNotContain(KubernetesAdapterConventions.MutationTools.ApplyManifest, toolCaller.CalledTools);
+        Assert.DoesNotContain(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest, toolCaller.CalledTools);
     }
 
     [Theory]
@@ -268,7 +286,7 @@ public sealed class KubernetesPlanExecutorTests
         var toolCaller = new FakeToolCaller()
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunSetDeploymentImage, DryRunJson(dryRun));
 
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
@@ -287,7 +305,7 @@ public sealed class KubernetesPlanExecutorTests
         var toolCaller = new FakeToolCaller()
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunSetDeploymentImage, DryRunJson(dryRun));
 
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.True(result.IsSuccessful);
@@ -304,7 +322,7 @@ public sealed class KubernetesPlanExecutorTests
         var toolCaller = new FakeToolCaller()
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunScaleDeployment, DryRunJson(dryRun));
 
-        var executor = new KubernetesPlanExecutor(toolCaller, outbox);
+        var executor = CreateExecutor(toolCaller, outbox);
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.True(result.IsSuccessful);
@@ -323,7 +341,7 @@ public sealed class KubernetesPlanExecutorTests
         var badEnvelope = BuildApplyEnvelope([]) with { AdapterId = "unknown-adapter" };
 
         var toolCaller = new FakeToolCaller();
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.ExecuteAsync(badEnvelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);

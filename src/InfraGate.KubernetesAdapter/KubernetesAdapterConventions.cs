@@ -23,6 +23,25 @@ public static class KubernetesAdapterConventions
         public const string PreExecuteDryRun = "kubernetes.pre-execute-dry-run";
     }
 
+    public static class AuditPhases
+    {
+        public const string Request = "request";
+        public const string PreApply = "pre-apply";
+    }
+
+    public static class ResourceKinds
+    {
+        public const string Deployment = "Deployment";
+        public const string Service = "Service";
+        public const string ConfigMap = "ConfigMap";
+    }
+
+    public static class ApiVersions
+    {
+        public const string AppsV1 = "apps/v1";
+        public const string V1 = "v1";
+    }
+
     public static class EvidenceArtifactTypes
     {
         public const string DryRun = "kubernetes.dry-run";

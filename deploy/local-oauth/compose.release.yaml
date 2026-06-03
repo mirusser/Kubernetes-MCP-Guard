@@ -67,6 +67,13 @@ services:
       - ${INFRA_GATE_DATA_PROTECTION_HOST_PATH}:/data/dataprotection-keys
     ports:
       - "${INFRA_GATE_BIND_ADDRESS:-127.0.0.1}:${INFRA_GATE_BIND_PORT:-3001}:3001"
+    read_only: true
+    tmpfs:
+      - /tmp:exec,size=256M
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
 volumes:
   pgdata:

@@ -1,76 +1,185 @@
-# Kubernetes Adapter — Behavioral Deepening Opportunities
+# Kubernetes Adapter — Behavioral Deepening Plan
 
-These candidates were identified during the directory-structure restructure of `src/InfraGate.KubernetesAdapter/`. They involve **code changes** (extracting modules, eliminating duplication) — unlike the slice restructure which was purely structural.
+**Last validated:** 2026-06-03 — plan still accurate, line numbers updated.
 
----
+## Validation (2026-06-03)
 
-## 1. Extract operation-specific builders from `KubernetesPlanBuilder`
+All four refactorings remain unimplemented. No new files have been added to `PlanBuilding/` or `Execution/` since the directory restructure. No `IOperationPlanBuilder`, `KubernetesEvidenceService`, `OperationDispatch`, or `KubernetesAuditHelper` exist.
 
-**Files:** `src/InfraGate.KubernetesAdapter/PlanBuilding/KubernetesPlanBuilder.cs` (693 lines)
+**Line count drift:**
+- `KubernetesPlanBuilder.cs`: 693 → **723** lines (+30)
+- `KubernetesPlanExecutor.cs`: **373** lines (unchanged)
 
-**Problem:** All 5 operations (apply, delete, scale, restart, set-image) live in one monolithic switch statement. Understanding, changing, or testing any single operation requires reading the entire file. Each operation follows the same pattern (parse args → dry-run → diff → build envelope) but with enough variation that shared infrastructure is duplicated inline.
+Line number references below have been updated to match current (2026-06-03) file positions.
 
-**Solution:** Extract each operation into its own builder class behind an internal `IOperationPlanBuilder` seam. `KubernetesPlanBuilder` becomes a simple router. Each builder receives `IToolCaller` and owns the complete build method for its operation.
+## Architecture Decisions
 
-**Benefits:**
-- **Locality** — change to `apply` logic is in `ApplyManifestBuilder`, not a 693-line file
-- **Leverage** — routing interface stays the same (`BuildAsync`), implementation becomes modular
-- **Tests** — each builder tested in isolation with its own `FakeToolCaller`
+1. **Extract, don't rewrite.** Each refactoring moves existing code into new files with the same behavior. No new abstractions, no new dependencies — just locality improvements. Tests should pass before and after each step.
 
----
+2. **Bottom-up dependency order.** Audit helpers (Phase 1) and operation map (Phase 2) are prerequisites for evidence service (Phase 3), which is a prerequisite for builder extraction (Phase 4). Each phase leaves the system in a working state.
 
-## 2. Consolidate duplicated dry-run/diff evidence logic between Builder and Executor
-
-**Files:**
-- `PlanBuilding/KubernetesPlanBuilder.cs` (lines 117–155: `GetApplyEvidenceAsync`, lines 579–601: `DeserializeDryRun`/`DeserializeDiffs`)
-- `Execution/KubernetesPlanExecutor.cs` (lines 198–263: `CheckApplyDryRunAsync`/`CheckSimpleDryRunAsync`)
-
-**Problem:** Builder and Executor call the same evidence tools (`dry_run_apply_manifest`, `check_live_drift`, etc.) with identical tool-name→argument construction, JSON deserialization, null/error handling, and policy-blocked checks. A change to the evidence format requires touching both files in lockstep.
-
-**Solution:** Extract a `KubernetesEvidenceService` that owns tool-to-evidence calling for all 5 dry-run operations, plus the `KubernetesApplyEvidence` deserialization + policy check for apply, and the `KubernetesPlanDryRun` deserialization for other operations. Both builder and executor inject it.
-
-**Benefits:**
-- **Locality** — one place to change when evidence format changes
-- **Leverage** — the evidence service interface hides tool names, argument construction, deserialization, and error handling
-- **Tests** — `KubernetesEvidenceService` tested independently; builder and executor tests stub it out
+3. **All new types are `internal`.** Nothing in this plan adds to the adapter's public API surface. The `IDomainPlanBuilder` and `IDomainPlanExecutor` seams are the only public contracts.
 
 ---
 
-## 3. Consolidate duplicate switch statements in `KubernetesPlanExecutor`
+## Phase 1: Audit Consolidation (no dependencies)
 
-**Files:** `Execution/KubernetesPlanExecutor.cs` (lines 126–175: `RunPreExecuteDryRunAsync`, lines 276–328: `DispatchMutationAsync`)
+### Task 1: Extract shared Kubernetes audit helper
 
-**Problem:** Two switch statements over the same 5 operations, each constructing identical argument dictionaries with `StringComparer.Ordinal` and `GetValueOrDefault` lookups. Adding a new operation requires updating both. If one drifts out of sync, a plan passes pre-execution but fails at dispatch — a runtime bug caught only in production.
+**Description:** Move `DryRunAudit` and `DiffAudit` from `KubernetesPlanBuilder` (lines 618–629) and `DryRunFailedAudit` and `ApplyDriftDetectedAudit` from `KubernetesPlanExecutor` (lines 339–351) into a single `KubernetesAuditHelper` class in the adapter root. Both builder and executor call through it.
 
-**Solution:** Introduce an operation→tool mapping table that both methods reference:
+**Acceptance criteria:**
+- [x] `KubernetesAuditHelper.cs` exists with all four static factory methods
+- [x] `KubernetesPlanBuilder.cs` no longer contains `DryRunAudit` or `DiffAudit` — calls helper instead
+- [x] `KubernetesPlanExecutor.cs` no longer contains `DryRunFailedAudit` or `ApplyDriftDetectedAudit` — calls helper instead
+- [x] All existing tests pass unchanged
 
-```csharp
-private static readonly Dictionary<string, OperationDispatch> OperationMap = new(...)
-{
-    [Apply] = new("dry_run_apply_manifest", "apply_manifest", args => ...),
-    ...
-}
-```
+**Verification:**
+- [ ] Build: `dotnet build src/InfraGate.KubernetesAdapter/`
+- [ ] Tests: `dotnet test` — full suite (adapter has no tests yet, so validate upstream tests still pass)
+- [ ] Manual: audit JSONL output shape unchanged when running the gateway end-to-end
 
-Both `RunPreExecuteDryRunAsync` and `DispatchMutationAsync` become `OperationMap.TryGetValue(...)` lookups.
+**Files touched:**
+- NEW: `src/InfraGate.KubernetesAdapter/KubernetesAuditHelper.cs`
+- `src/InfraGate.KubernetesAdapter/PlanBuilding/KubernetesPlanBuilder.cs`
+- `src/InfraGate.KubernetesAdapter/Execution/KubernetesPlanExecutor.cs`
 
-**Benefits:**
-- **Locality** — adding an operation means one entry in the map, not two switch cases
-- **Leverage** — mapping table concentrates all operation→tool relationships
-- **Tests** — one test for the mapping table covers both dispatch paths
+**Estimated scope:** Small (1 new file, 2 modified)
 
 ---
 
-## 4. Consolidate audit event helpers into a shared helper
+## Phase 2: Operation Map (no hard dependencies)
 
-**Files:**
-- `PlanBuilding/KubernetesPlanBuilder.cs` (lines 603–626: `DryRunAudit`, `DiffAudit`)
-- `Execution/KubernetesPlanExecutor.cs` (lines 333–351: `DryRunFailedAudit`, `ApplyDriftDetectedAudit`)
+### Task 2: Consolidate executor switch statements into operation map
 
-**Problem:** Both builder and executor construct `PlanAudit` instances with near-identical `AuditPayloads.*` payload patterns. Audit event construction logic is scattered across two files, making it hard to verify audit schemas at a glance.
+**Description:** Replace both `RunPreExecuteDryRunAsync` (lines 132–181) and `DispatchMutationAsync` (lines 282–338) with a single `OperationDispatch` table. Each operation maps to its dry-run tool name, mutation tool name, and argument constructor lambda.
 
-**Solution:** Extract a `KubernetesAuditHelper` class with methods like `DryRunFailedAudit(planId, operation, namespaceName, message)`. Both builder and executor call through it.
+**Acceptance criteria:**
+- [ ] `OperationDispatch` record exists mapping operation → `(dryRunTool, mutationTool, argsBuilder)`
+- [ ] `RunPreExecuteDryRunAsync` uses `OperationMap.TryGetValue` lookup instead of switch
+- [ ] `DispatchMutationAsync` uses `OperationMap.TryGetValue` lookup instead of switch
+- [ ] Adding a new operation requires ONE entry in the map, not two switch cases
+- [ ] All existing tests pass unchanged
 
-**Benefits:**
-- **Locality** — all Kubernetes audit event constructions in one place
-- **Tests** — audit event format/field correctness tested once
+**Verification:**
+- [ ] Build: `dotnet build src/InfraGate.KubernetesAdapter/`
+- [ ] Tests: `dotnet test`
+
+**Files touched:**
+- `src/InfraGate.KubernetesAdapter/Execution/KubernetesPlanExecutor.cs`
+- Possibly NEW: `src/InfraGate.KubernetesAdapter/Execution/OperationDispatch.cs`
+
+**Estimated scope:** Small (1 file modified, possibly 1 new)
+
+---
+
+## Phase 3: Evidence Service (depends on Phase 2 operation map)
+
+### Task 3: Extract shared evidence service
+
+**Description:** Extract a `KubernetesEvidenceService` that owns tool-to-evidence calling for all 5 dry-run operations, JSON deserialization, and error/policy-blocked handling. Builder and executor inject it via constructor. Uses the operation map from Phase 2 for dry-run tool name resolution.
+
+**Current duplicated code to extract:**
+- Builder `GetApplyEvidenceAsync` (line 132), `DeserializeDryRun` (line 594), `DeserializeDiffs` (line 606)
+- Executor `CheckApplyDryRunAsync` (line 204), `CheckSimpleDryRunAsync` (line 244)
+
+**Acceptance criteria:**
+- [x] `IKubernetesEvidenceService` interface with methods for all 5 dry-run operations
+- [x] `KubernetesEvidenceService` class implementing evidence calls, deserialization, error handling
+- [x] Builder's `BuildApplyManifestAsync` uses `IEvidenceService` for apply evidence
+- [x] Builder's 4 other build methods use `IEvidenceService` for dry-run/diff
+- [x] Executor's `RunPreExecuteDryRunAsync` uses `IEvidenceService` for pre-execution checks
+- [x] Builder and executor no longer contain `Dictionary<StringComparer.Ordinal>` argument construction for evidence tools
+- [x] All existing tests pass unchanged
+
+**Verification:**
+- [ ] Build: `dotnet build src/InfraGate.KubernetesAdapter/`
+- [ ] Tests: `dotnet test`
+
+**Files touched:**
+- NEW: `src/InfraGate.KubernetesAdapter/Evidence/KubernetesEvidenceService.cs`
+- NEW: `src/InfraGate.KubernetesAdapter/Evidence/IKubernetesEvidenceService.cs`
+- `src/InfraGate.KubernetesAdapter/PlanBuilding/KubernetesPlanBuilder.cs`
+- `src/InfraGate.KubernetesAdapter/Execution/KubernetesPlanExecutor.cs`
+
+**Estimated scope:** Medium (2 new files, 2 modified)
+
+**Dependency:** Phase 2 (`OperationDispatch` provides tool name resolution for evidence calls)
+
+---
+
+## Phase 4: Builder Extraction (depends on Phase 3 evidence service)
+
+### Task 4: Extract operation-specific builders
+
+**Description:** Extract each of the 5 private build methods (`BuildApplyManifestAsync`, `BuildDeleteManifestAsync`, `BuildScaleDeploymentAsync`, `BuildRestartDeploymentAsync`, `BuildSetDeploymentImageAsync`) into separate classes behind an `IOperationPlanBuilder` seam. `KubernetesPlanBuilder` becomes a router that selects the right builder based on the mutation tool name.
+
+**Acceptance criteria:**
+- [x] `IOperationPlanBuilder` interface with `BuildAsync(arguments, requester, approvalPolicy, ct) → Task<PlanBuildResult>`
+- [x] 5 builder classes: `ApplyManifestBuilder`, `DeleteManifestBuilder`, `ScaleDeploymentBuilder`, `RestartDeploymentBuilder`, `SetDeploymentImageBuilder`
+- [x] `KubernetesPlanBuilder` switch expression becomes a `Dictionary<string, IOperationPlanBuilder>` lookup
+- [x] Each builder injects `IKubernetesEvidenceService` (from Phase 3)
+- [x] `KubernetesPlanBuilder.cs` drops from 723 lines to ~50 (router only), shared infrastructure in `KubernetesBuilderInfrastructure.cs`
+- [x] Each builder is independently testable with a `FakeToolCaller`
+- [x] All existing tests pass unchanged
+
+**Verification:**
+- [ ] Build: `dotnet build src/InfraGate.KubernetesAdapter/`
+- [ ] Tests: `dotnet test`
+
+**Files touched:**
+- NEW: `src/InfraGate.KubernetesAdapter/PlanBuilding/IOperationPlanBuilder.cs`
+- NEW: `src/InfraGate.KubernetesAdapter/PlanBuilding/ApplyManifestBuilder.cs`
+- NEW: `src/InfraGate.KubernetesAdapter/PlanBuilding/DeleteManifestBuilder.cs`
+- NEW: `src/InfraGate.KubernetesAdapter/PlanBuilding/ScaleDeploymentBuilder.cs`
+- NEW: `src/InfraGate.KubernetesAdapter/PlanBuilding/RestartDeploymentBuilder.cs`
+- NEW: `src/InfraGate.KubernetesAdapter/PlanBuilding/SetDeploymentImageBuilder.cs`
+- `src/InfraGate.KubernetesAdapter/PlanBuilding/KubernetesPlanBuilder.cs`
+
+**Estimated scope:** Large (6 new files, 1 major modification)
+
+**Dependency:** Phase 3 (`IKubernetesEvidenceService` is injected into each builder)
+
+---
+
+## Checkpoints
+
+### Checkpoint: After Phase 1 + 2
+- [ ] `dotnet build` passes
+- [ ] `dotnet test` passes (full suite)
+- [ ] Audit helper and operation map are isolated and testable
+- [ ] No behavior change — gateway still produces identical audit events and dispatch calls
+
+### Checkpoint: After Phase 3
+- [ ] `dotnet build` passes
+- [ ] `dotnet test` passes
+- [ ] Builder and executor no longer construct `Dictionary<StringComparer.Ordinal>` inline for evidence tools
+- [ ] Evidence service can be tested independently with a `FakeToolCaller`
+
+### Checkpoint: After Phase 4
+- [ ] `dotnet build` passes
+- [ ] `dotnet test` passes
+- [ ] `KubernetesPlanBuilder.cs` is ~120 lines (from 723)
+- [ ] Each builder is independently testable
+- [ ] Adding a new operation requires: (a) one builder class, (b) one OperationDispatch entry, (c) one entry in the router — all in separate, focused files
+
+## Risks and Mitigations
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Line-by-line extraction introduces subtle behavior differences | High | Each phase verified by `dotnet test`; no behavior should change |
+| `IKubernetesEvidenceService` abstraction leaks tool-call details | Medium | Keep the interface narrow — one method per evidence type, not one per tool |
+| Operation dispatch mapping hides the operation set from compiler exhaustiveness checks | Low | Unit test the `OperationDispatch` table for all 5 expected operations |
+| Builder extraction creates too many small classes | Low | Each builder maps 1:1 to a Kubernetes operation; natural decomposition boundary |
+| No existing adapter unit tests | Medium | Manual verification via gateway end-to-end after each phase; adapter test project can be added in a future plan |
+
+## Scope Boundaries
+
+**In scope:** Extract, consolidate, and deduplicate existing code. No new behavior. No new abstractions beyond the seams listed above. No new tests (but existing tests must keep passing).
+
+**Out of scope:**
+- Adding a unit test project for the adapter (separate plan)
+- Changing the approval flow or gateway behavior
+- Modifying `KubernetesApprovalAdapter` or `KubernetesDomainAdapter`
+- Any changes to `InfraGate.Approvals` or other non-adapter projects
+- Public API changes to `IDomainPlanBuilder` or `IDomainPlanExecutor`
