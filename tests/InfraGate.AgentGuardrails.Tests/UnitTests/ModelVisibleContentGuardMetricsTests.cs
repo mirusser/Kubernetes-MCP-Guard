@@ -163,7 +163,7 @@ public sealed class ModelVisibleContentGuardMetricsTests
         var listener = new MeterListener();
         listener.InstrumentPublished = (instrument, l) =>
         {
-            if (instrument.Name == instrumentName)
+            if (instrument.Meter == meter && instrument.Name == instrumentName)
                 l.EnableMeasurementEvents(instrument);
         };
         listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>

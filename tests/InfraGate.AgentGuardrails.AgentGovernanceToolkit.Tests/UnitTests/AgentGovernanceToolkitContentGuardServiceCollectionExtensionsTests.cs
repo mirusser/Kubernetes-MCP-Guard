@@ -9,7 +9,7 @@ public sealed class AgentGovernanceToolkitContentGuardServiceCollectionExtension
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddModelVisibleContentGuard(new ModelVisibleContentOptions());
+        services.AddModelVisibleContentGuard(new ModelVisibleContentOptions { Enabled = true });
 
         await using var provider = services.BuildServiceProvider();
         var guard = provider.GetRequiredService<IModelVisibleContentGuard>();

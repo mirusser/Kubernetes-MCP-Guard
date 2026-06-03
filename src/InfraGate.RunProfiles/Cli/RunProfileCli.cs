@@ -550,15 +550,15 @@ internal static class RunProfileCli
         ModelVisibleContentProfile profile, string field, string value, string path) =>
         field switch
         {
-            var f when f.Equals(RunProfileConventions.YamlKeys.Enabled, StringComparison.Ordinal) =>
+            RunProfileConventions.YamlKeys.Enabled =>
                 profile with { Enabled = value },
-            var f when f.Equals(RunProfileConventions.YamlKeys.SemanticClassifierEnabled, StringComparison.Ordinal) =>
+            RunProfileConventions.YamlKeys.SemanticClassifierEnabled =>
                 profile with { SemanticClassifierEnabled = value },
-            var f when f.Equals(RunProfileConventions.YamlKeys.RequestTimeoutMilliseconds, StringComparison.Ordinal) =>
+            RunProfileConventions.YamlKeys.RequestTimeoutMilliseconds =>
                 profile with { RequestTimeoutMilliseconds = value },
-            var f when f.Equals(RunProfileConventions.YamlKeys.MaximumInputCharacters, StringComparison.Ordinal) =>
+            RunProfileConventions.YamlKeys.MaximumInputCharacters =>
                 profile with { MaximumInputCharacters = value },
-            var f when f.Equals(RunProfileConventions.YamlKeys.UnavailableBehavior, StringComparison.Ordinal) =>
+            RunProfileConventions.YamlKeys.UnavailableBehavior =>
                 profile with { UnavailableBehavior = value },
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };

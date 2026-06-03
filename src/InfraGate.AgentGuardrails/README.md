@@ -33,7 +33,7 @@ Types:
 - `ModelVisibleContentAction` — `Allow`, `Redact`, `Quarantine`, `BlockModelIngestion`.
 - `ModelVisibleContentSource` — `ObserverSnapshot`, `PlannerAnomaly`, `AgentToolResult`.
 - `ModelVisibleContentOptions` — configuration (`Enabled`, `MaximumInputCharacters`, `UnavailableBehavior`, etc.).
-- `ModelVisibleContentUnavailableBehavior` — `FailClosed`, `FailOpen`.
+- `ModelVisibleContentUnavailableBehavior` — `FailClosed`, `DeterministicOnly`.
 - `CompositeModelVisibleContentGuard` — chains multiple guards; strongest action wins; enforces `MaximumInputCharacters` size check.
 - `AllowAllModelVisibleContentGuard` — passthrough guard for development/testing.
 - `ModelVisibleContentGuardExtensions` — pending guard extensions.

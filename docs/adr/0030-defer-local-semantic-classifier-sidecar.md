@@ -39,5 +39,5 @@ Existing controls remain the active safety boundary for now:
 
 ## References
 
-- `.agents/Plans/loose/2026-06-02-agent-security-hardening-vertical-slice.md`
-- `.agents/Plans/loose/2026-06-03-local-semantic-classifier-research-plan.md`
+- `.agents/Plans/archive/2026-06-02-agent-security-hardening-vertical-slice.md`
+- `.agents/Plans/archive/2026-06-03-local-semantic-classifier-research-plan.md`

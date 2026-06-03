@@ -170,15 +170,10 @@ internal sealed class DecideExecutor( // NOSONAR:S107 — DI constructor; all pa
         _ => element.Clone(),
     };
 
-    // LlmDecisionOutput is a schema-only DTO discovered by ChatResponseFormat.ForJsonSchema().
-    // Its properties are never accessed by imperative code — the unused-setter and
-    // unused-property warnings are intentional.
-#pragma warning disable S1144, S3459
     private sealed record class LlmDecisionOutput
     {
         public string? OperationType { get; set; }
         public Dictionary<string, JsonElement>? Arguments { get; set; }
         public string? Reasoning { get; set; }
     }
-#pragma warning restore S1144, S3459
 }

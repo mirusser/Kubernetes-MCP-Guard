@@ -15,39 +15,7 @@ public sealed class CompositeModelVisibleContentGuard(
         CancellationToken cancellationToken)
     {
         if (content.Text.Length > options.MaximumInputCharacters)
-        {
-            var oversizedDecision = new ModelVisibleContentDecision(
-                ModelVisibleContentAction.Quarantine,
-                AgentGuardrailConventions.DefaultQuarantinePlaceholder,
-                [],
-                AgentGuardrailConventions.Reasons.ExceededMaximumInputCharacters);
-
-            metrics.RecordModelVisibleDecision(
-                ModelVisibleContentAction.Quarantine,
-                content.Source,
-                content.AgentName,
-                evaluationDurationMs: 0);
-
-            if (audit is not null)
-            {
-                try
-                {
-                    var blockDigest = ComputeDigest(content.Text);
-                    await audit.PersistAsync(blockDigest, content.Source, content.AgentName, oversizedDecision, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-#pragma warning disable CA1031
-                catch (Exception ex)
-#pragma warning restore CA1031
-                {
-                    logger.LogError(ex, "Model-visible content audit persistence failed for {Source}/{AgentName}",
-                        content.Source, content.AgentName);
-                    metrics.RecordModelVisibleDegraded(content.Source, content.AgentName);
-                }
-            }
-
-            return oversizedDecision;
-        }
+            return await HandleOversizedContentAsync(content, cancellationToken).ConfigureAwait(false);
 
         var sw = Stopwatch.StartNew();
 
@@ -93,24 +61,56 @@ public sealed class CompositeModelVisibleContentGuard(
         sw.Stop();
         metrics.RecordModelVisibleDecision(strongestAction, content.Source, content.AgentName, sw.Elapsed.TotalMilliseconds);
 
-        if (digest is not null && audit is not null)
-        {
-            try
-            {
-                await audit.PersistAsync(digest, content.Source, content.AgentName, final, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-#pragma warning disable CA1031 // Broad catch is intentional: audit write failure must never suppress the guard's block decision.
-            catch (Exception ex)
-#pragma warning restore CA1031
-            {
-                logger.LogError(ex, "Model-visible content audit persistence failed for {Source}/{AgentName}",
-                    content.Source, content.AgentName);
-                metrics.RecordModelVisibleDegraded(content.Source, content.AgentName);
-            }
-        }
+        await TryPersistAuditAsync(digest, content.Source, content.AgentName, final, cancellationToken).ConfigureAwait(false);
 
         return final;
+    }
+
+    private async Task<ModelVisibleContentDecision> HandleOversizedContentAsync(
+        ModelVisibleContent content,
+        CancellationToken cancellationToken)
+    {
+        var oversizedDecision = new ModelVisibleContentDecision(
+            ModelVisibleContentAction.Quarantine,
+            AgentGuardrailConventions.DefaultQuarantinePlaceholder,
+            [],
+            AgentGuardrailConventions.Reasons.ExceededMaximumInputCharacters);
+
+        metrics.RecordModelVisibleDecision(
+            ModelVisibleContentAction.Quarantine,
+            content.Source,
+            content.AgentName,
+            evaluationDurationMs: 0);
+
+        var blockDigest = ComputeDigest(content.Text);
+        await TryPersistAuditAsync(blockDigest, content.Source, content.AgentName, oversizedDecision, cancellationToken).ConfigureAwait(false);
+
+        return oversizedDecision;
+    }
+
+    private async Task TryPersistAuditAsync(
+        string? digest,
+        ModelVisibleContentSource source,
+        string agentName,
+        ModelVisibleContentDecision decision,
+        CancellationToken cancellationToken)
+    {
+        if (digest is null || audit is null)
+            return;
+
+        try
+        {
+            await audit.PersistAsync(digest, source, agentName, decision, cancellationToken)
+                .ConfigureAwait(false);
+        }
+#pragma warning disable CA1031 // Broad catch is intentional: audit write failure must never suppress the guard's block decision.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            logger.LogError(ex, "Model-visible content audit persistence failed for {Source}/{AgentName}",
+                source, agentName);
+            metrics.RecordModelVisibleDegraded(source, agentName);
+        }
     }
 
     private static string ComputeDigest(string text)

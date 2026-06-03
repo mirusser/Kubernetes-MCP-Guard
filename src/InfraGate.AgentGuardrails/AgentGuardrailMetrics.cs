@@ -56,13 +56,7 @@ public sealed class AgentGuardrailMetrics
             _ => AgentGuardrailConventions.Actions.Allow,
         };
 
-        string sourceValue = source switch
-        {
-            ModelVisibleContentSource.ObserverSnapshot => AgentGuardrailConventions.Sources.ObserverSnapshot,
-            ModelVisibleContentSource.PlannerAnomaly => AgentGuardrailConventions.Sources.PlannerAnomaly,
-            ModelVisibleContentSource.AgentToolResult => AgentGuardrailConventions.Sources.AgentToolResult,
-            _ => AgentGuardrailConventions.Sources.ObserverSnapshot,
-        };
+        string sourceValue = MapSource(source);
 
         modelVisibleDecisionCounter.Add(1,
             new KeyValuePair<string, object?>(AgentGuardrailConventions.Tags.AgentName, agentName),
@@ -76,16 +70,19 @@ public sealed class AgentGuardrailMetrics
 
     public void RecordModelVisibleDegraded(ModelVisibleContentSource source, string agentName)
     {
-        string sourceValue = source switch
+        string sourceValue = MapSource(source);
+
+        modelVisibleDegradedCounter.Add(1,
+            new KeyValuePair<string, object?>(AgentGuardrailConventions.Tags.AgentName, agentName),
+            new KeyValuePair<string, object?>(AgentGuardrailConventions.Tags.ModelVisibleSource, sourceValue));
+    }
+
+    private static string MapSource(ModelVisibleContentSource source) =>
+        source switch
         {
             ModelVisibleContentSource.ObserverSnapshot => AgentGuardrailConventions.Sources.ObserverSnapshot,
             ModelVisibleContentSource.PlannerAnomaly => AgentGuardrailConventions.Sources.PlannerAnomaly,
             ModelVisibleContentSource.AgentToolResult => AgentGuardrailConventions.Sources.AgentToolResult,
             _ => AgentGuardrailConventions.Sources.ObserverSnapshot,
         };
-
-        modelVisibleDegradedCounter.Add(1,
-            new KeyValuePair<string, object?>(AgentGuardrailConventions.Tags.AgentName, agentName),
-            new KeyValuePair<string, object?>(AgentGuardrailConventions.Tags.ModelVisibleSource, sourceValue));
-    }
 }

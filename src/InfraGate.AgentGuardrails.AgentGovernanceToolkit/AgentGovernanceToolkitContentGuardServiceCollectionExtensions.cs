@@ -8,7 +8,7 @@ public static class AgentGovernanceToolkitContentGuardServiceCollectionExtension
         this IServiceCollection services,
         DetectionConfig? config = null)
     {
-        services.AddSingleton(new AgentGovernanceToolkitContentGuard(
+        services.AddSingleton<IModelVisibleContentGuard>(new AgentGovernanceToolkitContentGuard(
             new PromptInjectionDetector(config ?? new DetectionConfig())));
         return services;
     }
