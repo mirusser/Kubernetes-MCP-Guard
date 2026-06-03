@@ -27,6 +27,10 @@
 
 It is a security-first bridge between AI agents and Kubernetes, with out-of-band, OAuth-authenticated, human-in-the-loop (HITL), plan-based approval for every gateway-exposed mutation.
 
+### Why?
+
+AI agents can help diagnose infrastructure problems, but giving them direct mutation access is risky. Kubernetes MCP Guard explores a safer pattern: agents may observe, dry-run, and propose bounded remediations, while humans approve the exact digest-bound plan before any Kubernetes write occurs.
+
 ## 🎬 Demo
 
 https://github.com/user-attachments/assets/4e06b4ee-db80-4d74-96cc-38dfbb413042
@@ -203,36 +207,41 @@ Direct Kubernetes mutation tools exist inside the private server surface for the
 
 ## ⚡ Quick Start
 
-### 📦 Run Published Images
 
-Prerequisites: [Docker Compose v2](https://docs.docker.com/compose/install/), [minikube](https://minikube.sigs.k8s.io/docs/start/), and [git](https://git-scm.com/).
+Prerequisites: [Docker Compose v2](https://docs.docker.com/compose/install/), [kubectl](https://kubernetes.io/docs/tasks/tools/), [minikube](https://minikube.sigs.k8s.io/docs/start/), and [git](https://git-scm.com/).
+
+Review [docs/configuration.md](docs/configuration.md) before changing runtime settings.
+
+### 📦 From Packages
+
+The default quickstart uses published images and committed local-demo defaults.
 
 ```bash
 git clone https://github.com/mirusser/Kubernetes-MCP-Guard.git
 cd Kubernetes-MCP-Guard
 
-./scripts/quickstart.sh published
+export InfraGate__OpenRouter__ApiKey="<openrouter-api-key>"
+make quickstart
 ```
 
-This starts the local Keycloak-backed OAuth path, PostgreSQL approval store, and the published gateway image. Use `./scripts/quickstart.sh published --tag v0.1.0` for a stable release tag. The committed no-SDK file comes from the `smoke-release` Run Profile: `release.env.example` supplies both Compose interpolation and `InfraGate__...` runtime settings.
+`make quickstart` starts the local Keycloak-backed OAuth path, PostgreSQL approval store, and published gateway image with `TAG=latest`. Pin a release with `TAG=v0.1.0 make quickstart`. The committed no-SDK defaults come from the `smoke-release` Run Profile: `deploy/local-oauth/release.env.example` supplies both Compose interpolation and `InfraGate__...` runtime settings.
 
-### 🛠️ Build From Source
+### 🛠️ From Source
 
-Prerequisites: [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), [Docker Compose v2](https://docs.docker.com/compose/install/), [minikube](https://minikube.sigs.k8s.io/docs/start/), and [git](https://git-scm.com/).
+Use source mode when you want the gateway, Observer, Planner, and Executor built from local code. This path also requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) and an OpenRouter API key for the LLM-backed agents.
 
 ```bash
 export InfraGate__OpenRouter__ApiKey="<openrouter-api-key>"
-./scripts/quickstart.sh source
+make quickstart-source
 ```
 
-The source quickstart generates `deploy/generated/local-compose.env` from `deploy/run-profiles.yaml` and starts the gateway, Observer, Planner, and Executor from local source builds.
+The source quickstart generates `deploy/generated/local-compose.env` (default configuration) from `deploy/run-profiles.yaml` and starts the gateway, Observer, Planner, and Executor from local source builds.
 
-Optional Make aliases are available for the same flows:
+Useful follow-up commands:
 
 ```bash
-make quickstart-source
-make quickstart-down
 make quickstart-logs
+make quickstart-down
 ```
 
 Other run modes and full setup details are in [docs/setup-guide.md](docs/setup-guide.md).
@@ -265,12 +274,6 @@ claude
 /mcp
 ```
 
-After login, a useful first prompt is:
-
-```text
-Explain briefly what capabilities the MCP server infra-gate exposes.
-```
-
 ## 📦 Container Images
 
 Release images are built by the Docker workflow and published to GHCR and Docker Hub.
@@ -296,22 +299,12 @@ Use specific release tags for stable demos. The `:dev` tag tracks the developmen
 
 ## 🧭 Project Map
 
-- [docs/devs-readme.md](docs/devs-readme.md): developer runbook, local runs, tool contracts, and verification.
-- [docs/setup-guide.md](docs/setup-guide.md): setup paths for local OAuth, source builds, and published images.
-- [docs/configuration.md](docs/configuration.md): environment variables, defaults, and production guidance.
-- [docs/security-model.md](docs/security-model.md): hard boundaries, defense-in-depth controls, assumptions, and non-goals.
-- [docs/MCP-compliance.md](docs/MCP-compliance.md): MCP transport and OAuth notes.
-- [docs/tool-permissions.md](docs/tool-permissions.md): per-tool RBAC verbs, bounds, and approval requirements.
-- [docs/production-oidc.md](docs/production-oidc.md): production OIDC guidance.
-- [docs/roadmap.md](docs/roadmap.md): public roadmap and current/future scope.
-- [src/InfraGate.McpGateway/README.md](src/InfraGate.McpGateway/README.md): HTTP MCP gateway, forwarding, guardrails, approval endpoints, and audit behavior.
-- [src/InfraGate.Approvals/README.md](src/InfraGate.Approvals/README.md): generic approval storage, challenges, grants, gates, and audit payloads.
-- [src/InfraGate.KubernetesAdapter/README.md](src/InfraGate.KubernetesAdapter/README.md): Kubernetes mutation intent, evidence, policy, freshness checks, and execution.
-- [src/InfraGate.McpServer/README.md](src/InfraGate.McpServer/README.md): private Kubernetes MCP server and typed tool surface.
-- [src/InfraGate.Observer/README.md](src/InfraGate.Observer/README.md): LLM-driven anomaly observer.
-- [src/InfraGate.Planner/README.md](src/InfraGate.Planner/README.md): LLM-driven remediation planner.
-- [src/InfraGate.Executor/README.md](src/InfraGate.Executor/README.md): deterministic remediation executor.
-- [src/InfraGate.AgentGuardrails/README.md](src/InfraGate.AgentGuardrails/README.md): tool-call guardrail middleware and hallucination-rate metric.
+- [docs/devs-readme.md](docs/devs-readme.md): developer runbook, local runs, MCP tool contracts, and verification.
+- [docs/setup-guide.md](docs/setup-guide.md) and [docs/configuration.md](docs/configuration.md): setup paths, run profiles, environment variables, and production guidance.
+- [docs/architecture.md](docs/architecture.md), [docs/security-model.md](docs/security-model.md), and [docs/tool-permissions.md](docs/tool-permissions.md): request flows, safety boundaries, and per-tool permissions.
+- Runtime services: [McpGateway](src/InfraGate.McpGateway/README.md), [McpServer](src/InfraGate.McpServer/README.md), [Observer](src/InfraGate.Observer/README.md), [Planner](src/InfraGate.Planner/README.md), and [Executor](src/InfraGate.Executor/README.md).
+- Approval and Kubernetes domain: [Approvals](src/InfraGate.Approvals/README.md), [Approvals.Postgres](src/InfraGate.Approvals.Postgres/README.md), and [KubernetesAdapter](src/InfraGate.KubernetesAdapter/README.md).
+- Validation and demos: [tests](tests), [failing-deployment example](examples/failing-deployment/README.md), and [local SonarQube](tools/sonarqube/README.md).
 
 ## ⚖️ Boundaries And Non-Goals
 
