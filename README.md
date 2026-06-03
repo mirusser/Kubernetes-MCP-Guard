@@ -27,16 +27,12 @@
 
 It is a security-first bridge between AI agents and Kubernetes, with out-of-band, OAuth-authenticated, human-in-the-loop (HITL), plan-based approval for every gateway-exposed mutation.
 
-<sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments, not production-certified infrastructure.</em></sub>
-
-<sub><em>The codebase uses **InfraGate** as the internal project name.</em></sub>
-
 ## 🎬 Demo
 
 https://github.com/user-attachments/assets/4e06b4ee-db80-4d74-96cc-38dfbb413042
 
-
-> Demo scenario:  
+> [!NOTE]
+> **Demo scenario:**  
 >  
 > 1. A Deployment is intentionally broken.  
 > 2. The Observer detects the unhealthy workload.  
@@ -316,13 +312,18 @@ Use specific release tags for stable demos. The `:dev` tag tracks the developmen
 
 ## ⚖️ Boundaries And Non-Goals
 
-- The project is experimental and not production-certified.
-- The local Keycloak realm runs in development mode over HTTP and is not a production identity provider.
-- Prompt-injection guardrails are defense-in-depth, not a guaranteed hard security boundary.
-- The tool surface does not expose shell execution, `kubectl` passthrough, exec, attach, port-forward, namespace creation, RBAC manipulation, Secret reads, raw manifest reads, or cluster-scoped writes.
-- This is not a full Kubernetes policy engine and not an MCP standard.
+> [!IMPORTANT]
+> - The project is experimental and not production-certified.  
+> - The local Keycloak realm runs in development mode over HTTP and is not a production identity provider.  
+> - Prompt-injection guardrails are defense-in-depth, not a guaranteed hard security boundary.  
+> - The tool surface does not expose shell execution, `kubectl` passthrough, exec, attach, port-forward, namespace creation, RBAC manipulation, Secret reads, raw manifest reads, or cluster-scoped writes.  
+> - This is not a full Kubernetes policy engine and not an MCP standard.  
 
 See [docs/security-model.md](docs/security-model.md) for the full threat model.
+
+<sub><em>It is a working reference implementation for a possible MCP mutation-approval profile, designed for early technical evaluation in local or tightly controlled environments, not production-certified infrastructure.</em></sub>
+
+<sub><em>The codebase uses **InfraGate** as the internal project name.</em></sub>
 
 ## 📜 Governance
 
