@@ -61,3 +61,7 @@
 61: [sonarqube-local] Don't assume the local SonarQube server separates branch analysis — the `run-analysis.sh` script doesn't set `sonar.branch.name`, so all scans land in the same project and server-side issue counts may carry over from a prior branch's scan. (cause: missing branch configuration in local scan script)
 [bash-scripts] Don't route live Compose commands based on stopped containers — filter for running containers when detecting the active stack. (cause: stopped source stack shadowing published logs)
 [bash-scripts] Don't let optional cleanup failures abort required cleanup under `set -e` — warn and continue to the remaining cleanup path. (cause: source stack down blocked published stack cleanup)
+[docs] Don't turn a root README project map into a source inventory — keep it to essential navigation entry points. (cause: Project Map became too long)
+[docs] Don't document long quickstart script invocations when a Make alias exists — use the Make target, document defaults, and link configuration. (cause: Quick Start brevity correction)
+[docs] Don't describe agent setup as one generic path when README presents package and source modes — mirror those modes explicitly. (cause: agent setup wording correction)
+[docs] Don't put markdown list styling inside a copy-to-agent prompt — use a plain text fence with direct instructions. (cause: copyability correction)

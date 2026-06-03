@@ -1,7 +1,9 @@
+TAG ?= latest
+
 .PHONY: quickstart quickstart-source quickstart-down quickstart-logs
 
 quickstart:
-	./scripts/quickstart.sh published
+	./scripts/quickstart.sh published --tag $(TAG)
 
 quickstart-source:
 	./scripts/quickstart.sh source
