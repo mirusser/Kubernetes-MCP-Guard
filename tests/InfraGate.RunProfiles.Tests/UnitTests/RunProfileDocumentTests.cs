@@ -126,6 +126,7 @@ public sealed class RunProfileDocumentTests
                 PlannerHandoffUrl: null,
                 ObserverHostPath: null,
                 AuditConnectionString: null,
+                SkipCycleWhenNoWarningEvents: null,
                 AllowedNamespaces: null),
             Planner = new PlannerProfile(
                 AspnetcoreUrls: null,
@@ -164,6 +165,7 @@ public sealed class RunProfileDocumentTests
                 "/observer/out",
                 "http://planner/handoff",
                 "/observer/state",
+                null,
                 null,
                 ["default"]),
             new PlannerProfile(
@@ -212,7 +214,7 @@ public sealed class RunProfileDocumentTests
             null, null, null, null, null, null,
             new ObserverProfile(
                 "http://observer",
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null),
             new PlannerProfile(
                 "http://planner",
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null),

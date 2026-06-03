@@ -83,7 +83,7 @@ internal static class McpGatewayMessages
             $"Plan '{planId}' could not be decoded by the approval adapter.";
 
         public static string PlanApproved(string planId, string grantId) =>
-            $"Plan '{planId}' was approved with grant '{grantId}'. Return to your MCP client and call {McpGatewayConventions.ToolNames.ApplyApprovedPlan} again.";
+            $"Plan '{planId}' has been approved (grant: {grantId}). The Executor will apply the plan automatically.";
 
         public static string PlanDenied(string planId) =>
             $"Plan '{planId}' was denied.";

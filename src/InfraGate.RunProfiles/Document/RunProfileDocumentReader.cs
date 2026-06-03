@@ -151,7 +151,8 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.ObserverAuditConnectionString,
                 RunProfileConventions.YamlKeys.ObserverHostPath,
                 RunProfileConventions.YamlKeys.PlannerHandoffUrl,
-                RunProfileConventions.YamlKeys.Scope
+                RunProfileConventions.YamlKeys.Scope,
+                RunProfileConventions.YamlKeys.SkipCycleWhenNoWarningEvents,
             ],
             StringComparer.Ordinal);
 
@@ -479,6 +480,7 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.PlannerHandoffUrl),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ObserverHostPath),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ObserverAuditConnectionString),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.SkipCycleWhenNoWarningEvents),
             GetOptionalScalarSequence(mapping, RunProfileConventions.YamlKeys.AllowedNamespaces));
     }
 

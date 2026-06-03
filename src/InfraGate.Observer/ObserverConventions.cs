@@ -33,6 +33,7 @@ internal static class ObserverConventions
         public const string FileSinkRoot = "InfraGate:Observer:FileSinkRoot";
         public const string PlannerHandoffUrl = "InfraGate:Observer:PlannerHandoffUrl";
         public const string AuditConnectionString = "InfraGate:Observer:AuditConnectionString";
+        public const string SkipCycleWhenNoWarningEvents = "InfraGate:Observer:SkipCycleWhenNoWarningEvents";
     }
 
     public static class EnvironmentVariables
@@ -55,6 +56,7 @@ internal static class ObserverConventions
         public const string FileSinkRoot = "InfraGate__Observer__FileSinkRoot";
         public const string PlannerHandoffUrl = "InfraGate__Observer__PlannerHandoffUrl";
         public const string AuditConnectionString = "InfraGate__Observer__AuditConnectionString";
+        public const string SkipCycleWhenNoWarningEvents = "InfraGate__Observer__SkipCycleWhenNoWarningEvents";
     }
 
     public static class LlmProviders

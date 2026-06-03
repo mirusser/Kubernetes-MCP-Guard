@@ -345,6 +345,7 @@ internal static class EnvFileRenderer
             !string.IsNullOrEmpty(observer.PlannerHandoffUrl) ||
             !string.IsNullOrEmpty(observer.ObserverHostPath) ||
             !string.IsNullOrEmpty(observer.AuditConnectionString) ||
+            !string.IsNullOrEmpty(observer.SkipCycleWhenNoWarningEvents) ||
             observer.AllowedNamespaces?.Count > 0;
 
         if (!hasAnyValue)
@@ -370,6 +371,7 @@ internal static class EnvFileRenderer
         AppendIfSet(builder, RunProfileConventions.Env.ObserverPlannerHandoffUrl, observer.PlannerHandoffUrl);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverHostPath, observer.ObserverHostPath);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverAuditConnectionString, observer.AuditConnectionString);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverSkipCycleWhenNoWarningEvents, observer.SkipCycleWhenNoWarningEvents);
 
         if (observer.AllowedNamespaces?.Count > 0)
         {

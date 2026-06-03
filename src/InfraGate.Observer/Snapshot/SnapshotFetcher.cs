@@ -1,4 +1,5 @@
 using System.Diagnostics.Metrics;
+using System.Text.Json.Nodes;
 using InfraGate.AgentMcp;
 using InfraGate.Observer.Diagnostics;
 using Microsoft.Extensions.Logging;
@@ -27,13 +28,11 @@ internal sealed class SnapshotFetcher : ISnapshotFetcher
         var availableTools = await mcpClient.GetAgentToolsAsync(cancellationToken).ConfigureAwait(false);
         var availableNames = availableTools.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
 
-        var arguments = new Dictionary<string, object?>(StringComparer.Ordinal) { ["namespace"] = namespaceName };
-
         var tasks = ObserverConventions.ToolNames.NamespaceSnapshotTools
             .Where(availableNames.Contains)
             .ToDictionary(
                 name => name,
-                name => FetchToolSafeAsync(name, arguments, namespaceName, cancellationToken),
+                name => FetchToolSafeAsync(name, ToolArguments(name, namespaceName), namespaceName, cancellationToken),
                 StringComparer.Ordinal);
 
         await Task.WhenAll(tasks.Values).ConfigureAwait(false);
@@ -46,7 +45,19 @@ internal sealed class SnapshotFetcher : ISnapshotFetcher
         return new SnapshotDocument(namespaceName, toolResults, DateTimeOffset.UtcNow);
     }
 
-    private async Task<string?> FetchToolSafeAsync(
+    private static IReadOnlyDictionary<string, object?> ToolArguments(string toolName, string namespaceName)
+    {
+        var args = new Dictionary<string, object?>(StringComparer.Ordinal) { ["namespace"] = namespaceName };
+
+        if (string.Equals(toolName, ObserverConventions.ToolNames.GetK8sEvents, StringComparison.OrdinalIgnoreCase))
+        {
+            args["excludeEventTypes"] = new[] { "Normal" };
+        }
+
+        return args;
+    }
+
+    private async Task<JsonNode?> FetchToolSafeAsync(
         string toolName,
         IReadOnlyDictionary<string, object?> arguments,
         string namespaceName,
@@ -66,7 +77,10 @@ internal sealed class SnapshotFetcher : ISnapshotFetcher
             string text = string.Join(
                 Environment.NewLine,
                 result.Content.OfType<TextContentBlock>().Select(c => c.Text));
-            return string.IsNullOrEmpty(text) ? null : text;
+            if (string.IsNullOrEmpty(text))
+                return null;
+
+            return JsonNode.Parse(text, nodeOptions: null, documentOptions: new JsonDocumentOptions { AllowTrailingCommas = true });
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException)
         {

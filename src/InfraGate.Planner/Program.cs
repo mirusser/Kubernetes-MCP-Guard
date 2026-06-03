@@ -253,7 +253,11 @@ return 0;
 static void ConfigureUrls(WebApplicationBuilder builder)
 {
     string? configuredUrls = builder.Configuration[PlannerConventions.AspNetCoreUrlsKey];
-    if (string.IsNullOrWhiteSpace(configuredUrls))
+    if (!string.IsNullOrWhiteSpace(configuredUrls))
+    {
+        builder.WebHost.UseUrls(configuredUrls);
+    }
+    else
     {
         builder.WebHost.UseUrls(PlannerConventions.DefaultUrl);
     }

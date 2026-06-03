@@ -13,11 +13,12 @@ public sealed partial class KubernetesManager
         string? labelSelector,
         string? fieldSelector,
         int limit,
+        string[]? excludeEventTypes,
         CancellationToken cancellationToken)
     {
         // Justification: CA1873 — all log arguments are simple scalars (strings, int). Negligible evaluation cost.
-        logger.LogInformation("GetEvents called: Namespace={Namespace}, LabelSelector={LabelSelector}, FieldSelector={FieldSelector}, Limit={Limit}",
-            namespaceName, labelSelector, fieldSelector, limit);
+        logger.LogInformation("GetEvents called: Namespace={Namespace}, LabelSelector={LabelSelector}, FieldSelector={FieldSelector}, Limit={Limit}, ExcludeEventTypes={ExcludeEventTypes}",
+            namespaceName, labelSelector, fieldSelector, limit, excludeEventTypes);
 
         var validation = KubernetesManagerHelpers.ValidateNamespace(options, namespaceName) ??
             ValidateBoundedCount(limit, KubernetesConventions.MaxEventLimit, "Limit");
@@ -31,12 +32,24 @@ public sealed partial class KubernetesManager
 
         try
         {
+            var excludeSet = excludeEventTypes is { Length: > 0 }
+                ? new HashSet<string>(excludeEventTypes, StringComparer.OrdinalIgnoreCase)
+                : null;
+
             var events = await client.EventsV1.ListNamespacedEventAsync(
                 namespaceName,
                 fieldSelector: fieldSelector,
                 labelSelector: labelSelector,
-                limit: limit,
+                limit: excludeSet is null ? limit : null, // Fetch all when filtering locally; use API limit otherwise
                 cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            var filtered = events.Items.AsEnumerable();
+            if (excludeSet is not null)
+            {
+                filtered = filtered.Where(e => e.Type is null || !excludeSet.Contains(e.Type));
+            }
+
+            var items = filtered.Take(limit).ToList();
 
             return JsonSerializer.Serialize(new
             {
@@ -44,7 +57,8 @@ public sealed partial class KubernetesManager
                 labelSelector,
                 fieldSelector,
                 limit,
-                events = events.Items.Select(EventSummary)
+                excludeEventTypes,
+                events = items.Select(EventSummary)
             }, KubernetesManagerHelpers.JsonOptions);
         }
         catch (Exception ex)

@@ -71,6 +71,12 @@ services:
       # Compose --env-file supplies interpolation values; env_file passes the
       # same generated profile into the gateway container runtime.
       - ${INFRA_GATE_GATEWAY_ENV_FILE:-../generated/local-compose.env}
+    environment:
+      InfraGate__Approval__OperatorEmail: operator@infragate.local
+      InfraGate__Approval__Smtp__Host: mailpit
+      InfraGate__Approval__Smtp__Port: "1025"
+      InfraGate__Approval__Smtp__From: gateway@infragate.local
+      InfraGate__Approval__Smtp__EnableSsl: "false"
     volumes:
       - ${INFRA_GATE_KUBECONFIG_HOST_PATH}:/run/kube/mcp-nginx-demo.compose.config:ro
       - ${INFRA_GATE_APPROVAL_HOST_PATH}:/data/approvals
@@ -100,6 +106,8 @@ services:
       keycloak:
         condition: service_healthy
       mcp-gateway:
+        condition: service_started
+      planner:
         condition: service_started
     env_file:
       - ${INFRA_GATE_GATEWAY_ENV_FILE:-../generated/local-compose.env}

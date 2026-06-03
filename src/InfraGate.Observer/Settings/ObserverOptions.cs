@@ -23,6 +23,7 @@ public sealed record class ObserverOptions
     public string FileSinkRoot { get; init; } = string.Empty;
     public string PlannerHandoffUrl { get; init; } = string.Empty;
     public string AuditConnectionString { get; init; } = string.Empty;
+    public bool SkipCycleWhenNoWarningEvents { get; init; } = true;
 
     /// <summary>
     /// OAuth client-credentials the Observer uses to authenticate its outbound MCP calls.

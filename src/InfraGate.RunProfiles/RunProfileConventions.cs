@@ -98,6 +98,7 @@ internal static class RunProfileConventions
         public const string MaxToolIterations = "maxToolIterations";
         public const string ObserverAuditConnectionString = "auditConnectionString";
         public const string ObserverHostPath = "observerHostPath";
+        public const string SkipCycleWhenNoWarningEvents = "skipCycleWhenNoWarningEvents";
     }
 
     public static class Env
@@ -153,6 +154,7 @@ internal static class RunProfileConventions
         public const string ObserverScope = "InfraGate__Observer__ClientCredentials__Scope";
         public const string ObserverAllowedNamespaces = "InfraGate__Observer__AllowedNamespaces";
         public const string ObserverAuditConnectionString = "InfraGate__Observer__AuditConnectionString";
+        public const string ObserverSkipCycleWhenNoWarningEvents = "InfraGate__Observer__SkipCycleWhenNoWarningEvents";
         public const string PlannerAspnetcoreUrls = "InfraGate__Planner__AspNetCoreUrls";
         public const string PlannerGatewayBaseUrl = "InfraGate__Planner__GatewayBaseUrl";
         public const string PlannerExecutorHandoffUrl = "InfraGate__Planner__ExecutorHandoffUrl";

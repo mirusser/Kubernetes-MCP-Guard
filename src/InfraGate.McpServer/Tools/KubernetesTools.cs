@@ -28,8 +28,9 @@ public static class KubernetesTools
         [Description("Optional Kubernetes label selector, for example app=my-app.")] string? labelSelector = null,
         [Description("Optional Kubernetes field selector, for example regarding.name=my-pod.")] string? fieldSelector = null,
         [Description("Maximum events to return, from 1 to 100.")] int limit = KubernetesConventions.DefaultEventLimit,
+        [Description("Optional event types to exclude, for example [\"Normal\"].")] string[]? excludeEventTypes = null,
         CancellationToken cancellationToken = default) =>
-        manager.GetEventsAsync(@namespace, labelSelector, fieldSelector, limit, cancellationToken);
+        manager.GetEventsAsync(@namespace, labelSelector, fieldSelector, limit, excludeEventTypes, cancellationToken);
 
     [McpServerTool(Name = KubernetesConventions.ToolNames.GetPodLogs, ReadOnly = true, OpenWorld = false)]
     [Description("Shows bounded logs for a Pod in an allowed namespace.")]

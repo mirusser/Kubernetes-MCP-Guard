@@ -1,4 +1,5 @@
 using System.ClientModel;
+using System.Text.Json;
 using InfraGate.AgentLlm.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -70,16 +71,39 @@ public sealed class RateLimitRetryingChatClient(
     private static void LogRaw(ILogger logger, string text) =>
         logger.Log(LogLevel.Information, 0, text, null, static (s, _) => s);
 
-    private static string FormatMessages(IEnumerable<ChatMessage> messages)
+    private string FormatMessages(IEnumerable<ChatMessage> messages)
     {
         var parts = new List<string>();
         var i = 0;
         foreach (var msg in messages)
         {
             var header = $"── [{i++}:{msg.Role}] " + new string('─', 48);
-            parts.Add($"{header}\n{msg.Text ?? "(empty)"}");
+            parts.Add($"{header}\n{PrettyPrint(msg.Text)}");
         }
         return string.Join("\n\n", parts);
+    }
+
+    private static readonly JsonSerializerOptions prettyPrintOptions = new() { WriteIndented = true };
+
+    private string PrettyPrint(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return text ?? "(empty)";
+
+        var trimmed = text.AsSpan().TrimStart();
+        if (trimmed.Length == 0 || (trimmed[0] != '{' && trimmed[0] != '['))
+            return text;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            return JsonSerializer.Serialize(doc, prettyPrintOptions);
+        }
+        catch (JsonException ex)
+        {
+            AgentLogEvents.LogPrettyPrintParseFailed(log, ex);
+            return text;
+        }
     }
 
     public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(

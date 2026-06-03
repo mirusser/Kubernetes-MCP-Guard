@@ -111,12 +111,12 @@ internal sealed class ProposePlanHandler( // NOSONAR:S107 - Handler composes exp
         string approvalUrl,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation("attempting approval email for plan '{PlanId}' operator={OperatorEmail}", planId, options.OperatorEmail);
+
         if (string.IsNullOrWhiteSpace(options.OperatorEmail))
         {
             EmailFailedCounter.Add(1);
-            logger.LogWarning(
-                "Approval email for plan '{PlanId}' was not sent because operator email is not configured.",
-                planId);
+            logger.LogError("approval email for plan '{PlanId}' not sent — operator email is not configured", planId);
             return false;
         }
 
@@ -134,12 +134,13 @@ internal sealed class ProposePlanHandler( // NOSONAR:S107 - Handler composes exp
         try
         {
             await emailSender.SendAsync(content, cancellationToken).ConfigureAwait(false);
+            logger.LogInformation("approval email sent for plan '{PlanId}' to {To}", planId, options.OperatorEmail);
             return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             EmailFailedCounter.Add(1);
-            logger.LogWarning(ex, "Approval email for plan '{PlanId}' failed.", planId);
+            logger.LogError(ex, "approval email for plan '{PlanId}' failed", planId);
             return false;
         }
     }

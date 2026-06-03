@@ -262,7 +262,7 @@ public sealed class EnvFileRendererTests
         {
             Observer = new ObserverProfile(
                 "http://observer:3002",
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 ["default", "mcp-nginx-demo"])
         };
 

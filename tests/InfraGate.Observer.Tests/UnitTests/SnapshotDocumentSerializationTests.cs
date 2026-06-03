@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace InfraGate.Observer.Tests.UnitTests;
 
 public sealed class SnapshotDocumentSerializationTests
@@ -12,10 +14,10 @@ public sealed class SnapshotDocumentSerializationTests
     {
         var original = new SnapshotDocument(
             "test-ns",
-            new Dictionary<string, string?>
+            new Dictionary<string, JsonNode?>
             {
-                ["get_k8s_status"] = "{\"healthy\":true}",
-                ["get_k8s_events"] = "{\"events\":[]}",
+                ["get_k8s_status"] = JsonNode.Parse("{\"healthy\":true}"),
+                ["get_k8s_events"] = JsonNode.Parse("{\"events\":[]}"),
             },
             DateTimeOffset.UtcNow);
 
@@ -24,8 +26,10 @@ public sealed class SnapshotDocumentSerializationTests
 
         Assert.NotNull(roundTripped);
         Assert.Equal(original.Namespace, roundTripped.Namespace);
-        Assert.Equal("{\"healthy\":true}", roundTripped.ToolResults["get_k8s_status"]);
-        Assert.Equal("{\"events\":[]}", roundTripped.ToolResults["get_k8s_events"]);
+        var statusNode = roundTripped.ToolResults["get_k8s_status"];
+        Assert.NotNull(statusNode);
+        Assert.True(statusNode["healthy"]?.GetValue<bool>() == true);
+        Assert.NotNull(roundTripped.ToolResults["get_k8s_events"]);
     }
 
     [Fact]
@@ -33,9 +37,9 @@ public sealed class SnapshotDocumentSerializationTests
     {
         var original = new SnapshotDocument(
             "test-ns",
-            new Dictionary<string, string?>
+            new Dictionary<string, JsonNode?>
             {
-                ["get_k8s_status"] = "{}",
+                ["get_k8s_status"] = JsonNode.Parse("{}"),
                 ["get_k8s_events"] = null,
             },
             DateTimeOffset.UtcNow);
@@ -44,7 +48,7 @@ public sealed class SnapshotDocumentSerializationTests
         var roundTripped = JsonSerializer.Deserialize<SnapshotDocument>(json, JsonOptions);
 
         Assert.NotNull(roundTripped);
-        Assert.Equal("{}", roundTripped.ToolResults["get_k8s_status"]);
+        Assert.NotNull(roundTripped.ToolResults["get_k8s_status"]);
         Assert.Null(roundTripped.ToolResults["get_k8s_events"]);
     }
 }

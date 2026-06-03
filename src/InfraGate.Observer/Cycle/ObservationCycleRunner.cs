@@ -11,6 +11,7 @@ using InfraGate.Prompts;
 using InfraGate.Observer.Snapshot;
 using InfraGate.Observer.State;
 using Microsoft.Agents.AI.Workflows;
+using ModelContextProtocol.Protocol;
 using Serilog.Context;
 
 namespace InfraGate.Observer.Cycle;
@@ -114,6 +115,17 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
         cycleCts.CancelAfter(TimeSpan.FromSeconds(opts.WallClockCapSeconds));
 
         var tools = await mcpClient.GetAgentToolsAsync(cycleCts.Token).ConfigureAwait(false);
+
+        if (opts.SkipCycleWhenNoWarningEvents)
+        {
+            var hasEvents = await HasWarningEventsAsync(opts.AllowedNamespaces, cycleCts.Token).ConfigureAwait(false);
+            if (!hasEvents)
+            {
+                ObserverLogEvents.LogCycleSkippedNoEvents(logger, cycleId);
+                return EmptyResult(cycleId);
+            }
+        }
+
         var input = new CycleWorkflowInput(cycleId, opts.MaxToolIterations);
 
         var renderedPrompts = new Dictionary<string, string>(opts.AllowedNamespaces.Count, StringComparer.Ordinal);
@@ -254,6 +266,44 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
             .Build();
 
         return (workflow, () => agentGetCounts.Sum(f => f()));
+    }
+
+    private async Task<bool> HasWarningEventsAsync(
+        IReadOnlyList<string> namespaces,
+        CancellationToken cancellationToken)
+    {
+        var arguments = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["namespace"] = "",
+            ["limit"] = 1,
+            ["excludeEventTypes"] = new[] { "Normal" },
+        };
+
+        foreach (var ns in namespaces)
+        {
+            arguments["namespace"] = ns;
+            try
+            {
+                var result = await mcpClient.CallToolAsync(
+                    ObserverConventions.ToolNames.GetK8sEvents,
+                    arguments,
+                    cancellationToken).ConfigureAwait(false);
+
+                if (result.IsError == true)
+                    continue;
+
+                string text = string.Concat(result.Content.OfType<TextContentBlock>().Select(c => c.Text));
+                if (!string.IsNullOrEmpty(text) && !text.Contains("\"events\":[]", StringComparison.Ordinal))
+                    return true;
+            }
+            catch
+            {
+                // If we can't check, err on the side of running the cycle.
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static CycleResult EmptyResult(string cycleId) => new()
