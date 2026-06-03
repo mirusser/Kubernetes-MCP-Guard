@@ -13,9 +13,8 @@ internal sealed class SmtpApprovalEmailSender(
         options.Validate();
 
         logger.LogInformation(
-            "smtp sending email host={Host}:{Port} ssl={Ssl} from={From} to={To} subject={Subject}",
-            options.Host, options.Port, options.EnableSsl,
-            options.FromAddress, content.ToAddress, content.Subject);
+            "smtp email queued host={Host}:{Port} ssl={Ssl}",
+            options.Host, options.Port, options.EnableSsl);
 
         using var message = new MailMessage(
             options.FromAddress,
@@ -23,19 +22,9 @@ internal sealed class SmtpApprovalEmailSender(
             content.Subject,
             content.BodyPlaintext);
 
-        try
-        {
-            using var client = smtpClientFactory.Create(options);
-            await client.SendMailAsync(message, cancellationToken).ConfigureAwait(false);
+        using var client = smtpClientFactory.Create(options);
+        await client.SendMailAsync(message, cancellationToken).ConfigureAwait(false);
 
-            logger.LogInformation("smtp email sent to {To}", content.ToAddress);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogError(ex,
-                "smtp email failed host={Host}:{Port} to={To}",
-                options.Host, options.Port, content.ToAddress);
-            throw;
-        }
+        logger.LogInformation("smtp email sent");
     }
 }

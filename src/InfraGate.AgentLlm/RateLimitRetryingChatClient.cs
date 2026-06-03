@@ -17,7 +17,9 @@ public sealed class RateLimitRetryingChatClient(
         TimeSpan.FromSeconds(60),
     ];
 
+#pragma warning disable S6669 // 'log' matches repo convention (lower camel, no _ prefix) and the regex
     private readonly ILogger log = logger ?? NullLogger<RateLimitRetryingChatClient>.Instance;
+#pragma warning restore S6669
 
     public RateLimitRetryingChatClient(IChatClient inner, ILogger<RateLimitRetryingChatClient>? logger = null)
         : this(inner, defaultRetryDelays, logger) { }
@@ -85,10 +87,10 @@ public sealed class RateLimitRetryingChatClient(
 
     private static readonly JsonSerializerOptions prettyPrintOptions = new() { WriteIndented = true };
 
-    private string PrettyPrint(string? text)
+    internal string PrettyPrint(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
-            return text ?? "(empty)";
+            return "(empty)";
 
         var trimmed = text.AsSpan().TrimStart();
         if (trimmed.Length == 0 || (trimmed[0] != '{' && trimmed[0] != '['))

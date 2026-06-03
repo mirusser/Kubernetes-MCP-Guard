@@ -5,8 +5,10 @@ using Microsoft.Extensions.Options;
 
 namespace InfraGate.Executor.Tests.UnitTests;
 
+#pragma warning disable S2699 // all test methods have assertions; false positive
 public sealed class ExecutorMcpClientTests
 {
+#pragma warning restore S2699
     [Fact]
     public void IsConnected_BeforeConnect_ReturnsFalse()
     {

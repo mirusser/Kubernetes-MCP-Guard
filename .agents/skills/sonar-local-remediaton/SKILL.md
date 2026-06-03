@@ -1,6 +1,6 @@
 ---
 name: sonar-local-remediaton
-description: Consume the saved local SonarQube report at `.sonarqube-local/reports/sonarqube-local-report.json` and produce a structured remediation plan for findings in k8s-toolkit. Use after running `$run-local-sonarqube` or `tools/sonarqube/run-analysis.sh` when Codex needs to triage local SonarQube issues, quality gate, coverage, measures, or hotspots from the on-disk report. Chains to repo-onboarding, code-standards, planning-and-task-breakdown, writing-tests, and verify-readme-docs.
+description: Consume the saved local SonarQube report at `.sonarqube-local/reports/sonarqube-local-report.json` and produce a structured remediation plan for findings in this repo. Use after running `$run-local-sonarqube` or `tools/sonarqube/run-analysis.sh` when agent (you) needs to triage local SonarQube issues, quality gate, coverage, measures, or hotspots from the on-disk report. Chains to repo-onboarding, code-standards, planning-and-task-breakdown, writing-tests, and verify-readme-docs.
 ---
 
 # Sonar Local Remediation

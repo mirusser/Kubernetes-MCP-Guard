@@ -24,7 +24,7 @@ See [`src/InfraGate.McpGateway.Auth/README.md`](../src/InfraGate.McpGateway.Auth
 
 ### 1.3 Namespace Allow-list
 
-`InfraGate__Kubernetes__AllowedNamespaces__0` is a comma-separated namespace allow-list. It defaults to `mcp-nginx-demo`.
+`InfraGate__Kubernetes__AllowedNamespaces__0` is a single indexed namespace entry, not a comma-separated list. Provide additional namespaces as separate indexed keys (`InfraGate__Kubernetes__AllowedNamespaces__1`, `__2`, and so on). The default single value is `mcp-nginx-demo`.
 
 `InfraGate.McpServer` checks the allow-list before Kubernetes API calls, providing a second containment layer beyond Kubernetes RBAC.
 

@@ -79,6 +79,7 @@ public sealed class DownstreamMcpClientTests
     [InlineData("K8S_MCP_ALLOWED_NAMESPACES", "mcp-nginx-demo")]
     [InlineData("K8S_MCP_USE_IN_CLUSTER", "true")]
     [InlineData("K8S_MCP_LOG_PATH", "/data/logs/mcp-server.log")]
+    [InlineData("KUBECONFIG", "/home/user/.kube/config")]
     public void CreateTransportOptions_ExcludesOldStyleEnvVar_AfterHardCut(string envVarName, string envVarValue)
     {
         string downstreamProject = "/app/src/InfraGate.McpServer/InfraGate.McpServer.csproj";

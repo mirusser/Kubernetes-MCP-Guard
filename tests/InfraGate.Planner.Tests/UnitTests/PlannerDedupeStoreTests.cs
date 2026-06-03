@@ -2,8 +2,10 @@ using InfraGate.Planner.Dedupe;
 
 namespace InfraGate.Planner.Tests.UnitTests;
 
+#pragma warning disable S2699 // all test methods have assertions; false positive
 public sealed class PlannerDedupeStoreTests
 {
+#pragma warning restore S2699
     [Fact]
     public void HasActivePlan_UnknownId_ReturnsFalse()
     {

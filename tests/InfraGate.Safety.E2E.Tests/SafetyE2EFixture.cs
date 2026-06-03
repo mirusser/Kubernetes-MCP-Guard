@@ -60,6 +60,10 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
     private readonly string namespaceName;
     private readonly string kubeconfigPath;
     private readonly string? previousDownstreamAuthRequired;
+    private readonly string? previousApprovalRoot;
+    private readonly string? previousKubernetesAllowedNamespaces0;
+    private readonly string? previousKubernetesKubeConfig;
+    private readonly string? previousKubeconfig;
 
     private KeycloakContainer? keycloakContainer;
     private TestServer? gatewayServer;
@@ -78,6 +82,10 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
             KubernetesAllowedNamespacesEnvVar + "__0") ?? DefaultNamespace;
         kubeconfigPath = ResolveKubeconfigPath(repoRoot);
         previousDownstreamAuthRequired = Environment.GetEnvironmentVariable(DownstreamAuthConventions.EnvironmentVariables.Required);
+        previousApprovalRoot = Environment.GetEnvironmentVariable(ApprovalConventions.EnvironmentVariables.ApprovalRoot);
+        previousKubernetesAllowedNamespaces0 = Environment.GetEnvironmentVariable(KubernetesAllowedNamespacesEnvVar + "__0");
+        previousKubernetesKubeConfig = Environment.GetEnvironmentVariable(KubernetesKubeConfigEnvVar);
+        previousKubeconfig = Environment.GetEnvironmentVariable(KubeconfigEnvVar);
     }
 
     public bool IsEnabled { get; private set; }
@@ -152,6 +160,18 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
         Environment.SetEnvironmentVariable(
             DownstreamAuthConventions.EnvironmentVariables.Required,
             previousDownstreamAuthRequired);
+        Environment.SetEnvironmentVariable(
+            ApprovalConventions.EnvironmentVariables.ApprovalRoot,
+            previousApprovalRoot);
+        Environment.SetEnvironmentVariable(
+            KubernetesAllowedNamespacesEnvVar + "__0",
+            previousKubernetesAllowedNamespaces0);
+        Environment.SetEnvironmentVariable(
+            KubernetesKubeConfigEnvVar,
+            previousKubernetesKubeConfig);
+        Environment.SetEnvironmentVariable(
+            KubeconfigEnvVar,
+            previousKubeconfig);
 
         try
         {

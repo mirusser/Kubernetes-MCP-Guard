@@ -161,6 +161,73 @@ public sealed class RateLimitRetryingChatClientTests
         Assert.Same(SuccessResult, result);
     }
 
+    [Fact]
+    public void PrettyPrint_NullText_ReturnsEmptySentinel()
+    {
+        var sut = new RateLimitRetryingChatClient(
+            new FakeChatClient(), [TimeSpan.Zero], NullLogger<RateLimitRetryingChatClient>.Instance);
+
+        var result = sut.PrettyPrint(null);
+
+        Assert.Equal("(empty)", result);
+    }
+
+    [Fact]
+    public void PrettyPrint_EmptyText_ReturnsEmptySentinel()
+    {
+        var sut = new RateLimitRetryingChatClient(
+            new FakeChatClient(), [TimeSpan.Zero], NullLogger<RateLimitRetryingChatClient>.Instance);
+
+        var result = sut.PrettyPrint("");
+
+        Assert.Equal("(empty)", result);
+    }
+
+    [Fact]
+    public void PrettyPrint_WhitespaceText_ReturnsEmptySentinel()
+    {
+        var sut = new RateLimitRetryingChatClient(
+            new FakeChatClient(), [TimeSpan.Zero], NullLogger<RateLimitRetryingChatClient>.Instance);
+
+        var result = sut.PrettyPrint("   ");
+
+        Assert.Equal("(empty)", result);
+    }
+
+    [Fact]
+    public void PrettyPrint_PlainText_ReturnsUnchanged()
+    {
+        var sut = new RateLimitRetryingChatClient(
+            new FakeChatClient(), [TimeSpan.Zero], NullLogger<RateLimitRetryingChatClient>.Instance);
+
+        var result = sut.PrettyPrint("hello world");
+
+        Assert.Equal("hello world", result);
+    }
+
+    [Fact]
+    public void PrettyPrint_ValidJson_PrettyPrints()
+    {
+        var sut = new RateLimitRetryingChatClient(
+            new FakeChatClient(), [TimeSpan.Zero], NullLogger<RateLimitRetryingChatClient>.Instance);
+
+        var result = sut.PrettyPrint("{\"a\":1}");
+
+        Assert.Contains("\n", result, StringComparison.Ordinal);
+        Assert.Contains("  ", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PrettyPrint_InvalidJson_ReturnsUnchanged()
+    {
+        var sut = new RateLimitRetryingChatClient(
+            new FakeChatClient(), [TimeSpan.Zero], NullLogger<RateLimitRetryingChatClient>.Instance);
+
+        var result = sut.PrettyPrint("{invalid");
+
+        Assert.Equal("{invalid", result);
+    }
+
     // ── Fakes ────────────────────────────────────────────────────────────
 
     private sealed class FakePipelineResponse(int statusCode) : PipelineResponse
