@@ -182,7 +182,7 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        var mutationToolName = toolName.Substring(McpGatewayConventions.ToolNames.RequestToolPrefix.Length);
+        var mutationToolName = toolName[McpGatewayConventions.ToolNames.RequestToolPrefix.Length..];
 
         var identity = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
         if (identity is null)
