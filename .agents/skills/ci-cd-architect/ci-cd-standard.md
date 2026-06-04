@@ -13,9 +13,9 @@ owners: ["backend-team"]
 upstream:
   - ref.mcp-server-standards
 source_of_truth: true
-last_verified: "2026-05-21"
+last_verified: "2026-06-04"
 doc_kind: atomic
-standard_version: "1.0.1"
+standard_version: "1.1.0"
 ---
 
 # CI/CD Standard — Unified Pipelines for Python, .NET, and Polyglot Projects
@@ -53,17 +53,24 @@ Define a unified, version-locked, and reproducible CI/CD pipeline standard for P
 
 ### Rule 1: Standard Workflow Files
 
-Every compliant repository MUST contain exactly three GitHub Actions workflow files:
+Every compliant repository MUST contain the required core workflows for its configured archetype and MAY contain only standard-classified extension workflows:
 
 | File | Purpose | Trigger |
 |------|---------|---------|
-| `.github/workflows/ci.yml` | Continuous Integration | `push` to main/master, `pull_request` to main/master, `workflow_dispatch` |
-| `.github/workflows/publish.yml` | Docker publish + GitHub Release | `workflow_run` (CI success on main), `push tags v*`, `workflow_dispatch` |
-| `.github/workflows/auto-tag.yml` | Automatic version tagging | `pull_request closed` (merged to main) |
+| `.github/workflows/ci.yml` | Continuous Integration | `push` to configured `ci_branches`, `pull_request`, `workflow_dispatch` |
+| `.github/workflows/publish.yml` or declared publish workflow | Docker publish, package publish, release, or deployment gate | gated by CI success; may also validate PR/branch Docker builds with `push: false` |
+| `.github/workflows/auto-tag.yml` | Automatic version tagging | only when `release_strategy: auto-tag`; `pull_request closed` (merged to default branch) |
 
-**[RULE: CI-CDW-1] [L1+]** All three workflow files MUST be present in every compliant repository.
+**[RULE: CI-CDW-1] [L1+]** Workflow files MUST be classified as either core workflows (`ci.yml`, publish/release workflows when enabled, `auto-tag.yml` when `release_strategy: auto-tag`) or standard extension workflows (Semgrep, dependency scan, container scan, Sonar/SonarCloud, docs validation, integration tests, Keycloak tests, safety E2E, deployment gates). Unclassified workflow files are prohibited. Docker-less or no-release projects omit publish/release workflows by configuration.
 
-**[RULE: CI-CDW-2] [L1+]** `ci.yml` MUST be named `ci.yml`. `publish.yml` MUST be named `publish.yml`. `auto-tag.yml` MUST be named `auto-tag.yml`.
+**[RULE: CI-CDW-2] [L1+]** Core workflows MUST use standard names: `ci.yml` for CI, `publish.yml` or another declared publish/deploy workflow name from the configuration contract for Docker/release/deploy flows, and `auto-tag.yml` only for automatic tag creation. Extension workflows MUST use descriptive names matching their standard category, such as `semgrep.yml`, `semgrep-scheduled.yml`, `dependency-scan.yml`, `sonar.yml`, `integration-tests.yml`, `keycloak-tests.yml`, `safety-e2e.yml`, or `docs-validation.yml`.
+
+Core workflow presence is derived from the configuration contract:
+
+- `ci.yml` is required for all compliant repositories.
+- A publish/release workflow is required only when `use_docker: true`, `publish_artifacts: true`, or a deployment gate is declared.
+- `auto-tag.yml` is required only when `release_strategy: auto-tag`.
+- Extension workflows are permitted when their corresponding config field is enabled or the repository contains the matching test/security/docs surface.
 
 ### Rule 2: Unified Action Versions
 
@@ -82,7 +89,7 @@ All compliant CI/CD workflows MUST use the same pinned versions of GitHub Action
 | `codecov/codecov-action` | `v6` | Upload coverage to Codecov |
 | `actions/upload-artifact` | `v4` | Upload build artifacts |
 
-**[RULE: CI-CDW-3] [L1+]** All workflow files MUST use the exact action versions listed above. Upgrading an action version requires updating this standard first, then propagating to all projects. For the full version history and upgrade policy, see `references/action-version-matrix.md`.
+**[RULE: CI-CDW-3] [L1+]** All workflow files MUST use the exact action versions listed above. Templates MAY use the listed major-version tags. Generated workflows SHOULD pin each action to a full commit SHA and include a trailing comment with the approved major version (for example `actions/checkout@<sha> # v6`). A SHA pin without a matching version comment is incomplete; a tag that does not match the matrix is non-compliant. Upgrading an action version requires updating this standard first, then propagating to all projects. For the full version history and upgrade policy, see `references/action-version-matrix.md`.
 
 ### Rule 3: Python Version
 
@@ -90,9 +97,9 @@ All compliant CI/CD workflows MUST use the same pinned versions of GitHub Action
 
 ### Rule 4: CI Pipeline Structure (`ci.yml`)
 
-The CI pipeline consists of three sequential jobs. Each job depends on the previous one succeeding.
+The CI pipeline is language-aware. Python Docker projects use the strict sequential `lint` -> `test` -> `docker-smoke` shape. .NET projects may use a combined build/test job when it preserves restore -> format -> build -> test ordering, and may split integration, Keycloak, and safety E2E tests into classified extension workflows.
 
-**[RULE: CI-CDW-5] [L1+]** The `ci.yml` workflow MUST contain exactly three jobs in this order: `lint`, `test`, `docker-smoke`. The `pull_request` trigger MUST NOT have a `branches:` filter — this ensures CI runs on every PR regardless of target branch. The `push` trigger MUST filter to `[main, master]` only.
+**[RULE: CI-CDW-5] [L1+]** Python Docker `ci.yml` workflows MUST contain sequential `lint`, `test`, and `docker-smoke` jobs. .NET `ci.yml` workflows MUST preserve restore, format, build, test, and coverage ordering inside their primary job or explicit `needs:` graph. Workflow triggers MUST follow the configuration contract branch policy (`ci_branches`, `release_branches`, `deploy_branches`) rather than hardcoded branch names.
 
 ```yaml
 on:
@@ -181,10 +188,7 @@ steps:
 
 ### Rule 5: Docker Publish (`publish.yml`)
 
-**[RULE: CI-CDW-19] [L1+]** The `publish.yml` workflow MUST trigger on three events:
-1. `workflow_run` — when `ci.yml` completes successfully on the `main` branch
-2. `push` — when a tag matching `v*` is pushed
-3. `workflow_dispatch` — manual trigger
+**[RULE: CI-CDW-19] [L1+]** Any workflow path that pushes a Docker image, creates a release, publishes a package, or deploys to an environment MUST be gated by required CI success. Accepted gating mechanisms are `workflow_run` from `ci.yml`, `workflow_call` from a required CI workflow, repository required checks, or an explicit in-workflow `needs:` chain that runs the required tests before `push: true`, release, publish, or deploy steps. PR and branch workflows MAY build Docker images for validation with `push: false`; those validation paths MUST NOT publish registry images.
 
 **[RULE: CI-CDW-20] [L1+]** The publish workflow MUST build multi-architecture images:
 
@@ -240,7 +244,9 @@ env:
 
 ### Rule 6: Auto Tag (`auto-tag.yml`)
 
-**[RULE: CI-CDW-27] [L1+]** Every compliant repository MUST have an `auto-tag.yml` workflow that automatically creates and pushes a Git tag when a PR is merged to the default branch.
+**[RULE: CI-CDW-27] [L1+]** Every compliant repository MUST declare `release_strategy` in the configuration contract: `auto-tag`, `manual-tag`, or `none`. `auto-tag.yml` is required only for `release_strategy: auto-tag`, and that workflow MUST automatically create and push a Git tag when a PR is merged to the default branch. `manual-tag` projects MUST document that tags are created outside the workflow. `none` projects MUST NOT generate `auto-tag.yml`.
+
+When `release_strategy: auto-tag`, `version_source` MUST point to a real version value. Valid sources include `pyproject`, `directory-build-props`, or another source added to this standard before use.
 
 ```yaml
 name: Auto-tag on merge to main
@@ -330,6 +336,16 @@ The configuration contract defines these parameters:
 | `dotnet_version` | No | .NET SDK version (required when `language: dotnet`) | `"8.0.x"` |
 | `dotnet_solution` | No | Path to .NET solution file (required when `language: dotnet`) | `src/MyApp.sln` |
 | `version_source` | No | Source for auto-tag version extraction: `"pyproject"` (default) or `"directory-build-props"` (.NET) | `"pyproject"` |
+| `release_strategy` | Yes | Release tagging strategy: `"auto-tag"`, `"manual-tag"`, or `"none"` | `"manual-tag"` |
+| `coverage_provider` | No | Where coverage is consumed: `"codecov"`, `"sonarcloud"`, `"artifact"`, or `"none"` | `"codecov"` |
+| `ci_branches` | No | Branches that run required CI on push | `["main"]` |
+| `release_branches` | No | Branches/tags that can publish release artifacts | `["main"]` |
+| `deploy_branches` | No | Branches that can deploy to an environment | `[]` |
+| `use_dependency_scan` | No | Run language/package vulnerability scan workflow | `true` |
+| `use_container_scan` | No | Run container image vulnerability scan for Docker workflows | same as `use_docker` |
+| `use_sonar` | No | Run Sonar/SonarCloud quality gate and report export | `false` |
+| `integration_test_profile` | No | Named integration-test workflow profile; may include runner labels and required services | unset |
+| `safety_e2e_profile` | No | Named manual safety/E2E workflow profile with explicit opt-in inputs | unset |
 
 **[RULE: CI-CDW-37] [L2+]** When `.github/ci-cd-config.yaml` exists, it is the SSOT for all CI/CD parameters. Workflow files SHOULD be regenerated from templates when configuration changes. The SKILL.md describes the regeneration workflow.
 
@@ -591,7 +607,7 @@ updates:
 
 Documentation quality is enforced through automated validation in CI. This is a content-focused check, independent of programming language.
 
-**[RULE: CI-CDW-58] [L2+]** Projects with documentation files (`**/*.md` beyond `README.md`) MUST have a `docs-validation.yml` workflow.
+**[RULE: CI-CDW-58] [L2+]** Projects with documentation validation enabled MUST have both a validator contract/script and a `docs-validation.yml` workflow. Projects with substantial Markdown files but no validator contract MUST be reported as a contract gap; do not generate an inert docs-validation workflow that cannot validate anything.
 
 **[RULE: CI-CDW-59] [L2+]** The workflow MUST use `paths` filters (`**/*.md`) and `tj-actions/changed-files@v47` for incremental validation — only changed documentation files are validated.
 
@@ -761,7 +777,25 @@ if (existing) {
 }
 ```
 
-### Rule 15: Integration with Upstream Standards
+### Rule 22: Classified Extension Workflows
+
+Extension workflows are permitted only when they map to declared configuration fields or repository surfaces.
+
+**[RULE: CI-CDW-70] [L2+]** Docker image workflows MUST run a container vulnerability scan before publishing or deploying images. Trivy is the standard scanner unless the configuration contract declares an equivalent. Scans MUST fail on configured critical/high findings and MUST upload SARIF when a SARIF file is produced.
+
+**[RULE: CI-CDW-71] [L2+]** .NET projects with NuGet dependencies SHOULD run `dotnet list <solution> package --vulnerable --include-transitive`. Critical/high vulnerability findings MUST fail the workflow. Deprecated package checks MAY be advisory and uploaded as artifacts.
+
+**[RULE: CI-CDW-72] [L2+]** Sonar/SonarCloud workflows, when enabled, MUST export an agent-ingestible report artifact containing quality gate status, selected measures, open issues, and security hotspots. The workflow MUST not leak the Sonar token in logs.
+
+**[RULE: CI-CDW-73] [L1+]** Branch policy MUST be explicit in the configuration contract. `ci_branches` controls required CI push triggers, `release_branches` controls publish/release eligibility, and `deploy_branches` controls deployment eligibility. Workflows MUST NOT hardcode branch sets that conflict with the contract.
+
+**[RULE: CI-CDW-74] [L2+]** Integration-test extension workflows MUST declare their runner class, required services, and opt-in environment variables in configuration. Self-hosted or cluster-backed tests MUST include readiness checks before running tests.
+
+**[RULE: CI-CDW-75] [L2+]** Safety/E2E workflows that can touch live infrastructure MUST use `workflow_dispatch` or another explicit opt-in trigger and MUST keep mutation-enabling environment variables visible in the workflow file.
+
+**[RULE: CI-CDW-76] [L1+]** Coverage configuration MUST match the actual consumer. Use `coverage_provider: codecov` only when a Codecov upload step exists. Use `sonarcloud`, `artifact`, or `none` when coverage is consumed by Sonar/SonarCloud, uploaded only as artifacts, or intentionally absent.
+
+### Rule 23: Integration with Upstream Standards
 
 **[RULE: CI-CDW-34] [L2+]** This CI/CD standard implements the CI requirements from `ref.mcp-server-standards` for projects that use that standard:
 
@@ -774,7 +808,7 @@ if (existing) {
 | `[L2+]` — CI SHOULD run ruff check, format, mypy, bandit | `lint` job runs all four tools |
 | `[L1+]` — Unit tests MUST run in CI on every commit | `test` job runs `pytest tests/unit/` |
 
-### Rule 22: Python Project Metadata Consistency
+### Rule 24: Python Project Metadata Consistency
 
 **[RULE: CI-CDW-70] [L2+]** The `pyproject.toml` classifiers MUST include the Python version used in CI. When `python_version` is set to `"3.14"` in the configuration contract, classifiers SHALL include `"Programming Language :: Python :: 3.14"` and SHOULD include the two preceding stable versions (`3.13`, `3.12`). Outdated classifiers create confusion between the declared and actual runtime.
 
@@ -794,7 +828,7 @@ if (existing) {
 
 - Assumptions: Repository uses GitHub Actions. Python `3.14` is available via `actions/setup-python`. Docker Buildx is available on `ubuntu-latest` runners. Project has a `pyproject.toml` with `version` field. Documentation follows AFDS standard (when applicable).
 - Constraints: Maximum three workflow files (except Docker-less projects which may have two). Lint, test, docker-smoke run sequentially. Publish requires CI to pass on main (when triggered by `workflow_run`).
-- Known Limitations: Codecov upload requires a `CODECOV_TOKEN` secret. Multi-arch Docker builds increase CI time by ~2-3 minutes. AFDS validation downloads the validator script from `https://raw.githubusercontent.com/paulomac1000/ai-skills/main/skills/afds-doc-writer/docs_validate.py` at runtime via curl. Projects without `pyproject.toml` cannot use `auto-tag.yml`.
+- Known Limitations: Codecov upload requires a `CODECOV_TOKEN` secret and only applies when `coverage_provider: codecov`. Multi-arch Docker builds increase CI time by ~2-3 minutes. AFDS validation downloads the validator script from `https://raw.githubusercontent.com/paulomac1000/ai-skills/main/skills/afds-doc-writer/docs_validate.py` at runtime via curl. Projects cannot use `auto-tag.yml` unless `release_strategy: auto-tag` and `version_source` identifies a real version value.
 
 ## EDGE CASES
 
@@ -809,7 +843,7 @@ if (existing) {
 - CASE: Project is not an MCP server but has a REST API → EXPECTED: Set `is_mcp: false`. Use `health_port` for the health endpoint. Smoke test verifies health only.
 - CASE: Configuration contract is missing → EXPECTED: The project is treated as non-compliant. See SKILL.md migration workflow for how to add the config contract retroactively.
 - CASE: Semgrep `# nosemgrep` suppression in Dockerfiles → EXPECTED: In Dockerfiles, `# nosemgrep:` comments MUST be placed on a SEPARATE line BEFORE the directive they suppress. Inline `#` characters on Dockerfile directive lines (e.g., `USER root  # nosemgrep: ...`) are parsed as part of the directive argument, not as comments. This causes Docker build failures (`unable to find user`). Correct form: `# nosemgrep: rule-id` on a separate preceding line.
-- CASE: Direct push to main without a pull request → EXPECTED: The auto-tag workflow fires only on PR merge (`pull_request.closed + merged == true`). Direct pushes to main do NOT create a version tag. To publish after a direct push: (1) verify `pyproject.toml` version is correct, then (2) manually create and push the tag via `git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`. The publish workflow will then create the release and Docker image from the tag push.
+- CASE: Direct push to a release branch without a pull request → EXPECTED: `auto-tag.yml` fires only for `release_strategy: auto-tag` on PR merge (`pull_request.closed + merged == true`). Direct pushes do NOT create a version tag. To publish after a direct push in `manual-tag` or emergency `auto-tag` scenarios: (1) verify the configured `version_source` value is correct, then (2) manually create and push the tag via `git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`. Publish/release workflows may then run from the tag push if their CI gate is satisfied.
 
 ## EXAMPLES
 
@@ -870,13 +904,21 @@ See `templates/auto-tag.yml.j2` for the Jinja2 template.
 
 ## NON_GOALS
 
-- This standard does not cover deployment orchestration, Kubernetes, or Nomad.
+- This standard covers CI/CD workflow gates for deployment jobs, but not the deployment infrastructure itself, Kubernetes manifests, or Nomad jobs.
 - It does not specify monitoring, alerting, or observability beyond CI exit codes.
-- It does not define branching strategies, code review processes, or merge policies.
+- It does not define organization-wide branching strategy, code review processes, or merge policies beyond the branch sets required for workflow triggers and publish/deploy eligibility.
 - It does not cover secrets injection beyond `.env` and GitHub Secrets.
 - It does not prescribe a specific tool for generating workflow files from templates (Jinja2 is a suggestion; any template engine works).
 
 ## CHANGELOG
+
+### 1.1.0 (2026-06-04)
+
+- Replaced the exactly-three-workflows model with core workflows plus classified extension workflows.
+- Added SHA-pinned generated workflow guidance while keeping major-version tags in templates.
+- Made release strategy explicit (`auto-tag`, `manual-tag`, `none`) and made `auto-tag.yml` conditional on a valid version source.
+- Generalized publish gating to cover registry push, package publish, GitHub Release, deployment gates, and PR/branch Docker validation with `push: false`.
+- Added extension rules for container image scanning, NuGet vulnerability scanning, Sonar/SonarCloud report export, branch policy, integration tests, safety E2E, and coverage providers.
 
 ### 1.0.1 (2026-05-21)
 - Fixed: Rule ID collision — Dependabot rules CI-CDW-52/53 overlapped with Semgrep rules CI-CDW-52/53. Renumbered Dependabot (52→54, 53→55, 54→56, 55→57), Docs (56→58, 57→59, 58→60), Concurrency (59→61, 60→62), .NET (61→63, 62→64, 63→65, 64→66, 65→67), PR Feedback (66→68, 67→69).
@@ -891,5 +933,5 @@ See `templates/auto-tag.yml.j2` for the Jinja2 template.
 ### 1.0.0 (2026-05-20)
 - Initial standard: Unicode CI pipeline (lint, test, docker-smoke), Docker publish, auto-tag, unified action versions, Semgrep security scanning, Dependabot dependency management, documentation validation (CAFDS), Codecov integration, .NET CI variant, PR feedback patterns, concurrency best practices.
 - Scope: Python + Docker (primary), .NET + NuGet (variant), polyglot projects.
-- Rules: `[CI-CDW-1]` through `[CI-CDW-69]` covering workflow files, action versions, Python version, CI structure (3 jobs), lint quality gates, test coverage, Docker smoke, publish (multi-arch + attestation), auto-tag, documentation validation, project config contract, customizations, source layout variants, Docker-less projects, service integration, standard versioning, non-MCP smoke, Semgrep scanning, Dependabot, docs validation, concurrency, .NET variant, PR feedback.
+- Rules: `[CI-CDW-1]` through `[CI-CDW-76]` covering workflow files, action versions, Python version, CI structure, lint quality gates, test coverage, Docker smoke, publish gates, attestation, release strategy, documentation validation, project config contract, customizations, source layout variants, Docker-less projects, service integration, standard versioning, non-MCP smoke, Semgrep scanning, Dependabot, docs validation, concurrency, .NET variants, PR feedback, container scanning, dependency vulnerability scans, Sonar/SonarCloud reporting, branch policy, integration tests, safety E2E, and coverage providers.
 - Action versions pinned: checkout@v6, setup-python@v6, buildx@v4, login@v4, metadata@v6, build-push@v7, attest@v4, gh-release@v3, codecov@v6, upload-artifact@v4, semgrep-action@v1, upload-sarif@v4, cache@v5, setup-dotnet@v5, github-script@v9, changed-files@v47, test-reporter@v3.

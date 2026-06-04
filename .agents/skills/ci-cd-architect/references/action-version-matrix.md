@@ -1,5 +1,7 @@
 # Action Version Matrix
 
+Generated workflow files SHOULD pin GitHub Actions to a full commit SHA and include a trailing approved-version comment, for example `actions/checkout@<sha> # v6`. Templates MAY use the approved major-version tags below because they are later resolved during generation. When auditing, treat a SHA pin as compliant only when the accompanying comment matches this matrix.
+
 > **Standard Version:** 1.0.0
 > **Reference:** `ref.ci-cd-standard` Rule 2 and Rule 13
 
@@ -35,6 +37,9 @@ This document tracks the history of GitHub Action versions used across CI/CD sta
 | `tj-actions/changed-files` | `v47` | Detect changed files |
 | `dorny/test-reporter` | `v3` | Publish test results |
 | `marocchino/sticky-pull-request-comment` | `v3` | Post coverage summary to PR |
+| `aquasecurity/trivy-action` | `v0.36.0` | Container image vulnerability scanning |
+| `azure/setup-kubectl` | `v4` | Install kubectl for explicit opt-in Kubernetes E2E workflows |
+| `actions/setup-java` | `v5` | Java runtime for scanners/tools that require it |
 
 **Language versions:**
 | Language | Version |
@@ -44,8 +49,12 @@ This document tracks the history of GitHub Action versions used across CI/CD sta
 
 ## Version History
 
+### v1.1.0 (2026-06-04) — Extension workflow support
+
+Adds SHA-pin audit policy and action entries used by container scanning and explicit opt-in Kubernetes E2E workflows.
+
 ### v1.0.0 (2026-05-20) — Initial deployed standard
 
 First version deployed across production MCP server projects. Covers Python + Docker (primary), .NET + NuGet (variant), polyglot projects. Includes CI pipeline, Docker publish, auto-tag, Semgrep security scanning, Dependabot, documentation validation, concurrency best practices, and PR feedback patterns.
 
-All action versions are pinned at their latest stable major versions as of May 2026.
+All action versions are pinned at their latest stable major versions as of June 2026.
