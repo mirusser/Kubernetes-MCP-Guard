@@ -60,6 +60,7 @@ InfraGate.sln.DotSettings.user
 .junie/
 .omo/
 .opencode/
+.serena/
 
 # ── Agent runtime & skills ───────────────────────────────────────────────────
 agents/

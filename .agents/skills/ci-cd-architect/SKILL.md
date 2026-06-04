@@ -18,12 +18,12 @@ Your rulebook is `ci-cd-standard.md`. You enforce every `[L1+]` invariant as abs
 ## Core Operating Directives
 
 1. **Config-Driven Over Hardcoded:** All project parameters come from the configuration contract (`.github/ci-cd-config.yaml` or `pyproject.toml [tool.ci-cd]`). Never hardcode project-specific values in workflow files.
-2. **Unified Standard Over Local Variation:** All compliant projects MUST follow the same workflow structure. Reject per-project drift in action versions, job ordering, quality gates, or publish triggers.
-3. **Version-Locked Actions:** Every GitHub Action version is pinned in the standard. Upgrading an action requires updating the standard first, then propagating to all projects.
+2. **Standard Core Plus Named Extensions:** All compliant projects MUST keep the standard core workflow responsibilities and may add only named extension workflows from the standard (security scans, dependency scans, docs validation, integration/E2E, Sonar, deployment gates). Reject unclassified per-project drift in action versions, job ordering, quality gates, or publish/deploy triggers.
+3. **Version-Locked Actions:** Every GitHub Action version is pinned in the standard. Major-version tags are accepted only in templates; generated workflows SHOULD pin the resolved commit SHA with a trailing version comment (for example `actions/checkout@<sha> # v6`). Upgrading an action requires updating the standard first, then propagating to all projects.
 4. **Fail Explicitly, Not Silently:** Linting and security checks MUST fail the pipeline on real issues. No `|| true` on bandit, no `--ignore` on ruff, no `--ignore-missing-imports` on mypy.
-5. **Test Everything Before Publishing:** The publish workflow triggers on CI success, not independently. A Docker image must never be published if tests failed.
-6. **Automate Versioning:** Every project gets `auto-tag.yml`. Manual tagging is a process failure.
-7. **Documentation is Code:** Every documentation file (except README) MUST pass AFDS validation in CI. README MUST reference the AFDS standard.
+5. **Test Everything Before Publishing:** Docker validation may build images on PRs and branch pushes, but registry pushes, releases, and deployments MUST be gated by CI success or an equivalent in-workflow dependency chain. A Docker image must never be published if required tests failed.
+6. **Make Release Strategy Explicit:** Projects use `auto-tag.yml` only when the configuration contract declares a valid automatic version source. .NET or Docker-only projects without a version source MUST declare `release_strategy: manual-tag` or `none` instead of receiving a broken auto-tag workflow.
+7. **Documentation is Code:** Documentation validation is required when the repository declares a docs validation contract or has a validation script/config. Repositories with substantial Markdown but no validator should add the contract and workflow together rather than generating an inert workflow.
 8. **Project Classification First:** Before making any changes, classify the project (MCP/non-MCP, Docker/dockerless, source layout variant). The classification determines which templates and rules apply.
 
 ## Project Classification (ALWAYS DO THIS FIRST)
@@ -253,7 +253,7 @@ Use this when a project's workflows are based on an older version of the standar
 
 ## Strict Constraints (The "Never Do This" List)
 
-- **NEVER** use different GitHub Action versions across projects. All projects use the exact versions from `ci-cd-standard.md` Rule 2. Version drift is a standards violation.
+- **NEVER** use different GitHub Action versions across projects. All projects use the exact versions from `ci-cd-standard.md` Rule 2. In generated workflows, prefer commit SHA pins with a trailing standard-version comment (`# vN`); in templates, major-version tags remain acceptable placeholders. Version drift is a standards violation.
 - **NEVER** combine `lint` and `test` into a single CI job. They are sequential stages with separate responsibilities.
 - **NEVER** add `|| true`, `|| exit 0`, or `continue-on-error: true` to bandit, mypy, or ruff steps. Real issues must fail the pipeline. This is `[RULE: CI-CDW-9]`.
 - **NEVER** use `--ignore=E501` or any other ruff suppression flag. The standard linting rules apply uniformly. Exemptions go in `pyproject.toml`. This is `[RULE: CI-CDW-7]`.
@@ -261,11 +261,13 @@ Use this when a project's workflows are based on an older version of the standar
 - **NEVER** hardcode version numbers in Docker publish tags (e.g., `value=1.2.0`). Tags must be derived from Git refs only. This is `[RULE: CI-CDW-24]`.
 - **NEVER** build the Docker image twice in the same CI run (once in `docker-build` and again in `smoke-test`). The `docker-smoke` job builds once and tests the same image. This is `[RULE: CI-CDW-15]`.
 - **NEVER** skip the Docker smoke test in CI. Every commit must verify that the Docker image starts and serves correctly. This is `[RULE: CI-CDW-16]`.
+- **NEVER** publish or deploy a Docker image if required CI tests failed. `publish.yml` must depend on successful `ci.yml` via `workflow_run`, `workflow_call`, required checks, or an equivalent in-workflow `needs:` chain. PR/branch Docker validation may build with `push: false`; registry pushes must be gated. `[RULE: CI-CDW-19]`.
 - **NEVER** publish a Docker image without artifact attestation. Every image pushed to GHCR must have a signed attestation. This is `[RULE: CI-CDW-22]`.
 - **NEVER** publish single-architecture Docker images. All images must be built for `linux/amd64` and `linux/arm64`. This is `[RULE: CI-CDW-20]`.
 - **NEVER** name the publish workflow anything other than `publish.yml`. It is not `docker-publish.yml` or `release.yml`. This is `[RULE: CI-CDW-2]`.
-- **NEVER** omit `auto-tag.yml` from a project. Every compliant project must auto-tag on PR merge. This is `[RULE: CI-CDW-27]`.
-- **NEVER** create a fourth workflow file beyond `ci.yml`, `publish.yml`, and `auto-tag.yml`. Additional CI concerns must fit within these three files. This is `[RULE: CI-CDW-1]`. (Exception: Docker-less projects may omit `publish.yml` per `[RULE: CI-CDW-35]`.)
+- **NEVER** omit release strategy from the configuration contract. Use `auto-tag.yml` only for `release_strategy: auto-tag`; use `manual-tag` when tags are intentionally created by humans or another release process; use `none` for projects that do not release artifacts. `[RULE: CI-CDW-27]`.
+- **NEVER** create an unclassified workflow file. Core workflows are `ci.yml`, publish/release workflows when enabled, and `auto-tag.yml` only when `release_strategy: auto-tag`. Extension workflows are allowed only when they map to standard extension categories such as Semgrep, dependency scan, container scan, Sonar, docs validation, integration tests, Keycloak tests, safety E2E, or deployment gates. `[RULE: CI-CDW-1]`.
+- **NEVER** add `auto-tag.yml` unless the configuration contract declares `release_strategy: auto-tag` and a valid `version_source`. Manual-tag and no-release projects must declare that explicitly. `[RULE: CI-CDW-27]`.
 - **NEVER** use a Python version older than the latest stable release. The standard tracks the current latest (3.14 at time of writing). This is `[RULE: CI-CDW-4]`.
 - **NEVER** place project-specific values directly in workflow files when a configuration contract exists. All substitutions come from `.github/ci-cd-config.yaml` or `pyproject.toml [tool.ci-cd]`. This is `[RULE: CI-CDW-32]`.
 - **NEVER** remove `needs: lint` from `test` or `needs: test` from `docker-smoke`. Sequential execution is mandatory. This is `[RULE: CI-CDW-5]`.
@@ -274,6 +276,8 @@ Use this when a project's workflows are based on an older version of the standar
 - **NEVER** omit `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` from workflows using JavaScript actions. This is `[RULE: CI-CDW-62]`.
 - **NEVER** skip Semgrep security scanning. Every project must have `semgrep.yml` and `semgrep-scheduled.yml`. This is `[RULE: CI-CDW-47]`.
 - **NEVER** omit `.github/dependabot.yml`. Automated dependency updates are mandatory. This is `[RULE: CI-CDW-54]`.
+- **NEVER** skip container vulnerability scanning for Docker image workflows. Use Trivy or an equivalent scanner, fail on configured high-severity findings, and upload SARIF when produced. `[RULE: CI-CDW-70]`.
+- **NEVER** mark `use_codecov: true` unless a Codecov upload step exists. Use `coverage_provider: codecov`, `sonarcloud`, `artifact`, or `none` to match where coverage is actually consumed. `[RULE: CI-CDW-76]`.
 - **NEVER** post duplicate PR comments from CI bots. Always search for the marker first and update the existing comment. This is `[RULE: CI-CDW-69]`.
 - **NEVER** skip the SARIF upload step in Semgrep. Security findings must be visible in the GitHub Security tab. This is `[RULE: CI-CDW-49]`.
 
@@ -282,8 +286,9 @@ Use this when a project's workflows are based on an older version of the standar
 When reviewing CI/CD workflows against this standard, verify every invariant. Cite violations by rule ID from `ci-cd-standard.md`:
 
 **File Structure:**
-- [ ] Exactly three workflow files exist (or two for dockerless): `ci.yml`, `publish.yml`, `auto-tag.yml` — `[RULE: CI-CDW-1]`
+- [ ] Core workflows and all extension workflows are classified by standard category; no unclassified workflows exist — `[RULE: CI-CDW-1]`
 - [ ] Workflow files are named correctly — `[RULE: CI-CDW-2]`
+- [ ] All `uses:` entries match the action-version matrix; generated workflows use approved SHA pins with version comments or documented template major tags — `[RULE: CI-CDW-3]`
 - [ ] `.github/ci-cd-config.yaml` or `pyproject.toml [tool.ci-cd]` exists — `[RULE: CI-CDW-32]`
 
 **Action Versions:**
@@ -319,7 +324,7 @@ When reviewing CI/CD workflows against this standard, verify every invariant. Ci
 - [ ] For non-MCP: at minimum a health endpoint is verified — `[RULE: CI-CDW-45]`
 
 **publish.yml:**
-- [ ] Three triggers: `workflow_run`, `tags v*`, `workflow_dispatch` — `[RULE: CI-CDW-19]`
+- [ ] Registry push, release, and deployment paths are gated by CI success (`workflow_run`, `workflow_call`, required checks, or equivalent `needs:` chain); PR/branch Docker validation does not push images — `[RULE: CI-CDW-19]`
 - [ ] Multi-arch: `linux/amd64,linux/arm64` — `[RULE: CI-CDW-20]`
 - [ ] Docker tags: semver + sha + latest (no hardcoded versions) — `[RULE: CI-CDW-21]`, `[RULE: CI-CDW-24]`
 - [ ] Artifact attestation with `push-to-registry: true` — `[RULE: CI-CDW-22]`
@@ -329,11 +334,13 @@ When reviewing CI/CD workflows against this standard, verify every invariant. Ci
 
 **auto-tag.yml:**
 - [ ] Triggered by PR merge to main — `[RULE: CI-CDW-27]`
-- [ ] Extracts version from `pyproject.toml` — `[RULE: CI-CDW-27]`
+- [ ] `release_strategy` is declared; `auto-tag.yml` exists only when `release_strategy: auto-tag` and `version_source` is valid — `[RULE: CI-CDW-27]`
 - [ ] Bot name follows `<project>-bot` pattern — `[RULE: CI-CDW-28]`
 
 **Project-Specific:**
 - [ ] Configuration contract exists and all placeholders substituted — `[RULE: CI-CDW-32]`
+- [ ] Branch policy is declared (`ci_branches`, `release_branches`, `deploy_branches`) and workflow triggers follow it — `[RULE: CI-CDW-73]`
+- [ ] `coverage_provider` matches the actual coverage consumer (`codecov`, `sonarcloud`, `artifact`, or `none`) — `[RULE: CI-CDW-76]`
 - [ ] `language` field correctly set — `python` / `dotnet` / `polyglot`
 - [ ] No prohibited customizations present — `[RULE: CI-CDW-33]`
 - [ ] Documentation conforms to AFDS standard where applicable — `[RULE: CI-CDW-30]`
@@ -349,6 +356,11 @@ When reviewing CI/CD workflows against this standard, verify every invariant. Ci
 - [ ] `SEMGREP_BASELINE_REF` env var present — `[RULE: CI-CDW-52]`
 - [ ] SARIF upload guarded with `hashFiles('semgrep.sarif')` — `[RULE: CI-CDW-53]`
 
+**Security Extensions:**
+- [ ] Docker image workflows run a container vulnerability scan before publishing/deploying, fail on configured high-severity findings, and upload SARIF when produced — `[RULE: CI-CDW-70]`
+- [ ] .NET projects with NuGet dependencies run `dotnet list package --vulnerable --include-transitive`; critical/high findings fail the workflow — `[RULE: CI-CDW-71]`
+- [ ] Sonar/SonarCloud workflows export quality gate, measures, issues, and hotspots when configured for agent-ingestible reporting — `[RULE: CI-CDW-72]`
+
 **Dependabot (L1+):**
 - [ ] `.github/dependabot.yml` exists — `[RULE: CI-CDW-54]`
 - [ ] `github-actions` ecosystem present, weekly interval — `[RULE: CI-CDW-55]`
@@ -356,7 +368,7 @@ When reviewing CI/CD workflows against this standard, verify every invariant. Ci
 - [ ] All ecosystems use `groups:` with `patterns: ["*"]` — `[RULE: CI-CDW-57]`
 
 **Docs Validation (L2+):**
-- [ ] `docs-validation.yml` exists when project has `**/*.md` beyond README — `[RULE: CI-CDW-58]`
+- [ ] Repositories with documentation validation enabled have both a validator contract/script and `docs-validation.yml`; repositories with substantial docs but no validator are reported as a contract gap — `[RULE: CI-CDW-58]`
 - [ ] Uses `paths` filter and `tj-actions/changed-files` — `[RULE: CI-CDW-59]`
 - [ ] PR comment with `<!-- docs-validation-bot -->` marker — `[RULE: CI-CDW-60]`
 
@@ -416,6 +428,11 @@ The `templates/` directory contains Jinja2 templates for all workflow files plus
 | `templates/semgrep.yml.j2` | PR security scan (p/auto + p/secrets + p/owasp-top-ten) | L1+ |
 | `templates/semgrep-scheduled.yml.j2` | Daily full security scan | L2+ |
 | `templates/dependabot.yml.j2` | Multi-ecosystem dependency management | L1+ |
+| `templates/dependency-scan.yml.j2` | NuGet/package vulnerability scan | L2+ (when `use_dependency_scan: true`) |
+| `templates/container-scan.yml.j2` | Docker image vulnerability scan or publish-workflow scan block | L2+ (when `use_docker: true`) |
+| `templates/sonar.yml.j2` | Sonar/SonarCloud quality gate and agent-ingestible report export | L2+ (when `coverage_provider: sonarcloud` or `use_sonar: true`) |
+| `templates/integration-tests.yml.j2` | Self-hosted or service-backed integration tests | L2+ (when `integration_test_profile` exists) |
+| `templates/safety-e2e.yml.j2` | Manual safety/E2E workflow guarded by explicit opt-in inputs | L2+ (when `safety_e2e_profile` exists) |
 | `templates/docs-validation.yml.j2` | Documentation validation (Markdown quality) | L2+ (when docs exist) |
 | `templates/dotnet-ci.yml.j2` | .NET CI pipeline (restore → format → build → test → pack) | L2+ (when `language: dotnet`) |
 | `templates/ci-cd-config.example.yaml` | Annotated example of all configuration contract fields | Reference |
@@ -430,8 +447,8 @@ GitHub's `matrix` strategy is for running the same job with different parameters
 ### ADR-2: Why `.github/ci-cd-config.yaml` instead of only `pyproject.toml`?
 `pyproject.toml` is a Python packaging file. CI/CD configuration is an orthogonal concern. A dedicated file avoids polluting the packaging config and is easier for non-Python tooling to consume. However, `pyproject.toml [tool.ci-cd]` is accepted as a fallback.
 
-### ADR-3: Why mandatory `auto-tag.yml` instead of GitHub's automatic release tags?
-GitHub's automatic release creation from tags does not create the tag itself. Someone (or something) must run `git tag` and `git push --tags`. The `auto-tag.yml` workflow automates this, ensuring the version in `pyproject.toml` is always the SSOT for the tag name.
+### ADR-3: Why explicit release strategy instead of always generating `auto-tag.yml`?
+GitHub's automatic release creation from tags does not create the tag itself. Someone or something must run `git tag` and `git push --tags`. Use `auto-tag.yml` only when the project has a valid version source (`pyproject.toml`, `Directory.Build.props`, or another standard-declared source). .NET and Docker-only projects without such a source must declare `release_strategy: manual-tag` or `none` so the workflow set is honest instead of generating a broken tagger.
 
 ### ADR-4: Why `--strict` on mypy instead of gradual typing?
 Gradual typing allows projects to have partial type coverage. This standard enforces full type coverage because CI pipelines are the enforcement mechanism for code quality. Projects configure type ignores in `pyproject.toml`, not in CI.
