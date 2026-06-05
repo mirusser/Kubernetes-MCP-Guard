@@ -186,8 +186,7 @@ Observer adds a fan-in barrier: `.AddFanInBarrierEdge(parseExecutors, aggregate)
 **DAG = Directed Acyclic Graph.** *Directed* = every edge is one-way (`A → B`). *Acyclic* = following edges forward, you never return to a visited node; data flows strictly "downhill" from input to output.
 
 InfraGate's Observer shape (`ObservationCycleRunner.cs:254-268`):
-
-```
+```text
               ┌─ snapshot-0 → observer-agent-0 → parse-0     ─┐
 cycle-input ──┤   ┌─ snapshot-1 → observer-agent-1 → parse-1 ─┤── (fan-in barrier) → aggregate → OUTPUT
    (fan-out)  └─ … snapshot-N → observer-agent-N → parse-N   ─┘
@@ -213,8 +212,7 @@ Key reframing: **in LangGraph the canonical cycle is the ReAct tool-calling loop
 - **Level A — the agent's own tool loop (already present).** `UseFunctionInvocation` runs think/act/observe internally, capped by `MaximumIterationsPerRequest`. `DecideExecutor` calls the agent **once** (`agent.RunAsync`, `DecideExecutor.cs:115`); the loop is hidden inside, bounded by `maxToolIterations` (`DecideExecutor.cs:112`, from `opts.MaxToolIterations`, `BatchProcessor.cs:232`). The graph stays a DAG.
 
 - **Level B — a real graph-level loop (back-edge + conditional edge).** Use `AddEdge(source, target, condition: Func<object?, bool>)`:
-
-  ```
+  ```text
   decide ──→ validate ──(valid)──────────────→ propose → OUTPUT
      ▲            │
      └──(invalid && attempts < N)──────────────┘   ← back-edge

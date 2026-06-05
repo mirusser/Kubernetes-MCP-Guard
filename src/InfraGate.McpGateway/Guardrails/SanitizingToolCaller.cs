@@ -6,7 +6,8 @@ namespace InfraGate.McpGateway;
 internal sealed class SanitizingToolCaller(
     IDownstreamMcpClient inner,
     IGuardrailAuditStore auditStore,
-    IHttpContextAccessor? httpContextAccessor) : IToolCaller
+    IHttpContextAccessor? httpContextAccessor,
+    ILogger<SanitizingToolCaller> logger) : IToolCaller
 {
     public async Task<string> CallAsync(
         string toolName,
@@ -20,7 +21,8 @@ internal sealed class SanitizingToolCaller(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            rawResponse = $"Tool call failed: {ex.GetType().Name}: {ex.Message}";
+            logger.LogError(ex, "Downstream tool call '{ToolName}' failed", toolName);
+            rawResponse = "Tool call failed";
         }
 
         var sanitized = PromptInjectionGuard.SanitizeResponse(rawResponse ?? string.Empty);

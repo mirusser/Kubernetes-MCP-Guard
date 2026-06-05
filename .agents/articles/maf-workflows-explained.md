@@ -127,8 +127,7 @@ InfraGate runs two MAF Workflows in production. Both are DAGs — fan out, do pe
 collect.
 
 ### Observer — the "watcher" (`InfraGate.Observer/Cycle/ObservationCycleRunner.cs`)
-
-```
+```text
                     ┌▶ snapshot(ns-a) ─▶ agent(ns-a) ─▶ parse(ns-a) ─┐
 cycleInput ─fanout──┼▶ snapshot(ns-b) ─▶ agent(ns-b) ─▶ parse(ns-b) ─┼─[BARRIER]─▶ aggregate ─▶ output
                     └▶ snapshot(ns-c) ─▶ agent(ns-c) ─▶ parse(ns-c) ─┘
@@ -140,8 +139,7 @@ for **every** namespace lane before emitting the combined `AnomalyBatch`. The ba
 real rule: *don't report until all namespaces are in.*
 
 ### Planner — the "fixer" (`InfraGate.Planner/Cycle/BatchProcessor.cs`)
-
-```
+```text
                      ┌▶ filter ─▶ dedupe ─▶ decide ─▶ validate ─▶ propose ─┐
 batchIntake ─fanout──┼▶ filter ─▶ dedupe ─▶ decide ─▶ validate ─▶ propose ─┼▶ outputs
                      └▶ ...                                                 ┘

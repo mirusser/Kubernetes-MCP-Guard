@@ -87,7 +87,8 @@ internal static class ConfigurationExtensions
                 new SanitizingToolCaller(
                     sp.GetRequiredService<IDownstreamMcpClient>(),
                     sp.GetRequiredService<IGuardrailAuditStore>(),
-                    sp.GetRequiredService<IHttpContextAccessor>()));
+                    sp.GetRequiredService<IHttpContextAccessor>(),
+                    sp.GetRequiredService<ILogger<SanitizingToolCaller>>()));
             builder.Services.AddKubernetesAdapter();
             builder.Services.AddSingleton<DownstreamToolRegistry>();
             builder.Services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();

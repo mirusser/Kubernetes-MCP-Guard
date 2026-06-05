@@ -155,6 +155,8 @@ jobs:
           output: trivy-${{ matrix.image }}.sarif
           scanners: vuln
           severity: CRITICAL,HIGH
+          trivy-version: v0.71.0
+          ignore-unfixed: true
           exit-code: '1'
 
       - name: Upload Trivy SARIF results

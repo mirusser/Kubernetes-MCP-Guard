@@ -1,9 +1,12 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace InfraGate.McpGateway.KeycloakTests.UnitTests;
 
 public sealed class KeycloakRealmFileTests
 {
+    private static readonly JsonSerializerOptions PrettyPrint = new() { WriteIndented = true };
+
     [Fact]
     public async Task RealmFiles_DeployAndTestData_AreEquivalentJson()
     {
@@ -11,12 +14,18 @@ public sealed class KeycloakRealmFileTests
         var deployRealmPath = Path.Combine(repoRoot, "deploy", "keycloak", "infra-gate-realm.json");
         var testRealmPath = Path.Combine(repoRoot, "tests", "TestData", "keycloak", "infra-gate-realm.json");
 
-        JsonNode? deployRealm = JsonNode.Parse(await File.ReadAllTextAsync(deployRealmPath));
-        JsonNode? testRealm = JsonNode.Parse(await File.ReadAllTextAsync(testRealmPath));
+        string deployJson = await File.ReadAllTextAsync(deployRealmPath);
+        string testJson = await File.ReadAllTextAsync(testRealmPath);
 
-        Assert.True(
-            JsonNode.DeepEquals(deployRealm, testRealm),
-            "Deploy and test Keycloak realm JSON must remain semantically equivalent.");
+        JsonNode? deployRealm = JsonNode.Parse(deployJson);
+        JsonNode? testRealm = JsonNode.Parse(testJson);
+
+        if (!JsonNode.DeepEquals(deployRealm, testRealm))
+        {
+            string deployPretty = deployRealm!.ToJsonString(PrettyPrint);
+            string testPretty = testRealm!.ToJsonString(PrettyPrint);
+            Assert.Equal(deployPretty, testPretty);
+        }
     }
 
     private static string FindRepoRoot()
