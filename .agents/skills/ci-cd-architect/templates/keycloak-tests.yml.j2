@@ -1,0 +1,45 @@
+# keycloak-tests.yml - Keycloak Integration Tests
+#
+# Substitution variables:
+# {{ dotnet_version }}          - .NET SDK version
+# {{ keycloak_test_project }}   - test project path
+
+name: Keycloak Integration Tests
+
+on:
+  pull_request:
+  push:
+    branches: {{ ci_branches | default(["main"]) }}
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keycloak-tests-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  keycloak-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: {{ dotnet_version | default("10.0.x") }}
+
+      - name: Restore
+        run: dotnet restore {{ keycloak_test_project }}
+
+      - name: Build
+        run: dotnet build {{ keycloak_test_project }} --configuration Release --no-restore
+
+      - name: Run Keycloak integration tests
+        run: dotnet test {{ keycloak_test_project }} --configuration Release --no-build --filter "Category=Keycloak" --logger "console;verbosity=normal"

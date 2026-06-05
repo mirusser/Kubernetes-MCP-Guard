@@ -46,16 +46,16 @@ Before inspecting or modifying any workflow, determine the project's archetype. 
 
 ### Classification → Template Selection
 
-| Archetype | CI Template | Publish | Auto-tag | Additional Workflows |
-|-----------|------------|---------|----------|----------------------|
-| Python + MCP + Docker + `src/` | `ci.yml.j2` (MCP, variant A) | `publish.yml.j2` | `auto-tag.yml.j2` | semgrep, dependabot, docs-val* |
-| Python + MCP + Docker + `tools/` | `ci.yml.j2` (MCP, variant B) | `publish.yml.j2` | `auto-tag.yml.j2` | semgrep, dependabot, docs-val* |
-| Python + non-MCP + Docker | `ci.yml.j2` (non-MCP) | `publish.yml.j2` | `auto-tag.yml.j2` | semgrep, dependabot, docs-val* |
-| Python + Dockerless | `ci.yml.j2` (smoke job) | N/A | `auto-tag.yml.j2` | semgrep, dependabot, docs-val* |
-| .NET + `*.sln` | `dotnet-ci.yml.j2` | N/A (NuGet pack inline) | `auto-tag.yml.j2` | semgrep, dependabot, docs-val* |
-| Polyglot (Python + .NET) | Both `ci.yml.j2` + `dotnet-ci.yml.j2` | `publish.yml.j2` | `auto-tag.yml.j2` | semgrep, dependabot, docs-val* |
+| Archetype | CI Template | Publish / Release | Release Strategy | Additional Workflows |
+|-----------|------------|-------------------|------------------|----------------------|
+| Python + MCP + Docker + `src/` | `ci.yml.j2` (MCP, variant A) | `publish.yml.j2` | `auto-tag.yml.j2` only for `release_strategy: auto-tag` | semgrep, dependabot, dependency/container scan, docs-val* |
+| Python + MCP + Docker + `tools/` | `ci.yml.j2` (MCP, variant B) | `publish.yml.j2` | `auto-tag.yml.j2` only for `release_strategy: auto-tag` | semgrep, dependabot, dependency/container scan, docs-val* |
+| Python + non-MCP + Docker | `ci.yml.j2` (non-MCP) | `publish.yml.j2` | `auto-tag.yml.j2` only for `release_strategy: auto-tag` | semgrep, dependabot, dependency/container scan, docs-val* |
+| Python + Dockerless | `ci.yml.j2` (smoke job) | N/A | `auto-tag.yml.j2` only for `release_strategy: auto-tag` | semgrep, dependabot, dependency scan, docs-val* |
+| .NET + `*.sln` | `dotnet-ci.yml.j2` | optional publish/deploy workflow from config | `manual-tag` by default unless a valid `version_source` exists | semgrep, dependabot, dependency scan, sonar, integration/keycloak/safety E2E |
+| Polyglot (Python + .NET) | Both `ci.yml.j2` + `dotnet-ci.yml.j2` or a generated merged workflow | `publish.yml.j2` when Docker/release enabled | declare `auto-tag`, `manual-tag`, or `none` | semgrep, dependabot, dependency/container scan, sonar/docs/integration as configured |
 
-*`docs-val` = `docs-validation.yml.j2` — generated only when `use_docs_validation: true` or `docs/` directory exists.
+*`docs-val` = `docs-validation.yml.j2` — generated only when `use_docs_validation: true` and a validator contract/script exists; otherwise report a docs-validation contract gap.
 
 ### Always-Generated Workflows (L1+)
 
@@ -113,7 +113,7 @@ Use this when asked to review or audit existing workflows. Produces a structured
    - For MCP: exact tool count assertion, REST API tools endpoint → `[RULE: CI-CDW-16]`
 
 9. **Check Publish Workflow:**
-   - Three triggers: `workflow_run`, `push tags v*`, `workflow_dispatch` → `[RULE: CI-CDW-19]`
+   - Registry push, release, package publish, and deployment paths are gated by CI success; PR/branch Docker validation never pushes images → `[RULE: CI-CDW-19]`
    - Multi-arch platforms → `[RULE: CI-CDW-20]`
    - Docker tags: semver + sha + latest, no hardcoded versions → `[RULE: CI-CDW-21]`, `[RULE: CI-CDW-24]`
    - Artifact attestation with `push-to-registry: true` → `[RULE: CI-CDW-22]`
@@ -432,6 +432,7 @@ The `templates/` directory contains Jinja2 templates for all workflow files plus
 | `templates/container-scan.yml.j2` | Docker image vulnerability scan or publish-workflow scan block | L2+ (when `use_docker: true`) |
 | `templates/sonar.yml.j2` | Sonar/SonarCloud quality gate and agent-ingestible report export | L2+ (when `coverage_provider: sonarcloud` or `use_sonar: true`) |
 | `templates/integration-tests.yml.j2` | Self-hosted or service-backed integration tests | L2+ (when `integration_test_profile` exists) |
+| `templates/keycloak-tests.yml.j2` | Keycloak/OIDC integration tests | L2+ (when `keycloak_test_project` exists) |
 | `templates/safety-e2e.yml.j2` | Manual safety/E2E workflow guarded by explicit opt-in inputs | L2+ (when `safety_e2e_profile` exists) |
 | `templates/docs-validation.yml.j2` | Documentation validation (Markdown quality) | L2+ (when docs exist) |
 | `templates/dotnet-ci.yml.j2` | .NET CI pipeline (restore → format → build → test → pack) | L2+ (when `language: dotnet`) |

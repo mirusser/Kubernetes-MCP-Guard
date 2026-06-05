@@ -1,0 +1,88 @@
+# sonar.yml - Sonar/SonarCloud Analysis and Report Export
+#
+# Substitution variables:
+# {{ dotnet_solution }}      - solution path
+# {{ dotnet_version }}       - .NET SDK version
+
+name: SonarCloud Analysis
+
+on:
+  pull_request:
+  push:
+    branches: {{ ci_branches | default(["main"]) }}
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonar-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  sonar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: {{ dotnet_version | default("10.0.x") }}
+
+      - name: Restore
+        run: dotnet restore {{ dotnet_solution }}
+
+      - name: Begin Sonar scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet tool run dotnet-sonarscanner begin \
+            /k:"${{ vars.SONAR_PROJECT_KEY }}" \
+            /o:"${{ vars.SONAR_ORGANIZATION }}" \
+            /d:sonar.token="$SONAR_TOKEN" \
+            /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.cs.opencover.reportsPaths="TestResults/coverage/**/coverage.opencover.xml"
+
+      - name: Build
+        run: dotnet build {{ dotnet_solution }} --configuration Release --no-restore
+
+      - name: Test with coverage
+        run: dotnet test {{ dotnet_solution }} --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory TestResults/coverage -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+      - name: End Sonar scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: dotnet tool run dotnet-sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+
+      - name: Export SonarCloud report
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+        run: |
+          AUTH="$SONAR_TOKEN:"
+          BASE="https://sonarcloud.io/api"
+          curl -sf -u "$AUTH" "$BASE/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY" > sonar-quality-gate.json
+          curl -sf -u "$AUTH" "$BASE/issues/search?componentKeys=$SONAR_PROJECT_KEY&ps=500&statuses=OPEN,CONFIRMED&additionalFields=rules" > sonar-issues.json
+          curl -sf -u "$AUTH" "$BASE/hotspots/search?projectKey=$SONAR_PROJECT_KEY&ps=500" > sonar-hotspots.json
+          jq -n \
+            --arg generatedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg project "$SONAR_PROJECT_KEY" \
+            --slurpfile qualityGate sonar-quality-gate.json \
+            --slurpfile issues sonar-issues.json \
+            --slurpfile hotspots sonar-hotspots.json \
+            '{metadata: {generatedAt: $generatedAt, projectKey: $project}, qualityGate: $qualityGate[0], issues: $issues[0], hotspots: $hotspots[0]}' \
+            > sonarcloud-report.json
+
+      - name: Upload SonarCloud report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonarcloud-report
+          path: sonarcloud-report.json
+          retention-days: 7
