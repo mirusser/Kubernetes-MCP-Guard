@@ -11,4 +11,5 @@ public sealed record class KubernetesPlanDiff(
     string? ProposedObjectJson,
     string[] AddedPaths,
     string[] RemovedPaths,
-    string[] ChangedPaths);
+    string[] ChangedPaths,
+    string? ResourceVersion = null);

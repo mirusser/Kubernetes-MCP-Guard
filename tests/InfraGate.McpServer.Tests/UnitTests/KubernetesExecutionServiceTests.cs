@@ -19,7 +19,7 @@ public sealed class KubernetesExecutionServiceTests
             throw new InvalidOperationException("API must not be called when policy denies"));
         var service = CreateService(api);
 
-        var result = await service.ExecuteApplyManifestAsync(DemoNamespace, manifest, CancellationToken.None);
+        var result = await service.ExecuteApplyManifestAsync(DemoNamespace, manifest, resourceVersionsJson: null, CancellationToken.None);
 
         Assert.StartsWith(KubernetesConventions.ExecutionMessages.PolicyRefusal, result, StringComparison.Ordinal);
         Assert.Contains(expectedCode, result, StringComparison.Ordinal);
@@ -31,7 +31,7 @@ public sealed class KubernetesExecutionServiceTests
         await using var api = new TestKubernetesApi(_ => TestResponse.Json(SafeDeploymentResponse()));
         var service = CreateService(api);
 
-        var result = await service.ExecuteApplyManifestAsync(DemoNamespace, SafeDeploymentManifest, CancellationToken.None);
+        var result = await service.ExecuteApplyManifestAsync(DemoNamespace, SafeDeploymentManifest, resourceVersionsJson: null, CancellationToken.None);
 
         Assert.DoesNotContain(KubernetesConventions.ExecutionMessages.PolicyRefusal, result, StringComparison.Ordinal);
         Assert.Contains(KubernetesConventions.ExecutionMessages.ApplySuccess, result, StringComparison.Ordinal);
@@ -191,7 +191,7 @@ public sealed class KubernetesExecutionServiceTests
         await using var api = new TestKubernetesApi(_ => throw new InvalidOperationException("should not call k8s"));
         var service = CreateService(api);
 
-        var result = await service.ExecuteApplyManifestAsync("disallowed", SafeDeploymentManifest, CancellationToken.None);
+        var result = await service.ExecuteApplyManifestAsync("disallowed", SafeDeploymentManifest, resourceVersionsJson: null, CancellationToken.None);
 
         Assert.Contains("disallowed", result, StringComparison.Ordinal);
     }

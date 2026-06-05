@@ -42,6 +42,17 @@ public sealed class KubernetesPlanExecutor : IDomainPlanExecutor
         var plan = decodeResult.Plan;
         var payload = plan.Payload;
 
+        var resourceVersionBlock = await CheckResourceVersionAsync(plan, payload, ct).ConfigureAwait(false);
+        if (resourceVersionBlock is not null)
+        {
+            var audit = KubernetesAuditHelper.ApplyDriftDetected(
+                plan.Id,
+                plan.Operation,
+                payload.Namespace,
+                resourceVersionBlock.Message);
+            return DomainPlanExecutionResult.Blocked(resourceVersionBlock.Message, audit, resourceVersionBlock.ReasonCode);
+        }
+
         var driftBlock = await CheckLiveDriftAsync(plan, payload, ct).ConfigureAwait(false);
         if (driftBlock is not null)
         {
@@ -131,6 +142,33 @@ public sealed class KubernetesPlanExecutor : IDomainPlanExecutor
             ct).ConfigureAwait(false);
 
         return await DispatchAsync(plan.Operation, payload, ct).ConfigureAwait(false);
+    }
+
+    private async Task<ResultFailure?> CheckResourceVersionAsync(KubernetesPlan plan, KubernetesPlanPayload payload, CancellationToken ct)
+    {
+        var resourceVersionCheck = plan.Envelope.FreshnessPolicy.Checks
+            .FirstOrDefault(c => string.Equals(c.Type, KubernetesAdapterConventions.FreshnessCheckTypes.ResourceVersionCheck, StringComparison.Ordinal));
+
+        if (resourceVersionCheck is null || resourceVersionCheck.Parameters.Count == 0)
+        {
+            return null;
+        }
+
+        var parametersJson = JsonSerializer.Serialize(resourceVersionCheck.Parameters, jsonOptions);
+        var result = await toolCaller.CallAsync(
+            KubernetesAdapterConventions.EvidenceTools.CheckResourceVersion,
+            new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                [KubernetesAdapterConventions.EvidenceArguments.Namespace] = payload.Namespace,
+                [KubernetesAdapterConventions.EvidenceArguments.DiffsJson] = parametersJson
+            },
+            ct).ConfigureAwait(false);
+
+        return string.Equals(result, KubernetesAdapterConventions.DriftCheckResults.NoDrift, StringComparison.Ordinal)
+            ? null
+            : new ResultFailure(
+                $"Plan '{plan.Id}' cannot be executed: live resource versions have changed. {result}",
+                KubernetesAdapterConventions.ResultReasonCodes.ResourceVersionMismatch);
     }
 
     private async Task<ResultFailure?> CheckLiveDriftAsync(KubernetesPlan plan, KubernetesPlanPayload payload, CancellationToken ct)

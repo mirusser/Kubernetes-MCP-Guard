@@ -183,6 +183,64 @@ public sealed class KubernetesEvidenceService
         }
     }
 
+    public async Task<string> EvidenceCheckResourceVersionAsync(
+        string namespaceName,
+        string resourceVersionsJson,
+        CancellationToken cancellationToken)
+    {
+        var validation = KubernetesManagerHelpers.ValidateNamespace(options, namespaceName);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        Dictionary<string, string>? expectedVersions;
+        try
+        {
+            expectedVersions = JsonSerializer.Deserialize<Dictionary<string, string>>(
+                resourceVersionsJson, KubernetesManagerHelpers.JsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            return $"Could not parse resource versions: {ex.Message}";
+        }
+
+        if (expectedVersions is null || expectedVersions.Count == 0)
+        {
+            return KubernetesConventions.DriftCheckResult.NoDrift;
+        }
+
+        foreach (var (key, expectedVersion) in expectedVersions)
+        {
+            var (apiVersion, kind, ns, name) = ParseResourceVersionKey(key);
+            if (apiVersion is null || kind is null || ns is null || name is null)
+            {
+                return $"Could not parse resource version key '{key}'.";
+            }
+
+            try
+            {
+                var liveJson = await ReadLiveObjectAsJsonAsync(
+                    client, apiVersion, kind, ns, name, cancellationToken).ConfigureAwait(false);
+                var liveVersion = KubernetesObjectMetadataExtractor.ExtractResourceVersion(liveJson);
+
+                if (!string.Equals(liveVersion, expectedVersion, StringComparison.Ordinal))
+                {
+                    return $"ResourceVersion mismatch for {key}: expected {expectedVersion}, got {liveVersion ?? "null"}.";
+                }
+            }
+            catch (Exception ex) when (KubernetesManagerHelpers.IsNotFound(ex))
+            {
+                if (expectedVersion.Length > 0)
+                {
+                    return $"ResourceVersion mismatch for {key}: expected {expectedVersion}, object not found.";
+                }
+            }
+        }
+
+        return KubernetesConventions.DriftCheckResult.NoDrift;
+    }
+
     public async Task<string> EvidenceDiffManifestAsync(
         string namespaceName,
         string manifest,
@@ -601,6 +659,47 @@ public sealed class KubernetesEvidenceService
 
     private static string FormatObjectRef(IKubernetesObject<V1ObjectMeta> obj) =>
         $"{obj.ApiVersion} {obj.Kind} {obj.Metadata.NamespaceProperty}/{obj.Metadata.Name}";
+
+    private static (string? ApiVersion, string? Kind, string? Namespace, string? Name) ParseResourceVersionKey(string key)
+    {
+        var parts = key.Split(' ');
+        if (parts.Length != 3)
+        {
+            return (null, null, null, null);
+        }
+
+        var apiVersion = parts[0];
+        var kind = parts[1];
+        var nsAndName = parts[2].Split('/');
+        if (nsAndName.Length != 2)
+        {
+            return (null, null, null, null);
+        }
+
+        return (apiVersion, kind, nsAndName[0], nsAndName[1]);
+    }
+
+    private static async Task<string?> ReadLiveObjectAsJsonAsync(
+        IKubernetes client,
+        string apiVersion,
+        string kind,
+        string namespaceName,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        object liveObject = (apiVersion, kind) switch
+        {
+            (KubernetesConventions.KubernetesResources.AppsV1, KubernetesConventions.KubernetesResources.Deployment) =>
+                await client.AppsV1.ReadNamespacedDeploymentAsync(name, namespaceName, cancellationToken: cancellationToken).ConfigureAwait(false),
+            (KubernetesConventions.KubernetesResources.V1, KubernetesConventions.KubernetesResources.Service) =>
+                await client.CoreV1.ReadNamespacedServiceAsync(name, namespaceName, cancellationToken: cancellationToken).ConfigureAwait(false),
+            (KubernetesConventions.KubernetesResources.V1, KubernetesConventions.KubernetesResources.ConfigMap) =>
+                await client.CoreV1.ReadNamespacedConfigMapAsync(name, namespaceName, cancellationToken: cancellationToken).ConfigureAwait(false),
+            _ => throw new InvalidOperationException($"Unsupported resource type for resource version check: {apiVersion} {kind}.")
+        };
+
+        return JsonSerializer.Serialize(liveObject, KubernetesManagerHelpers.JsonOptions);
+    }
 
     private sealed record class DryRunObjectResult(
         KubernetesPlanDryRunObject Object,

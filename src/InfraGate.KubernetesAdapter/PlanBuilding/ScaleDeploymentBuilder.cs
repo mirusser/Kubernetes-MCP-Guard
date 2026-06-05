@@ -92,6 +92,6 @@ internal sealed class ScaleDeploymentBuilder(IKubernetesEvidenceService evidence
             payload,
             requester,
             approvalPolicy,
-            new FreshnessPolicy(deploymentFreshnessChecks));
+            BuildFreshnessPolicy(deploymentFreshnessChecks, diffs));
     }
 }

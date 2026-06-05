@@ -124,6 +124,7 @@ internal static class KubernetesConventions
         public const string DiffManifest = "diff_manifest";
         public const string CheckLiveDrift = "check_live_drift";
         public const string DiffDeployment = "diff_deployment";
+        public const string CheckResourceVersion = "check_resource_version";
 
         public const string ApplyManifest = "apply_manifest";
         public const string DeleteManifest = "delete_manifest";

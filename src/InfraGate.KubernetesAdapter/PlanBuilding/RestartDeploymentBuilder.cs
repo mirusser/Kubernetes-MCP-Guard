@@ -91,6 +91,6 @@ internal sealed class RestartDeploymentBuilder(IKubernetesEvidenceService eviden
             payload,
             requester,
             approvalPolicy,
-            new FreshnessPolicy(deploymentFreshnessChecks));
+            BuildFreshnessPolicy(deploymentFreshnessChecks, diffs));
     }
 }

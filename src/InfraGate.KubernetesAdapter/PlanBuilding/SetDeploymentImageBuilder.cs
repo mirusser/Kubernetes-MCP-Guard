@@ -110,6 +110,6 @@ internal sealed class SetDeploymentImageBuilder(IKubernetesEvidenceService evide
             payload,
             requester,
             approvalPolicy,
-            new FreshnessPolicy(deploymentFreshnessChecks));
+            BuildFreshnessPolicy(deploymentFreshnessChecks, diffs));
     }
 }

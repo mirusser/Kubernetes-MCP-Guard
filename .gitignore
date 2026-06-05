@@ -182,7 +182,6 @@ agents/
 .agents/skills/minimal-apis
 .agents/skills/mixed-reality
 .agents/skills/mlnet
-.agents/skills/modern-csharp
 .agents/skills/msbuild-antipatterns
 .agents/skills/msbuild-modernization
 .agents/skills/msbuild-server

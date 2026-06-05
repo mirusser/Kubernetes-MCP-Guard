@@ -24,6 +24,13 @@ internal sealed class ApplyManifestBuilder(IKubernetesEvidenceService evidenceSe
         }
 
         var policyResult = CheckManifestPolicy(manifest);
+        if (policyResult.HadError)
+        {
+            return PlanBuildResult.Failed(
+                "Manifest policy evaluation failed — the manifest could not be parsed or validated.",
+                KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked);
+        }
+
         if (policyResult.IsDenied)
         {
             var policyMessage = $"Manifest rejected by policy:{Environment.NewLine}{policyResult.FormatRefusal()}";
@@ -87,7 +94,7 @@ internal sealed class ApplyManifestBuilder(IKubernetesEvidenceService evidenceSe
             payload,
             requester,
             approvalPolicy,
-            new FreshnessPolicy(manifestFreshnessChecks));
+            BuildFreshnessPolicy(manifestFreshnessChecks, diffValues));
     }
 
     private async Task<DiffsResult> GetManifestDiffsAsync(

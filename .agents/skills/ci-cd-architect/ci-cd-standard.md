@@ -833,13 +833,13 @@ Extension workflows are permitted only when they map to declared configuration f
 
 ### Rule 24: Python Project Metadata Consistency
 
-**[RULE: CI-CDW-70] [L2+]** The `pyproject.toml` classifiers MUST include the Python version used in CI. When `python_version` is set to `"3.14"` in the configuration contract, classifiers SHALL include `"Programming Language :: Python :: 3.14"` and SHOULD include the two preceding stable versions (`3.13`, `3.12`). Outdated classifiers create confusion between the declared and actual runtime.
+**[RULE: CI-CDW-79] [L2+]** The `pyproject.toml` classifiers MUST include the Python version used in CI. When `python_version` is set to `"3.14"` in the configuration contract, classifiers SHALL include `"Programming Language :: Python :: 3.14"` and SHOULD include the two preceding stable versions (`3.13`, `3.12`). Outdated classifiers create confusion between the declared and actual runtime.
 
-**[RULE: CI-CDW-71] [L2+]** The `[tool.mypy]` section MUST include:
+**[RULE: CI-CDW-80] [L2+]** The `[tool.mypy]` section MUST include:
 - `python_version` set to the same value as the CI Python version (currently `"3.14"`)
 - `warn_unused_ignores = true` — stale `# type: ignore` comments are tech debt
 
-**[RULE: CI-CDW-72] [L2+]** The `python-version` in `ci.yml`, the `python_version` in `ci-cd-config.yaml`, `[tool.mypy].python_version`, `[tool.ruff].target-version`, and `pyproject.toml` classifiers MUST all agree on the same Python version. Version drift between these sources causes CI failures or false passes.
+**[RULE: CI-CDW-81] [L2+]** The `python-version` in `ci.yml`, the `python_version` in `ci-cd-config.yaml`, `[tool.mypy].python_version`, `[tool.ruff].target-version`, and `pyproject.toml` classifiers MUST all agree on the same Python version. Version drift between these sources causes CI failures or false passes.
 
 ## INTERFACES
 
@@ -850,7 +850,7 @@ Extension workflows are permitted only when they map to declared configuration f
 ## STATE
 
 - Assumptions: Repository uses GitHub Actions. Python `3.14` is available via `actions/setup-python`. Docker Buildx is available on `ubuntu-latest` runners. Project has a `pyproject.toml` with `version` field. Documentation follows AFDS standard (when applicable).
-- Constraints: Maximum three workflow files (except Docker-less projects which may have two). Lint, test, docker-smoke run sequentially. Publish requires CI to pass on main (when triggered by `workflow_run`).
+- Constraints: Workflow count is governed by the configuration contract and classification rules in [RULE: CI-CDW-1] and [RULE: CI-CDW-2]: core workflows are required per configuration; classified extension workflows are permitted when their corresponding config fields are enabled or the repository surface requires them. Identical check/lint/test stages must not be duplicated across workflows. Lint, test, docker-smoke run sequentially. Publish requires CI to pass on main (when triggered by `workflow_run`).
 - Known Limitations: Codecov upload requires a `CODECOV_TOKEN` secret and only applies when `coverage_provider: codecov`. Multi-arch Docker builds increase CI time by ~2-3 minutes. AFDS validation downloads the validator script from `https://raw.githubusercontent.com/paulomac1000/ai-skills/main/skills/afds-doc-writer/docs_validate.py` at runtime via curl. Projects cannot use `auto-tag.yml` unless `release_strategy: auto-tag` and `version_source` identifies a real version value.
 
 ## EDGE CASES
@@ -956,7 +956,7 @@ See `templates/auto-tag.yml.j2` for the Jinja2 template.
 - Added: `[CI-CDW-52]` (L1+) — `SEMGREP_BASELINE_REF` env var for diff-aware Semgrep scanning, upgraded from L3+ to L1+.
 - Added: `[CI-CDW-53]` (L2+) — `hashFiles('semgrep.sarif')` guard on SARIF upload to prevent spurious failures.
 - Added: `[CI-CDW-53a]` (SHOULD) — `.semgrep.yml` triage file for accepted unfixable findings.
-- Added: `[CI-CDW-70]`, `[CI-CDW-71]`, `[CI-CDW-72]` (Rule 22) — pyproject.toml classifier consistency, mypy configuration completeness, and cross-source Python version agreement.
+- Added: `[CI-CDW-79]`, `[CI-CDW-80]`, `[CI-CDW-81]` (Rule 24) — pyproject.toml classifier consistency, mypy configuration completeness, and cross-source Python version agreement.
 - Added: Edge cases for `# nosemgrep` in Dockerfiles (must be on separate line) and direct push to main without PR.
 - Updated: Semgrep templates — added `SEMGREP_BASELINE_REF` env, `hashFiles` guard, and fixed `SEMGREP_EXIT_CODE` → `SEMGREP_OUTCOME` variable naming.
 - Updated: Code Review Checklist in SKILL.md — all rule references updated to new numbering.
@@ -964,5 +964,5 @@ See `templates/auto-tag.yml.j2` for the Jinja2 template.
 ### 1.0.0 (2026-05-20)
 - Initial standard: Unicode CI pipeline (lint, test, docker-smoke), Docker publish, auto-tag, unified action versions, Semgrep security scanning, Dependabot dependency management, documentation validation (CAFDS), Codecov integration, .NET CI variant, PR feedback patterns, concurrency best practices.
 - Scope: Python + Docker (primary), .NET + NuGet (variant), polyglot projects.
-- Rules: `[CI-CDW-1]` through `[CI-CDW-78]` covering workflow files, action versions, Python version, CI structure, lint quality gates, test coverage, Docker smoke, publish gates, attestation, release strategy, documentation validation, project config contract, customizations, source layout variants, Docker-less projects, service integration, standard versioning, non-MCP smoke, Semgrep scanning, Dependabot, docs validation, concurrency, .NET variants, PR feedback, container scanning, dependency vulnerability scans, Sonar/SonarCloud reporting, branch policy, integration tests, safety E2E, coverage providers, and docs strictness/exemptions.
+- Rules: `[CI-CDW-1]` through `[CI-CDW-81]` covering workflow files, action versions, Python version, CI structure, lint quality gates, test coverage, Docker smoke, publish gates, attestation, release strategy, documentation validation, project config contract, customizations, source layout variants, Docker-less projects, service integration, standard versioning, non-MCP smoke, Semgrep scanning, Dependabot, docs validation, concurrency, .NET variants, PR feedback, container scanning, dependency vulnerability scans, Sonar/SonarCloud reporting, branch policy, integration tests, safety E2E, coverage providers, Python metadata consistency, and docs strictness/exemptions.
 - Action versions pinned: checkout@v6, setup-python@v6, buildx@v4, login@v4, metadata@v6, build-push@v7, attest@v4, gh-release@v3, codecov@v6, upload-artifact@v7, download-artifact@v8, semgrep-action@v1, upload-sarif@v4, cache@v5, setup-dotnet@v5, github-script@v9, changed-files@v47, test-reporter@v3.

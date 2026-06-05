@@ -52,7 +52,8 @@ public sealed class KubernetesPlanExecutorTests
         KubernetesPlanDiff[] diffs,
         string ns = "demo",
         string name = "nginx",
-        KubernetesPlanPolicyFinding[]? policyFindings = null)
+        KubernetesPlanPolicyFinding[]? policyFindings = null,
+        FreshnessPolicy? freshnessPolicy = null)
     {
         var payload = new KubernetesPlanPayload(
             ns,
@@ -66,7 +67,7 @@ public sealed class KubernetesPlanExecutorTests
             PolicyFindings = policyFindings ?? []
         };
 
-        var freshnessPolicy = new FreshnessPolicy(
+        freshnessPolicy ??= new FreshnessPolicy(
         [
             new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.LiveDrift, new Dictionary<string, string>()),
             new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun, new Dictionary<string, string>())
@@ -150,6 +151,88 @@ public sealed class KubernetesPlanExecutorTests
             KubernetesAdapterConventions.PolicyCodes.DeploymentPrivilegedContainer,
             $"Deployment {ns}/{name}",
             "Privileged container detected.");
+
+    [Fact]
+    public async Task CheckPreExecutionAsync_ResourceVersionMismatch_BlocksBeforeDriftCheck()
+    {
+        var diff = MakeDiff("demo", "nginx");
+        var freshnessPolicy = new FreshnessPolicy(
+        [
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.ResourceVersionCheck,
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["apps/v1 Deployment demo/nginx"] = "42"
+                }),
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.LiveDrift, new Dictionary<string, string>()),
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun, new Dictionary<string, string>())
+        ]);
+        var envelope = BuildApplyEnvelope([diff], freshnessPolicy: freshnessPolicy);
+
+        var toolCaller = new FakeToolCaller()
+            .With(KubernetesAdapterConventions.EvidenceTools.CheckResourceVersion,
+                "Resource version changed for apps/v1 Deployment demo/nginx: expected 42, actual 99.");
+
+        var executor = CreateExecutor(toolCaller);
+        var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.ResourceVersionMismatch, result.ReasonCode);
+        Assert.NotNull(result.Audit);
+        Assert.Equal(ApprovalConventions.AuditEvents.ApplyDriftDetected, result.Audit.EventName);
+        Assert.DoesNotContain(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift, toolCaller.CalledTools);
+    }
+
+    [Fact]
+    public async Task CheckPreExecutionAsync_ResourceVersionMatches_ProceedsToDriftCheck()
+    {
+        var diff = MakeDiff("demo", "nginx");
+        var dryRun = MakeDryRun("demo", "nginx");
+        var freshnessPolicy = new FreshnessPolicy(
+        [
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.ResourceVersionCheck,
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["apps/v1 Deployment demo/nginx"] = "42"
+                }),
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.LiveDrift, new Dictionary<string, string>()),
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun, new Dictionary<string, string>())
+        ]);
+        var envelope = BuildApplyEnvelope([diff], freshnessPolicy: freshnessPolicy);
+
+        var toolCaller = new FakeToolCaller()
+            .With(KubernetesAdapterConventions.EvidenceTools.CheckResourceVersion,
+                KubernetesAdapterConventions.DriftCheckResults.NoDrift)
+            .With(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift,
+                KubernetesAdapterConventions.DriftCheckResults.NoDrift)
+            .With(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
+                ApplyEvidenceJson(dryRun));
+
+        var executor = CreateExecutor(toolCaller);
+        var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Contains(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift, toolCaller.CalledTools);
+    }
+
+    [Fact]
+    public async Task CheckPreExecutionAsync_NoResourceVersionCheck_ProceedsNormally()
+    {
+        var diff = MakeDiff("demo", "nginx");
+        var dryRun = MakeDryRun("demo", "nginx");
+        var envelope = BuildApplyEnvelope([diff]);
+
+        var toolCaller = new FakeToolCaller()
+            .With(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift,
+                KubernetesAdapterConventions.DriftCheckResults.NoDrift)
+            .With(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
+                ApplyEvidenceJson(dryRun));
+
+        var executor = CreateExecutor(toolCaller);
+        var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
+
+        Assert.True(result.IsSuccessful);
+        Assert.DoesNotContain(KubernetesAdapterConventions.EvidenceTools.CheckResourceVersion, toolCaller.CalledTools);
+    }
 
     [Fact]
     public async Task ExecuteAsync_ApplyManifest_HappyPath_DispatchesToApplyTool()

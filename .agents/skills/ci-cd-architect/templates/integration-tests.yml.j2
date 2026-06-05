@@ -42,8 +42,10 @@ jobs:
       - name: Build
         run: dotnet build {{ dotnet_solution }} --configuration Release --no-restore
 
+{% if integration_readiness_command %}
       - name: Verify integration dependencies
-        run: {{ integration_readiness_command | default("echo 'No integration readiness command configured'") }}
+        run: {{ integration_readiness_command }}
+{% endif %}
 
       - name: Run integration tests
         run: {{ integration_test_command }}

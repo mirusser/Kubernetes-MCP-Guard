@@ -81,8 +81,10 @@ jobs:
 
           # Run validation — capture output for PR comment
           {% if docs_validation_script %}
+          set +e
           python {{ docs_validation_script }} --ci{% if docs_validation_strict | default(false) %} --strict{% endif %} 2>&1 | tee /tmp/docs-validation-output.txt
           EXIT_CODE=${PIPESTATUS[0]}
+          set -e
           {% else %}
           echo "⚠️  No validation script configured (docs_validation_script is empty)"
           echo "Add a validation script path to .github/ci-cd-config.yaml"
@@ -91,9 +93,7 @@ jobs:
 
           # Save compact failure list for the PR comment
           {% if docs_validation_script %}
-          python {{ docs_validation_script }} --ci 2>/dev/null \
-            | grep -E "^❌|^   •" \
-            > /tmp/docs-validation-failures.txt || true
+          grep -E "^❌|^   •" /tmp/docs-validation-output.txt > /tmp/docs-validation-failures.txt || true
           {% endif %}
 
           if [ $EXIT_CODE -ne 0 ]; then
@@ -107,7 +107,14 @@ jobs:
         run: |
           echo "No markdown files changed — validating all documents"
           {% if docs_validation_script %}
-          python {{ docs_validation_script }} docs/{% if docs_validation_strict | default(false) %} --strict{% endif %} || true
+          set +e
+          python {{ docs_validation_script }} docs/{% if docs_validation_strict | default(false) %} --strict{% endif %}
+          EXIT_CODE=$?
+          set -e
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ Documentation validation FAILED"
+            exit $EXIT_CODE
+          fi
           {% else %}
           echo "No validation script configured — skipping"
           {% endif %}

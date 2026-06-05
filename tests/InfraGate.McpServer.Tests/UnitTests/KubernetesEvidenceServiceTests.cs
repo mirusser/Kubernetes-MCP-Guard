@@ -1,3 +1,4 @@
+using System.Text.Json;
 using InfraGate.McpServer;
 using k8s;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -120,6 +121,78 @@ public sealed class KubernetesEvidenceServiceTests
     }
 
     [Fact]
+    public async Task EvidenceCheckResourceVersionAsync_Match_ReturnsOk()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/apis/apps/v1/namespaces/demo/deployments/nginx" => TestResponse.Json(DeploymentResponseWithVersion("42")),
+            _ => TestResponse.Json("{}")
+        });
+        var service = CreateService(api);
+        var resourceVersionsJson = JsonSerializer.Serialize(
+            new Dictionary<string, string> { ["apps/v1 Deployment demo/nginx"] = "42" });
+
+        var result = await service.EvidenceCheckResourceVersionAsync(
+            DemoNamespace, resourceVersionsJson, CancellationToken.None);
+
+        Assert.Equal(KubernetesConventions.DriftCheckResult.NoDrift, result);
+    }
+
+    [Fact]
+    public async Task EvidenceCheckResourceVersionAsync_Mismatch_ReturnsError()
+    {
+        await using var api = new TestKubernetesApi(request => request.Path switch
+        {
+            "/apis/apps/v1/namespaces/demo/deployments/nginx" => TestResponse.Json(DeploymentResponseWithVersion("99")),
+            _ => TestResponse.Json("{}")
+        });
+        var service = CreateService(api);
+        var resourceVersionsJson = JsonSerializer.Serialize(
+            new Dictionary<string, string> { ["apps/v1 Deployment demo/nginx"] = "42" });
+
+        var result = await service.EvidenceCheckResourceVersionAsync(
+            DemoNamespace, resourceVersionsJson, CancellationToken.None);
+
+        Assert.Contains("ResourceVersion mismatch", result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task EvidenceCheckResourceVersionAsync_DisallowedNamespace_ReturnsValidationError()
+    {
+        await using var api = new TestKubernetesApi(_ => throw new InvalidOperationException("should not call k8s"));
+        var service = CreateService(api);
+
+        var result = await service.EvidenceCheckResourceVersionAsync(
+            DisallowedNamespace, "{}", CancellationToken.None);
+
+        Assert.Contains(DisallowedNamespace, result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EvidenceCheckResourceVersionAsync_InvalidJson_ReturnsParseError()
+    {
+        await using var api = new TestKubernetesApi(_ => throw new InvalidOperationException("should not call k8s"));
+        var service = CreateService(api);
+
+        var result = await service.EvidenceCheckResourceVersionAsync(
+            DemoNamespace, "not-valid-json", CancellationToken.None);
+
+        Assert.Contains("Could not parse resource versions", result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task EvidenceCheckResourceVersionAsync_EmptyDictionary_ReturnsOk()
+    {
+        await using var api = new TestKubernetesApi(_ => throw new InvalidOperationException("should not call k8s"));
+        var service = CreateService(api);
+
+        var result = await service.EvidenceCheckResourceVersionAsync(
+            DemoNamespace, "{}", CancellationToken.None);
+
+        Assert.Equal(KubernetesConventions.DriftCheckResult.NoDrift, result);
+    }
+
+    [Fact]
     public async Task EvidenceDiffManifestAsync_DisallowedNamespace_ReturnsValidationError()
     {
         await using var api = new TestKubernetesApi(_ => throw new InvalidOperationException("should not call k8s"));
@@ -172,6 +245,30 @@ public sealed class KubernetesEvidenceServiceTests
                 "name": "nginx",
                 "namespace": "demo",
                 "uid": "abc123"
+            },
+            "spec": {
+                "replicas": 1,
+                "selector": { "matchLabels": { "app": "nginx" } },
+                "template": {
+                    "metadata": { "labels": { "app": "nginx" } },
+                    "spec": {
+                        "containers": [
+                            { "name": "app", "image": "nginx:1.27-alpine" }
+                        ]
+                    }
+                }
+            }
+        }
+        """;
+
+    private static string DeploymentResponseWithVersion(string resourceVersion) => $$"""
+        {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "name": "nginx",
+                "namespace": "demo",
+                "resourceVersion": "{{resourceVersion}}"
             },
             "spec": {
                 "replicas": 1,

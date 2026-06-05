@@ -55,7 +55,7 @@ internal sealed class DeleteManifestBuilder(IKubernetesEvidenceService evidenceS
                     namespaceName,
                     dryRun.Objects.Select(obj => obj.Object).ToArray(),
                     message),
-                KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceEmpty);
+                KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceFailed);
         }
 
         var objects = diffs.Select(d => d.Object).ToArray();
@@ -78,6 +78,6 @@ internal sealed class DeleteManifestBuilder(IKubernetesEvidenceService evidenceS
             payload,
             requester,
             approvalPolicy,
-            new FreshnessPolicy(manifestFreshnessChecks));
+            BuildFreshnessPolicy(manifestFreshnessChecks, diffs));
     }
 }

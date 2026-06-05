@@ -2,6 +2,7 @@ using System.Text.Json;
 using InfraGate.Approvals;
 using InfraGate.Approvals.Plan;
 using InfraGate.KubernetesAdapter.Approval;
+using InfraGate.KubernetesAdapter.Evidence;
 using InfraGate.KubernetesAdapter.Policy;
 using k8s;
 using k8s.Models;
@@ -28,6 +29,34 @@ internal static class KubernetesBuilderInfrastructure
         [$"{KubernetesAdapterConventions.ApiVersions.V1}/{KubernetesAdapterConventions.ResourceKinds.Service}"] = typeof(V1Service),
         [$"{KubernetesAdapterConventions.ApiVersions.V1}/{KubernetesAdapterConventions.ResourceKinds.ConfigMap}"] = typeof(V1ConfigMap)
     };
+
+    internal static FreshnessPolicy BuildFreshnessPolicy(
+        IReadOnlyList<FreshnessCheck> baseChecks,
+        IReadOnlyList<KubernetesPlanDiff> diffs)
+    {
+        var resourceVersions = diffs
+            .Where(d => d.ResourceVersion is not null)
+            .ToDictionary(
+                d => FormatObjectKey(d.Object),
+                d => d.ResourceVersion!,
+                StringComparer.Ordinal);
+
+        if (resourceVersions.Count == 0)
+        {
+            return new FreshnessPolicy(baseChecks);
+        }
+
+        var checks = new List<FreshnessCheck>(baseChecks.Count + 1);
+        checks.AddRange(baseChecks);
+        checks.Add(new FreshnessCheck(
+            KubernetesAdapterConventions.FreshnessCheckTypes.ResourceVersionCheck,
+            resourceVersions.AsReadOnly()!));
+
+        return new FreshnessPolicy(checks);
+    }
+
+    private static string FormatObjectKey(KubernetesObjectRef obj) =>
+        $"{obj.ApiVersion} {obj.Kind} {obj.Namespace}/{obj.Name}";
 
     internal static PlanBuildResult BuildEnvelope(
         string operation,
@@ -89,7 +118,7 @@ internal static class KubernetesBuilderInfrastructure
             case int i:
                 value = i;
                 return true;
-            case long l:
+            case long l when l >= int.MinValue && l <= int.MaxValue:
                 value = (int)l;
                 return true;
             case double d when double.IsInteger(d) && d >= int.MinValue && d <= int.MaxValue:
@@ -128,15 +157,15 @@ internal static class KubernetesBuilderInfrastructure
         }
         catch (YamlException)
         {
-            return new KubernetesPolicyResult([]);
+            return new KubernetesPolicyResult([]) { HadError = true };
         }
         catch (ArgumentException)
         {
-            return new KubernetesPolicyResult([]);
+            return new KubernetesPolicyResult([]) { HadError = true };
         }
         catch (KeyNotFoundException)
         {
-            return new KubernetesPolicyResult([]);
+            return new KubernetesPolicyResult([]) { HadError = true };
         }
     }
 }

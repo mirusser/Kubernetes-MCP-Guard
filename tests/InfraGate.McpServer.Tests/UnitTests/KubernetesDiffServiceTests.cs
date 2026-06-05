@@ -15,6 +15,39 @@ public sealed class KubernetesDiffServiceTests
         new("v1", "ConfigMap", "demo", "demo-config");
 
     [Fact]
+    public void BuildDiff_LiveWithResourceVersion_PreservesResourceVersionInDiff()
+    {
+        var diff = KubernetesDiffService.BuildDiff(
+            DeploymentRef,
+            DeploymentJson("nginx:1.27-alpine", resourceVersion: "42"),
+            DeploymentJson("nginx:1.28-alpine", resourceVersion: "99"));
+
+        Assert.Equal("42", diff.ResourceVersion);
+    }
+
+    [Fact]
+    public void BuildDiff_LiveIsNull_ResourceVersionIsNull()
+    {
+        var diff = KubernetesDiffService.BuildDiff(
+            DeploymentRef,
+            liveJson: null,
+            DeploymentJson("nginx:1.27-alpine"));
+
+        Assert.Null(diff.ResourceVersion);
+    }
+
+    [Fact]
+    public void BuildDiff_LiveWithoutResourceVersion_ResourceVersionIsNull()
+    {
+        var diff = KubernetesDiffService.BuildDiff(
+            DeploymentRef,
+            """{"kind":"Deployment","spec":{"replicas":1}}""",
+            """{"kind":"Deployment","spec":{"replicas":3}}""");
+
+        Assert.Null(diff.ResourceVersion);
+    }
+
+    [Fact]
     public void BuildDiff_CreateObject_RecordsCreateSummaryAndAddedPaths()
     {
         var diff = KubernetesDiffService.BuildDiff(DeploymentRef, liveJson: null, DeploymentJson("nginx:1.27-alpine"));

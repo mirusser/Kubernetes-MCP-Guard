@@ -1,3 +1,4 @@
+using System.Text.Json;
 using InfraGate.McpServer.Models;
 using k8s;
 using k8s.Models;
@@ -10,6 +11,7 @@ public sealed class KubernetesExecutionService
     private readonly IKubernetes client;
     private readonly ILogger<KubernetesExecutionService> logger;
     private readonly KubernetesMcpOptions options;
+    private static readonly JsonSerializerOptions ResourceVersionJsonOptions = new(JsonSerializerDefaults.Web);
 
     public KubernetesExecutionService(IKubernetes client, ILogger<KubernetesExecutionService> logger, KubernetesMcpOptions options)
     {
@@ -21,7 +23,8 @@ public sealed class KubernetesExecutionService
     public async Task<string> ExecuteApplyManifestAsync(
         string namespaceName,
         string manifest,
-        CancellationToken cancellationToken)
+        string? resourceVersionsJson = null,
+        CancellationToken cancellationToken = default)
     {
         var validation = KubernetesManagerHelpers.ValidateNamespace(options, namespaceName);
         if (validation is not null)
@@ -44,6 +47,8 @@ public sealed class KubernetesExecutionService
         {
             return policyRefusal;
         }
+
+        ApplyResourceVersions(parsed.Objects, resourceVersionsJson);
 
         var messages = new List<string>();
         foreach (var obj in parsed.Objects)
@@ -357,6 +362,45 @@ public sealed class KubernetesExecutionService
                 }
             }
         }, V1Patch.PatchType.StrategicMergePatch);
+
+    private static void ApplyResourceVersions(
+        IReadOnlyList<IKubernetesObject<V1ObjectMeta>> objects,
+        string? resourceVersionsJson)
+    {
+        if (string.IsNullOrWhiteSpace(resourceVersionsJson))
+        {
+            return;
+        }
+
+        var resourceVersionEntries = JsonSerializer.Deserialize<List<ResourceVersionEntry>>(
+            resourceVersionsJson,
+            ResourceVersionJsonOptions);
+
+        if (resourceVersionEntries is null || resourceVersionEntries.Count == 0)
+        {
+            return;
+        }
+
+        var resourceVersionByKey = resourceVersionEntries
+            .Where(e => e.ResourceVersion is not null)
+            .ToDictionary(e => e.Key, e => e.ResourceVersion!, StringComparer.Ordinal);
+
+        foreach (var obj in objects)
+        {
+            if (obj.Metadata is null)
+            {
+                continue;
+            }
+
+            var key = $"{obj.ApiVersion} {obj.Kind} {obj.Metadata.NamespaceProperty}/{obj.Metadata.Name}";
+            if (resourceVersionByKey.TryGetValue(key, out var rv))
+            {
+                obj.Metadata.ResourceVersion = rv;
+            }
+        }
+    }
+
+    private sealed record class ResourceVersionEntry(string Key, string? ResourceVersion);
 
     private static string? CheckDenyPolicy(IReadOnlyList<IKubernetesObject<V1ObjectMeta>> objects)
     {

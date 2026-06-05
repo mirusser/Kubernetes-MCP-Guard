@@ -181,7 +181,7 @@ Use this when asked to create new workflow files or fix non-compliant ones for a
 6. **Generate `auto-tag.yml`:**
    - Start from `templates/auto-tag.yml.j2`.
    - Substitute `<PROJECT>` placeholder.
-   - If the project does not use `pyproject.toml` for versioning: this file is inapplicable. Note this in the output.
+   - Generate this file only when the configuration contract declares `release_strategy: auto-tag` and a valid `version_source` (e.g., `pyproject`, `directory-build-props`, or another standard-declared source). If no valid version source exists, the project must declare `release_strategy: manual-tag` or `none` instead; skip this file and note the decision in the output.
    - Write to `.github/workflows/auto-tag.yml`.
 
 7. **Verify Action Versions:** Check every `uses:` field against Rule 2 table in the standard. All versions must match exactly.
@@ -450,7 +450,7 @@ The `templates/` directory contains Jinja2 templates for all workflow files plus
 | `templates/integration-tests.yml.j2` | Self-hosted or service-backed integration tests | L2+ (when `integration_test_profile` exists) |
 | `templates/keycloak-tests.yml.j2` | Keycloak/OIDC integration tests | L2+ (when `keycloak_test_project` exists) |
 | `templates/safety-e2e.yml.j2` | Manual safety/E2E workflow guarded by explicit opt-in inputs | L2+ (when `safety_e2e_profile` exists) |
-| `templates/docs-validation.yml.j2` | Documentation validation (Markdown quality) | L2+ (when docs exist) |
+| `templates/docs-validation.yml.j2` | Documentation validation (Markdown quality) | L2+ (when `use_docs_validation: true` and a validator contract/script exists) |
 | `templates/dotnet-ci.yml.j2` | .NET CI pipeline (restore → format → build → test → pack) | L2+ (when `language: dotnet`) |
 | `templates/ci-cd-config.example.yaml` | Annotated example of all configuration contract fields | Reference |
 
