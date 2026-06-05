@@ -226,4 +226,11 @@ internal static partial class ObserverLogEvents
         Level = LogLevel.Information,
         Message = "observer.llm.call_done namespace={Namespace} iteration={Iteration} durationMs={DurationMs}")]
     public static partial void LogLlmCallCompleted(ILogger logger, string @namespace, int iteration, long durationMs);
+
+    // ── Workflow topology ───────────────────────────────────────
+
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "observer.workflow.topology namespaces={NamespaceCount} (Mermaid)\n{Diagram}")]
+    public static partial void LogWorkflowTopology(ILogger logger, int namespaceCount, string diagram);
 }

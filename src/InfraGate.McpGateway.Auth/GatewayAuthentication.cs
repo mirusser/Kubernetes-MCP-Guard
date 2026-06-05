@@ -76,7 +76,9 @@ public static class GatewayAuthentication
         GatewayAuthConventions.DefaultOAuthScope,
         GatewayAuthConventions.DefaultReadOnlyOAuthScope,
         GatewayAuthConventions.DefaultProposeOAuthScope,
-        GatewayAuthConventions.DefaultExecuteOAuthScope
+        GatewayAuthConventions.DefaultExecuteOAuthScope,
+        GatewayAuthConventions.DefaultReadToolsOAuthScope,
+        GatewayAuthConventions.DefaultWriteToolsOAuthScope
     ];
 
     private static void AddGatewayAuthorization(IServiceCollection services, GatewayAuthOptions options)

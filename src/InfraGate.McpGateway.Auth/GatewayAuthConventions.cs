@@ -7,6 +7,8 @@ public static class GatewayAuthConventions
     public const string DefaultReadOnlyOAuthScope = "mcp:tools.readonly";
     public const string DefaultProposeOAuthScope = "mcp:tools.propose";
     public const string DefaultExecuteOAuthScope = "mcp:tools.execute";
+    public const string DefaultReadToolsOAuthScope = "mcp:tools.read";
+    public const string DefaultWriteToolsOAuthScope = "mcp:tools.write";
     public const string DefaultApprovalOAuthClientId = "infra-gate-approval-ui";
     public const string AuthorizationScheme = "Bearer";
 

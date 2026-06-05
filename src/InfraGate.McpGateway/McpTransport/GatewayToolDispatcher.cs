@@ -86,6 +86,8 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         CallToolRequestParams request,
         CancellationToken ct)
     {
+        GuardrailContext.Reset();
+
         string toolName = request.Name;
 
         var synthesizedScopes = ToolScopeCatalog.GetSynthesizedScopes(toolName);
@@ -221,7 +223,7 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         }
 
         var message = McpGatewayMessages.ToolRouting.PlanCreated(planResult.PlanId);
-        if (requestHasFindings)
+        if (requestHasFindings || GuardrailContext.HasResponseFindings)
         {
             message = GuardedToolRunner.FormatWarningResponse(message);
         }
@@ -254,7 +256,7 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
 
         var sanitized = await guardedRunner.SanitizeAndAuditResponseAsync(toolName, args, planResult.Message, ct)
             .ConfigureAwait(false);
-        var errorText = requestHasFindings || sanitized.HasFindings
+        var errorText = requestHasFindings || sanitized.HasFindings || GuardrailContext.HasResponseFindings
             ? GuardedToolRunner.FormatWarningResponse(sanitized.Text)
             : sanitized.Text;
 

@@ -15,7 +15,8 @@
 
 - `InfraGate__Auth__OAuthAuthority` is required.
 - OAuth tokens must contain the configured audience/resource and required scope.
-- Human MCP clients use the broad mutation scope. Planner clients use the propose scope, Executor clients use the execute scope, and Observer/Planner read paths use the read-only scope.
+- Human MCP clients can use `mcp:tools.read` for read-only inspection or `mcp:tools.write` for full mutation access. The legacy `mcp:tools` scope remains for backward compatibility.
+- Planner clients use the propose scope, Executor clients use the execute scope, and Observer/Planner read paths use the read-only scope.
 - Valid OAuth tokens that lack the required scope return `403 Forbidden` with a `WWW-Authenticate` Bearer challenge containing `error="insufficient_scope"`, the required `scope`, and `resource_metadata`.
 - Approval UI browser sessions use OAuth authorization-code + PKCE and sign into a gateway cookie.
 - OAuth identities are normalized for guardrail audit entries.

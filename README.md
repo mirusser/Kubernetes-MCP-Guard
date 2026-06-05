@@ -98,7 +98,7 @@ flowchart TB
     K8s(("☸️ Kubernetes API\n(namespace-scoped RBAC)"))
 
     Human -->|"review snapshot · approve/deny"| ApprovalUI --> ApprovalCore
-    McpClient -->|"Bearer JWT · mcp:tools scope"| Guard -->|"scope-filtered tool call"| ApprovalCore
+    McpClient -->|"Bearer JWT · mcp:tools.read/write"| Guard -->|"scope-filtered tool call"| ApprovalCore
     agents -->|"Bearer JWT · service identity"| Guard
     ApprovalCore -->|"stdio · service token"| McpServer -->|"KubernetesClient"| K8s
 ```
@@ -254,8 +254,10 @@ Add this to `~/.codex/config.toml`:
 [mcp_servers.infra-gate]
 url = "http://127.0.0.1:3001/mcp"
 oauth_resource = "http://127.0.0.1:3001/mcp"
-scopes = ["mcp:tools"]
+scopes = ["mcp:tools.read"]
 ```
+
+Use `mcp:tools.write` for sessions where you intend to create and apply mutation plans. The legacy `mcp:tools` scope grants full access for backward compatibility.
 
 Then authenticate and start Codex:
 
@@ -268,7 +270,7 @@ codex
 
 ```bash
 claude mcp add-json --scope user infra-gate \
-  '{"type":"http","url":"http://127.0.0.1:3001/mcp","oauth":{"scopes":"mcp:tools"}}'
+  '{"type":"http","url":"http://127.0.0.1:3001/mcp","oauth":{"scopes":"mcp:tools.read"}}'
 
 claude
 /mcp

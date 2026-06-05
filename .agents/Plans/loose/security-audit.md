@@ -5,7 +5,7 @@
 **Re-assessed:** 2026-06-05 (against current codebase; see Implementation Notes per finding)  
 **Scope:** Architecture & request-flow diagrams covering OAuth Login & Authorization, Read-Only Tool Calls, and Approval-Gated Mutations.  
 **Method:** Static architectural analysis of Mermaid sequence diagrams and system description.  
-**Status:** 13 findings identified — 6 from initial audit (verified & extended), 7 new. **Re-assessment: 5 mitigated, 3 partial, 5 unaddressed.**
+**Status:** 13 findings identified — 6 from initial audit (verified & extended), 7 new. **Re-assessment: 6 mitigated, 2 partial, 5 unaddressed.**
 
 ---
 
@@ -39,11 +39,11 @@ The architecture demonstrates a strong security foundation: OAuth 2.0 with PKCE 
 However, the audit identified **13 findings** ranging from Medium to Critical severity. The most impactful are:
 
 - The approval flow proves **plan integrity** via hash binding, but cannot prove **human presence** — a compromised MCP client can auto-approve without rendering the prompt to the SRE.
-- A **single `mcp:tools` scope** gates both read-only and destructive mutation operations, meaning any legitimately issued token can invoke mutation paths.
+- A five-tier scope model now separates read (`mcp:tools.read`), write (`mcp:tools.write`), observation (`mcp:tools.readonly`), proposal (`mcp:tools.propose`), and execution (`mcp:tools.execute`), with the legacy `mcp:tools` scope retained for backward compatibility. Each tool is mapped to its minimum required scope in `ToolScopeCatalog` and enforced at call-time by `ToolScopeGuard`.
 - **No user-to-plan binding** means any authenticated principal can approve and execute a plan they did not create.
 - **JWT Bearer tokens are replayable** with no proof-of-possession or revocation mechanism.
 
-> **Re-assessment (2026-06-05):** Of the top 4 concerns above, F-01 (auto-approval) and F-08 (user-to-plan binding) are now **mitigated**. F-13 (scope split) is partially addressed with role-based scopes (`mcp:tools.readonly`/`.propose`/`.execute`). F-07 (JWT replay) remains unaddressed. See individual findings for detailed Implementation Notes.
+> **Re-assessment (2026-06-05):** Of the top 4 concerns above, F-01 (auto-approval) and F-08 (user-to-plan binding) are now **mitigated**. F-13 (scope split) is fully addressed with `mcp:tools.read`/`mcp:tools.write` for human operators and role-based scopes (`mcp:tools.readonly`/`.propose`/`.execute`) for agents. F-07 (JWT replay) remains unaddressed. See individual findings for detailed Implementation Notes.
 
 ---
 
@@ -459,28 +459,45 @@ PostgreSQL audit outbox implements **cryptographic hash chaining** (`PostgresAud
 **Severity:** High
 **Diagram:** All three diagrams
 **Status:** New finding
-**Resolution:** ⚠️ **PARTIALLY MITIGATED** (re-assessed 2026-06-05)
+**Resolution:** ✅ **MITIGATED** (re-assessed 2026-06-05)
 
 #### Description
 
-The only OAuth scope referenced throughout the architecture is `mcp:tools`. This single scope is used to gate both read-only operations (`get_k8s_status`, log streaming) and destructive mutation operations (`request_scale_deployment`, `apply_approved_plan`).
+The architecture originally used a single `mcp:tools` OAuth scope to gate all operations — read-only diagnostics (`get_k8s_status`, log streaming) and destructive mutations (`request_scale_deployment`, `apply_approved_plan`).
 
-A token legitimately issued for a read-only session carries the same scope as a token for a mutation session. Consequences include:
+**This is now mitigated.** A five-tier scope model replaces the single-scope approach:
 
-- Any `mcp:tools` token can invoke mutation paths. There is no scope-level guardrail preventing this.
-- If a read-only token is stolen or replayed (see F-07), it can be used to initiate or apply destructive plans.
-- Least-privilege cannot be enforced at the OAuth layer — the token grants more permission than the operation requires.
+- `mcp:tools.read` — human operators: read-only inspection tools, evidence tools, `get_plan_status`
+- `mcp:tools.write` — human operators: all tools including plan mutation and execution
+- `mcp:tools.readonly` — agent service identity: Observer read path
+- `mcp:tools.propose` — agent service identity: Planner plan proposal (combined with `mcp:tools.readonly` for read access)
+- `mcp:tools.execute` — agent service identity: Executor plan execution
+- `mcp:tools` — legacy scope for backward compatibility (equivalent to full access)
 
 #### Recommended Fix
 
-- Define at minimum two scopes: `mcp:read` and `mcp:write`.
-- The DevIssuer should issue `mcp:read`-only tokens for sessions where mutation is not expected.
-- The Gateway must enforce scope per tool: read-only handlers accept `mcp:read` or `mcp:write`; mutation handlers require `mcp:write` exclusively.
-- The protected-resource metadata (`/.well-known/oauth-protected-resource`) should advertise both scopes so MCP clients can request the minimum necessary scope.
+- ~~Define at minimum two scopes: `mcp:read` and `mcp:write`.~~ → Implemented as `mcp:tools.read` / `mcp:tools.write`
+- ~~Issue `mcp:read`-only tokens for read-only sessions.~~ → Done
+- ~~Enforce scope per tool at the Gateway.~~ → Done via `ToolScopeCatalog` + `ToolScopeGuard`
+- ~~Advertise scopes in protected-resource metadata.~~ → Done
 
 #### Implementation Notes (2026-06-05)
 
-Scope constants now exist for role-based granularity: `mcp:tools`, `mcp:tools.readonly`, `mcp:tools.propose`, `mcp:tools.execute` (`GatewayAuthConventions.cs:5-9`). Per-tool scope enforcement via `ToolScopeCatalog` + `ToolScopeGuard`: `request_*` tools require `mcp:tools`, read-only tools accept `mcp:tools.readonly`, propose requires `mcp:tools.propose`, execute requires `mcp:tools.execute`. Architecture diagram shows Observer using `mcp:tools.readonly`, Planner using `mcp:tools.propose`, Executor using `mcp:tools.execute`. **However:** docs explicitly state "there is no `mcp:read` or `mcp:write` split today" (`docs/tool-permissions.md:76`). Current split is agent-role oriented (which agent does what), not the simple `mcp:read`/`mcp:write` split recommended.
+Fully addressed. Six scope constants are defined in both `GatewayAuthConventions.cs:5-11` and `McpGatewayConventions.cs:177-185`: `mcp:tools` (legacy), `mcp:tools.readonly`, `mcp:tools.propose`, `mcp:tools.execute`, `mcp:tools.read`, `mcp:tools.write`. All six are registered in `AcceptedScopes` (`GatewayAuthentication.cs:74-82`) so the authorization policy accepts them.
+
+Per-tool enforcement is handled by `ToolScopeCatalog` (`src/InfraGate.McpGateway/McpTransport/Dispatch/ToolScopeCatalog.cs`) — a single source of truth mapping each tool to its minimum required scope(s):
+- `request_*` tools → `mcp:tools` or `mcp:tools.write`
+- `execute_approved_plan` / `wait_for_plan_approval` → `mcp:tools` or `mcp:tools.execute` or `mcp:tools.write`
+- `get_plan_status` → `mcp:tools` or `mcp:tools.readonly` or `mcp:tools.read`
+- `propose_plan` → `mcp:tools` or `mcp:tools.propose` or `mcp:tools.write`
+- Downstream ReadOnly tools → `mcp:tools` or `mcp:tools.readonly` or `mcp:tools.read`
+- Downstream Destructive tools → `mcp:tools` or `mcp:tools.write`
+
+`ToolScopeGuard` (`ToolScopeGuard.cs`) enforces these at call-time in `GatewayToolDispatcher.CallToolAsyncCore` (lines 96 and 167), returning an error result and writing a `scope.denied` audit event on mismatch. `ToolScopeCatalog.IsVisibleTo` also filters the `tools/list` response so clients only see tools their scope permits.
+
+Agent service identities use their appropriate scopes: Observer → `mcp:tools.readonly` (`ObserverConventions.cs:17`), Planner → `mcp:tools.propose mcp:tools.readonly` (`PlannerConventions.cs:11`), Executor → `mcp:tools.execute` (`ExecutorConventions.cs:11`). Human operators use `mcp:tools.read` or `mcp:tools.write` as documented in `docs/tool-permissions.md` and the README.
+
+The naming follows `mcp:tools.{role}` (e.g., `mcp:tools.read`) rather than the shorter `mcp:read` originally recommended — this is a consistent namespace choice, not a functional gap. All tool scopes live under the `mcp:tools` prefix.
 
 ---
 
@@ -500,7 +517,7 @@ Scope constants now exist for role-based granularity: `mcp:tools`, `mcp:tools.re
 | F-10 | Subprocess binary integrity not verified | **High** | New | Diagrams 2 & 3 | ❌ Not mitigated |
 | F-11 | JWKS cache poisoning / key rollover race | **Medium** | New | Diagram 1 | ❌ Not mitigated |
 | F-12 | Audit log tamper by compromised process | **Medium** | New | Diagrams 2 & 3 | ⚠️ Partial |
-| F-13 | Single scope for read and write operations | **High** | New | All | ⚠️ Partial |
+| F-13 | Single scope for read and write operations | **High** | New | All | ✅ Mitigated |
 
 ---
 
@@ -510,7 +527,7 @@ Scope constants now exist for role-based granularity: `mcp:tools`, `mcp:tools.re
 
 | Priority | Finding | Reason | Status |
 |---|---|---|---|
-| 1 | **F-13** — Split `mcp:read` / `mcp:write` scopes | Architectural change required; blocks all other scope-based controls | ⚠️ Partial — role-based scopes exist, no read/write split |
+| 1 | ✅ **F-13** — Split `mcp:read` / `mcp:write` scopes | Architectural change required; blocks all other scope-based controls | ✅ Done — `mcp:tools.read`/`.write` for human operators + role-based scopes for agents |
 | 2 | **F-08** — Bind plans to creator `sub` claim | Prevents cross-user approval with minimal implementation effort | ✅ Done — SameSubject + OperatorApproval policies implemented |
 | 3 | **F-04** — UUID validation + rate limit on planId | Low-effort fix with high DoS / traversal impact | ✅ Done — PostgreSQL migration + IsSafePlanId validation |
 | 4 | ✅ **F-02** — Capture and assert `resourceVersion` | Prevents silent overwrite of human-made changes | ✅ Mitigated — Two-layer defense: pre-execution freshness check + SSA server-side precondition |

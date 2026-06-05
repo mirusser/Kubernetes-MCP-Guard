@@ -180,6 +180,8 @@ internal static class McpGatewayConventions
         public const string ReadOnlyScope = "mcp:tools.readonly";
         public const string ProposeScope = "mcp:tools.propose";
         public const string ExecuteScope = "mcp:tools.execute";
+        public const string ReadScope = "mcp:tools.read";
+        public const string WriteScope = "mcp:tools.write";
     }
 
     public static class ToolArguments

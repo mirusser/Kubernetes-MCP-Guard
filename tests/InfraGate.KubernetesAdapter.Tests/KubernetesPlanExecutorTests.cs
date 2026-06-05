@@ -153,37 +153,7 @@ public sealed class KubernetesPlanExecutorTests
             "Privileged container detected.");
 
     [Fact]
-    public async Task CheckPreExecutionAsync_ResourceVersionMismatch_BlocksBeforeDriftCheck()
-    {
-        var diff = MakeDiff("demo", "nginx");
-        var freshnessPolicy = new FreshnessPolicy(
-        [
-            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.ResourceVersionCheck,
-                new Dictionary<string, string>(StringComparer.Ordinal)
-                {
-                    ["apps/v1 Deployment demo/nginx"] = "42"
-                }),
-            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.LiveDrift, new Dictionary<string, string>()),
-            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun, new Dictionary<string, string>())
-        ]);
-        var envelope = BuildApplyEnvelope([diff], freshnessPolicy: freshnessPolicy);
-
-        var toolCaller = new FakeToolCaller()
-            .With(KubernetesAdapterConventions.EvidenceTools.CheckResourceVersion,
-                "Resource version changed for apps/v1 Deployment demo/nginx: expected 42, actual 99.");
-
-        var executor = CreateExecutor(toolCaller);
-        var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
-
-        Assert.False(result.IsSuccessful);
-        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.ResourceVersionMismatch, result.ReasonCode);
-        Assert.NotNull(result.Audit);
-        Assert.Equal(ApprovalConventions.AuditEvents.ApplyDriftDetected, result.Audit.EventName);
-        Assert.DoesNotContain(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift, toolCaller.CalledTools);
-    }
-
-    [Fact]
-    public async Task CheckPreExecutionAsync_ResourceVersionMatches_ProceedsToDriftCheck()
+    public async Task CheckPreExecutionAsync_DriftPasses_ToleratesResourceVersionMismatch()
     {
         var diff = MakeDiff("demo", "nginx");
         var dryRun = MakeDryRun("demo", "nginx");
@@ -200,8 +170,39 @@ public sealed class KubernetesPlanExecutorTests
         var envelope = BuildApplyEnvelope([diff], freshnessPolicy: freshnessPolicy);
 
         var toolCaller = new FakeToolCaller()
-            .With(KubernetesAdapterConventions.EvidenceTools.CheckResourceVersion,
+            .With(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift,
                 KubernetesAdapterConventions.DriftCheckResults.NoDrift)
+            .With(KubernetesAdapterConventions.EvidenceTools.CheckResourceVersion,
+                "Resource version changed for apps/v1 Deployment demo/nginx: expected 42, actual 99.")
+            .With(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
+                ApplyEvidenceJson(dryRun));
+
+        var executor = CreateExecutor(toolCaller);
+        var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Contains(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift, toolCaller.CalledTools);
+        Assert.DoesNotContain(KubernetesAdapterConventions.EvidenceTools.CheckResourceVersion, toolCaller.CalledTools);
+    }
+
+    [Fact]
+    public async Task CheckPreExecutionAsync_DriftPasses_ProceedsToRemainingChecks()
+    {
+        var diff = MakeDiff("demo", "nginx");
+        var dryRun = MakeDryRun("demo", "nginx");
+        var freshnessPolicy = new FreshnessPolicy(
+        [
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.ResourceVersionCheck,
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["apps/v1 Deployment demo/nginx"] = "42"
+                }),
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.LiveDrift, new Dictionary<string, string>()),
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun, new Dictionary<string, string>())
+        ]);
+        var envelope = BuildApplyEnvelope([diff], freshnessPolicy: freshnessPolicy);
+
+        var toolCaller = new FakeToolCaller()
             .With(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift,
                 KubernetesAdapterConventions.DriftCheckResults.NoDrift)
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
@@ -212,6 +213,7 @@ public sealed class KubernetesPlanExecutorTests
 
         Assert.True(result.IsSuccessful);
         Assert.Contains(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift, toolCaller.CalledTools);
+        Assert.Contains(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest, toolCaller.CalledTools);
     }
 
     [Fact]

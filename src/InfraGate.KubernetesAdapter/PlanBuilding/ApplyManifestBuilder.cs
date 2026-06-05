@@ -47,7 +47,7 @@ internal sealed class ApplyManifestBuilder(IKubernetesEvidenceService evidenceSe
         }
 
         var applyEvidence = await evidenceService.GetApplyEvidenceAsync(namespaceName, manifest, ct).ConfigureAwait(false);
-        if (applyEvidence is null)
+        if (applyEvidence is null || applyEvidence.DryRun is null)
         {
             const string message = "Evidence dry-run failed or returned an empty result.";
             return PlanBuildResult.Failed(message,

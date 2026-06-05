@@ -35,6 +35,7 @@ internal sealed class BatchProcessor : BackgroundService
     private readonly PlannerTaskLifecycle? taskLifecycle;
     private readonly IExecutorDispatchClient? executorDispatchClient;
     private readonly IModelVisibleContentGuard? contentGuard;
+    private int workflowTopologyLogged;
 
     public BatchProcessor( // NOSONAR:S107 — orchestrator dependencies are explicit production seams.
         IOptionsMonitor<PlannerOptions> optionsMonitor,
@@ -252,6 +253,11 @@ internal sealed class BatchProcessor : BackgroundService
             .WithOutputFrom([.. proposeExecs])
             .WithOpenTelemetry()
             .Build();
+
+        // Emit the workflow topology (Mermaid) to the console sink once per process — the graph
+        // shape is structural, so re-logging it every batch would just flood the console.
+        if (logger.IsEnabled(LogLevel.Debug) && Interlocked.CompareExchange(ref workflowTopologyLogged, 1, 0) == 0)
+            PlannerLogEvents.LogWorkflowTopology(logger, batch.Reports.Count, workflow.ToMermaidString());
 
         return (workflow, proposeExecs);
     }
