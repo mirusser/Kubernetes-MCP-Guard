@@ -1,8 +1,8 @@
 # Action Version Matrix
 
-Generated workflow files SHOULD pin GitHub Actions to a full commit SHA and include a trailing approved-version comment, for example `actions/checkout@<sha> # v6`. Templates MAY use the approved major-version tags below because they are later resolved during generation. When auditing, treat a SHA pin as compliant only when the accompanying comment matches this matrix.
+Generated workflow files MUST pin GitHub Actions to a full commit SHA and include a trailing approved-version comment, for example `actions/checkout@<sha> # v6`. Templates MAY use the approved major-version tags below because they are later resolved during generation. When auditing, treat a SHA pin as compliant only when the accompanying comment matches this matrix.
 
-> **Standard Version:** 1.0.0
+> **Standard Version:** 1.2.0
 > **Reference:** `ref.ci-cd-standard` Rule 2 and Rule 13
 
 This document tracks the history of GitHub Action versions used across CI/CD standard versions. It is the authoritative reference for which action versions belong to which standard version.
@@ -14,7 +14,7 @@ This document tracks the history of GitHub Action versions used across CI/CD sta
 3. Backward-incompatible action changes MUST be documented in the migration guide in SKILL.md.
 4. Minor/patch action upgrades within the same standard version are NOT allowed.
 
-## Current Versions (Standard v1.0.0)
+## Current Versions (Standard v1.2.0)
 
 | Action | Version | Purpose |
 |--------|---------|---------|
@@ -27,8 +27,8 @@ This document tracks the history of GitHub Action versions used across CI/CD sta
 | `actions/attest` | `v4` | Generate artifact attestation |
 | `softprops/action-gh-release` | `v3` | Create GitHub Release |
 | `codecov/codecov-action` | `v6` | Upload coverage to Codecov |
-| `actions/upload-artifact` | `v4` | Upload build artifacts |
-| `actions/download-artifact` | `v4` | Download artifacts between jobs |
+| `actions/upload-artifact` | `v7` | Upload build artifacts |
+| `actions/download-artifact` | `v8` | Download artifacts between jobs |
 | `actions/cache` | `v5` | Cache dependencies (NuGet, pip) |
 | `semgrep/semgrep-action` | `v1` | Security scanning |
 | `github/codeql-action/upload-sarif` | `v4` | Upload SARIF to Security tab |
@@ -48,6 +48,10 @@ This document tracks the history of GitHub Action versions used across CI/CD sta
 | .NET | `10.0.x` |
 
 ## Version History
+
+### v1.2.0 (2026-06-05) — Generated SHA pinning and artifact action updates
+
+Generated workflows now require full commit SHA pins with approved-version comments. Artifact upload/download actions moved to `actions/upload-artifact@v7` and `actions/download-artifact@v8`.
 
 ### v1.1.0 (2026-06-04) — Extension workflow support
 

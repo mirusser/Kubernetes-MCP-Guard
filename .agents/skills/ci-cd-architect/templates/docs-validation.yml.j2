@@ -81,7 +81,7 @@ jobs:
 
           # Run validation — capture output for PR comment
           {% if docs_validation_script %}
-          python {{ docs_validation_script }} --ci 2>&1 | tee /tmp/docs-validation-output.txt
+          python {{ docs_validation_script }} --ci{% if docs_validation_strict | default(false) %} --strict{% endif %} 2>&1 | tee /tmp/docs-validation-output.txt
           EXIT_CODE=${PIPESTATUS[0]}
           {% else %}
           echo "⚠️  No validation script configured (docs_validation_script is empty)"
@@ -107,7 +107,7 @@ jobs:
         run: |
           echo "No markdown files changed — validating all documents"
           {% if docs_validation_script %}
-          python {{ docs_validation_script }} docs/ || true
+          python {{ docs_validation_script }} docs/{% if docs_validation_strict | default(false) %} --strict{% endif %} || true
           {% else %}
           echo "No validation script configured — skipping"
           {% endif %}

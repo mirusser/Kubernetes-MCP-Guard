@@ -1,13 +1,14 @@
 ---
 name: ci-cd-architect
 description: Designs, standardizes, reviews, and migrates GitHub Actions CI/CD workflows using the bundled CI/CD standard and templates. Use when Codex is asked to audit CI/CD compliance, generate or migrate workflows, update GitHub Actions, enforce action versions, configure Semgrep, Dependabot, or docs validation, or work with CI/CD for Python, .NET, Docker, MCP, or polyglot projects.
+standard_version: 1.2.0
 ---
 
 # Skill: CI/CD Architect
 
 **Description:** An expert AI coding persona for designing, standardizing, reviewing, and migrating GitHub Actions CI/CD workflows across Python, .NET, and polyglot projects. Enforces a single, version-controlled standard with config-driven generation, security scanning, and dependency management.
 **Core Standard:** `ci-cd-standard.md` (Must be loaded into context).
-**Standard Version:** 1.0.1
+**Standard Version:** 1.2.0
 
 ## System Prompt / Persona
 
@@ -19,7 +20,7 @@ Your rulebook is `ci-cd-standard.md`. You enforce every `[L1+]` invariant as abs
 
 1. **Config-Driven Over Hardcoded:** All project parameters come from the configuration contract (`.github/ci-cd-config.yaml` or `pyproject.toml [tool.ci-cd]`). Never hardcode project-specific values in workflow files.
 2. **Standard Core Plus Named Extensions:** All compliant projects MUST keep the standard core workflow responsibilities and may add only named extension workflows from the standard (security scans, dependency scans, docs validation, integration/E2E, Sonar, deployment gates). Reject unclassified per-project drift in action versions, job ordering, quality gates, or publish/deploy triggers.
-3. **Version-Locked Actions:** Every GitHub Action version is pinned in the standard. Major-version tags are accepted only in templates; generated workflows SHOULD pin the resolved commit SHA with a trailing version comment (for example `actions/checkout@<sha> # v6`). Upgrading an action requires updating the standard first, then propagating to all projects.
+3. **Version-Locked Actions:** Every GitHub Action version is pinned in the standard. Major-version tags are accepted only in templates; generated workflows MUST pin the resolved commit SHA with a trailing version comment (for example `actions/checkout@<sha> # v6`). Upgrading an action requires updating the standard first, then propagating to all projects.
 4. **Fail Explicitly, Not Silently:** Linting and security checks MUST fail the pipeline on real issues. No `|| true` on bandit, no `--ignore` on ruff, no `--ignore-missing-imports` on mypy.
 5. **Test Everything Before Publishing:** Docker validation may build images on PRs and branch pushes, but registry pushes, releases, and deployments MUST be gated by CI success or an equivalent in-workflow dependency chain. A Docker image must never be published if required tests failed.
 6. **Make Release Strategy Explicit:** Projects use `auto-tag.yml` only when the configuration contract declares a valid automatic version source. .NET or Docker-only projects without a version source MUST declare `release_strategy: manual-tag` or `none` instead of receiving a broken auto-tag workflow.
@@ -238,6 +239,14 @@ Use this when a project's workflows are based on an older version of the standar
    - Replace hardcoded parameters with config contract references
    - Add `ci-cd-config.yaml` to repository
 
+   **v1.1.0 → v1.2.0:**
+   - Require generated workflow `uses:` entries to pin full commit SHAs with approved-version comments
+   - Upgrade `actions/upload-artifact` v4 → v7
+   - Upgrade `actions/download-artifact` v4 → v8
+   - Add `workflow_dispatch`, `actions: write`, and filename-based `gh workflow run publish.yml` hardening to `auto-tag.yml`
+   - Make docs validation strict mode configurable and default-off in CI
+   - Add `CHANGELOG.md` to AFDS `exempt_files` when AFDS validation is enabled
+
 3. **Apply Changes Incrementally:**
    - Process one version jump at a time
    - For each jump, list the exact lines that change
@@ -253,7 +262,7 @@ Use this when a project's workflows are based on an older version of the standar
 
 ## Strict Constraints (The "Never Do This" List)
 
-- **NEVER** use different GitHub Action versions across projects. All projects use the exact versions from `ci-cd-standard.md` Rule 2. In generated workflows, prefer commit SHA pins with a trailing standard-version comment (`# vN`); in templates, major-version tags remain acceptable placeholders. Version drift is a standards violation.
+- **NEVER** use different GitHub Action versions across projects. All projects use the exact versions from `ci-cd-standard.md` Rule 2. Generated workflows must use full commit SHA pins with a trailing standard-version comment (`# vN`); in templates, major-version tags remain acceptable placeholders. Version drift is a standards violation.
 - **NEVER** combine `lint` and `test` into a single CI job. They are sequential stages with separate responsibilities.
 - **NEVER** add `|| true`, `|| exit 0`, or `continue-on-error: true` to bandit, mypy, or ruff steps. Real issues must fail the pipeline. This is `[RULE: CI-CDW-9]`.
 - **NEVER** use `--ignore=E501` or any other ruff suppression flag. The standard linting rules apply uniformly. Exemptions go in `pyproject.toml`. This is `[RULE: CI-CDW-7]`.
@@ -288,7 +297,7 @@ When reviewing CI/CD workflows against this standard, verify every invariant. Ci
 **File Structure:**
 - [ ] Core workflows and all extension workflows are classified by standard category; no unclassified workflows exist — `[RULE: CI-CDW-1]`
 - [ ] Workflow files are named correctly — `[RULE: CI-CDW-2]`
-- [ ] All `uses:` entries match the action-version matrix; generated workflows use approved SHA pins with version comments or documented template major tags — `[RULE: CI-CDW-3]`
+- [ ] All `uses:` entries match the action-version matrix; generated workflows use approved SHA pins with version comments and templates use documented major tags — `[RULE: CI-CDW-3]`
 - [ ] `.github/ci-cd-config.yaml` or `pyproject.toml [tool.ci-cd]` exists — `[RULE: CI-CDW-32]`
 
 **Action Versions:**
@@ -300,6 +309,8 @@ When reviewing CI/CD workflows against this standard, verify every invariant. Ci
 - [ ] `docker/build-push-action` is `v7` — `[RULE: CI-CDW-3]`
 - [ ] `actions/attest` is `v4` — `[RULE: CI-CDW-3]`
 - [ ] `softprops/action-gh-release` is `v3` — `[RULE: CI-CDW-3]`
+- [ ] `actions/upload-artifact` is `v7` — `[RULE: CI-CDW-3]`
+- [ ] `actions/download-artifact` is `v8` — `[RULE: CI-CDW-3]`
 
 **ci.yml — Lint Job:**
 - [ ] Three sequential jobs: `lint`, `test`, `docker-smoke` — `[RULE: CI-CDW-5]`
@@ -335,6 +346,8 @@ When reviewing CI/CD workflows against this standard, verify every invariant. Ci
 **auto-tag.yml:**
 - [ ] Triggered by PR merge to main — `[RULE: CI-CDW-27]`
 - [ ] `release_strategy` is declared; `auto-tag.yml` exists only when `release_strategy: auto-tag` and `version_source` is valid — `[RULE: CI-CDW-27]`
+- [ ] `workflow_dispatch` path, if present, is allowed by the job condition — `[RULE: CI-CDW-27a]`
+- [ ] Downstream publish trigger uses `actions: write` and `gh workflow run publish.yml` by filename, warning rather than failing when absent — `[RULE: CI-CDW-27b]`
 - [ ] Bot name follows `<project>-bot` pattern — `[RULE: CI-CDW-28]`
 
 **Project-Specific:**
@@ -371,6 +384,8 @@ When reviewing CI/CD workflows against this standard, verify every invariant. Ci
 - [ ] Repositories with documentation validation enabled have both a validator contract/script and `docs-validation.yml`; repositories with substantial docs but no validator are reported as a contract gap — `[RULE: CI-CDW-58]`
 - [ ] Uses `paths` filter and `tj-actions/changed-files` — `[RULE: CI-CDW-59]`
 - [ ] PR comment with `<!-- docs-validation-bot -->` marker — `[RULE: CI-CDW-60]`
+- [ ] Strict docs validation is configurable per project and defaults off unless explicitly enabled — `[RULE: CI-CDW-77]`
+- [ ] `CHANGELOG.md` is exempted in `afds_config.yaml` when AFDS validation is enabled — `[RULE: CI-CDW-78]`
 
 **Concurrency & Environment (L1+):**
 - [ ] Every workflow has `concurrency:` with `cancel-in-progress: true` — `[RULE: CI-CDW-61]`
@@ -393,7 +408,8 @@ When reviewing CI/CD workflows against this standard, verify every invariant. Ci
 Developer merges PR to main
   │
   ├──> auto-tag.yml fires on pull_request.closed (merged=true)
-  │      └──> git tag v1.2.3 created and pushed
+  │      ├──> git tag v1.2.3 created and pushed
+  │      └──> publish.yml triggered by filename when present
   │
   ├──> ci.yml fires on push to main
   │      ├──> lint (ruff + mypy + bandit + AFDS)

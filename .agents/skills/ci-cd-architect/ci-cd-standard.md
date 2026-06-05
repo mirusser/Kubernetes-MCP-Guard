@@ -13,9 +13,9 @@ owners: ["backend-team"]
 upstream:
   - ref.mcp-server-standards
 source_of_truth: true
-last_verified: "2026-06-04"
+last_verified: "2026-06-05"
 doc_kind: atomic
-standard_version: "1.1.0"
+standard_version: "1.2.0"
 ---
 
 # CI/CD Standard — Unified Pipelines for Python, .NET, and Polyglot Projects
@@ -87,9 +87,10 @@ All compliant CI/CD workflows MUST use the same pinned versions of GitHub Action
 | `actions/attest` | `v4` | Generate artifact attestation |
 | `softprops/action-gh-release` | `v3` | Create GitHub Release |
 | `codecov/codecov-action` | `v6` | Upload coverage to Codecov |
-| `actions/upload-artifact` | `v4` | Upload build artifacts |
+| `actions/upload-artifact` | `v7` | Upload build artifacts |
+| `actions/download-artifact` | `v8` | Download artifacts between jobs |
 
-**[RULE: CI-CDW-3] [L1+]** All workflow files MUST use the exact action versions listed above. Templates MAY use the listed major-version tags. Generated workflows SHOULD pin each action to a full commit SHA and include a trailing comment with the approved major version (for example `actions/checkout@<sha> # v6`). A SHA pin without a matching version comment is incomplete; a tag that does not match the matrix is non-compliant. Upgrading an action version requires updating this standard first, then propagating to all projects. For the full version history and upgrade policy, see `references/action-version-matrix.md`.
+**[RULE: CI-CDW-3] [L1+]** All workflow files MUST use the exact action versions listed above. Templates MAY use the listed major-version tags. Generated workflows MUST pin each action to a full commit SHA and include a trailing comment with the approved major version (for example `actions/checkout@<sha> # v6`). A SHA pin without a matching version comment is incomplete; a tag that does not match the matrix is non-compliant in generated workflows. Upgrading an action version requires updating this standard first, then propagating to all projects. For the full version history and upgrade policy, see `references/action-version-matrix.md`.
 
 ### Rule 3: Python Version
 
@@ -255,13 +256,15 @@ on:
   pull_request:
     branches: [main]
     types: [closed]
+  workflow_dispatch:
 
 jobs:
   tag:
-    if: github.event.pull_request.merged == true
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
 
     steps:
       - uses: actions/checkout@v6
@@ -276,14 +279,27 @@ jobs:
           echo "Found version: $VERSION"
 
       - name: Create and push tag
+        id: tag
         run: |
           git config user.name "<PROJECT>-bot"
           git config user.email "bot@<PROJECT>.local"
           git tag "v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
+
+      - name: Trigger downstream publish
+        run: |
+          gh workflow run "publish.yml" \
+            --ref "v${{ steps.version.outputs.version }}" \
+            || echo "::warning::Publish workflow not found or failed to trigger"
+        env:
+          GH_TOKEN: ${{ github.token }}
 ```
 
 **[RULE: CI-CDW-28] [L1+]** The bot name MUST follow the pattern `<project-name>-bot` with email `bot@<project-name>.local`. The `<PROJECT>` placeholder is substituted from the project's configuration contract.
+
+**[RULE: CI-CDW-27a] [L2+]** `auto-tag.yml` SHOULD include a `workflow_dispatch` trigger for manual tag creation. When `workflow_dispatch` is present, the tag job condition MUST include `github.event_name == 'workflow_dispatch'` as an allowed path because manually triggered runs do not have a `github.event.pull_request` object.
+
+**[RULE: CI-CDW-27b] [L2+]** When a downstream publish/release workflow exists, `auto-tag.yml` MUST include `actions: write` permission and call `gh workflow run` after creating a new tag. The target MUST be the workflow filename, such as `publish.yml`, not the workflow display name. The command SHOULD warn rather than fail when the downstream workflow is intentionally absent for non-Docker, manual-tag, or no-release projects.
 
 ### Rule 7: Documentation Validation (AFDS)
 
@@ -296,7 +312,9 @@ jobs:
   if: hashFiles('afds_config.yaml') != ''
   run: |
     curl -sS https://raw.githubusercontent.com/paulomac1000/ai-skills/main/skills/afds-doc-writer/docs_validate.py | python3 - \
-      --config afds_config.yaml --strict --baseline .afds-baseline.json ./
+      --config afds_config.yaml \
+      ${DOCS_VALIDATION_STRICT:+--strict} \
+      --baseline .afds-baseline.json ./
 ```
 
 **[RULE: CI-CDW-31] [L2+]** Every project `README.md` SHOULD link to the project's standards repository or documentation for contributors. The README is a human-first document (not AFDS-governed) per `ref.documentation-standard`.
@@ -333,6 +351,7 @@ The configuration contract defines these parameters:
 | `use_docs_validation` | No | Whether to validate documentation in CI (default: `false`, auto-enabled when `docs/` exists) | `true` / `false` |
 | `docs_paths` | No | Paths to scan for documentation validation | `["docs/", "*.md"]` |
 | `docs_validation_script` | No | Path to the documentation validation script | `scripts/validate_docs.py` |
+| `docs_validation_strict` | No | Whether docs validation warnings should fail CI. Defaults to `false`; use `true` only for projects that intentionally enforce zero-warning docs. | `false` |
 | `dotnet_version` | No | .NET SDK version (required when `language: dotnet`) | `"8.0.x"` |
 | `dotnet_solution` | No | Path to .NET solution file (required when `language: dotnet`) | `src/MyApp.sln` |
 | `version_source` | No | Source for auto-tag version extraction: `"pyproject"` (default) or `"directory-build-props"` (.NET) | `"pyproject"` |
@@ -358,7 +377,7 @@ The configuration contract defines these parameters:
 - Adding integration test execution in the `test` job (after unit tests)
 - Adding a manifest verification step in `docker-smoke` (for MCP projects)
 - Adding `--cov-fail-under=80` to pytest
-- Adding a bandit report upload as an artifact (using `actions/upload-artifact@v4`)
+- Adding a bandit report upload as an artifact (using `actions/upload-artifact@v7`)
 - Adding extra lint steps (e.g., `vulture` for dead code detection) after bandit
 - Adding platform-specific test steps (e.g., `pip install nmap` for network scan tests)
 - Adding a multi-stage Dockerfile target (`dockerfile_target` parameter)
@@ -612,6 +631,10 @@ Documentation quality is enforced through automated validation in CI. This is a 
 **[RULE: CI-CDW-59] [L2+]** The workflow MUST use `paths` filters (`**/*.md`) and `tj-actions/changed-files@v47` for incremental validation — only changed documentation files are validated.
 
 **[RULE: CI-CDW-60] [L2+]** On PR, a status comment MUST be posted or updated via `actions/github-script@v9` with marker `<!-- docs-validation-bot -->`. The comment lists failed files and provides fix instructions.
+
+**[RULE: CI-CDW-77] [L2+]** Documentation validation strict mode MUST be configurable per project through `ci-cd-config.yaml`, a workflow variable, or an equivalent generated input. Strict mode SHOULD default to off in CI so advisory warnings do not block unrelated changes unless the project explicitly opts into zero-warning enforcement.
+
+**[RULE: CI-CDW-78] [L1+]** `CHANGELOG.md` MUST be listed in `afds_config.yaml` `exempt_files` when AFDS validation is enabled. Changelogs are version-history documents rather than AFDS-structured documents, and failing them for missing AFDS frontmatter creates noise. Projects SHOULD also exempt `README.md` when the AFDS profile treats README as a human-first overview rather than a structured doc.
 
 **`docs-validation.yml` template:**
 
@@ -912,6 +935,14 @@ See `templates/auto-tag.yml.j2` for the Jinja2 template.
 
 ## CHANGELOG
 
+### 1.2.0 (2026-06-05)
+
+- Hardened generated workflow action references: generated workflows now require full commit SHA pins with approved-version comments; templates may continue to use the approved major-version tags.
+- Updated artifact actions to `actions/upload-artifact@v7` and `actions/download-artifact@v8`.
+- Hardened `auto-tag.yml` for manual dispatch, downstream publish triggering by workflow filename, and `actions: write` permission when invoking `gh workflow run`.
+- Made documentation validation strict mode configurable and default-off in CI.
+- Required `CHANGELOG.md` to be exempted from AFDS validation when AFDS is enabled.
+
 ### 1.1.0 (2026-06-04)
 
 - Replaced the exactly-three-workflows model with core workflows plus classified extension workflows.
@@ -933,5 +964,5 @@ See `templates/auto-tag.yml.j2` for the Jinja2 template.
 ### 1.0.0 (2026-05-20)
 - Initial standard: Unicode CI pipeline (lint, test, docker-smoke), Docker publish, auto-tag, unified action versions, Semgrep security scanning, Dependabot dependency management, documentation validation (CAFDS), Codecov integration, .NET CI variant, PR feedback patterns, concurrency best practices.
 - Scope: Python + Docker (primary), .NET + NuGet (variant), polyglot projects.
-- Rules: `[CI-CDW-1]` through `[CI-CDW-76]` covering workflow files, action versions, Python version, CI structure, lint quality gates, test coverage, Docker smoke, publish gates, attestation, release strategy, documentation validation, project config contract, customizations, source layout variants, Docker-less projects, service integration, standard versioning, non-MCP smoke, Semgrep scanning, Dependabot, docs validation, concurrency, .NET variants, PR feedback, container scanning, dependency vulnerability scans, Sonar/SonarCloud reporting, branch policy, integration tests, safety E2E, and coverage providers.
-- Action versions pinned: checkout@v6, setup-python@v6, buildx@v4, login@v4, metadata@v6, build-push@v7, attest@v4, gh-release@v3, codecov@v6, upload-artifact@v4, semgrep-action@v1, upload-sarif@v4, cache@v5, setup-dotnet@v5, github-script@v9, changed-files@v47, test-reporter@v3.
+- Rules: `[CI-CDW-1]` through `[CI-CDW-78]` covering workflow files, action versions, Python version, CI structure, lint quality gates, test coverage, Docker smoke, publish gates, attestation, release strategy, documentation validation, project config contract, customizations, source layout variants, Docker-less projects, service integration, standard versioning, non-MCP smoke, Semgrep scanning, Dependabot, docs validation, concurrency, .NET variants, PR feedback, container scanning, dependency vulnerability scans, Sonar/SonarCloud reporting, branch policy, integration tests, safety E2E, coverage providers, and docs strictness/exemptions.
+- Action versions pinned: checkout@v6, setup-python@v6, buildx@v4, login@v4, metadata@v6, build-push@v7, attest@v4, gh-release@v3, codecov@v6, upload-artifact@v7, download-artifact@v8, semgrep-action@v1, upload-sarif@v4, cache@v5, setup-dotnet@v5, github-script@v9, changed-files@v47, test-reporter@v3.
