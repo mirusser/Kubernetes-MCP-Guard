@@ -46,6 +46,7 @@ incremental SHA256-based skip detection and complete in seconds.
 | `InfraGate__RfcRag__EmbeddingBatchSize` | `20` | Batch size for embedding API calls |
 | `InfraGate__RfcRag__OpenRouterEmbeddingEndpoint` | `https://openrouter.ai/api/v1` | OpenRouter API base URL for embedding requests |
 | `InfraGate__RfcRag__RunMigrationsOnStartup` | `true` | Auto-apply SQL schema migrations |
+| `InfraGate__RfcRag__EmbeddingDimensions` | `1536` | Embedding vector dimensions (validated on startup) |
 | `InfraGate__OpenRouter__ApiKey` | (required) | OpenRouter API key |
 
 ## MCP Tools
@@ -108,6 +109,22 @@ Parameters: none
 Returns: JSON string { indexedRfcs, sections, abnfBlocks, normativeOccurrences, lastIndexedAtUtc }
 ```
 
+### `get_rfc_metadata`
+Retrieve metadata for a specific RFC (title, updates, obsoletes).
+
+```
+Parameters: rfcNumber (int)
+Returns: JSON object with { rfcNumber, title, updates, obsoletes, updated_by, obsoleted_by }
+```
+
+### `list_indexed_rfcs`
+List indexed RFCs with their numbers and titles. Supports pagination.
+
+```
+Parameters: limit (int, default=100, max=1000), offset (int, default=0)
+Returns: JSON object with { total, rfcs: [{ rfcNumber, title, ... }] }
+```
+
 ## Example Queries
 
 ```
@@ -144,6 +161,75 @@ Add to `~/.codex/config.toml`:
 command = "dotnet"
 args = ["run", "--project", "src/InfraGate.RfcRag/"]
 ```
+
+## Docker
+
+A `Dockerfile` and `docker-compose` setup are provided for containerized deployment.
+
+### Prerequisites
+
+- [Docker Compose v2](https://docs.docker.com/compose/install/)
+- OpenRouter API key
+- RFC mirror on the host (one-time):
+  ```bash
+  rsync -avz --delete rsync.rfc-editor.org::rfcs-text-only ~/rfc-mirror/
+  ```
+
+### docker-compose (recommended)
+
+Starts a pgvector PostgreSQL sidecar and the RfcRag MCP server with persistent storage.
+
+```bash
+# Using inline env:
+OPENROUTER_API_KEY="sk-or-..." \
+  docker compose -f deploy/compose/rfc-rag.yaml up
+
+# Or using .env file:
+cp deploy/compose/rfc-rag.env.example .env.rfc-rag
+# edit .env.rfc-rag with your OpenRouter API key and mirror path
+docker compose --env-file .env.rfc-rag -f deploy/compose/rfc-rag.yaml up
+```
+
+First run indexes all ~9,800 RFCs (10-15 min). The postgres data persists across restarts via a named volume.
+
+### Docker standalone
+
+```bash
+docker build -t rfc-rag -f src/InfraGate.RfcRag/Dockerfile .
+
+docker run --rm -i \
+  --network host \
+  -v ~/rfc-mirror:/rfc-mirror:ro \
+  -e InfraGate__RfcRag__PostgresConnectionString="Host=localhost;Database=rfc_rag;Username=postgres;Password=postgres" \
+  -e InfraGate__RfcRag__RfcMirrorPath=/rfc-mirror \
+  -e InfraGate__OpenRouter__ApiKey="sk-or-..." \
+  rfc-rag
+```
+
+The `-i` flag keeps stdin open so the MCP stdio server stays alive.
+
+### Connecting via containerized MCP
+
+```bash
+# Claude Code (docker-compose mode):
+claude mcp add-json --scope user rfc-rag \
+  '{"type":"stdio","command":"docker","args":["exec","-i","rfc-rag-rfc-rag-1","dotnet","InfraGate.RfcRag.dll"]}'
+
+# Codex (docker-compose mode):
+# ~/.codex/config.toml
+[mcp_servers.rfc-rag]
+command = "docker"
+args = ["exec", "-i", "rfc-rag-rfc-rag-1", "dotnet", "InfraGate.RfcRag.dll"]
+```
+
+### Extraction from monorepo
+
+This project has **no internal dependencies on other InfraGate projects** (zero `ProjectReference` entries), so extraction is straightforward:
+
+1. Copy `src/InfraGate.RfcRag/` to the new repo
+2. Update `Dockerfile` paths: remove the `src/InfraGate.RfcRag/` prefix from project references
+3. Update `deploy/compose/rfc-rag.yaml` build context from `../..` to `.`
+4. The project builds standalone with only NuGet dependencies
 
 ## Architecture
 
@@ -188,18 +274,20 @@ dotnet test tests/InfraGate.RfcRag.Tests/ --filter "Category=Integration"
 
 - `RfcParser.cs`: parses raw RFC `.txt` files, strips page headers/footers, extracts metadata, splits into sections, detects ABNF blocks, extracts normative keywords.
 - `RfcIndexer.cs`: walks the RFC mirror, parses each RFC, generates embeddings via OpenRouter, stores in PostgreSQL.
-- `RfcRepository.cs`: Dapper-based data access for RFC sections, ABNF blocks, normative occurrences.
+- `Search/SearchRepository.cs`: Dapper-based data access for RFC sections, ABNF blocks, normative occurrences.
+- `Search/MetadataRepository.cs`: Dapper-based data access for RFC metadata queries.
+- `Indexing/IndexingRepository.cs`: Dapper-based data access for indexing operations.
 - `SearchService.cs`: hybrid search combining vector similarity, full-text lexical search, and exact section lookup.
 - `RfcRagTools.cs`: MCP tool definitions exposed to coding agents.
 - `Program.cs`: stdio MCP server with auto-indexing on startup.
-- `ServiceCollectionExtensions.cs`: dependency injection registration for RFC RAG services and adapters.
-- `RfcRagMigrationRunner.cs`: applies database schema migrations for the RFC RAG tables.
+- `Infrastructure/ServiceCollectionExtensions.cs`: dependency injection registration for RFC RAG services and adapters.
+- `Infrastructure/RfcRagMigrationRunner.cs`: applies database schema migrations for the RFC RAG tables.
 - `RfcDocument.cs`: represents a parsed RFC document with metadata and sections.
 - `Settings/RfcRagOptions.cs`: configuration options for the RFC RAG pipeline.
-- `RfcRagConventions.cs`: database schema and table name conventions.
-- `EmbeddingService.cs`: generates text embeddings in batches using the configured generator.
-- `ISearchService.cs`: interface for RFC search and retrieval operations.
-- `IIndexerService.cs`: interface for the RFC indexing service.
+- `Infrastructure/RfcRagConventions.cs`: database schema and table name conventions.
+- `Indexing/EmbeddingService.cs`: generates text embeddings in batches using the configured generator.
+- `Search/ISearchService.cs`: interface for RFC search and retrieval operations.
+- `Indexing/IIndexerService.cs`: interface for the RFC indexing service.
 - `SearchResult.cs`: represents a ranked search result from hybrid search.
 - `Models/`: database entity models including `RfcSection.cs`, `RfcAbnfBlock.cs`, `NormativeOccurrence.cs`, and `RfcMetadata.cs`.
 

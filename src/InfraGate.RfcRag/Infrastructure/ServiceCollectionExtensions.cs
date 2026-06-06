@@ -45,11 +45,15 @@ public static class ServiceCollectionExtensions
     {
         services.TryAddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
         {
-            var options = sp.GetRequiredService<IOptions<RfcRagOptions>>().Value;
-            var openRouterKey = Environment.GetEnvironmentVariable(RfcRagOptions.OpenRouterApiKeyEnvironmentVariable)
-                ?? throw new InvalidOperationException(
-                    $"{RfcRagOptions.OpenRouterApiKeyEnvironmentVariable} environment variable is required for OpenRouter embeddings.");
+            var openRouterKey = Environment.GetEnvironmentVariable(
+                RfcRagOptions.OpenRouterApiKeyEnvironmentVariable);
 
+            if (string.IsNullOrWhiteSpace(openRouterKey))
+            {
+                return new MissingApiKeyEmbeddingGenerator();
+            }
+
+            var options = sp.GetRequiredService<IOptions<RfcRagOptions>>().Value;
             var openAiOptions = new OpenAIClientOptions
             {
                 Endpoint = new Uri(options.OpenRouterEmbeddingEndpoint)

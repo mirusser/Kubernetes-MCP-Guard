@@ -1,0 +1,76 @@
+# deploy/compose/rfc-rag.yaml
+# Standalone RFC RAG MCP server with pgvector PostgreSQL.
+#
+# Prerequisites:
+#   1. RFC mirror on the host (one-time):
+#        rsync -avz --delete rsync.rfc-editor.org::rfcs-text-only ~/rfc-mirror/
+#   2. OpenRouter API key
+#
+# Run (after creating .env.rfc-rag):
+#   docker compose --env-file .env.rfc-rag -f deploy/compose/rfc-rag.yaml up
+#
+# First-time setup:
+#   cp deploy/compose/rfc-rag.env.example .env.rfc-rag
+#   # edit .env.rfc-rag with your settings
+#   docker compose --env-file .env.rfc-rag -f deploy/compose/rfc-rag.yaml up
+#
+# Override env file path:
+#   RFC_RAG_ENV_FILE=/custom/path.env docker compose ... up
+#
+# First run indexes all ~9800 RFCs (10-15 min). Subsequent starts are fast
+# (SHA256-based incremental indexing).
+#
+# Connect Claude Code / Codex CLI:
+#   claude mcp add-json --scope user rfc-rag \
+#     '{"type":"stdio","command":"docker","args":["exec","-i","rfc-rag-rfc-rag-1","dotnet","InfraGate.RfcRag.dll"]}'
+#
+# Or via docker run (standalone, not compose):
+#   docker run --rm -i --network rfc-rag_default \
+#     -v ~/rfc-mirror:/rfc-mirror:ro \
+#     -e InfraGate__RfcRag__PostgresConnectionString="Host=postgres;..." \
+#     -e InfraGate__RfcRag__RfcMirrorPath=/rfc-mirror \
+#     -e InfraGate__OpenRouter__ApiKey="sk-or-..." \
+#     rfc-rag
+#
+# Extraction notes:
+#   When extracting this project from the monorepo:
+#   - Change build.context from "../.." to "."
+#   - Change dockerfile from "src/InfraGate.RfcRag/Dockerfile" to "Dockerfile"
+#   - Remove paths like src/ from the Dockerfile filter stage
+#   - The compose file can live at the repo root as docker-compose.yml
+
+name: rfc-rag
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    env_file:
+      - ${RFC_RAG_ENV_FILE:-../../.env.rfc-rag}
+    ports:
+      - "${PG_BIND_ADDRESS:-127.0.0.1}:${PG_BIND_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-rfc_rag} -d ${PG_DATABASE:-rfc_rag}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  rfc-rag:
+    build:
+      context: ../..
+      dockerfile: src/InfraGate.RfcRag/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    stdin_open: true
+    env_file:
+      - ${RFC_RAG_ENV_FILE:-../../.env.rfc-rag}
+    volumes:
+      - ${RFC_MIRROR_HOST_PATH:-/home/user/rfc-mirror}:/rfc-mirror:ro
+    restart: unless-stopped
+
+volumes:
+  pgdata:

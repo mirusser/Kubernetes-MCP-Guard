@@ -14,6 +14,21 @@ Defaults below come from the current source code and workflows. Paths shown as `
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | All runtime components | No | Unset | `http://localhost:4317` | Enables OTLP export for traces and metrics. If unset, only the Serilog bridge is active. | Use an authenticated OTLP collector. |
 | `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` | `InfraGate.Observer`, `InfraGate.Planner` | No | `false` | `true` | Set to `true` to include prompt/response content in spans. | **Off by default** — do not enable in production without a data-handling review. |
 
+## InfraGate.RfcRag
+
+The RFC RAG MCP server is a standalone tool with no internal InfraGate project dependencies.
+
+| Variable | Component | Required | Default | Example | Description | Production guidance |
+| --- | --- | :---: | --- | --- | --- | --- |
+| `InfraGate__RfcRag__RfcMirrorPath` | `InfraGate.RfcRag` | Yes | `~/OtherRepos/rfc-mirror/` | `/rfc-mirror` | Path to the local RFC mirror directory containing `.txt` files. | Use an absolute path in Docker deployments to avoid tilde-expansion issues. |
+| `InfraGate__RfcRag__PostgresConnectionString` | `InfraGate.RfcRag` | Yes | None | `Host=localhost;Database=rfc_rag;Username=postgres;Password=postgres` | PostgreSQL connection string for the RfcRag database (`pgvector` required). | Use a least-privilege role with write access to the `rfc_rag` schema. |
+| `InfraGate__RfcRag__EmbeddingModel` | `InfraGate.RfcRag` | No | `openai/text-embedding-3-small` | `openai/text-embedding-3-large` | OpenRouter embedding model identifier. | Choose based on quality/cost trade-off; dimensions must match `EmbeddingDimensions`. |
+| `InfraGate__RfcRag__EmbeddingDimensions` | `InfraGate.RfcRag` | No | `1536` | `3072` | Embedding vector dimensions matching the selected model. | Must match the model's output dimensions; mismatches fail startup. |
+| `InfraGate__RfcRag__EmbeddingBatchSize` | `InfraGate.RfcRag` | No | `20` | `10` | Batch size for embedding API calls. | Smaller batches reduce memory but increase API call count. |
+| `InfraGate__RfcRag__OpenRouterEmbeddingEndpoint` | `InfraGate.RfcRag` | No | `https://openrouter.ai/api/v1` | `https://openrouter.ai/api/v1` | OpenRouter API base URL for embedding requests. | Override only when using a compatible proxy or alternative provider. |
+| `InfraGate__RfcRag__RunMigrationsOnStartup` | `InfraGate.RfcRag` | No | `true` | `false` | Auto-apply SQL schema migrations on startup. | Disable only when managing migrations externally. |
+| `InfraGate__OpenRouter__ApiKey` | `InfraGate.RfcRag` | Yes | None | (secret) | OpenRouter API key used for embedding generation. | Use a secret manager in production; env vars are development-only. |
+
 ## McpServer
 
 ## InfraGate.AgentGuardrails.ModelVisibleContent

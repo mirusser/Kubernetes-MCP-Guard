@@ -78,11 +78,25 @@ internal static class Program
             return;
         }
 
-        int beforeCount = await indexer.GetIndexedCountAsync(CancellationToken.None).ConfigureAwait(false);
-        logger.LogInformation("Starting RFC RAG indexing. IndexedRfcsBefore={IndexedRfcsBefore}", beforeCount);
-        await indexer.IndexAllAsync(CancellationToken.None).ConfigureAwait(false);
-        int afterCount = await indexer.GetIndexedCountAsync(CancellationToken.None).ConfigureAwait(false);
-        logger.LogInformation("RFC RAG indexing complete. IndexedRfcsAfter={IndexedRfcsAfter}", afterCount);
+        string? openRouterKey = Environment.GetEnvironmentVariable(
+            RfcRagOptions.OpenRouterApiKeyEnvironmentVariable);
+
+        if (string.IsNullOrWhiteSpace(openRouterKey))
+        {
+            logger.LogWarning(
+                "{EnvVar} is not set. Skipping startup indexing. " +
+                "Search queries against already-indexed data will still work. " +
+                "Set this environment variable to enable embedding generation.",
+                RfcRagOptions.OpenRouterApiKeyEnvironmentVariable);
+        }
+        else
+        {
+            int beforeCount = await indexer.GetIndexedCountAsync(CancellationToken.None).ConfigureAwait(false);
+            logger.LogInformation("Starting RFC RAG indexing. IndexedRfcsBefore={IndexedRfcsBefore}", beforeCount);
+            await indexer.IndexAllAsync(CancellationToken.None).ConfigureAwait(false);
+            int afterCount = await indexer.GetIndexedCountAsync(CancellationToken.None).ConfigureAwait(false);
+            logger.LogInformation("RFC RAG indexing complete. IndexedRfcsAfter={IndexedRfcsAfter}", afterCount);
+        }
 
         await app.RunAsync().ConfigureAwait(false);
     }
