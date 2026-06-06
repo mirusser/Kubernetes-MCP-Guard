@@ -118,7 +118,7 @@ internal sealed class DpopProofTestFactory : IDisposable
         var descriptor = new SecurityTokenDescriptor
         {
             TokenType = GatewayAuthConventions.DPoP.ProofTyp,
-            Expires = expires,
+            Expires = expires ?? DateTime.UtcNow.AddMinutes(5),
             AdditionalHeaderClaims = new Dictionary<string, object>
             {
                 ["jwk"] = new Dictionary<string, string>

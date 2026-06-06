@@ -98,7 +98,8 @@ internal sealed class DpopProofValidator : IDpopProofValidator
         }
 
         // Verify signature using the embedded public key. DPoP proofs are self-signed: no issuer and no audience.
-        // Expiration is optional for DPoP proofs, but exp/nbf must be honored when present.
+        // Expiration is required: exp must be present and unexpired. The iat claim is also validated
+        // externally within a 300s window for replay protection.
         var handler = new JsonWebTokenHandler();
 #pragma warning disable CA5404 // Issuer and audience validation are intentionally disabled for self-signed DPoP proofs.
         var signatureResult = await handler.ValidateTokenAsync(
@@ -108,7 +109,7 @@ internal sealed class DpopProofValidator : IDpopProofValidator
                 ValidateIssuer = false,
                 ValidateAudience = false,
                 ValidateLifetime = true,
-                RequireExpirationTime = false,
+                RequireExpirationTime = true,
                 RequireSignedTokens = true,
                 IssuerSigningKey = proofJwk
             }).ConfigureAwait(false);
