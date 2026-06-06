@@ -1,8 +1,11 @@
+using InfraGate.RfcRag.Indexing;
+using InfraGate.RfcRag.Parsing;
+using InfraGate.RfcRag.Search;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using OpenAI;
 
-namespace InfraGate.RfcRag;
+namespace InfraGate.RfcRag.Infrastructure;
 
 public static class ServiceCollectionExtensions
 {
@@ -29,7 +32,9 @@ public static class ServiceCollectionExtensions
         }
 
         services.TryAddSingleton<RfcParser>();
-        services.TryAddSingleton<RfcRepository>();
+        services.TryAddSingleton<SearchRepository>();
+        services.TryAddSingleton<MetadataRepository>();
+        services.TryAddSingleton<IndexingRepository>();
         services.TryAddSingleton<IIndexerService, RfcIndexer>();
         services.TryAddSingleton<ISearchService, SearchService>();
 
@@ -65,37 +70,4 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
-}
-
-internal sealed class OpenAiEmbeddingGeneratorAdapter : IEmbeddingGenerator<string, Embedding<float>>
-{
-    private readonly OpenAI.Embeddings.EmbeddingClient client;
-
-    public OpenAiEmbeddingGeneratorAdapter(OpenAI.Embeddings.EmbeddingClient client)
-    {
-        this.client = client;
-    }
-
-    public static EmbeddingGeneratorMetadata Metadata => new("OpenRouter", new Uri("https://openrouter.ai"));
-
-    public async Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
-        IEnumerable<string> values,
-        EmbeddingGenerationOptions? options = null,
-        CancellationToken cancellationToken = default)
-    {
-        var inputs = values.ToList();
-        var response = await client.GenerateEmbeddingsAsync(inputs, options: null, cancellationToken).ConfigureAwait(false);
-
-        var results = new List<Embedding<float>>(inputs.Count);
-        foreach (OpenAI.Embeddings.OpenAIEmbedding item in response.Value)
-        {
-            results.Add(new Embedding<float>(item.ToFloats()));
-        }
-
-        return new GeneratedEmbeddings<Embedding<float>>(results);
-    }
-
-    public object? GetService(Type? serviceType, object? key = null) => null;
-
-    public void Dispose() { }
 }

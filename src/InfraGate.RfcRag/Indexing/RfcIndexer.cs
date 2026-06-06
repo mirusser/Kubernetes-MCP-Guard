@@ -1,11 +1,12 @@
 using System.Security.Cryptography;
+using InfraGate.RfcRag.Models;
 
-namespace InfraGate.RfcRag;
+namespace InfraGate.RfcRag.Indexing;
 
 public sealed class RfcIndexer : IIndexerService
 {
     private readonly NpgsqlDataSource dataSource;
-    private readonly RfcRepository repository;
+    private readonly IndexingRepository repository;
     private readonly RfcParser parser;
     private readonly EmbeddingService embeddingService;
     private readonly RfcRagOptions options;
@@ -13,7 +14,7 @@ public sealed class RfcIndexer : IIndexerService
 
     public RfcIndexer(
         NpgsqlDataSource dataSource,
-        RfcRepository repository,
+        IndexingRepository repository,
         RfcParser parser,
         EmbeddingService embeddingService,
         IOptions<RfcRagOptions> options,
@@ -82,7 +83,7 @@ public sealed class RfcIndexer : IIndexerService
     }
 
     public Task<int> GetIndexedCountAsync(CancellationToken cancellationToken) =>
-        repository.GetIndexedCountAsync(dataSource, cancellationToken);
+        repository.GetIndexedCountAsync(cancellationToken);
 
     private async Task IndexFileAsync(
         RfcSourceFile sourceFile,
@@ -95,19 +96,14 @@ public sealed class RfcIndexer : IIndexerService
 
         if (!force)
         {
-            var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-            await using (connection.ConfigureAwait(false))
-            {
-                string? indexedHash = await repository.GetIndexedRfcHashAsync(
-                    connection,
-                    sourceFile.RfcNumber,
-                    cancellationToken).ConfigureAwait(false);
+            string? indexedHash = await repository.GetIndexedRfcHashAsync(
+                sourceFile.RfcNumber,
+                cancellationToken).ConfigureAwait(false);
 
-                if (string.Equals(indexedHash, sourceSha256, StringComparison.Ordinal))
-                {
-                    logger.LogDebug("Skipping unchanged RFC {RfcNumber}", sourceFile.RfcNumber);
-                    return;
-                }
+            if (string.Equals(indexedHash, sourceSha256, StringComparison.Ordinal))
+            {
+                logger.LogDebug("Skipping unchanged RFC {RfcNumber}", sourceFile.RfcNumber);
+                return;
             }
         }
 

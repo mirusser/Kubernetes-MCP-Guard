@@ -1,6 +1,4 @@
-using Microsoft.Extensions.AI;
-
-namespace InfraGate.RfcRag;
+namespace InfraGate.RfcRag.Indexing;
 
 /// <summary>
 /// Generates vector embeddings for RFC section text using the configured embedding provider.

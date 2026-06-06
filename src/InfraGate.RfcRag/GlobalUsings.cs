@@ -1,6 +1,11 @@
 global using Dapper;
+global using InfraGate.RfcRag.Indexing;
+global using InfraGate.RfcRag.Infrastructure;
 global using InfraGate.RfcRag.Models;
+global using InfraGate.RfcRag.Parsing;
+global using InfraGate.RfcRag.Search;
 global using InfraGate.RfcRag.Settings;
+global using InfraGate.RfcRag.Tools;
 global using Microsoft.Extensions.AI;
 global using Microsoft.Extensions.Logging;
 global using Microsoft.Extensions.Options;

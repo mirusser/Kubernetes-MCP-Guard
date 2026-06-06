@@ -31,6 +31,6 @@ dotnet test tests/InfraGate.RfcRag.Tests/
 
 | Category | Count |
 |----------|-------|
-| Unit | 5 |
+| Unit | 28 |
 | Integration | 5 |
-| **Total** | **10** |
+| **Total** | **33** |

@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using Dapper;
 using Npgsql;
 
-namespace InfraGate.RfcRag;
+namespace InfraGate.RfcRag.Infrastructure;
 
 public static class RfcRagMigrationRunner
 {

@@ -1,17 +1,17 @@
-using InfraGate.RfcRag;
 using InfraGate.RfcRag.Models;
+using InfraGate.RfcRag.Parsing;
 
 namespace InfraGate.RfcRag.Tests.UnitTests;
 
 public sealed class RfcParserTests
 {
-    private static readonly RfcParser Parser = new();
+    private readonly RfcParser parser = new();
 
     [Fact]
     public async Task ParseAsync_RealRfc2119_ExtractsCorrectMetadata()
     {
         string fixturePath = Path.Combine("TestData", "rfc2119.txt");
-        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+        RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
 
         Assert.NotNull(document);
         Assert.NotNull(document.Metadata);
@@ -24,7 +24,7 @@ public sealed class RfcParserTests
     public async Task ParseAsync_RealRfc2119_ExtractsSections()
     {
         string fixturePath = Path.Combine("TestData", "rfc2119.txt");
-        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+        RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
 
         Assert.NotEmpty(document.Sections);
         RfcSection? introSection = document.Sections.FirstOrDefault(s => s.Section == "1");
@@ -38,7 +38,7 @@ public sealed class RfcParserTests
     public async Task ParseAsync_RealRfc2119_ExtractsNormativeKeywords()
     {
         string fixturePath = Path.Combine("TestData", "rfc2119.txt");
-        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+        RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
 
         var mustOccurrences = document.NormativeOccurrences
             .Where(n => n.Keyword == "MUST")
@@ -55,7 +55,7 @@ public sealed class RfcParserTests
     public async Task ParseAsync_RealRfc9110_ExtractsComplexSections()
     {
         string fixturePath = Path.Combine("TestData", "rfc9110.txt");
-        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+        RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
 
         Assert.Equal(9110, document.Metadata.Number);
         Assert.Contains("HTTP Semantics", document.Metadata.Title);
@@ -69,7 +69,7 @@ public sealed class RfcParserTests
     public async Task ParseAsync_RealRfc8446_ExtractsMultipleSections()
     {
         string fixturePath = Path.Combine("TestData", "rfc8446.txt");
-        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+        RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
 
         Assert.Equal(8446, document.Metadata.Number);
         Assert.Contains("TLS", document.Metadata.Title);
@@ -80,7 +80,7 @@ public sealed class RfcParserTests
     public async Task ParseAsync_RealRfc2119_ExtractsAbnfBlocks()
     {
         string fixturePath = Path.Combine("TestData", "rfc9110.txt");
-        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+        RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
 
         Assert.NotEmpty(document.AbnfBlocks);
     }
@@ -89,14 +89,14 @@ public sealed class RfcParserTests
     public async Task ParseAsync_InvalidFilename_ThrowsFormatException()
     {
         string fixturePath = Path.Combine("TestData", "badfile.txt");
-        await Assert.ThrowsAsync<FormatException>(() => Parser.ParseAsync(fixturePath, CancellationToken.None));
+        await Assert.ThrowsAsync<FormatException>(() => parser.ParseAsync(fixturePath, CancellationToken.None));
     }
 
     [Fact]
     public async Task NormativeKeywords_Dedup_DoesNotDoubleCountMustNotAsMust()
     {
         string fixturePath = Path.Combine("TestData", "rfc2119.txt");
-        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+        RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
 
         var mustNot = document.NormativeOccurrences.Where(n => n.Keyword == "MUST NOT").ToList();
         var must = document.NormativeOccurrences.Where(n => n.Keyword == "MUST").ToList();
@@ -117,7 +117,7 @@ public sealed class RfcParserTests
     public async Task AbnfBlocks_RealRfc9110_IncludesMultiLineDefinitions()
     {
         string fixturePath = Path.Combine("TestData", "rfc9110.txt");
-        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+        RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
 
         Assert.NotEmpty(document.AbnfBlocks);
 
@@ -129,7 +129,7 @@ public sealed class RfcParserTests
     public async Task ParseAsync_RealRfc3986_ExtractsUriGrammar()
     {
         string fixturePath = Path.Combine("TestData", "rfc3986.txt");
-        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+        RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
 
         Assert.Equal(3986, document.Metadata.Number);
         Assert.Contains("URI", document.Metadata.Title);
@@ -145,7 +145,7 @@ public sealed class RfcParserTests
     public async Task ParseAsync_RealRfc9000_ExtractsQuicTransport()
     {
         string fixturePath = Path.Combine("TestData", "rfc9000.txt");
-        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+        RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
 
         Assert.Equal(9000, document.Metadata.Number);
         Assert.Contains("QUIC", document.Metadata.Title);
@@ -158,7 +158,7 @@ public sealed class RfcParserTests
     public async Task PageHeaders_FormFeed_StripsSubsequentPageHeaders()
     {
         string fixturePath = Path.Combine("TestData", "rfc9999.txt");
-        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+        RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
 
         Assert.Equal(9999, document.Metadata.Number);
 

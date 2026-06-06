@@ -1,14 +1,15 @@
 using System.ComponentModel;
 using System.Text.Json;
+using InfraGate.RfcRag.Search;
 using ModelContextProtocol.Server;
 
-namespace InfraGate.RfcRag;
+namespace InfraGate.RfcRag.Tools;
 
 [McpServerToolType]
 [Description("RFC RAG search and retrieval tools")]
 public static class RfcRagTools
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
+    private static readonly JsonSerializerOptions jsonOptions = new() { WriteIndented = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     [McpServerTool(Name = "search_rfc", ReadOnly = true, OpenWorld = false)]
     [Description("Search RFCs using hybrid vector + full-text search. Returns ranked sections with excerpts.")]
@@ -58,6 +59,31 @@ public static class RfcRagTools
         return result is null
             ? ToJson(new { error = $"Section {section} of RFC {rfcNumber} is not indexed." })
             : ToJson(result);
+    }
+
+    [McpServerTool(Name = "get_rfc_metadata", ReadOnly = true, OpenWorld = false)]
+    [Description("Retrieve metadata for a specific RFC (title, updates, obsoletes).")]
+    public static async Task<string> GetRfcMetadata(
+        ISearchService search,
+        [Description("RFC number to retrieve metadata for.")] int rfcNumber,
+        CancellationToken cancellationToken = default)
+    {
+        RfcMetadata? metadata = await search.GetRfcMetadataAsync(rfcNumber, cancellationToken).ConfigureAwait(false);
+        return metadata is null
+            ? ToJson(new { error = $"RFC {rfcNumber} is not indexed." })
+            : ToJson(metadata);
+    }
+
+    [McpServerTool(Name = "list_indexed_rfcs", ReadOnly = true, OpenWorld = false)]
+    [Description("List indexed RFCs with their numbers and titles.")]
+    public static async Task<string> ListIndexedRfcs(
+        ISearchService search,
+        [Description("Maximum results to return, from 1 to 1000.")] int limit = 100,
+        [Description("Number of results to skip for pagination.")] int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<RfcMetadata> rfcs = await search.ListIndexedAsync(limit, offset, cancellationToken).ConfigureAwait(false);
+        return ToJson(new { total = rfcs.Count, rfcs });
     }
 
     [McpServerTool(Name = "search_normative", ReadOnly = true, OpenWorld = false)]
@@ -133,5 +159,5 @@ public static class RfcRagTools
         CancellationToken cancellationToken = default) =>
         search.GetStatsAsync(cancellationToken);
 
-    private static string ToJson<T>(T value) => JsonSerializer.Serialize(value, JsonOptions);
+    private static string ToJson<T>(T value) => JsonSerializer.Serialize(value, jsonOptions);
 }

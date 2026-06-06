@@ -1,4 +1,4 @@
-namespace InfraGate.RfcRag;
+namespace InfraGate.RfcRag.Infrastructure;
 
 internal static class RfcRagConventions
 {

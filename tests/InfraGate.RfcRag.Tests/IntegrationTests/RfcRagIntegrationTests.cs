@@ -1,5 +1,9 @@
 using Dapper;
+using InfraGate.RfcRag.Indexing;
+using InfraGate.RfcRag.Infrastructure;
 using InfraGate.RfcRag.Models;
+using InfraGate.RfcRag.Parsing;
+using InfraGate.RfcRag.Search;
 using InfraGate.RfcRag.Settings;
 using InfraGate.RfcRag.Tests.Fakes;
 using Microsoft.Extensions.AI;
@@ -165,7 +169,7 @@ public sealed class RfcRagIntegrationTests : IAsyncLifetime
 
     private RfcIndexer CreateIndexer(NpgsqlDataSource dataSource)
     {
-        var repository = new RfcRepository();
+        var indexingRepository = new IndexingRepository(dataSource);
         var embeddingService = CreateEmbeddingService();
         var options = Options.Create(new RfcRagOptions
         {
@@ -176,7 +180,7 @@ public sealed class RfcRagIntegrationTests : IAsyncLifetime
 
         return new RfcIndexer(
             dataSource,
-            repository,
+            indexingRepository,
             new RfcParser(),
             embeddingService,
             options,
@@ -184,7 +188,7 @@ public sealed class RfcRagIntegrationTests : IAsyncLifetime
     }
 
     private static SearchService CreateSearchService(NpgsqlDataSource dataSource) =>
-        new(dataSource, new RfcRepository(), CreateEmbeddingService());
+        new(new SearchRepository(dataSource), new MetadataRepository(dataSource), CreateEmbeddingService());
 
     private static EmbeddingService CreateEmbeddingService() =>
         new(new FakeEmbeddingGenerator(), 5, NullLogger<EmbeddingService>.Instance);

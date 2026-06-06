@@ -1,4 +1,4 @@
-namespace InfraGate.RfcRag;
+namespace InfraGate.RfcRag.Indexing;
 
 public interface IIndexerService
 {

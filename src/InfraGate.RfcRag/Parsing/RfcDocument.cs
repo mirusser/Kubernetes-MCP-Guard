@@ -1,6 +1,6 @@
 using InfraGate.RfcRag.Models;
 
-namespace InfraGate.RfcRag;
+namespace InfraGate.RfcRag.Parsing;
 
 /// <summary>
 /// Represents a fully parsed RFC document with metadata, sections, ABNF blocks,
@@ -19,7 +19,4 @@ public sealed record class RfcDocument
 
     /// <summary>Normative keyword occurrences (MUST, SHOULD, etc.).</summary>
     public IReadOnlyList<NormativeOccurrence> NormativeOccurrences { get; init; } = [];
-
-    /// <summary>Raw text content after page header/footer stripping.</summary>
-    public string RawText { get; init; } = string.Empty;
 }

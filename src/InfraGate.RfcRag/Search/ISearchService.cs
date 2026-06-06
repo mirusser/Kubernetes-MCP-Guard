@@ -1,4 +1,6 @@
-namespace InfraGate.RfcRag;
+using InfraGate.RfcRag.Models;
+
+namespace InfraGate.RfcRag.Search;
 
 public interface ISearchService
 {
@@ -23,6 +25,8 @@ public interface ISearchService
     Task<RfcMetadata?> GetRfcMetadataAsync(int rfcNumber, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<RfcMetadata>> FindBackReferencesAsync(int rfcNumber, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<RfcMetadata>> ListIndexedAsync(int limit, int offset, CancellationToken cancellationToken);
 
     Task<string> GetStatsAsync(CancellationToken cancellationToken);
 }

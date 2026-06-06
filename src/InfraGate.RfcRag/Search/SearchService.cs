@@ -1,22 +1,25 @@
-namespace InfraGate.RfcRag;
+using InfraGate.RfcRag.Indexing;
+using InfraGate.RfcRag.Models;
+
+namespace InfraGate.RfcRag.Search;
 
 public sealed class SearchService : ISearchService
 {
-    private readonly NpgsqlDataSource dataSource;
-    private readonly RfcRepository repository;
+    private readonly SearchRepository searchRepository;
+    private readonly MetadataRepository metadataRepository;
     private readonly EmbeddingService embeddingService;
 
     public SearchService(
-        NpgsqlDataSource dataSource,
-        RfcRepository repository,
+        SearchRepository searchRepository,
+        MetadataRepository metadataRepository,
         EmbeddingService embeddingService)
     {
-        ArgumentNullException.ThrowIfNull(dataSource);
-        ArgumentNullException.ThrowIfNull(repository);
+        ArgumentNullException.ThrowIfNull(searchRepository);
+        ArgumentNullException.ThrowIfNull(metadataRepository);
         ArgumentNullException.ThrowIfNull(embeddingService);
 
-        this.dataSource = dataSource;
-        this.repository = repository;
+        this.searchRepository = searchRepository;
+        this.metadataRepository = metadataRepository;
         this.embeddingService = embeddingService;
     }
 
@@ -31,8 +34,7 @@ public sealed class SearchService : ISearchService
             [query],
             cancellationToken).ConfigureAwait(false);
 
-        return await repository.SearchHybridAsync(
-            dataSource,
+        return await searchRepository.SearchHybridAsync(
             query,
             embeddings[0],
             limit,
@@ -40,31 +42,34 @@ public sealed class SearchService : ISearchService
     }
 
     public Task<RfcSection?> GetSectionAsync(int rfcNumber, string section, CancellationToken cancellationToken) =>
-        repository.GetSectionAsync(dataSource, rfcNumber, section, cancellationToken);
+        searchRepository.GetSectionAsync(rfcNumber, section, cancellationToken);
 
     public Task<IReadOnlyList<RfcSection>> GetRfcAsync(int rfcNumber, CancellationToken cancellationToken) =>
-        repository.GetRfcAsync(dataSource, rfcNumber, cancellationToken);
+        searchRepository.GetRfcAsync(rfcNumber, cancellationToken);
 
     public Task<IReadOnlyList<SearchResult>> SearchNormativeAsync(
         string keyword,
         int[]? rfcNumbers,
         int limit,
         CancellationToken cancellationToken) =>
-        repository.SearchNormativeAsync(dataSource, keyword, rfcNumbers, limit, cancellationToken);
+        searchRepository.SearchNormativeAsync(keyword, rfcNumbers, limit, cancellationToken);
 
     public Task<IReadOnlyList<SearchResult>> SearchAbnfAsync(
         string query,
         int[]? rfcNumbers,
         int limit,
         CancellationToken cancellationToken) =>
-        repository.SearchAbnfAsync(dataSource, query, rfcNumbers, limit, cancellationToken);
+        searchRepository.SearchAbnfAsync(query, rfcNumbers, limit, cancellationToken);
 
     public Task<RfcMetadata?> GetRfcMetadataAsync(int rfcNumber, CancellationToken cancellationToken) =>
-        repository.GetIndexedRfcMetadataAsync(dataSource, rfcNumber, cancellationToken);
+        metadataRepository.GetIndexedRfcMetadataAsync(rfcNumber, cancellationToken);
 
     public Task<IReadOnlyList<RfcMetadata>> FindBackReferencesAsync(int rfcNumber, CancellationToken cancellationToken) =>
-        repository.FindBackReferencesAsync(dataSource, rfcNumber, cancellationToken);
+        metadataRepository.FindBackReferencesAsync(rfcNumber, cancellationToken);
+
+    public Task<IReadOnlyList<RfcMetadata>> ListIndexedAsync(int limit, int offset, CancellationToken cancellationToken) =>
+        metadataRepository.ListIndexedAsync(limit, offset, cancellationToken);
 
     public Task<string> GetStatsAsync(CancellationToken cancellationToken) =>
-        repository.GetStatsAsync(dataSource, cancellationToken);
+        metadataRepository.GetStatsAsync(cancellationToken);
 }

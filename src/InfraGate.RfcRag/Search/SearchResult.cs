@@ -1,4 +1,4 @@
-namespace InfraGate.RfcRag;
+namespace InfraGate.RfcRag.Search;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage(
     "Usage",

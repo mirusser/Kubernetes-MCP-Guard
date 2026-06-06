@@ -1,3 +1,4 @@
+using InfraGate.RfcRag.Indexing;
 using InfraGate.RfcRag.Tests.Fakes;
 using Microsoft.Extensions.Logging.Abstractions;
 
