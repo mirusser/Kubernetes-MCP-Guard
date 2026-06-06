@@ -4,7 +4,7 @@
 
 ## What It Covers
 
-- `KeycloakIntegrationTests.cs`: OIDC discovery, anonymous loopback DCR policy, `mcp-client` authorization-code + PKCE coverage, wrong-verifier rejection, valid-token access, wrong-audience rejection, missing-scope rejection, token claim shape, and the approval browser OAuth callback/cookie path with a real Keycloak-issued token backchannel.
+- `KeycloakIntegrationTests.cs`: OIDC discovery, anonymous loopback DCR policy, `mcp-client` authorization-code + PKCE coverage, wrong-verifier rejection, valid-token access, wrong-audience rejection, missing-scope rejection, token claim shape, DPoP token acquisition and validation for controlled clients, and the approval browser OAuth callback/cookie path with a real Keycloak-issued token backchannel.
 - `KeycloakRealmFileTests.cs`: fast deploy/test realm alignment coverage that does not start Docker.
 
 ## Running Tests

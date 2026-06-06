@@ -154,6 +154,9 @@ The Remediation Executor listens on port `3005` by default, accepts synchronous 
 | `InfraGate__Auth__ApprovalOAuthTokenEndpoint` | `InfraGate.McpGateway.Auth` | No | `${InfraGate__Auth__OAuthAuthority}/token` | `https://issuer.example.com/realms/demo/protocol/openid-connect/token` | Gateway-visible token endpoint override for approval login. | Use an endpoint reachable by the gateway; do not point browser-only hosts here. Production requires the effective endpoint to be HTTPS and non-loopback. |
 | `InfraGate__Auth__ApprovalOAuthCallbackPath` | `InfraGate.McpGateway.Auth` | No | `/approvals/oauth/callback` | `/approvals/oauth/callback` | Local callback path used by the gateway approval UI OAuth flow. | Register the full external redirect URI with the IdP. |
 
+> [!WARNING]
+> **DPoP Replay Store Limitation:** The Gateway currently uses an in-memory DPoP proof replay store (`InMemoryDpopProofReplayStore`) to mitigate token replay attacks. Because this store is in-memory and not backed by shared storage (e.g., Redis or PostgreSQL), DPoP replay detection is local to the instance. In multi-replica gateway deployments, replayed DPoP tokens might be accepted if they hit a different replica than the original request. Single-replica deployments are unaffected.
+
 ## Local Keycloak Demo
 
 The local OAuth Compose path (`deploy/local-oauth`) and the development compose path import `deploy/keycloak/infra-gate-realm.json` into `quay.io/keycloak/keycloak:26.6.1`. The matching test realm lives at `tests/TestData/keycloak/infra-gate-realm.json`; clients, scopes, and DCR policy should remain aligned unless a test intentionally documents a difference.

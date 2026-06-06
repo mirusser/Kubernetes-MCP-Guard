@@ -13,6 +13,7 @@ using InfraGate.Approvals.Execution;
 using InfraGate.Approvals.Audit;
 using InfraGate.Approvals.PreExecution;
 using InfraGate.Approvals.AccessCodes;
+using InfraGate.ClientCredentials;
 using InfraGate.KubernetesAdapter;
 using InfraGate.KubernetesAdapter.Approval;
 using InfraGate.KubernetesAdapter.Evidence;
@@ -28,6 +29,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -349,6 +351,53 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         // Verify the second call is served from cache
         string bearerHeader2 = await provider.GetServiceTokenAsync(CancellationToken.None);
         Assert.Equal(bearerHeader, bearerHeader2);
+    }
+
+    [Fact]
+    public async Task ObserverClient_DpopClientCredentials_CallsGateway()
+    {
+        if (!string.Equals(
+            Environment.GetEnvironmentVariable(RunKeycloakTestsEnvVar),
+            "1",
+            StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        using var server = CreateGatewayServer(
+            authority: RealmAuthority(),
+            requireDPoP: true);
+        using var gatewayClient = server.CreateClient();
+        using var tokenHttpClient = new HttpClient();
+        using var tokenProvider = new ClientCredentialsTokenProvider(
+            new ClientCredentialsTokenOptions
+            {
+                Authority = RealmAuthority(),
+                RequireHttpsMetadata = false,
+                ClientId = GatewayAuthConventions.ServiceClients.ObserverClientId,
+                ClientSecret = "observer-secret",
+                Scope = GatewayAuthConventions.DefaultReadOnlyOAuthScope,
+                UseDPoP = true
+            },
+            tokenHttpClient,
+            TimeProvider.System,
+            NullLogger<ClientCredentialsTokenProvider>.Instance);
+
+        string accessToken = await tokenProvider.GetTokenAsync(CancellationToken.None);
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            new Uri(gatewayClient.BaseAddress!, McpGatewayConventions.McpPath));
+        request.Headers.Authorization = new AuthenticationHeaderValue(
+            ClientCredentialsConventions.DPoP.AuthorizationScheme,
+            accessToken);
+        request.Headers.Add(
+            ClientCredentialsConventions.DPoP.ProofHeaderName,
+            await tokenProvider.CreateDpopProofAsync(accessToken, request, CancellationToken.None));
+
+        using var response = await gatewayClient.SendAsync(request);
+
+        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     private string RealmAuthority() =>
@@ -940,7 +989,8 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
     private static TestServer CreateGatewayServer(
         string authority,
         string oauthResource = Resource,
-        HttpMessageHandler? approvalOAuthBackchannel = null)
+        HttpMessageHandler? approvalOAuthBackchannel = null,
+        bool requireDPoP = false)
     {
         var authOptions = new GatewayAuthOptions(
             OAuthAuthority: authority,
@@ -950,7 +1000,8 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             OAuthMetadataAddress: null,
             ApprovalOAuthClientId: GatewayAuthConventions.DefaultApprovalOAuthClientId,
             ApprovalOAuthAuthorizationEndpoint: $"{authority}/protocol/openid-connect/auth",
-            ApprovalOAuthTokenEndpoint: $"{authority}/protocol/openid-connect/token");
+            ApprovalOAuthTokenEndpoint: $"{authority}/protocol/openid-connect/token",
+            RequireDPoP: requireDPoP);
 
         var root = Path.Combine(Path.GetTempPath(), "kc-test", Guid.NewGuid().ToString("N"));
         var options = new McpGatewayOptions(

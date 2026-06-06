@@ -22,7 +22,7 @@ public sealed class ClientCredentialsBearerHandler : DelegatingHandler
         CancellationToken cancellationToken)
     {
         string token = await tokenProvider.GetTokenAsync(cancellationToken).ConfigureAwait(false);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        await AttachAuthorizationAsync(request, token, cancellationToken).ConfigureAwait(false);
 
         var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -31,11 +31,33 @@ public sealed class ClientCredentialsBearerHandler : DelegatingHandler
             logger.LogWarning("Got 401; refreshing client credentials token and retrying once.");
             string refreshedToken = await tokenProvider.RefreshTokenAsync(cancellationToken).ConfigureAwait(false);
             var retryRequest = await CloneRequestAsync(request, cancellationToken).ConfigureAwait(false);
-            retryRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", refreshedToken);
+            await AttachAuthorizationAsync(retryRequest, refreshedToken, cancellationToken).ConfigureAwait(false);
             return await base.SendAsync(retryRequest, cancellationToken).ConfigureAwait(false);
         }
 
         return response;
+    }
+
+    private async Task AttachAuthorizationAsync(
+        HttpRequestMessage request,
+        string accessToken,
+        CancellationToken cancellationToken)
+    {
+        if (tokenProvider is IClientCredentialsDpopProofProvider { IsDPoPEnabled: true } dpopProofProvider)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue(
+                ClientCredentialsConventions.DPoP.AuthorizationScheme,
+                accessToken);
+            request.Headers.Remove(ClientCredentialsConventions.DPoP.ProofHeaderName);
+            string proof = await dpopProofProvider.CreateDpopProofAsync(
+                accessToken,
+                request,
+                cancellationToken).ConfigureAwait(false);
+            request.Headers.Add(ClientCredentialsConventions.DPoP.ProofHeaderName, proof);
+            return;
+        }
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
     }
 
     private static async Task<HttpRequestMessage> CloneRequestAsync(

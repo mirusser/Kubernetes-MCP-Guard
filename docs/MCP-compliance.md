@@ -107,11 +107,16 @@ The MCP Authorization standard is built heavily on Draft OAuth 2.1, emphasizing 
 * **Methods:** Keycloak realm clients.
 * **Implementation:** Keycloak `mcp-client` and `infra-gate-approval-ui` are public authorization-code clients with PKCE S256 configured.
 
-### D. Token Passthrough Prevention
+### D. Token Replay Mitigation (DPoP)
+* **Methods:** `GatewayAuthentication.ConfigureJwtBearerOptions`, `DpopProofValidator`
+* **Implementation:** The Gateway implements RFC 9449 Demonstrating Proof-of-Possession (DPoP) to bind access tokens to the client's private key, preventing replay of stolen tokens. Controlled clients (like the executor and approval UI) are required by Keycloak policy to present DPoP-bound tokens (`dpop.bound.access.tokens: true`). 
+* **External Client Compatibility:** External MCP clients (acting through `mcp-client`) do not yet widely support DPoP. To maintain compatibility, `mcp-client` accepts standard bearer tokens without DPoP binding. This is documented as a residual risk for external client integration until the MCP ecosystem adopts DPoP.
+
+### E. Token Passthrough Prevention
 * **Methods:** `DownstreamMcpClient.GetClientAsync`
 * **Implementation:** The spec warns against forwarding user access tokens to downstream services. The `McpGateway` acts as a true structural firewall: it fully terminates the OAuth JWT and initiates a `StdioClientTransport` to the `InfraGate.McpServer`. The user's OAuth JWT is never forwarded, structurally preventing user-token-passthrough vulnerabilities. When downstream auth is configured (release and production paths), a separate gateway client-credentials service token authenticates downstream calls as defense-in-depth.
 
-### E. Open Redirection & Localhost Risks
+### F. Open Redirection & Localhost Risks
 * **Methods:** Keycloak OIDC Dynamic Client Registration policies.
 * **Implementation:** The local Keycloak realm enables anonymous DCR only for local/demo use and restricts redirect URIs to trusted loopback hosts with an allowed-scope policy and max-client cap.
 

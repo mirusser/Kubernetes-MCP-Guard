@@ -240,19 +240,19 @@ public sealed class ToolScopeCatalogTests
     }
 
     [Theory]
-    [InlineData("get_k8s_status", true)]
-    [InlineData("scale_deployment", false)]
-    [InlineData("request_scale_deployment", false)]
-    [InlineData("request_restart_deployment", false)]
-    [InlineData(McpGatewayConventions.ToolNames.ApplyApprovedPlan, false)]
-    [InlineData(McpGatewayConventions.ToolNames.ProposePlan, false)]
-    public void IsVisibleTo_WriteScopeUser_ReturnsTrueForAllTools(string toolName, bool hasReadOnlyHint)
+    [InlineData("get_k8s_status", true, false)]
+    [InlineData("scale_deployment", false, true)]
+    [InlineData("request_scale_deployment", false, true)]
+    [InlineData("request_restart_deployment", false, true)]
+    [InlineData(McpGatewayConventions.ToolNames.ApplyApprovedPlan, false, true)]
+    [InlineData(McpGatewayConventions.ToolNames.ProposePlan, false, true)]
+    public void IsVisibleTo_WriteScopeUser_ReturnsTrueForAllTools(string toolName, bool hasReadOnlyHint, bool expectedVisible)
     {
         var user = CreateUserWithScopes(McpGatewayConventions.ToolScopeRequirements.WriteScope);
 
         var visible = ToolScopeCatalog.IsVisibleTo(toolName, hasReadOnlyHint, user);
 
-        Assert.True(visible);
+        Assert.Equal(expectedVisible, visible);
     }
 
     [Fact]

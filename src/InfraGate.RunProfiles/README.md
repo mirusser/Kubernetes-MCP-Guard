@@ -203,6 +203,8 @@ dotnet run --project src/InfraGate.RunProfiles -- generate local-compose \
   --output deploy/generated/local-compose.env
 ```
 
+The `observer`, `planner`, and `executor` sections also accept `useDPoP`; local controlled-client profiles set it to `"true"` so generated service-client configuration requests DPoP-bound access tokens.
+
 ## Generated file layout
 
 The generated `.env` file groups vars into labelled sections and includes a header indicating the source profile:

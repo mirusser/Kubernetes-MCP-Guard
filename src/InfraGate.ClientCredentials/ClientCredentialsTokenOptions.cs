@@ -8,6 +8,7 @@ public sealed record class ClientCredentialsTokenOptions
     public string ClientId { get; init; } = string.Empty;
     public string? ClientSecret { get; init; }
     public string Scope { get; init; } = string.Empty;
+    public bool UseDPoP { get; init; }
     public int RefreshSkewSeconds { get; init; } = ClientCredentialsConventions.DefaultRefreshSkewSeconds;
 
     public void Validate()

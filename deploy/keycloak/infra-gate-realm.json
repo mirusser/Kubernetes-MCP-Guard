@@ -635,7 +635,10 @@
         "basic",
         "mcp:tools.readonly"
       ],
-      "optionalClientScopes": []
+      "optionalClientScopes": [],
+      "attributes": {
+        "dpop.bound.access.tokens": "true"
+      }
     },
     {
       "clientId": "infra-gate-approval-ui",
@@ -683,7 +686,10 @@
         "mcp:tools.propose",
         "mcp:tools.readonly"
       ],
-      "optionalClientScopes": []
+      "optionalClientScopes": [],
+      "attributes": {
+        "dpop.bound.access.tokens": "true"
+      }
     },
     {
       "clientId": "infra-gate-executor",
@@ -700,7 +706,10 @@
         "basic",
         "mcp:tools.execute"
       ],
-      "optionalClientScopes": []
+      "optionalClientScopes": [],
+      "attributes": {
+        "dpop.bound.access.tokens": "true"
+      }
     }
   ],
   "users": [
