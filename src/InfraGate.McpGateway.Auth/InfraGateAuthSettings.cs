@@ -11,4 +11,5 @@ public sealed record class InfraGateAuthSettings
     public string? ApprovalOAuthCallbackPath { get; init; }
     public string? ApprovalOAuthAuthorizationEndpoint { get; init; }
     public string? ApprovalOAuthTokenEndpoint { get; init; }
+    public bool? RequireDPoP { get; init; }
 }

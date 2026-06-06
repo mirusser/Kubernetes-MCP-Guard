@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using InfraGate.McpServer.Diff;
 using InfraGate.McpServer.Models;
 using k8s;
 using k8s.Autorest;
@@ -29,8 +30,9 @@ internal static class KubernetesDiffService
         foreach (var obj in objects)
         {
             var liveJson = await ReadComparableLiveJsonAsync(client, operation, obj, cancellationToken).ConfigureAwait(false);
+            var resourceVersion = KubernetesObjectMetadataExtractor.ExtractResourceVersion(liveJson);
             var proposedJson = ProposedJson(operation, obj, dryRunByObject);
-            diffs.Add(BuildDiff(obj, liveJson, proposedJson));
+            diffs.Add(BuildDiff(obj, liveJson, proposedJson, resourceVersion));
         }
 
         return diffs.ToArray();
@@ -63,12 +65,13 @@ internal static class KubernetesDiffService
         return null;
     }
 
-    public static KubernetesPlanDiff BuildDiff(KubernetesObjectRef obj, string? liveJson, string? proposedJson)
+    public static KubernetesPlanDiff BuildDiff(KubernetesObjectRef obj, string? liveJson, string? proposedJson, string? resourceVersion = null)
     {
         var normalizedLiveJson = liveJson is null ? null : KubernetesObjectNormalizer.NormalizeJson(liveJson);
         var normalizedProposedJson = proposedJson is null ? null : KubernetesObjectNormalizer.NormalizeJson(proposedJson);
         var changes = ComparePaths(normalizedLiveJson, normalizedProposedJson);
         var changeType = ChangeType(normalizedLiveJson, normalizedProposedJson);
+        var capturedResourceVersion = resourceVersion ?? KubernetesObjectMetadataExtractor.ExtractResourceVersion(liveJson);
 
         return new KubernetesPlanDiff(
             obj,
@@ -79,7 +82,8 @@ internal static class KubernetesDiffService
             normalizedProposedJson,
             changes.AddedPaths,
             changes.RemovedPaths,
-            changes.ChangedPaths);
+            changes.ChangedPaths,
+            capturedResourceVersion);
     }
 
     private static string? ProposedJson(

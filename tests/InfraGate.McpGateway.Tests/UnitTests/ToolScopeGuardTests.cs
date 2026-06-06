@@ -72,6 +72,27 @@ public sealed class ToolScopeGuardTests
         Assert.Null(result);
     }
 
+    [Fact]
+    public void ToolScopeRequirements_HasReadWriteScopeConstants()
+    {
+        Assert.Equal("mcp:tools.read", McpGatewayConventions.ToolScopeRequirements.ReadScope);
+        Assert.Equal("mcp:tools.write", McpGatewayConventions.ToolScopeRequirements.WriteScope);
+    }
+
+    [Fact]
+    public void GatewayAuthConventions_HasReadWriteScopeConstants()
+    {
+        Assert.Equal("mcp:tools.read", GatewayAuthConventions.DefaultReadToolsOAuthScope);
+        Assert.Equal("mcp:tools.write", GatewayAuthConventions.DefaultWriteToolsOAuthScope);
+    }
+
+    [Fact]
+    public void GatewayAuthentication_AcceptedScopes_IncludesReadWriteScopes()
+    {
+        Assert.Contains(GatewayAuthentication.AcceptedScopes, s => s == "mcp:tools.read");
+        Assert.Contains(GatewayAuthentication.AcceptedScopes, s => s == "mcp:tools.write");
+    }
+
     private readonly InMemoryGuardrailAuditStore auditStore = new();
 
     private static void SetUser(HttpContextAccessor accessor, string subject, params string[] scopes)

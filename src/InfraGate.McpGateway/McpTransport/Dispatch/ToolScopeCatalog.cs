@@ -12,15 +12,15 @@ internal static class ToolScopeCatalog
     {
         if (toolName.StartsWith(McpGatewayConventions.ToolNames.RequestToolPrefix, StringComparison.Ordinal))
         {
-            return [McpGatewayConventions.ToolScopeRequirements.MutationScope];
+            return [McpGatewayConventions.ToolScopeRequirements.MutationScope, McpGatewayConventions.ToolScopeRequirements.WriteScope];
         }
 
         return toolName switch
         {
-            McpGatewayConventions.ToolNames.ApplyApprovedPlan => [McpGatewayConventions.ToolScopeRequirements.MutationScope, McpGatewayConventions.ToolScopeRequirements.ExecuteScope],
-            McpGatewayConventions.ToolNames.GetPlanStatus => [McpGatewayConventions.ToolScopeRequirements.MutationScope, McpGatewayConventions.ToolScopeRequirements.ReadOnlyScope],
-            McpGatewayConventions.ToolNames.WaitForPlanApproval => [McpGatewayConventions.ToolScopeRequirements.MutationScope, McpGatewayConventions.ToolScopeRequirements.ExecuteScope],
-            McpGatewayConventions.ToolNames.ProposePlan => [McpGatewayConventions.ToolScopeRequirements.MutationScope, McpGatewayConventions.ToolScopeRequirements.ProposeScope],
+            McpGatewayConventions.ToolNames.ApplyApprovedPlan => [McpGatewayConventions.ToolScopeRequirements.MutationScope, McpGatewayConventions.ToolScopeRequirements.ExecuteScope, McpGatewayConventions.ToolScopeRequirements.WriteScope],
+            McpGatewayConventions.ToolNames.GetPlanStatus => [McpGatewayConventions.ToolScopeRequirements.MutationScope, McpGatewayConventions.ToolScopeRequirements.ReadOnlyScope, McpGatewayConventions.ToolScopeRequirements.ReadScope],
+            McpGatewayConventions.ToolNames.WaitForPlanApproval => [McpGatewayConventions.ToolScopeRequirements.MutationScope, McpGatewayConventions.ToolScopeRequirements.ExecuteScope, McpGatewayConventions.ToolScopeRequirements.WriteScope],
+            McpGatewayConventions.ToolNames.ProposePlan => [McpGatewayConventions.ToolScopeRequirements.MutationScope, McpGatewayConventions.ToolScopeRequirements.ProposeScope, McpGatewayConventions.ToolScopeRequirements.WriteScope],
             _ => null
         };
     }
@@ -34,9 +34,9 @@ internal static class ToolScopeCatalog
             return synthesized;
 
         if (hasReadOnlyHint)
-            return [McpGatewayConventions.ToolScopeRequirements.MutationScope, McpGatewayConventions.ToolScopeRequirements.ReadOnlyScope];
+            return [McpGatewayConventions.ToolScopeRequirements.MutationScope, McpGatewayConventions.ToolScopeRequirements.ReadOnlyScope, McpGatewayConventions.ToolScopeRequirements.ReadScope];
 
-        return [McpGatewayConventions.ToolScopeRequirements.MutationScope];
+        return [McpGatewayConventions.ToolScopeRequirements.MutationScope, McpGatewayConventions.ToolScopeRequirements.WriteScope];
     }
 
     // Returns whether a tool should appear in the scope-filtered tools/list response for this caller.

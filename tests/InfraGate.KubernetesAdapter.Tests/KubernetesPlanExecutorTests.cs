@@ -17,6 +17,36 @@ public sealed class KubernetesPlanExecutorTests
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly PlanRequester TestRequester = new("test-subject", "oauth-jwt");
 
+    public static TheoryData<string, Dictionary<string, string>, string> CorruptedScalePayloadCases { get; } =
+        new()
+        {
+            {
+                string.Empty,
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [KubernetesAdapterConventions.PlanParameters.Name] = "nginx",
+                    [KubernetesAdapterConventions.PlanParameters.Replicas] = "3"
+                },
+                "Namespace"
+            },
+            {
+                "demo",
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [KubernetesAdapterConventions.PlanParameters.Replicas] = "3"
+                },
+                $"payload.Parameters[\"{KubernetesAdapterConventions.PlanParameters.Name}\"]"
+            },
+            {
+                "demo",
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    [KubernetesAdapterConventions.PlanParameters.Name] = "nginx"
+                },
+                $"payload.Parameters[\"{KubernetesAdapterConventions.PlanParameters.Replicas}\"]"
+            }
+        };
+
     private static KubernetesPlanDryRun MakeDryRun(string ns, string name) =>
         new(
             "succeeded",
@@ -25,7 +55,7 @@ public sealed class KubernetesPlanExecutorTests
             [],
             "Server-side dry-run succeeded.");
 
-    private static KubernetesPlanDiff MakeDiff(string ns, string name) =>
+    private static KubernetesPlanDiff MakeDiff(string ns, string name, string? resourceVersion = null) =>
         new(
             new KubernetesObjectRef("apps/v1", "Deployment", ns, name),
             "update",
@@ -35,7 +65,8 @@ public sealed class KubernetesPlanExecutorTests
             "{}",
             [],
             [],
-            []);
+            [],
+            resourceVersion);
 
     private static string DryRunJson(KubernetesPlanDryRun dryRun) =>
         JsonSerializer.Serialize(dryRun, JsonOptions);
@@ -43,7 +74,17 @@ public sealed class KubernetesPlanExecutorTests
     private static string ApplyEvidenceJson(KubernetesPlanDryRun dryRun) =>
         JsonSerializer.Serialize(new KubernetesApplyEvidence(dryRun, [], false, null), JsonOptions);
 
-    private static PlanEnvelope BuildApplyEnvelope(KubernetesPlanDiff[] diffs, string ns = "demo", string name = "nginx")
+    private static KubernetesPlanExecutor CreateExecutor(
+        FakeToolCaller toolCaller,
+        IApprovalAuditOutbox? auditOutbox = null) =>
+        new(toolCaller, new KubernetesEvidenceService(toolCaller), auditOutbox);
+
+    private static PlanEnvelope BuildApplyEnvelope(
+        KubernetesPlanDiff[] diffs,
+        string ns = "demo",
+        string name = "nginx",
+        KubernetesPlanPolicyFinding[]? policyFindings = null,
+        FreshnessPolicy? freshnessPolicy = null)
     {
         var payload = new KubernetesPlanPayload(
             ns,
@@ -53,10 +94,11 @@ public sealed class KubernetesPlanExecutorTests
         {
             Manifest = "apiVersion: apps/v1",
             DryRun = MakeDryRun(ns, name),
-            Diffs = diffs
+            Diffs = diffs,
+            PolicyFindings = policyFindings ?? []
         };
 
-        var freshnessPolicy = new FreshnessPolicy(
+        freshnessPolicy ??= new FreshnessPolicy(
         [
             new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.LiveDrift, new Dictionary<string, string>()),
             new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun, new Dictionary<string, string>())
@@ -103,6 +145,34 @@ public sealed class KubernetesPlanExecutorTests
                 freshnessPolicy: freshnessPolicy));
     }
 
+    private static PlanEnvelope BuildRestartEnvelope(string ns = "demo", string name = "nginx")
+    {
+        var payload = new KubernetesPlanPayload(
+            ns,
+            $"Restart deployment {name}.",
+            new Dictionary<string, string> { [KubernetesAdapterConventions.PlanParameters.Name] = name },
+            [new KubernetesObjectRef("apps/v1", "Deployment", ns, name)])
+        {
+            DryRun = MakeDryRun(ns, name),
+            Diffs = [MakeDiff(ns, name)]
+        };
+
+        var freshnessPolicy = new FreshnessPolicy(
+        [
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.LiveDrift, new Dictionary<string, string>()),
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun, new Dictionary<string, string>())
+        ]);
+
+        return KubernetesApprovalAdapter.ToEnvelope(
+            KubernetesApprovalAdapter.CreateEnvelope(
+                ApprovalIds.NewPlanId(),
+                KubernetesAdapterConventions.PlanOperations.Restart,
+                DateTimeOffset.UtcNow,
+                TestRequester,
+                payload,
+                freshnessPolicy: freshnessPolicy));
+    }
+
     private static PlanEnvelope BuildSetImageEnvelope(string image, string ns = "demo", string name = "nginx")
     {
         var payload = new KubernetesPlanPayload(
@@ -134,10 +204,106 @@ public sealed class KubernetesPlanExecutorTests
                 freshnessPolicy: freshnessPolicy));
     }
 
+    private static KubernetesPlanPolicyFinding MakeDenyFinding(string ns = "demo", string name = "nginx") =>
+        new(
+            KubernetesAdapterConventions.PolicySeverities.Deny,
+            KubernetesAdapterConventions.PolicyCodes.DeploymentPrivilegedContainer,
+            $"Deployment {ns}/{name}",
+            "Privileged container detected.");
+
+    [Fact]
+    public async Task CheckPreExecutionAsync_ResourceVersionMismatch_BlocksExecution()
+    {
+        var diff = MakeDiff("demo", "nginx", "12345");
+        var dryRun = MakeDryRun("demo", "nginx");
+        var freshnessPolicy = new FreshnessPolicy(
+        [
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.ResourceVersionCheck,
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["apps/v1 Deployment demo/nginx"] = "42"
+                }),
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.LiveDrift, new Dictionary<string, string>()),
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun, new Dictionary<string, string>())
+        ]);
+        var envelope = BuildApplyEnvelope([diff], freshnessPolicy: freshnessPolicy);
+
+        var toolCaller = new FakeToolCaller()
+            .With(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift,
+                KubernetesAdapterConventions.DriftCheckResults.NoDrift)
+            .With(KubernetesAdapterConventions.EvidenceTools.CheckResourceVersion,
+                "Resource version changed for apps/v1 Deployment demo/nginx: expected 42, actual 99.")
+            .With(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
+                ApplyEvidenceJson(dryRun));
+
+        var executor = CreateExecutor(toolCaller);
+        var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.ResourceVersionMismatch, result.ReasonCode);
+        Assert.Contains(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift, toolCaller.CalledTools);
+        Assert.Contains(KubernetesAdapterConventions.EvidenceTools.CheckResourceVersion, toolCaller.CalledTools);
+        Assert.DoesNotContain(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest, toolCaller.CalledTools);
+    }
+
+    [Fact]
+    public async Task CheckPreExecutionAsync_DriftPasses_ProceedsToRemainingChecks()
+    {
+        var diff = MakeDiff("demo", "nginx");
+        var dryRun = MakeDryRun("demo", "nginx");
+        var freshnessPolicy = new FreshnessPolicy(
+        [
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.ResourceVersionCheck,
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["apps/v1 Deployment demo/nginx"] = "42"
+                }),
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.LiveDrift, new Dictionary<string, string>()),
+            new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun, new Dictionary<string, string>())
+        ]);
+        var envelope = BuildApplyEnvelope([diff], freshnessPolicy: freshnessPolicy);
+
+        var toolCaller = new FakeToolCaller()
+            .With(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift,
+                KubernetesAdapterConventions.DriftCheckResults.NoDrift)
+            .With(KubernetesAdapterConventions.EvidenceTools.CheckResourceVersion,
+                KubernetesAdapterConventions.DriftCheckResults.NoDrift)
+            .With(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
+                ApplyEvidenceJson(dryRun));
+
+        var executor = CreateExecutor(toolCaller);
+        var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Contains(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift, toolCaller.CalledTools);
+        Assert.Contains(KubernetesAdapterConventions.EvidenceTools.CheckResourceVersion, toolCaller.CalledTools);
+        Assert.Contains(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest, toolCaller.CalledTools);
+    }
+
+    [Fact]
+    public async Task CheckPreExecutionAsync_NoResourceVersionCheck_ProceedsNormally()
+    {
+        var diff = MakeDiff("demo", "nginx");
+        var dryRun = MakeDryRun("demo", "nginx");
+        var envelope = BuildApplyEnvelope([diff]);
+
+        var toolCaller = new FakeToolCaller()
+            .With(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift,
+                KubernetesAdapterConventions.DriftCheckResults.NoDrift)
+            .With(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
+                ApplyEvidenceJson(dryRun));
+
+        var executor = CreateExecutor(toolCaller);
+        var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
+
+        Assert.True(result.IsSuccessful);
+        Assert.DoesNotContain(KubernetesAdapterConventions.EvidenceTools.CheckResourceVersion, toolCaller.CalledTools);
+    }
+
     [Fact]
     public async Task ExecuteAsync_ApplyManifest_HappyPath_DispatchesToApplyTool()
     {
-        var diff = MakeDiff("demo", "nginx");
+        var diff = MakeDiff("demo", "nginx", "12345");
         var dryRun = MakeDryRun("demo", "nginx");
         var envelope = BuildApplyEnvelope([diff]);
 
@@ -146,12 +312,19 @@ public sealed class KubernetesPlanExecutorTests
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest, ApplyEvidenceJson(dryRun))
             .With(KubernetesAdapterConventions.MutationTools.ApplyManifest, "Applied successfully.");
 
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.ExecuteAsync(envelope, CancellationToken.None);
 
         Assert.True(result.IsSuccessful);
         Assert.Equal("Applied successfully.", result.Message);
         Assert.Contains(KubernetesAdapterConventions.MutationTools.ApplyManifest, toolCaller.CalledTools);
+        var applyArguments = toolCaller.ArgumentsByTool[KubernetesAdapterConventions.MutationTools.ApplyManifest];
+        var resourceVersionsJson = Assert.IsType<string>(
+            applyArguments[KubernetesAdapterConventions.EvidenceArguments.ResourceVersions]);
+        using var resourceVersions = JsonDocument.Parse(resourceVersionsJson);
+        var resourceVersion = resourceVersions.RootElement[0];
+        Assert.Equal("apps/v1 Deployment demo/nginx", resourceVersion.GetProperty("key").GetString());
+        Assert.Equal("12345", resourceVersion.GetProperty("resourceVersion").GetString());
     }
 
     [Fact]
@@ -165,12 +338,64 @@ public sealed class KubernetesPlanExecutorTests
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunScaleDeployment, DryRunJson(dryRun))
             .With(KubernetesAdapterConventions.MutationTools.ScaleDeployment, "Scaled to 3 replicas.");
 
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.ExecuteAsync(envelope, CancellationToken.None);
 
         Assert.True(result.IsSuccessful);
         Assert.Equal("Scaled to 3 replicas.", result.Message);
         Assert.Contains(KubernetesAdapterConventions.MutationTools.ScaleDeployment, toolCaller.CalledTools);
+    }
+
+    [Theory]
+    [MemberData(nameof(CorruptedScalePayloadCases))]
+    public async Task ExecuteAsync_ScaleDeployment_CorruptedStoredPayload_ThrowsBeforeMutation(
+        string namespaceName,
+        Dictionary<string, string> parameters,
+        string expectedParameterName)
+    {
+        var envelope = BuildScaleEnvelope();
+        var decoded = KubernetesApprovalAdapter.Decode(envelope);
+        Assert.True(decoded.Succeeded, decoded.Message);
+        Assert.NotNull(decoded.Plan);
+        var corruptedPayload = decoded.Plan.Payload with
+        {
+            Namespace = namespaceName,
+            Parameters = parameters
+        };
+        var corruptedEnvelope = KubernetesApprovalAdapter.ToEnvelope(
+            KubernetesApprovalAdapter.CreateEnvelope(
+                decoded.Plan.Id,
+                decoded.Plan.Operation,
+                decoded.Plan.CreatedAtUtc,
+                decoded.Plan.Requester,
+                corruptedPayload,
+                decoded.Plan.Envelope.ReviewSurfaceContext,
+                decoded.Plan.Envelope.FreshnessPolicy,
+                decoded.Plan.Envelope.ApprovalPolicy));
+        var toolCaller = new FakeToolCaller()
+            .With(KubernetesAdapterConventions.MutationTools.ScaleDeployment, "Scaled to 3 replicas.");
+        var executor = CreateExecutor(toolCaller);
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            executor.ExecuteAsync(corruptedEnvelope, CancellationToken.None));
+
+        Assert.Equal(expectedParameterName, exception.ParamName);
+        Assert.DoesNotContain(KubernetesAdapterConventions.MutationTools.ScaleDeployment, toolCaller.CalledTools);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RestartDeployment_HappyPath_DispatchesToRestartTool()
+    {
+        var envelope = BuildRestartEnvelope();
+        var toolCaller = new FakeToolCaller()
+            .With(KubernetesAdapterConventions.MutationTools.RestartDeployment, "Restarted successfully.");
+
+        var executor = CreateExecutor(toolCaller);
+        var result = await executor.ExecuteAsync(envelope, CancellationToken.None);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal("Restarted successfully.", result.Message);
+        Assert.Contains(KubernetesAdapterConventions.MutationTools.RestartDeployment, toolCaller.CalledTools);
     }
 
     [Fact]
@@ -181,7 +406,7 @@ public sealed class KubernetesPlanExecutorTests
             .With(KubernetesAdapterConventions.MutationTools.ScaleDeployment, "Scaled to 3 replicas.");
         var outbox = new RecordingApprovalAuditOutbox(() => toolCaller.CalledTools.ToArray());
 
-        var executor = new KubernetesPlanExecutor(toolCaller, outbox);
+        var executor = CreateExecutor(toolCaller, outbox);
         var result = await executor.ExecuteAsync(envelope, CancellationToken.None);
 
         Assert.True(result.IsSuccessful);
@@ -205,7 +430,7 @@ public sealed class KubernetesPlanExecutorTests
         var toolCaller = new FakeToolCaller()
             .With(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift, "Replica count changed from 2 to 4.");
 
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
@@ -225,7 +450,7 @@ public sealed class KubernetesPlanExecutorTests
             .With(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift, KubernetesAdapterConventions.DriftCheckResults.NoDrift)
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest, "Server-side dry-run failed: webhook rejected");
 
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
@@ -239,7 +464,7 @@ public sealed class KubernetesPlanExecutorTests
     public async Task CheckPreExecutionAsync_PolicyBlockedAtExecution_BlocksExecution()
     {
         var diff = MakeDiff("demo", "nginx");
-        var envelope = BuildApplyEnvelope([diff]);
+        var envelope = BuildApplyEnvelope([diff], policyFindings: [MakeDenyFinding()]);
         var dryRun = MakeDryRun("demo", "nginx");
 
         var toolCaller = new FakeToolCaller()
@@ -249,12 +474,13 @@ public sealed class KubernetesPlanExecutorTests
                     new KubernetesApplyEvidence(dryRun, [], true, "[PRIVILEGED_CONTAINER] Privileged container detected"),
                     JsonOptions));
 
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
         Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked, result.ReasonCode);
         Assert.DoesNotContain(KubernetesAdapterConventions.MutationTools.ApplyManifest, toolCaller.CalledTools);
+        Assert.DoesNotContain(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest, toolCaller.CalledTools);
     }
 
     [Theory]
@@ -268,7 +494,7 @@ public sealed class KubernetesPlanExecutorTests
         var toolCaller = new FakeToolCaller()
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunSetDeploymentImage, DryRunJson(dryRun));
 
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
@@ -287,7 +513,7 @@ public sealed class KubernetesPlanExecutorTests
         var toolCaller = new FakeToolCaller()
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunSetDeploymentImage, DryRunJson(dryRun));
 
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.True(result.IsSuccessful);
@@ -304,7 +530,7 @@ public sealed class KubernetesPlanExecutorTests
         var toolCaller = new FakeToolCaller()
             .With(KubernetesAdapterConventions.EvidenceTools.DryRunScaleDeployment, DryRunJson(dryRun));
 
-        var executor = new KubernetesPlanExecutor(toolCaller, outbox);
+        var executor = CreateExecutor(toolCaller, outbox);
         var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
 
         Assert.True(result.IsSuccessful);
@@ -323,7 +549,7 @@ public sealed class KubernetesPlanExecutorTests
         var badEnvelope = BuildApplyEnvelope([]) with { AdapterId = "unknown-adapter" };
 
         var toolCaller = new FakeToolCaller();
-        var executor = new KubernetesPlanExecutor(toolCaller);
+        var executor = CreateExecutor(toolCaller);
         var result = await executor.ExecuteAsync(badEnvelope, CancellationToken.None);
 
         Assert.False(result.IsSuccessful);
@@ -335,6 +561,8 @@ public sealed class KubernetesPlanExecutorTests
     {
         private readonly Dictionary<string, string> responses = new(StringComparer.Ordinal);
         public List<string> CalledTools { get; } = [];
+        public Dictionary<string, IReadOnlyDictionary<string, object?>> ArgumentsByTool { get; } =
+            new(StringComparer.Ordinal);
 
         public FakeToolCaller With(string toolName, string response)
         {
@@ -345,6 +573,7 @@ public sealed class KubernetesPlanExecutorTests
         public Task<string> CallAsync(string toolName, IReadOnlyDictionary<string, object?> arguments, CancellationToken ct)
         {
             CalledTools.Add(toolName);
+            ArgumentsByTool[toolName] = new Dictionary<string, object?>(arguments, StringComparer.Ordinal);
             return Task.FromResult(responses.TryGetValue(toolName, out var response) ? response : string.Empty);
         }
     }

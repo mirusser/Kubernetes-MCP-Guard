@@ -76,6 +76,8 @@
             "email",
             "mcp:tools",
             "mcp:tools.readonly",
+            "mcp:tools.read",
+            "mcp:tools.write",
             "mcp:downstream"
           ]
         }
@@ -134,6 +136,8 @@
     "microprofile-jwt",
     "mcp:tools",
     "mcp:tools.readonly",
+    "mcp:tools.read",
+    "mcp:tools.write",
     "mcp:downstream"
   ],
   "clientScopes": [
@@ -478,6 +482,50 @@
           }
         }
       ]
+    },
+    {
+      "name": "mcp:tools.read",
+      "description": "Read-only MCP tool access for human operators inspecting the cluster — follows the mcp:tools.* naming convention",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "mcp-gateway-audience-read",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "http://127.0.0.1:3001/mcp",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp:tools.write",
+      "description": "Mutation MCP tool access for human operators performing changes — follows the mcp:tools.* naming convention",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "mcp-gateway-audience-write",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "http://127.0.0.1:3001/mcp",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
     }
   ],
   "clients": [
@@ -504,7 +552,9 @@
       "optionalClientScopes": [
         "address",
         "phone",
-        "offline_access"
+        "offline_access",
+        "mcp:tools.read",
+        "mcp:tools.write"
       ]
     },
     {
@@ -585,7 +635,10 @@
         "basic",
         "mcp:tools.readonly"
       ],
-      "optionalClientScopes": []
+      "optionalClientScopes": [],
+      "attributes": {
+        "dpop.bound.access.tokens": "true"
+      }
     },
     {
       "clientId": "infra-gate-approval-ui",
@@ -633,7 +686,10 @@
         "mcp:tools.propose",
         "mcp:tools.readonly"
       ],
-      "optionalClientScopes": []
+      "optionalClientScopes": [],
+      "attributes": {
+        "dpop.bound.access.tokens": "true"
+      }
     },
     {
       "clientId": "infra-gate-executor",
@@ -650,7 +706,10 @@
         "basic",
         "mcp:tools.execute"
       ],
-      "optionalClientScopes": []
+      "optionalClientScopes": [],
+      "attributes": {
+        "dpop.bound.access.tokens": "true"
+      }
     }
   ],
   "users": [

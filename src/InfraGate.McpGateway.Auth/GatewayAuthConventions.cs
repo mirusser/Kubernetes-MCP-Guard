@@ -7,6 +7,8 @@ public static class GatewayAuthConventions
     public const string DefaultReadOnlyOAuthScope = "mcp:tools.readonly";
     public const string DefaultProposeOAuthScope = "mcp:tools.propose";
     public const string DefaultExecuteOAuthScope = "mcp:tools.execute";
+    public const string DefaultReadToolsOAuthScope = "mcp:tools.read";
+    public const string DefaultWriteToolsOAuthScope = "mcp:tools.write";
     public const string DefaultApprovalOAuthClientId = "infra-gate-approval-ui";
     public const string AuthorizationScheme = "Bearer";
 
@@ -21,6 +23,7 @@ public static class GatewayAuthConventions
         public const string ApprovalOAuthAuthorizationEndpoint = "InfraGate__Auth__ApprovalOAuthAuthorizationEndpoint";
         public const string ApprovalOAuthTokenEndpoint = "InfraGate__Auth__ApprovalOAuthTokenEndpoint";
         public const string ApprovalOAuthCallbackPath = "InfraGate__Auth__ApprovalOAuthCallbackPath";
+        public const string RequireDPoP = "InfraGate__Auth__RequireDPoP";
     }
 
     public static class ConfigurationKeys
@@ -34,6 +37,7 @@ public static class GatewayAuthConventions
         public const string ApprovalOAuthAuthorizationEndpoint = "InfraGate:Auth:ApprovalOAuthAuthorizationEndpoint";
         public const string ApprovalOAuthTokenEndpoint = "InfraGate:Auth:ApprovalOAuthTokenEndpoint";
         public const string ApprovalOAuthCallbackPath = "InfraGate:Auth:ApprovalOAuthCallbackPath";
+        public const string RequireDPoP = "InfraGate:Auth:RequireDPoP";
     }
 
     public static class Schemes
@@ -102,5 +106,14 @@ public static class GatewayAuthConventions
     public static class Parameters
     {
         public const string Resource = "resource";
+    }
+
+    public static class DPoP
+    {
+        public const string ProofHeaderName = "DPoP";
+        public const string Scheme = "DPoP";
+        public const string ProofTyp = "dpop+jwt";
+        public const string CnfClaim = "cnf";
+        public const string JktClaim = "jkt";
     }
 }

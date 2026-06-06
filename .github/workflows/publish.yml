@@ -28,13 +28,15 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  REGISTRY: ghcr.io
 
 jobs:
   docker:
     runs-on: ubuntu-latest
     permissions:
       attestations: write
-      contents: read
+      actions: read
+      contents: write
       packages: write
       security-events: write
       id-token: write
@@ -52,6 +54,33 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+
+      - name: Require CI success before publishing images
+        if: env.PUSH_IMAGES == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUIRED_SHA: ${{ github.sha }}
+          REQUIRED_WORKFLOW: ci.yml
+        run: |
+          for attempt in $(seq 1 60); do
+            success_count="$(gh run list --workflow "$REQUIRED_WORKFLOW" --commit "$REQUIRED_SHA" --status completed --limit 20 --json conclusion --jq '[.[] | select(.conclusion == "success")] | length')"
+            if [ "${success_count:-0}" -gt 0 ]; then
+              echo "CI succeeded for $REQUIRED_SHA."
+              exit 0
+            fi
+
+            failed_count="$(gh run list --workflow "$REQUIRED_WORKFLOW" --commit "$REQUIRED_SHA" --status completed --limit 20 --json conclusion --jq '[.[] | select(.conclusion == "failure" or .conclusion == "cancelled" or .conclusion == "timed_out" or .conclusion == "action_required")] | length')"
+            if [ "${failed_count:-0}" -gt 0 ]; then
+              echo "::error::CI did not succeed for $REQUIRED_SHA; refusing to publish images."
+              exit 1
+            fi
+
+            echo "Waiting for CI success for $REQUIRED_SHA (attempt $attempt/60)."
+            sleep 30
+          done
+
+          echo "::error::Timed out waiting for CI success for $REQUIRED_SHA; refusing to publish images."
+          exit 1
 
       - name: Validate Docker Hub configuration
         if: env.PUSH_IMAGES == 'true'
@@ -81,7 +110,7 @@ jobs:
         with:
           images: |
             ${{ env.DOCKERHUB_NAMESPACE }}/${{ matrix.image }}
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -89,6 +118,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Login to Docker Hub
         if: env.PUSH_IMAGES == 'true'
@@ -105,6 +135,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: ${{ env.PUSH_IMAGES == 'true' }}
           load: ${{ env.PUSH_IMAGES != 'true' }}
+          platforms: ${{ env.PUSH_IMAGES == 'true' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
@@ -112,7 +143,7 @@ jobs:
         if: env.PUSH_IMAGES == 'true'
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4
         with:
-          subject-name: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
@@ -124,6 +155,7 @@ jobs:
           output: trivy-${{ matrix.image }}.sarif
           scanners: vuln
           severity: CRITICAL,HIGH
+          trivy-version: v0.71.0
           ignore-unfixed: true
           exit-code: '1'
 
@@ -133,6 +165,15 @@ jobs:
         with:
           sarif_file: trivy-${{ matrix.image }}.sarif
           category: trivy-${{ matrix.image }}
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') && matrix.image == 'kubernetes-mcp-guard-gateway'
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3
+        with:
+          generate_release_notes: true
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   deploy-development:
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'

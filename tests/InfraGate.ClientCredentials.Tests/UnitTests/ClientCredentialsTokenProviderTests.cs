@@ -134,6 +134,24 @@ public sealed class ClientCredentialsTokenProviderTests
         Assert.StartsWith("my-access-token-", token);
     }
 
+    [Fact]
+    public async Task GetTokenAsync_WithDpopEnabled_AddsProofToTokenRequest()
+    {
+        using var httpClient = CreateTokenHttpClient(out var handler);
+        var provider = new ClientCredentialsTokenProvider(
+            ValidOptions() with { UseDPoP = true },
+            httpClient,
+            TimeProvider.System,
+            NullLogger<ClientCredentialsTokenProvider>.Instance);
+
+        string token = await provider.GetTokenAsync(CancellationToken.None);
+
+        Assert.StartsWith("my-access-token-", token);
+        Assert.NotNull(handler.LastTokenRequest);
+        var proof = Assert.Single(handler.LastTokenRequest!.Headers.GetValues("DPoP"));
+        Assert.False(string.IsNullOrWhiteSpace(proof));
+    }
+
     private static HttpClient CreateTokenHttpClient(
         out FakeOidcHttpMessageHandler handler,
         int expiresInSeconds = 3600)
@@ -165,6 +183,7 @@ public sealed class ClientCredentialsTokenProviderTests
         public int CallCount => callCount;
         public int DiscoveryRequestCount => discoveryRequestCount;
         public int TokenRequestCount => tokenRequestCount;
+        public HttpRequestMessage? LastTokenRequest { get; private set; }
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
@@ -185,6 +204,7 @@ public sealed class ClientCredentialsTokenProviderTests
             }
 
             Interlocked.Increment(ref tokenRequestCount);
+            LastTokenRequest = request;
             var response = JsonSerializer.Serialize(new
             {
                 access_token = $"my-access-token-{call}",

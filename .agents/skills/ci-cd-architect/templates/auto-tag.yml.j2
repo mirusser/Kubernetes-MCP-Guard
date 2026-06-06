@@ -1,10 +1,9 @@
-# auto-tag.yml — Automatic Version Tagging
+# auto-tag.yml - Automatic Version Tagging
 #
-# This template is part of the CI/CD Architect standard (ci-cd-standard.md v1.0.0).
-# It is designed to be processed by a Jinja2-compatible template engine.
-#
-# Substitution variables (from .github/ci-cd-config.yaml):
-#   {{ project }} — e.g. "my-project" (short project slug for bot name)
+# Substitution variables:
+#   {{ project }}          - project slug used for the bot identity
+#   {{ version_source }}   - "pyproject" or "directory-build-props"
+#   {{ publish_workflow }} - optional downstream workflow filename, defaults to "publish.yml"
 
 name: Auto-tag on merge to main
 
@@ -12,9 +11,10 @@ on:
   pull_request:
     branches: [main]
     types: [closed]
+  workflow_dispatch:
 
 concurrency:
-  group: auto-tag-${{ github.ref }}
+  group: auto-tag-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
@@ -22,10 +22,11 @@ env:
 
 jobs:
   tag:
-    if: github.event.pull_request.merged == true
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
 
     steps:
       - uses: actions/checkout@v6
@@ -40,16 +41,32 @@ jobs:
 {% else %}
           VERSION=$(grep 'version = ' pyproject.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
 {% endif %}
+          if [ -z "$VERSION" ]; then
+            echo "No version found"
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Found version: $VERSION"
 
       - name: Create and push tag
+        id: tag
         run: |
           git config user.name "{{ project }}-bot"
           git config user.email "bot@{{ project }}.local"
           if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
-            echo "Tag v${{ steps.version.outputs.version }} already exists — skipping"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag v${{ steps.version.outputs.version }} already exists - skipping"
             exit 0
           fi
           git tag "v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger downstream publish
+        if: steps.tag.outputs.exists != 'true'
+        run: |
+          gh workflow run "{{ publish_workflow | default('publish.yml') }}" \
+            --ref "v${{ steps.version.outputs.version }}" \
+            || echo "::warning::Publish workflow not found or failed to trigger (may be expected for non-Docker or no-release projects)"
+        env:
+          GH_TOKEN: ${{ github.token }}

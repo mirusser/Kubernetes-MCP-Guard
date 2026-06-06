@@ -90,4 +90,7 @@ internal static partial class PlannerLogEvents
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Planner task reconciliation failed: taskId={TaskId} contextId={ContextId}")]
     public static partial void LogTaskReconciliationFailed(ILogger logger, string taskId, string contextId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "planner.workflow.topology lanes={LaneCount} (Mermaid)\n{Diagram}")]
+    public static partial void LogWorkflowTopology(ILogger logger, int laneCount, string diagram);
 }

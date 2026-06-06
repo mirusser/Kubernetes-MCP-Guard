@@ -193,6 +193,8 @@ sequenceDiagram
     Note over Issuer: aud emitted by mcp:tools audience mapper<br/>gateway enforces issuer/signature/lifetime/audience/scope
 ```
 
+The gateway mitigates JWT bearer token replay by enforcing RFC 9449 Demonstrating Proof-of-Possession (DPoP) for internal services and the approval UI. The client generates a DPoP proof for each request, which the gateway validates against the `jkt` claim in the access token. To prevent proof reuse, the gateway stores used `jti` (JWT ID) claims in an in-memory replay store (`InMemoryDpopProofReplayStore`). Note: Because this store is not distributed, DPoP replay detection is localized to individual replicas and represents a residual risk in multi-replica deployments. External MCP clients currently fallback to standard bearer tokens.
+
 ## Read-Only Tool Call
 
 ```mermaid

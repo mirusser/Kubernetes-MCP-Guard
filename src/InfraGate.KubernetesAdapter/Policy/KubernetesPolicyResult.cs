@@ -2,6 +2,8 @@ namespace InfraGate.KubernetesAdapter.Policy;
 
 public sealed record class KubernetesPolicyResult(IReadOnlyList<KubernetesPolicyFinding> Findings)
 {
+    public bool HadError { get; init; }
+
     public bool IsDenied => Findings.Any(f => f.Severity == KubernetesPolicySeverity.Deny);
 
     public string FormatRefusal() =>

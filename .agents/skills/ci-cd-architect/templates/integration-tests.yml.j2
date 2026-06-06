@@ -1,0 +1,51 @@
+# integration-tests.yml - Service-backed Integration Tests
+#
+# Substitution variables:
+# {{ dotnet_solution }}       - solution path
+# {{ dotnet_version }}        - .NET SDK version
+# {{ integration_runner }}    - runner labels, e.g. [self-hosted, linux]
+# {{ integration_test_command }} - command that runs integration tests
+
+name: Integration Tests
+
+on:
+  pull_request:
+  push:
+    branches: {{ ci_branches | default(["main"]) }}
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-tests-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  integration-tests:
+    runs-on: {{ integration_runner | default("ubuntu-latest") }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: {{ dotnet_version | default("10.0.x") }}
+
+      - name: Restore
+        run: dotnet restore {{ dotnet_solution }}
+
+      - name: Build
+        run: dotnet build {{ dotnet_solution }} --configuration Release --no-restore
+
+{% if integration_readiness_command %}
+      - name: Verify integration dependencies
+        run: {{ integration_readiness_command }}
+{% endif %}
+
+      - name: Run integration tests
+        run: {{ integration_test_command }}

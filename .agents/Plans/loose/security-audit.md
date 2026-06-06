@@ -1,10 +1,11 @@
 # Security Audit Report
 ## MCP Kubernetes Gateway — OAuth / Gateway / Approval Architecture
 
-**Date:** 2026-05-05
-**Scope:** Architecture & request-flow diagrams covering OAuth Login & Authorization, Read-Only Tool Calls, and Approval-Gated Mutations.
-**Method:** Static architectural analysis of Mermaid sequence diagrams and system description.
-**Status:** 13 findings identified — 6 from initial audit (verified & extended), 7 new.
+**Date:** 2026-05-05  
+**Re-assessed:** 2026-06-05 (against current codebase; see Implementation Notes per finding)  
+**Scope:** Architecture & request-flow diagrams covering OAuth Login & Authorization, Read-Only Tool Calls, and Approval-Gated Mutations.  
+**Method:** Static architectural analysis of Mermaid sequence diagrams and system description.  
+**Status:** 13 findings identified — 6 from initial audit (verified & extended), 7 new. **Re-assessment: 6 mitigated, 2 partial, 5 unaddressed.**
 
 ---
 
@@ -38,9 +39,11 @@ The architecture demonstrates a strong security foundation: OAuth 2.0 with PKCE 
 However, the audit identified **13 findings** ranging from Medium to Critical severity. The most impactful are:
 
 - The approval flow proves **plan integrity** via hash binding, but cannot prove **human presence** — a compromised MCP client can auto-approve without rendering the prompt to the SRE.
-- A **single `mcp:tools` scope** gates both read-only and destructive mutation operations, meaning any legitimately issued token can invoke mutation paths.
+- A five-tier scope model now separates read (`mcp:tools.read`), write (`mcp:tools.write`), observation (`mcp:tools.readonly`), proposal (`mcp:tools.propose`), and execution (`mcp:tools.execute`), with the legacy `mcp:tools` scope retained for backward compatibility. Each tool is mapped to its minimum required scope in `ToolScopeCatalog` and enforced at call-time by `ToolScopeGuard`.
 - **No user-to-plan binding** means any authenticated principal can approve and execute a plan they did not create.
 - **JWT Bearer tokens are replayable** with no proof-of-possession or revocation mechanism.
+
+> **Re-assessment (2026-06-06):** Of the top 4 concerns above, F-01 (auto-approval) and F-08 (user-to-plan binding) are now **mitigated**. F-13 (scope split) is fully addressed with `mcp:tools.read`/`mcp:tools.write` for human operators and role-based scopes (`mcp:tools.readonly`/`.propose`/`.execute`) for agents. F-07 (JWT replay) is partially mitigated with DPoP for internal clients. See individual findings for detailed Implementation Notes.
 
 ---
 
@@ -64,9 +67,10 @@ The following attacker capabilities are assumed for this audit:
 
 ### F-01
 ### Auto-Approval Loophole — Human Presence Not Provable
-**Severity:** Critical
-**Diagram:** Approval-Gated Mutation (Diagram 3)
-**Status:** Original finding — extended after clarification
+**Severity:** Critical  
+**Diagram:** Approval-Gated Mutation (Diagram 3)  
+**Status:** Original finding — extended after clarification  
+**Resolution:** ✅ **MITIGATED** (re-assessed 2026-06-05)  
 
 #### Description
 
@@ -103,28 +107,59 @@ Implement **out-of-band (OOB) authorization** for mutation approvals. The Gatewa
 
 The approval signal should be cryptographically bound to the approver's identity (see F-08) and originate from outside the client's control plane.
 
+#### Implementation Notes (2026-06-05)
+
+Fully addressed. The approval flow now uses **out-of-band browser-based approval** (`GatewayApprovalService.ApproveChallengeAsync`). When `execute_approved_plan` is called, the gateway creates an `ApprovalChallenge` and returns a browser URL (`/approvals/{challengeId}`). The MCP client cannot auto-approve — the human operator must open the URL in a browser, authenticate via OAuth PKCE, and approve/deny on the Review Surface. SHA-256 digests are recomputed at challenge creation and grant time to prevent tampering. Plan hash is verified via `FixedTimeStringComparer` at apply time (`GatewayApprovalService.cs:612-620`).
+
 ---
 
 ### F-02
 ### TOCTOU via Stale Dry-Run / force-conflicts
-**Severity:** High
-**Diagram:** Approval-Gated Mutation (Diagram 3)
-**Status:** Original finding — confirmed
+**Severity:** High  
+**Diagram:** Approval-Gated Mutation (Diagram 3)  
+**Status:** Original finding — confirmed  
+**Resolution:** ✅ **MITIGATED** (re-assessed 2026-06-05)
 
 #### Description
 
-Plan creation performs a Server-Side Apply (SSA) dry-run with `force-conflicts`. The resulting plan is stored in `.mcp-approvals/pending/` and may sit unexecuted for an arbitrary duration before the user calls `apply_approved_plan`.
+Plan creation performs a Server-Side Apply (SSA) dry-run without `force-conflicts`. The resulting plan is stored and may sit unexecuted for an arbitrary duration before the user calls `execute_approved_plan`.
 
-During that window, another SRE or automated process may legitimately modify the same Kubernetes resource (e.g., rolling a new image tag to patch a zero-day vulnerability). When the pending plan is applied, `force-conflicts` causes it to silently overwrite those intervening changes, reverting a human-made security fix without any warning.
+During that window, another SRE or automated process may legitimately modify the same Kubernetes resource (e.g., rolling a new image tag to patch a zero-day vulnerability). When the pending plan is applied, the previous normalized-state comparison does not detect metadata-only changes (e.g., a round-trip write that updates `resourceVersion` but doesn't change normalized fields).
 
-The SHA-256 hash mitigates the case where the *pending plan file itself* is tampered with, but it does not protect against the **Kubernetes resource state** drifting between dry-run and apply.
+The SHA-256 hash mitigates the case where the *pending plan file itself* is tampered with, but without resourceVersion tracking it does not protect against all forms of **Kubernetes resource state** drifting between dry-run and apply.
 
-#### Recommended Fix
+#### Recommended Fix ✅
 
-- Capture the `resourceVersion` of every affected Kubernetes resource at dry-run time and store it alongside the plan.
-- At apply time, assert the `resourceVersion` is unchanged before proceeding. If any resource has been updated, reject the plan with an explicit error requiring re-planning.
-- Remove `force-conflicts` from AI-agent-initiated applies, or restrict it to an explicit operator override flag.
-- Enforce a configurable TTL on pending plans (e.g., 15 minutes) after which they expire automatically.
+- ✅ Capture the `resourceVersion` of every affected Kubernetes resource at plan creation time and store it alongside the plan.
+- ✅ At plan execution time, assert the `resourceVersion` is unchanged before proceeding. If any resource has been updated, reject the plan with an explicit error requiring re-planning.
+- ✅ Set `resourceVersion` as a server-side precondition on SSA apply objects, making the check atomic.
+- ✅ Enforce a configurable TTL on pending plans (e.g., 15 minutes) after which they expire automatically.
+
+#### Implementation Notes (2026-06-05)
+
+**Two-layer defense now implemented:**
+
+**Layer 1 — Pre-execution ResourceVersion freshness check** (covers ALL operations):
+- `KubernetesPlanDiff` now carries a `ResourceVersion` field captured from live resource metadata at plan creation time, extracted before normalization via `KubernetesObjectMetadataExtractor` (in `BuildDiff`/`BuildDiffsAsync`).
+- Plan builders (`ApplyManifestBuilder`, `DeleteManifestBuilder`, `ScaleDeploymentBuilder`, `RestartDeploymentBuilder`, `SetDeploymentImageBuilder`) add a `ResourceVersionCheck` to the `FreshnessPolicy` when any diff has a captured resourceVersion, storing the object-key → resourceVersion mapping in the check parameters.
+- `KubernetesPlanExecutor.CheckResourceVersionAsync` runs before drift detection in `CheckPreExecutionAsync`. It reads the `ResourceVersionCheck` from the freshness policy and compares each expected resourceVersion against current live state. A mismatch blocks execution with `kubernetes.resource_version.mismatch` reason code and an audit entry.
+
+**Layer 2 — Server-side resourceVersion precondition** (covers SSA apply/delete only):
+- `KubernetesExecutionService.ExecuteApplyManifestAsync` accepts an optional `resourceVersionsJson` parameter.
+- `ApplyResourceVersions` sets `Metadata.ResourceVersion` on each parsed object before the SSA patch, making the Kubernetes API atomically reject with 409 Conflict if any object's resourceVersion changed.
+- Resource versions flow from the adapter's `OperationDispatchMap.BuildManifestArgs` through dispatch arguments to the server-side execution service.
+
+**Key files changed:**
+- `KubernetesPlanDiff.cs` (adapter + McpServer): added `string? ResourceVersion = null`
+- `KubernetesObjectMetadataExtractor.cs` (new): extracts resourceVersion from raw JSON before normalization
+- `KubernetesDiffService.cs`: extracts resourceVersion in `BuildDiff`/`BuildDiffsAsync`
+- `KubernetesAdapterConventions.cs`: added `ResourceVersionCheck`, `CheckResourceVersion`, `ResourceVersionMismatch`, `ResourceVersions`
+- `KubernetesBuilderInfrastructure.cs`: added `BuildFreshnessPolicy` helper
+- All 5 plan builders: use `BuildFreshnessPolicy` instead of static check lists
+- `KubernetesPlanExecutor.cs`: added `CheckResourceVersionAsync`, integrated before drift check
+- `OperationDispatchMap.cs`: `BuildManifestArgs` includes resourceVersions JSON
+- `KubernetesExecutionService.cs`: `ApplyResourceVersions` helper, updated `ExecuteApplyManifestAsync` signature
+- `KubernetesTools.cs`: `ApplyManifest` accepts optional `resourceVersions` parameter
 
 ---
 
@@ -133,6 +168,7 @@ The SHA-256 hash mitigates the case where the *pending plan file itself* is tamp
 **Severity:** High
 **Diagram:** Read-Only Tool Call (Diagram 2)
 **Status:** Original finding — confirmed
+**Resolution:** ❌ **NOT MITIGATED** (re-assessed 2026-06-05)
 
 #### Description
 
@@ -154,6 +190,14 @@ If any such payload reaches the LLM, it can override the system prompt and hijac
 - Consider a secondary LLM pass specifically tasked with classifying tool output as benign or suspicious before it reaches the primary model context.
 - Use the audit log (`GuardrailAuditStore`) as a detection signal, not a prevention mechanism — assume some injections will pass.
 
+#### Implementation Notes (2026-06-05)
+
+Still regex/rule-based only. The five-category scanner lives in `PromptInjectionGuard.Regex.cs:153-180` with redaction in `PromptInjectionGuard.Sanitization.cs`. One improvement: **base64 decode-and-scan** was added (`PromptInjectionGuard.Regex.cs:29-117`) to catch encoded payloads. But all major gaps remain:
+- No schema-enforced tool output envelope — tool results returned as plain text blocks (`GatewayToolDispatcher.cs`).
+- No secondary LLM classification pass — `ModelVisibleContentOptions.cs:37-41` explicitly throws `InvalidOperationException` for `SemanticClassifierEnabled`.
+- No Unicode homoglyph or zero-width character detection.
+- `GuardrailAuditStore` is JSONL append-only on disk (`GuardrailAuditStore.cs:10-37`), local only.
+
 ---
 
 ### F-04
@@ -161,6 +205,7 @@ If any such payload reaches the LLM, it can override the system prompt and hijac
 **Severity:** High
 **Diagram:** Approval-Gated Mutation (Diagram 3)
 **Status:** Original finding — confirmed, scope extended
+**Resolution:** ✅ **MITIGATED** (re-assessed 2026-06-05)
 
 #### Description
 
@@ -175,6 +220,10 @@ If any such payload reaches the LLM, it can override the system prompt and hijac
 - Implement an automated TTL cleanup: pending plans older than a configurable threshold (e.g., 30 minutes) are moved to an `expired/` subdirectory or deleted.
 - Run the subprocess with an OS-level disk quota to bound worst-case exhaustion.
 
+#### Implementation Notes (2026-06-05)
+
+Both concerns are addressed by the migration from file-based storage to **PostgreSQL persistence** (`PostgresApprovalPersistence.cs`). The legacy `ApprovalStore` is deprecated (`src/InfraGate.Approvals/_Deprecated/`). PlanId validation was added via `IsSafePlanId` (alphanumeric + hyphens only, `PostgresApprovalPersistence.cs:1295-1303`). Plan IDs are generated as cryptographically random hex strings (`ApprovalIds.NewPlanId`). Plan validity window provides TTL-based expiration. Rate limiting on plan creation is still missing.
+
 ---
 
 ### F-05
@@ -182,6 +231,7 @@ If any such payload reaches the LLM, it can override the system prompt and hijac
 **Severity:** Medium
 **Diagram:** OAuth Login & Authorization (Diagram 1)
 **Status:** Original finding — confirmed, partially mitigated
+**Resolution:** ⚠️ **PARTIALLY MITIGATED** (re-assessed 2026-06-05)
 
 #### Description
 
@@ -196,6 +246,10 @@ The mandatory PKCE S256 enforcement significantly reduces the exploitability of 
 - Consider binding the redirect listener to an OS-assigned ephemeral port and registering it dynamically, reducing predictability.
 - On supported platforms, use OS-level process validation (e.g., verifying the process that bound the port matches the expected binary) as a defense-in-depth measure.
 
+#### Implementation Notes (2026-06-05)
+
+No material change since original audit. PKCE S256 is still enforced (`GatewayAuthentication.cs:164`: `UsePkce = true`). Loopback redirect URIs are constrained to `127.0.0.1`/`localhost` in Keycloak config (`deploy/keycloak/infra-gate-realm.json`). Container isolation added in compose files (`read_only: true`, `tmpfs`, `no-new-privileges`, `cap_drop: ALL`). No OS-level port binding validation implemented.
+
 ---
 
 ### F-06
@@ -203,6 +257,7 @@ The mandatory PKCE S256 enforcement significantly reduces the exploitability of 
 **Severity:** High
 **Diagram:** Read-Only Tool Call (Diagram 2)
 **Status:** Original finding — confirmed
+**Resolution:** ⚠️ **PARTIALLY MITIGATED** (re-assessed 2026-06-05)
 
 #### Description
 
@@ -216,6 +271,10 @@ The consequence is that all tool handlers — read-only (`get_k8s_status`) and m
 - Ideally, instantiate separate subprocess instances for read and write paths, each running under its respective Service Account, selected by the Gateway based on the tool being called.
 - Periodically rotate Service Account tokens and audit RBAC bindings in CI to prevent permission creep.
 
+#### Implementation Notes (2026-06-05)
+
+RBAC split implemented in `deploy/minikube/rbac.yaml`: `infra-gate-mcp-manager` Role has write verbs (create/update/patch/delete) bound to `infra-gate-mcp` SA; `infra-gate-mcp-viewer` Role has read-only verbs (get/list/watch) bound to `infra-gate-mcp-view` SA. Container isolation added (`read_only`, `tmpfs`, `no-new-privileges`, `cap_drop: ALL` in compose files). Dockerfiles use non-root `USER $APP_UID`. **However:** still a single subprocess instance (`BootstrapStdioClientTransport.cs:32-43`) sharing one K8s identity — no separate subprocess instances per read/write path. The Gateway does not select different subprocess instances based on tool type.
+
 ---
 
 ### F-07
@@ -223,6 +282,7 @@ The consequence is that all tool handlers — read-only (`get_k8s_status`) and m
 **Severity:** High
 **Diagram:** OAuth Login & Authorization (Diagram 1) & Read-Only Tool Call (Diagram 2)
 **Status:** New finding
+**Resolution:** ⚠️ **PARTIALLY MITIGATED** (re-assessed 2026-06-06)
 
 #### Description
 
@@ -243,6 +303,13 @@ Once leaked, the token is valid for its full lifetime and grants access to all t
 - If DPoP is out of scope, enforce very short token lifetimes (2–5 minutes) with silent refresh via refresh token rotation.
 - Ensure all Gateway and client log configurations explicitly scrub `Authorization` headers and Bearer token values.
 
+#### Implementation Notes (2026-06-06)
+
+DPoP (Demonstrating Proof-of-Possession) is now implemented and enforced for controlled internal clients (Planner, Observer, Executor) and the Approval UI. The Gateway verifies the DPoP proof signature, lifetime, `jti` replay, and matches the `jkt` claim against the access token. However, two gaps remain:
+1. The `jti` replay store (`InMemoryDpopProofReplayStore`) is in-memory only, meaning replay detection is not distributed across multiple Gateway replicas.
+2. External MCP clients (like Claude Code) do not yet broadly support DPoP, so the Keycloak `mcp-client` allows standard bearer tokens as a fallback.
+Thus, this finding is downgraded to partially mitigated.
+
 ---
 
 ### F-08
@@ -250,6 +317,7 @@ Once leaked, the token is valid for its full lifetime and grants access to all t
 **Severity:** High
 **Diagram:** Approval-Gated Mutation (Diagram 3)
 **Status:** New finding
+**Resolution:** ✅ **MITIGATED** (re-assessed 2026-06-05)
 
 #### Description
 
@@ -269,6 +337,13 @@ The SHA-256 hash binding does not address this because it binds content, not cal
 - Display the creator's identity in the elicitation approval prompt so the approving human sees who originated the plan.
 - Consider whether cross-user approval should ever be permitted, and if so, implement an explicit delegation mechanism rather than relying on ambient scope.
 
+#### Implementation Notes (2026-06-05)
+
+Fully addressed. Creator `sub` claim is resolved from the JWT (`GatewayApprovalIdentityResolver.Resolve`), recorded in `PlanRequester.Subject`, persisted to `approvals.plan_envelopes.requester_subject` column (`PostgresApprovalPersistence.cs:91`). Two policies enforce binding:
+- **SameSubject** (default for human-driven plans): `ApprovalPolicyAuthorizationCheck.SameSubject` verifies `context.ActorSubject == context.RequesterSubject`.
+- **OperatorApproval** (Planner-originated plans): `IsActorAuthorizedForChallengeOutcome` checks actor belongs to configured operator group.
+Grant validation (`ApprovalGrantValidation.Validate`) cross-checks requester subject at apply time.
+
 ---
 
 ### F-09
@@ -276,6 +351,7 @@ The SHA-256 hash binding does not address this because it binds content, not cal
 **Severity:** Medium
 **Diagram:** OAuth Login & Authorization (Diagram 1) & Read-Only Tool Call (Diagram 2)
 **Status:** New finding
+**Resolution:** ❌ **NOT MITIGATED** (re-assessed 2026-06-05)
 
 #### Description
 
@@ -289,6 +365,10 @@ This means a compromised token remains fully operational for its entire lifetime
 - Alternatively, enforce very short JWT lifetimes (2–5 minutes) combined with refresh token rotation and a refresh token revocation list. Revoking the refresh token effectively invalidates the session.
 - Expose a `POST /revoke` endpoint on the Gateway that an SRE can call to immediately blacklist a token by `jti` claim.
 
+#### Implementation Notes (2026-06-05)
+
+No token introspection endpoint. No revocation list or blacklist. The only logout path (`GatewayApprovalEndpoints.cs:168-171`) clears the approval cookie via `Results.SignOut(...)`, not JWT revocation. No `POST /revoke` endpoint. Token lifetime validation uses standard `ValidateLifetime = true` with no short-lifetime enforcement.
+
 ---
 
 ### F-10
@@ -296,6 +376,7 @@ This means a compromised token remains fully operational for its entire lifetime
 **Severity:** High
 **Diagram:** Read-Only Tool Call (Diagram 2) & Approval-Gated Mutation (Diagram 3)
 **Status:** New finding
+**Resolution:** ❌ **NOT MITIGATED** (re-assessed 2026-06-05)
 
 #### Description
 
@@ -312,6 +393,10 @@ This is especially relevant because the subprocess binary is co-located with the
 - Run the subprocess under a dedicated OS user that has no write permissions to its own binary path.
 - Where possible, sign the subprocess binary and verify the signature using a trusted key at spawn time.
 
+#### Implementation Notes (2026-06-05)
+
+No startup binary hash verification found in `src/InfraGate.McpGateway` or `src/InfraGate.McpServer`. Startup safety checks exist for URLs/directories (`McpGatewayOptions.cs:99-154`) but not binary attestation. Subprocess spawning uses standard `ProcessStartInfo` with `UseShellExecute = false` (`BootstrapStdioClientTransport.cs:32-43`). Non-root Docker user (`USER $APP_UID`) provides some isolation but no integrity verification.
+
 ---
 
 ### F-11
@@ -319,6 +404,7 @@ This is especially relevant because the subprocess binary is co-located with the
 **Severity:** Medium
 **Diagram:** OAuth Login & Authorization (Diagram 1)
 **Status:** New finding
+**Resolution:** ❌ **NOT MITIGATED** (re-assessed 2026-06-05)
 
 #### Description
 
@@ -337,6 +423,10 @@ The Gateway validates inbound JWTs against the issuer's JWKS (JSON Web Key Set).
 - On JWKS fetch failure, use the last-known-good cached key set rather than failing open or fetching synchronously per request.
 - Pin the JWKS endpoint URI in configuration and validate the TLS certificate against a pinned CA, even in local/dev deployments.
 
+#### Implementation Notes (2026-06-05)
+
+Gateway auth uses standard `AddJwtBearer` with IdentityModel's default `ConfigurationManager<OpenIdConnectConfiguration>` for OIDC discovery (`GatewayAuthentication.cs:104-127`). No custom cache TTL, no background refresh configuration, no explicit `kid` matching code found in gateway auth path. Downstream server auth (`DownstreamTokenValidator.cs:22-40`) uses similar defaults. No last-known-good cache fallback on fetch failure.
+
 ---
 
 ### F-12
@@ -344,6 +434,7 @@ The Gateway validates inbound JWTs against the issuer's JWKS (JSON Web Key Set).
 **Severity:** Medium
 **Diagram:** Read-Only Tool Call (Diagram 2) & Approval-Gated Mutation (Diagram 3)
 **Status:** New finding
+**Resolution:** ⚠️ **PARTIALLY MITIGATED** (re-assessed 2026-06-05)
 
 #### Description
 
@@ -360,6 +451,10 @@ This means the audit trail, which is the primary forensic record for detecting p
 - Consider cryptographically chaining log entries (each entry includes a hash of the previous entry) so tampering with any entry breaks the chain and is detectable.
 - Treat the local JSONL files as a write-ahead buffer only, not as the authoritative audit record.
 
+#### Implementation Notes (2026-06-05)
+
+PostgreSQL audit outbox implements **cryptographic hash chaining** (`PostgresAuditOutboxCore.cs:13-45`): `previous_event_hash` + canonical JSON + SHA-256, providing tamper-evident audit for approval streams. `AuditOutboxConventions.cs` defines canonical input and `previous_event_hash`/`event_hash` columns. **However:** the local guardrail JSONL audit (`GuardrailAuditStore.cs:10-37`) is plain `File.AppendAllTextAsync` with no chaining and no append-only enforcement. No remote syslog/SIEM shipping found. `JsonFileAnomalyHandoffSink.cs` writes local temp-file + rename, not an append-only audit stream.
+
 ---
 
 ### F-13
@@ -367,43 +462,65 @@ This means the audit trail, which is the primary forensic record for detecting p
 **Severity:** High
 **Diagram:** All three diagrams
 **Status:** New finding
+**Resolution:** ✅ **MITIGATED** (re-assessed 2026-06-05)
 
 #### Description
 
-The only OAuth scope referenced throughout the architecture is `mcp:tools`. This single scope is used to gate both read-only operations (`get_k8s_status`, log streaming) and destructive mutation operations (`request_scale_deployment`, `apply_approved_plan`).
+The architecture originally used a single `mcp:tools` OAuth scope to gate all operations — read-only diagnostics (`get_k8s_status`, log streaming) and destructive mutations (`request_scale_deployment`, `apply_approved_plan`).
 
-A token legitimately issued for a read-only session carries the same scope as a token for a mutation session. Consequences include:
+**This is now mitigated.** A five-tier scope model replaces the single-scope approach:
 
-- Any `mcp:tools` token can invoke mutation paths. There is no scope-level guardrail preventing this.
-- If a read-only token is stolen or replayed (see F-07), it can be used to initiate or apply destructive plans.
-- Least-privilege cannot be enforced at the OAuth layer — the token grants more permission than the operation requires.
+- `mcp:tools.read` — human operators: read-only inspection tools, evidence tools, `get_plan_status`
+- `mcp:tools.write` — human operators: all tools including plan mutation and execution
+- `mcp:tools.readonly` — agent service identity: Observer read path
+- `mcp:tools.propose` — agent service identity: Planner plan proposal (combined with `mcp:tools.readonly` for read access)
+- `mcp:tools.execute` — agent service identity: Executor plan execution
+- `mcp:tools` — legacy scope for backward compatibility (equivalent to full access)
 
 #### Recommended Fix
 
-- Define at minimum two scopes: `mcp:read` and `mcp:write`.
-- The DevIssuer should issue `mcp:read`-only tokens for sessions where mutation is not expected.
-- The Gateway must enforce scope per tool: read-only handlers accept `mcp:read` or `mcp:write`; mutation handlers require `mcp:write` exclusively.
-- The protected-resource metadata (`/.well-known/oauth-protected-resource`) should advertise both scopes so MCP clients can request the minimum necessary scope.
+- ~~Define at minimum two scopes: `mcp:read` and `mcp:write`.~~ → Implemented as `mcp:tools.read` / `mcp:tools.write`
+- ~~Issue `mcp:read`-only tokens for read-only sessions.~~ → Done
+- ~~Enforce scope per tool at the Gateway.~~ → Done via `ToolScopeCatalog` + `ToolScopeGuard`
+- ~~Advertise scopes in protected-resource metadata.~~ → Done
+
+#### Implementation Notes (2026-06-05)
+
+Fully addressed. Six scope constants are defined in both `GatewayAuthConventions.cs:5-11` and `McpGatewayConventions.cs:177-185`: `mcp:tools` (legacy), `mcp:tools.readonly`, `mcp:tools.propose`, `mcp:tools.execute`, `mcp:tools.read`, `mcp:tools.write`. All six are registered in `AcceptedScopes` (`GatewayAuthentication.cs:74-82`) so the authorization policy accepts them.
+
+Per-tool enforcement is handled by `ToolScopeCatalog` (`src/InfraGate.McpGateway/McpTransport/Dispatch/ToolScopeCatalog.cs`) — a single source of truth mapping each tool to its minimum required scope(s):
+- `request_*` tools → `mcp:tools` or `mcp:tools.write`
+- `execute_approved_plan` / `wait_for_plan_approval` → `mcp:tools` or `mcp:tools.execute` or `mcp:tools.write`
+- `get_plan_status` → `mcp:tools` or `mcp:tools.readonly` or `mcp:tools.read`
+- `propose_plan` → `mcp:tools` or `mcp:tools.propose` or `mcp:tools.write`
+- Downstream ReadOnly tools → `mcp:tools` or `mcp:tools.readonly` or `mcp:tools.read`
+- Downstream Destructive tools → `mcp:tools` or `mcp:tools.write`
+
+`ToolScopeGuard` (`ToolScopeGuard.cs`) enforces these at call-time in `GatewayToolDispatcher.CallToolAsyncCore` (lines 96 and 167), returning an error result and writing a `scope.denied` audit event on mismatch. `ToolScopeCatalog.IsVisibleTo` also filters the `tools/list` response so clients only see tools their scope permits.
+
+Agent service identities use their appropriate scopes: Observer → `mcp:tools.readonly` (`ObserverConventions.cs:17`), Planner → `mcp:tools.propose mcp:tools.readonly` (`PlannerConventions.cs:11`), Executor → `mcp:tools.execute` (`ExecutorConventions.cs:11`). Human operators use `mcp:tools.read` or `mcp:tools.write` as documented in `docs/tool-permissions.md` and the README.
+
+The naming follows `mcp:tools.{role}` (e.g., `mcp:tools.read`) rather than the shorter `mcp:read` originally recommended — this is a consistent namespace choice, not a functional gap. All tool scopes live under the `mcp:tools` prefix.
 
 ---
 
 ## Summary Table
 
-| ID | Finding | Severity | Source | Affected Diagram |
-|---|---|---|---|---|
-| F-01 | Auto-approval loophole — human presence not provable | **Critical** | Original (extended) | Diagram 3 |
-| F-02 | TOCTOU via stale dry-run / force-conflicts | **High** | Original | Diagram 3 |
-| F-03 | Prompt injection sanitization fallacy | **High** | Original | Diagram 2 |
-| F-04 | Disk exhaustion & path traversal in ApprovalStore | **High** | Original | Diagram 3 |
-| F-05 | Loopback port hijacking in DCR | **Medium** | Original | Diagram 1 |
-| F-06 | Subprocess blast radius under shared Service Account | **High** | Original | Diagram 2 |
-| F-07 | JWT Bearer replay — no proof-of-possession | **High** | New | Diagrams 1 & 2 |
-| F-08 | No user-to-plan binding — cross-user plan approval | **High** | New | Diagram 3 |
-| F-09 | No JWT revocation mechanism | **Medium** | New | Diagrams 1 & 2 |
-| F-10 | Subprocess binary integrity not verified | **High** | New | Diagrams 2 & 3 |
-| F-11 | JWKS cache poisoning / key rollover race | **Medium** | New | Diagram 1 |
-| F-12 | Audit log tamper by compromised process | **Medium** | New | Diagrams 2 & 3 |
-| F-13 | Single scope for read and write operations | **High** | New | All |
+| ID | Finding | Severity | Source | Affected Diagram | Resolution (2026-06-05) |
+|---|---|---|---|---|---|
+| F-01 | Auto-approval loophole — human presence not provable | **Critical** | Original (extended) | Diagram 3 | ✅ Mitigated |
+| F-02 | TOCTOU via stale dry-run / force-conflicts | **High** | Original | Diagram 3 | ✅ Mitigated |
+| F-03 | Prompt injection sanitization fallacy | **High** | Original | Diagram 2 | ❌ Not mitigated |
+| F-04 | Disk exhaustion & path traversal in ApprovalStore | **High** | Original | Diagram 3 | ✅ Mitigated |
+| F-05 | Loopback port hijacking in DCR | **Medium** | Original | Diagram 1 | ⚠️ Partial |
+| F-06 | Subprocess blast radius under shared Service Account | **High** | Original | Diagram 2 | ⚠️ Partial |
+| F-07 | JWT Bearer replay — no proof-of-possession | **High** | New | Diagrams 1 & 2 | ⚠️ Partial |
+| F-08 | No user-to-plan binding — cross-user plan approval | **High** | New | Diagram 3 | ✅ Mitigated |
+| F-09 | No JWT revocation mechanism | **Medium** | New | Diagrams 1 & 2 | ❌ Not mitigated |
+| F-10 | Subprocess binary integrity not verified | **High** | New | Diagrams 2 & 3 | ❌ Not mitigated |
+| F-11 | JWKS cache poisoning / key rollover race | **Medium** | New | Diagram 1 | ❌ Not mitigated |
+| F-12 | Audit log tamper by compromised process | **Medium** | New | Diagrams 2 & 3 | ⚠️ Partial |
+| F-13 | Single scope for read and write operations | **High** | New | All | ✅ Mitigated |
 
 ---
 
@@ -411,31 +528,31 @@ A token legitimately issued for a read-only session carries the same scope as a 
 
 ### Immediate (before any production use)
 
-| Priority | Finding | Reason |
-|---|---|---|
-| 1 | **F-13** — Split `mcp:read` / `mcp:write` scopes | Architectural change required; blocks all other scope-based controls |
-| 2 | **F-08** — Bind plans to creator `sub` claim | Prevents cross-user approval with minimal implementation effort |
-| 3 | **F-04** — UUID validation + rate limit on planId | Low-effort fix with high DoS / traversal impact |
-| 4 | **F-02** — Capture and assert `resourceVersion` | Prevents silent overwrite of human-made changes |
+| Priority | Finding | Reason | Status |
+|---|---|---|---|
+| 1 | ✅ **F-13** — Split `mcp:read` / `mcp:write` scopes | Architectural change required; blocks all other scope-based controls | ✅ Done — `mcp:tools.read`/`.write` for human operators + role-based scopes for agents |
+| 2 | **F-08** — Bind plans to creator `sub` claim | Prevents cross-user approval with minimal implementation effort | ✅ Done — SameSubject + OperatorApproval policies implemented |
+| 3 | **F-04** — UUID validation + rate limit on planId | Low-effort fix with high DoS / traversal impact | ✅ Done — PostgreSQL migration + IsSafePlanId validation |
+| 4 | ✅ **F-02** — Capture and assert `resourceVersion` | Prevents silent overwrite of human-made changes | ✅ Mitigated — Two-layer defense: pre-execution freshness check + SSA server-side precondition |
 
 ### Short-term (within one sprint)
 
-| Priority | Finding | Reason |
-|---|---|---|
-| 5 | **F-07** — DPoP or short-lived tokens + log scrubbing | Significantly reduces replay window |
-| 6 | **F-09** — Token revocation / introspection | Enables incident response to stolen tokens |
-| 7 | **F-10** — Binary hash pinning at startup | Low-cost, high-value supply-chain control |
-| 8 | **F-06** — Split Service Accounts by read/write | Reduces blast radius of subprocess compromise |
+| Priority | Finding | Reason | Status |
+|---|---|---|---|
+| 5 | **F-07** — DPoP or short-lived tokens + log scrubbing | Significantly reduces replay window | ⚠️ Partial — DPoP for internal clients, in-memory replay store |
+| 6 | **F-09** — Token revocation / introspection | Enables incident response to stolen tokens | ❌ Open |
+| 7 | **F-10** — Binary hash pinning at startup | Low-cost, high-value supply-chain control | ❌ Open |
+| 8 | **F-06** — Split Service Accounts by read/write | Reduces blast radius of subprocess compromise | ⚠️ Partial — RBAC split exists, single subprocess instance |
 
 ### Medium-term (hardening pass)
 
-| Priority | Finding | Reason |
-|---|---|---|
-| 9 | **F-01** — OOB approval channel | Full fix requires external infrastructure |
-| 10 | **F-12** — Remote audit log shipping | Requires out-of-process log sink |
-| 11 | **F-03** — Schema-enforced tool output isolation | Requires LLM prompt engineering + testing |
-| 12 | **F-11** — JWKS `kid` pinning + bounded cache TTL | Configuration-level fix once token plumbing is stable |
-| 13 | **F-05** — Subprocess / container isolation | Deployment environment dependent |
+| Priority | Finding | Reason | Status |
+|---|---|---|---|
+| 9 | **F-01** — OOB approval channel | Full fix requires external infrastructure | ✅ Done — browser-based approval with OAuth PKCE |
+| 10 | **F-12** — Remote audit log shipping | Requires out-of-process log sink | ⚠️ Partial — PG audit has hash chaining, no SIEM shipping |
+| 11 | **F-03** — Schema-enforced tool output isolation | Requires LLM prompt engineering + testing | ❌ Open |
+| 12 | **F-11** — JWKS `kid` pinning + bounded cache TTL | Configuration-level fix once token plumbing is stable | ❌ Open |
+| 13 | **F-05** — Subprocess / container isolation | Deployment environment dependent | ⚠️ Partial — container isolation added, no OS-level checks |
 
 ---
 

@@ -697,6 +697,7 @@ public sealed class RunProfileCliTests
             "InfraGate__Observer__ClientCredentials__ClientId",
             "InfraGate__Observer__ClientCredentials__ClientSecret",
             "InfraGate__Observer__ClientCredentials__Scope",
+            "InfraGate__Observer__ClientCredentials__UseDPoP",
             "InfraGate__Observer__LlmProvider",
             "InfraGate__Observer__LlmModel",
             "InfraGate__Observer__CycleIntervalSeconds",
@@ -714,6 +715,7 @@ public sealed class RunProfileCliTests
             "InfraGate__Planner__ClientCredentials__ClientSecret",
             "InfraGate__Planner__ClientCredentials__Authority",
             "InfraGate__Planner__ClientCredentials__Scope",
+            "InfraGate__Planner__ClientCredentials__UseDPoP",
             "InfraGate__Planner__LlmProvider",
             "InfraGate__Planner__LlmModel",
             "InfraGate__Planner__MaxToolIterations",
@@ -725,7 +727,8 @@ public sealed class RunProfileCliTests
             "InfraGate__Executor__ClientCredentials__ClientId",
             "InfraGate__Executor__ClientCredentials__ClientSecret",
             "InfraGate__Executor__ClientCredentials__Authority",
-            "InfraGate__Executor__ClientCredentials__Scope"
+            "InfraGate__Executor__ClientCredentials__Scope",
+            "InfraGate__Executor__ClientCredentials__UseDPoP"
         };
 
     private static readonly HashSet<string> SourceGatewayProfileKeys =
@@ -755,6 +758,7 @@ public sealed class RunProfileCliTests
             "InfraGate__Observer__ClientCredentials__ClientId",
             "InfraGate__Observer__ClientCredentials__ClientSecret",
             "InfraGate__Observer__ClientCredentials__Scope",
+            "InfraGate__Observer__ClientCredentials__UseDPoP",
             "InfraGate__Observer__LlmProvider",
             "InfraGate__Observer__LlmModel",
             "InfraGate__Observer__CycleIntervalSeconds",
@@ -770,6 +774,7 @@ public sealed class RunProfileCliTests
             "InfraGate__Planner__ClientCredentials__ClientSecret",
             "InfraGate__Planner__ClientCredentials__Authority",
             "InfraGate__Planner__ClientCredentials__Scope",
+            "InfraGate__Planner__ClientCredentials__UseDPoP",
             "InfraGate__Planner__LlmProvider",
             "InfraGate__Planner__LlmModel",
             "InfraGate__Planner__MaxToolIterations",
@@ -780,7 +785,8 @@ public sealed class RunProfileCliTests
             "InfraGate__Executor__ClientCredentials__ClientId",
             "InfraGate__Executor__ClientCredentials__ClientSecret",
             "InfraGate__Executor__ClientCredentials__Authority",
-            "InfraGate__Executor__ClientCredentials__Scope"
+            "InfraGate__Executor__ClientCredentials__Scope",
+            "InfraGate__Executor__ClientCredentials__UseDPoP"
         };
 
     private static readonly HashSet<string> SmokeProfileKeys =

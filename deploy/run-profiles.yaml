@@ -61,6 +61,7 @@ profiles:
       clientId: infra-gate-observer
       clientSecret: observer-secret
       scope: mcp:tools.readonly
+      useDPoP: "true"
       llmProvider: openrouter
       llmModel: openrouter/free
       cycleCadenceSeconds: "60"
@@ -80,6 +81,7 @@ profiles:
       clientSecret: planner-secret
       oauthAuthority: http://keycloak:8080/realms/infra-gate
       scope: mcp:tools.propose mcp:tools.readonly
+      useDPoP: "true"
       llmProvider: openrouter
       llmModel: openrouter/free
       anomalyWallClockCapSeconds: "90"
@@ -93,6 +95,7 @@ profiles:
       clientSecret: executor-secret
       oauthAuthority: http://keycloak:8080/realms/infra-gate
       scope: mcp:tools.execute
+      useDPoP: "true"
 
   local-source-gateway:
     kind: dotnet
@@ -125,6 +128,7 @@ profiles:
       clientId: infra-gate-observer
       clientSecret: observer-secret
       scope: mcp:tools.readonly
+      useDPoP: "true"
       llmProvider: openrouter
       llmModel: openrouter/free
       cycleCadenceSeconds: "60"
@@ -142,6 +146,7 @@ profiles:
       clientSecret: planner-secret
       oauthAuthority: http://127.0.0.1:3010/realms/infra-gate
       scope: mcp:tools.propose mcp:tools.readonly
+      useDPoP: "true"
       llmProvider: openrouter
       llmModel: openrouter/free
       anomalyWallClockCapSeconds: "90"
@@ -154,6 +159,7 @@ profiles:
       clientSecret: executor-secret
       oauthAuthority: http://127.0.0.1:3010/realms/infra-gate
       scope: mcp:tools.execute
+      useDPoP: "true"
 
   local-stdio:
     kind: mcp-stdio

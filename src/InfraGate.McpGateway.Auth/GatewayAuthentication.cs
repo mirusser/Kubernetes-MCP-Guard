@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using InfraGate.McpGateway.Auth.Dpop;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -19,6 +20,12 @@ public static class GatewayAuthentication
     public static IServiceCollection AddGatewayAuthentication(this IServiceCollection services, GatewayAuthOptions options)
     {
         services.AddSingleton(options);
+
+        if (options.RequireDPoP)
+        {
+            services.AddSingleton<IDpopProofReplayStore, InMemoryDpopProofReplayStore>();
+            services.AddSingleton<IDpopProofValidator, DpopProofValidator>();
+        }
 
         var authBuilder = AddGatewayAuthenticationSchemes(services);
         AddJwtBearerAuthentication(authBuilder, options);
@@ -76,7 +83,9 @@ public static class GatewayAuthentication
         GatewayAuthConventions.DefaultOAuthScope,
         GatewayAuthConventions.DefaultReadOnlyOAuthScope,
         GatewayAuthConventions.DefaultProposeOAuthScope,
-        GatewayAuthConventions.DefaultExecuteOAuthScope
+        GatewayAuthConventions.DefaultExecuteOAuthScope,
+        GatewayAuthConventions.DefaultReadToolsOAuthScope,
+        GatewayAuthConventions.DefaultWriteToolsOAuthScope
     ];
 
     private static void AddGatewayAuthorization(IServiceCollection services, GatewayAuthOptions options)
@@ -129,6 +138,63 @@ public static class GatewayAuthentication
 
     private static JwtBearerEvents CreateJwtBearerEvents(GatewayAuthOptions options) => new()
     {
+        OnMessageReceived = context =>
+        {
+            // Support Authorization: DPoP <token> alongside the default Authorization: Bearer <token>
+            var authorization = context.Request.Headers.Authorization.ToString();
+            if (authorization.StartsWith(
+                    $"{GatewayAuthConventions.DPoP.Scheme} ",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                context.Token = authorization[$"{GatewayAuthConventions.DPoP.Scheme} ".Length..].Trim();
+            }
+            return Task.CompletedTask;
+        },
+
+        OnTokenValidated = async context =>
+        {
+            if (!options.RequireDPoP)
+                return;
+
+            var authorization = context.Request.Headers.Authorization.ToString();
+            if (!authorization.StartsWith(
+                    $"{GatewayAuthConventions.DPoP.Scheme} ",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                context.Fail("DPoP is required: use 'Authorization: DPoP <token>'.");
+                return;
+            }
+
+            var dpopProof = context.Request.Headers[GatewayAuthConventions.DPoP.ProofHeaderName].ToString();
+            if (string.IsNullOrWhiteSpace(dpopProof))
+            {
+                context.Fail("DPoP proof header is missing.");
+                return;
+            }
+
+            if (context.SecurityToken is not JsonWebToken accessToken)
+            {
+                context.Fail("Unexpected security token type.");
+                return;
+            }
+
+            var request = context.Request;
+            var uri = $"{request.Scheme}://{request.Host}{request.PathBase}{request.Path}";
+            var validator = context.HttpContext.RequestServices
+                .GetRequiredService<IDpopProofValidator>();
+
+            var result = await validator.ValidateAsync(
+                new DpopProofValidationContext(
+                    DpopProofJwt: dpopProof,
+                    AccessToken: accessToken.EncodedToken,
+                    HttpMethod: request.Method,
+                    HttpUri: uri),
+                context.HttpContext.RequestAborted).ConfigureAwait(false);
+
+            if (!result.IsValid)
+                context.Fail($"DPoP validation failed: {result.FailureReason}");
+        },
+
         OnForbidden = context =>
         {
             var resourceMetadata = ResourceMetadataUrl(context.Request);
@@ -170,7 +236,7 @@ public static class GatewayAuthentication
         oauthOptions.AuthorizationEndpoint = options.ApprovalAuthorizationEndpoint;
         oauthOptions.TokenEndpoint = options.ApprovalTokenEndpoint;
         oauthOptions.UsePkce = true;
-        oauthOptions.SaveTokens = true;
+        oauthOptions.SaveTokens = false;
         oauthOptions.Scope.Clear();
         oauthOptions.Scope.Add(options.OAuthScope);
         oauthOptions.Events = CreateApprovalOAuthEvents(options);

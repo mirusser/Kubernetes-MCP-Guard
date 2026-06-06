@@ -3,7 +3,10 @@ using Microsoft.Extensions.Logging;
 
 namespace InfraGate.ClientCredentials;
 
-public sealed class ClientCredentialsTokenProvider : IClientCredentialsTokenProvider
+public sealed class ClientCredentialsTokenProvider :
+    IClientCredentialsTokenProvider,
+    IClientCredentialsDpopProofProvider,
+    IDisposable
 {
     private readonly ClientCredentialsTokenOptions options;
     private readonly HttpClient httpClient;
@@ -14,6 +17,7 @@ public sealed class ClientCredentialsTokenProvider : IClientCredentialsTokenProv
     private string? cachedToken;
     private DateTimeOffset tokenExpiry = DateTimeOffset.MinValue;
     private string? tokenEndpoint;
+    private readonly ClientCredentialsDpopProofFactory? dpopProofFactory;
 
     public ClientCredentialsTokenProvider(
         ClientCredentialsTokenOptions options,
@@ -25,7 +29,10 @@ public sealed class ClientCredentialsTokenProvider : IClientCredentialsTokenProv
         this.httpClient = httpClient;
         this.timeProvider = timeProvider;
         this.logger = logger;
+        dpopProofFactory = options.UseDPoP ? new ClientCredentialsDpopProofFactory() : null;
     }
+
+    public bool IsDPoPEnabled => dpopProofFactory is not null;
 
     public async Task<string> GetTokenAsync(CancellationToken cancellationToken)
     {
@@ -75,6 +82,26 @@ public sealed class ClientCredentialsTokenProvider : IClientCredentialsTokenProv
         return now < refreshThreshold;
     }
 
+    public Task<string> CreateDpopProofAsync(
+        string accessToken,
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        if (dpopProofFactory is null)
+            throw new InvalidOperationException("DPoP proof generation is not enabled.");
+
+        if (request.RequestUri is null)
+            throw new InvalidOperationException("Cannot create a DPoP proof for a request without a URI.");
+
+        return Task.FromResult(dpopProofFactory.CreateProof(request.Method, request.RequestUri, accessToken));
+    }
+
+    public void Dispose()
+    {
+        tokenSemaphore.Dispose();
+        dpopProofFactory?.Dispose();
+    }
+
     private async Task<string> AcquireTokenAsync(CancellationToken cancellationToken)
     {
         string endpoint = await GetTokenEndpointAsync(cancellationToken).ConfigureAwait(false);
@@ -87,7 +114,18 @@ public sealed class ClientCredentialsTokenProvider : IClientCredentialsTokenProv
             new KeyValuePair<string, string>("scope", options.Scope),
         ]);
 
-        using var response = await httpClient.PostAsync(endpoint, content, cancellationToken).ConfigureAwait(false);
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            Content = content
+        };
+        if (dpopProofFactory is not null)
+        {
+            request.Headers.Add(
+                ClientCredentialsConventions.DPoP.ProofHeaderName,
+                dpopProofFactory.CreateProof(HttpMethod.Post, request.RequestUri!));
+        }
+
+        using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
         using var body = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);

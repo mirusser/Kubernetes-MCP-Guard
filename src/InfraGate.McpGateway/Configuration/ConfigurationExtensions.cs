@@ -84,7 +84,11 @@ internal static class ConfigurationExtensions
             builder.Services.AddSingleton<IApprovalEmailSender, SmtpApprovalEmailSender>();
             builder.Services.AddSingleton<IProposePlanHandler, ProposePlanHandler>();
             builder.Services.AddSingleton<IToolCaller>(sp =>
-                (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
+                new SanitizingToolCaller(
+                    sp.GetRequiredService<IDownstreamMcpClient>(),
+                    sp.GetRequiredService<IGuardrailAuditStore>(),
+                    sp.GetRequiredService<IHttpContextAccessor>(),
+                    sp.GetRequiredService<ILogger<SanitizingToolCaller>>()));
             builder.Services.AddKubernetesAdapter();
             builder.Services.AddSingleton<DownstreamToolRegistry>();
             builder.Services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();

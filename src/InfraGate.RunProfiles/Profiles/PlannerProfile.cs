@@ -14,4 +14,5 @@ internal sealed record class PlannerProfile(
     string? BatchWallClockCapSeconds,
     string? MaxToolIterations,
     string? FileSinkRoot,
-    string? PlannerHostPath);
+    string? PlannerHostPath,
+    string? UseDPoP = null);

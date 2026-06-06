@@ -63,6 +63,7 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
     private readonly Histogram<double>? cycleDurationHistogram;
     private readonly AgentGuardrailPolicy? guardrailPolicy;
     private readonly IModelVisibleContentGuard contentGuard;
+    private int workflowTopologyLogged;
 
     public ObservationCycleRunner( // NOSONAR:S107 — DI constructor; all params are required services.
         IOptionsMonitor<ObserverOptions> optionsMonitor,
@@ -266,6 +267,11 @@ internal sealed class ObservationCycleRunner : IObservationCycleRunner
             .WithOutputFrom(aggregate)
             .WithOpenTelemetry()
             .Build();
+
+        // Emit the workflow topology (Mermaid) to the console sink once per process — the graph
+        // shape is structural, so re-logging it every cycle would just flood the console.
+        if (logger.IsEnabled(LogLevel.Debug) && Interlocked.CompareExchange(ref workflowTopologyLogged, 1, 0) == 0)
+            ObserverLogEvents.LogWorkflowTopology(logger, namespaces.Count, workflow.ToMermaidString());
 
         return (workflow, () => agentGetCounts.Sum(f => f()));
     }

@@ -6,11 +6,12 @@
 
 ## Contents
 
-- `KubernetesPlanPayload.cs` models the Kubernetes mutation intent and review evidence stored inside a generic approval envelope.
-- `KubernetesApprovalAdapter.cs` creates Kubernetes envelopes, derives evidence artifact summaries for Review Digest binding, and decodes generic envelopes back into Kubernetes review/apply plans with adapter-owned failure reason codes.
-- `KubernetesPlanBuilder.cs` implements `IDomainPlanBuilder` by applying parameter-level Kubernetes policy checks, calling downstream evidence tools, building the adapter payload, returning the target namespace for generic audit storage, and tagging failed branches with Kubernetes reason codes.
-- `KubernetesPlanExecutor.cs` implements `IDomainPlanExecutor` by separating adapter-owned pre-execution checks from raw downstream mutation calls. It publishes `pre_execution.checked` after successful adapter checks and `execution.started` immediately before mutation dispatch; blocked checks return stable reason codes for drift, policy, dry-run, decode, and unsupported-operation cases.
-- `KubernetesObjectRef.cs`, dry-run, diff, and policy-finding records define Kubernetes evidence rendered during review and consumed during apply.
+- `PlanBuilding/KubernetesPlanPayload.cs` models the Kubernetes mutation intent and review evidence stored inside a generic approval envelope.
+- `Approval/KubernetesApprovalAdapter.cs` creates Kubernetes envelopes, derives evidence artifact summaries for Review Digest binding, and decodes generic envelopes back into Kubernetes review/apply plans with adapter-owned failure reason codes.
+- `PlanBuilding/KubernetesPlanBuilder.cs` implements `IDomainPlanBuilder` as a router from mutation tool names to operation-specific `IOperationPlanBuilder` implementations. `ApplyManifestBuilder`, `DeleteManifestBuilder`, `ScaleDeploymentBuilder`, `RestartDeploymentBuilder`, and `SetDeploymentImageBuilder` apply parameter-level Kubernetes policy checks, call shared evidence services, build adapter payloads, return target namespaces for generic audit storage, and tag failed branches with Kubernetes reason codes.
+- `Execution/KubernetesPlanExecutor.cs` implements `IDomainPlanExecutor` by separating adapter-owned pre-execution checks from raw downstream mutation calls. It uses `OperationDispatchMap` for operation-to-tool dispatch, publishes `pre_execution.checked` after successful adapter checks, and publishes `execution.started` immediately before mutation dispatch; blocked checks return stable reason codes for drift, policy, dry-run, decode, and unsupported-operation cases.
+- `Evidence/` contains `IKubernetesEvidenceService`, `KubernetesEvidenceService`, dry-run, diff, and policy-finding records that define Kubernetes evidence rendered during review and consumed during apply.
+- `KubernetesAuditHelper.cs` centralizes adapter audit event construction for dry-run, diff, drift, and policy-denial outcomes.
 - `Policy/` contains the Kubernetes manifest policy validator and rule documentation.
 
 ## Boundaries

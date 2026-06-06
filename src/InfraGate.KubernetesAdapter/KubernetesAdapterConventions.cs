@@ -21,6 +21,26 @@ public static class KubernetesAdapterConventions
     {
         public const string LiveDrift = "kubernetes.live-drift";
         public const string PreExecuteDryRun = "kubernetes.pre-execute-dry-run";
+        public const string ResourceVersionCheck = "kubernetes.resource-version";
+    }
+
+    public static class AuditPhases
+    {
+        public const string Request = "request";
+        public const string PreApply = "pre-apply";
+    }
+
+    public static class ResourceKinds
+    {
+        public const string Deployment = "Deployment";
+        public const string Service = "Service";
+        public const string ConfigMap = "ConfigMap";
+    }
+
+    public static class ApiVersions
+    {
+        public const string AppsV1 = "apps/v1";
+        public const string V1 = "v1";
     }
 
     public static class EvidenceArtifactTypes
@@ -49,6 +69,7 @@ public static class KubernetesAdapterConventions
         public const string DiffManifest = "diff_manifest";
         public const string DiffDeployment = "diff_deployment";
         public const string CheckLiveDrift = "check_live_drift";
+        public const string CheckResourceVersion = "check_resource_version";
     }
 
     public static class EvidenceArguments
@@ -61,6 +82,7 @@ public static class KubernetesAdapterConventions
         public const string Image = ToolArguments.Image;
         public const string Operation = "operation";
         public const string DiffsJson = "diffsJson";
+        public const string ResourceVersions = "resourceVersions";
     }
 
     public static class ToolArguments
@@ -97,6 +119,7 @@ public static class KubernetesAdapterConventions
         public const string PayloadReadFailed = "kubernetes.payload.read_failed";
         public const string PolicyBlocked = "kubernetes.policy.blocked";
         public const string PreExecuteDryRunFailed = "kubernetes.pre_execute_dry_run.failed";
+        public const string ResourceVersionMismatch = "kubernetes.resource_version.mismatch";
         public const string UnsupportedAdapter = "kubernetes.adapter.unsupported";
         public const string UnsupportedMutationTool = "kubernetes.mutation_tool.unsupported";
         public const string UnsupportedOperation = "kubernetes.operation.unsupported";

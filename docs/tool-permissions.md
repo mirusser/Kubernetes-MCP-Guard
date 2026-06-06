@@ -4,7 +4,7 @@ This document lists the 24 MCP tools exposed by Kubernetes MCP Guard and their a
 
 ## Common Properties
 
-All 24 tools require the `mcp:tools` OAuth scope at the gateway. All Kubernetes-facing operations are namespace-scoped by the MCP server namespace allow-list and by Kubernetes RBAC. Kubernetes RBAC is enforced independently by the Kubernetes API server.
+All 24 tools require at least one gateway OAuth scope. The gateway supports two scope tiers for human operators: `mcp:tools.read` (read-only tools and plan-status inspection) and `mcp:tools.write` (all tools including mutation plan creation). The legacy `mcp:tools` scope grants full access for backward compatibility. Agent service identities use role-specific scopes (`mcp:tools.readonly`, `mcp:tools.propose`, `mcp:tools.execute`). All K8s-facing operations are namespace-scoped by the MCP server namespace allow-list and by K8s RBAC. K8s RBAC is enforced independently by the K8s API server.
 
 `ReadOnly` and `Destructive` are MCP tool annotations, not RBAC claims. They are useful client metadata, but they are not the enforcement mechanism.
 
@@ -38,7 +38,7 @@ These read-only tools compute server-side dry-run results, diffs, and drift chec
 
 ## Plan Mutation Tools (5 tools)
 
-These tools create pending plans. They run Kubernetes `dryRun=All` first, but they do not persist Kubernetes writes. All require `mcp:tools` and are namespace-scoped.
+These tools create pending plans. They run Kubernetes `dryRun=All` first, but they do not persist Kubernetes writes. All require `mcp:tools` or `mcp:tools.write` and are namespace-scoped.
 
 | MCP Tool | K8s Verbs at Request Time | K8s Resources at Request Time | Approval Required at Request Time | Bounds / Notes |
 |---|---|---|---|---|
@@ -73,6 +73,6 @@ Local direct-stdio server experiments must use an Approval Grant for execution a
 
 ## Notes
 
-- Scope is a single flat `mcp:tools`; there is no `mcp:read` or `mcp:write` split today. If finer-grained scopes are added, update this matrix and [`src/InfraGate.McpGateway.Auth/README.md`](../src/InfraGate.McpGateway.Auth/README.md) together.
+- **Scope tiers for human operators:** `mcp:tools.read` grants access to all 8 read-only diagnostic tools, 8 evidence tools, and `get_plan_status`. `mcp:tools.write` grants access to all 24 tools including the 5 `request_*` plan mutation tools, `propose_plan`, `execute_approved_plan`, `wait_for_plan_approval`, and all downstream destructive tools. The legacy `mcp:tools` scope remains available for backward compatibility. Agent service identities continue using `mcp:tools.readonly` (Observer), `mcp:tools.propose + mcp:tools.readonly` (Planner), and `mcp:tools.execute` (Executor). See [`src/InfraGate.McpGateway.Auth/README.md`](../src/InfraGate.McpGateway.Auth/README.md) for scope constants and authorization details.
 - `get_allowed_namespaces` makes no Kubernetes API call. It reads in-process configuration, but it is still subject to gateway JWT and scope enforcement.
 - For plan mutation tools, Kubernetes dry-run failures block plan creation and write an `execution.blocked` approval audit event with a dry-run failure payload. No Kubernetes write is persisted until `execute_approved_plan` is called and the user approves the plan.

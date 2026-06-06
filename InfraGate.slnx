@@ -38,6 +38,7 @@
     <Project Path="tests/InfraGate.Remediation.Contracts.Tests/InfraGate.Remediation.Contracts.Tests.csproj" />
     <Project Path="tests/InfraGate.Architecture.Tests/InfraGate.Architecture.Tests.csproj" />
     <Project Path="tests/InfraGate.Approvals.Postgres.Tests/InfraGate.Approvals.Postgres.Tests.csproj" />
+    <Project Path="tests/InfraGate.KubernetesAdapter.Tests/InfraGate.KubernetesAdapter.Tests.csproj" />
     <Project Path="tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj" />
     <Project Path="tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj" />
     <Project Path="tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj" />

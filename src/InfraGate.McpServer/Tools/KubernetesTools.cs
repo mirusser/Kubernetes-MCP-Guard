@@ -151,6 +151,15 @@ public static class KubernetesTools
         CancellationToken cancellationToken = default) =>
         evidence.EvidenceCheckLiveDriftAsync(@namespace, operation, diffsJson, cancellationToken);
 
+    [McpServerTool(Name = KubernetesConventions.ToolNames.CheckResourceVersion, ReadOnly = true, OpenWorld = false)]
+    [Description("Checks whether live Kubernetes object resourceVersions match the expected values captured at plan creation time. Returns 'ok' if all match, or a description of detected mismatch.")]
+    public static Task<string> CheckResourceVersion(
+        KubernetesEvidenceService evidence,
+        [Description("Allowed Kubernetes namespace.")] string @namespace,
+        [Description("JSON-serialized dictionary of { object-key: resourceVersion } pairs.")] string diffsJson,
+        CancellationToken cancellationToken = default) =>
+        evidence.EvidenceCheckResourceVersionAsync(@namespace, diffsJson, cancellationToken);
+
     [McpServerTool(Name = KubernetesConventions.ToolNames.DiffDeployment, ReadOnly = true, OpenWorld = false)]
     [Description("Computes a diff between live Kubernetes state and the proposed mutation of a Deployment. Returns JSON-serialized diff result.")]
     public static Task<string> DiffDeployment( // NOSONAR:S107 — MCP tool signature dictated by framework convention.
@@ -170,8 +179,9 @@ public static class KubernetesTools
         KubernetesExecutionService execution,
         [Description("Allowed Kubernetes namespace for the manifest.")] string @namespace,
         [Description("Multi-document YAML or JSON containing Deployments, Services, or ConfigMaps.")] string manifest,
+        [Description("Optional JSON array of {Key, ResourceVersion} pairs for optimistic concurrency.")] string? resourceVersions = null,
         CancellationToken cancellationToken = default) =>
-        execution.ExecuteApplyManifestAsync(@namespace, manifest, cancellationToken);
+        execution.ExecuteApplyManifestAsync(@namespace, manifest, resourceVersions, cancellationToken);
 
     [McpServerTool(Name = KubernetesConventions.ToolNames.DeleteManifest, Destructive = true, OpenWorld = false)]
     [Description("Deletes each supported Kubernetes object named in a manifest directly (no approval flow).")]

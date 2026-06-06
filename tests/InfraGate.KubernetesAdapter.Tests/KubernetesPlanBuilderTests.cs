@@ -34,6 +34,27 @@ public sealed class KubernetesPlanBuilderTests
             [],
             []);
 
+    private const string ValidDeploymentManifest = """
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: nginx
+          namespace: demo
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: nginx
+          template:
+            metadata:
+              labels:
+                app: nginx
+            spec:
+              containers:
+              - name: app
+                image: nginx:1.27-alpine
+        """;
+
     private static string DryRunJson(KubernetesPlanDryRun dryRun) =>
         JsonSerializer.Serialize(dryRun, JsonOptions);
 
@@ -50,6 +71,9 @@ public sealed class KubernetesPlanBuilderTests
             new KubernetesApplyEvidence(dryRun, [], true, refusal),
             JsonOptions);
 
+    private static KubernetesPlanBuilder CreateBuilder(FakeToolCaller toolCaller) =>
+        new(new KubernetesEvidenceService(toolCaller));
+
     [Fact]
     public async Task BuildAsync_ApplyManifest_HappyPath_ReturnsPlanWithEnvelope()
     {
@@ -58,11 +82,11 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_apply_manifest", ApplyEvidenceJson(dryRun))
             .With("diff_manifest", DiffJson([diff]));
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "apply_manifest",
-            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: apps/v1" },
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = ValidDeploymentManifest },
             TestRequester,
             CancellationToken.None);
 
@@ -81,11 +105,11 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_apply_manifest", "Server-side dry-run failed: connection refused")
             .With("diff_manifest", DiffJson([]));
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "apply_manifest",
-            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: apps/v1" },
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = ValidDeploymentManifest },
             TestRequester,
             CancellationToken.None);
 
@@ -97,7 +121,7 @@ public sealed class KubernetesPlanBuilderTests
     public async Task BuildAsync_ApplyManifest_PolicyBlocked_ReturnsFailed()
     {
         var toolCaller = new FakeToolCaller();
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "apply_manifest",
@@ -108,6 +132,27 @@ public sealed class KubernetesPlanBuilderTests
         Assert.False(result.Succeeded);
         Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked, result.ReasonCode);
         Assert.DoesNotContain("dry_run_apply_manifest", toolCaller.CalledTools);
+    }
+
+    [Fact]
+    public async Task BuildAsync_ApplyManifest_MalformedYaml_ReturnsPolicyBlocked()
+    {
+        var dryRun = MakeDryRun("demo", "nginx");
+        var diff = MakeDiff("demo", "nginx");
+        var toolCaller = new FakeToolCaller()
+            .With(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest, ApplyEvidenceJson(dryRun))
+            .With(KubernetesAdapterConventions.EvidenceTools.DiffManifest, DiffJson([diff]));
+        var builder = CreateBuilder(toolCaller);
+
+        var result = await builder.BuildAsync(
+            KubernetesAdapterConventions.MutationTools.ApplyManifest,
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: [" },
+            TestRequester,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked, result.ReasonCode);
+        Assert.DoesNotContain(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest, toolCaller.CalledTools);
     }
 
     private const string PrivilegedDeploymentManifest = """
@@ -141,7 +186,7 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_delete_manifest", DryRunJson(dryRun))
             .With("diff_manifest", DiffJson([diff]));
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "delete_manifest",
@@ -159,7 +204,7 @@ public sealed class KubernetesPlanBuilderTests
     {
         var toolCaller = new FakeToolCaller()
             .With("dry_run_delete_manifest", "Dry-run failed: object not found");
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "delete_manifest",
@@ -179,7 +224,7 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_scale_deployment", DryRunJson(dryRun))
             .With("diff_deployment", DiffJson([diff]));
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "scale_deployment",
@@ -199,7 +244,7 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_scale_deployment", DryRunJson(dryRun))
             .With("diff_deployment", DiffJson([diff]));
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
         var approvalPolicy = ApprovalPolicy.OperatorApproval("kubernetes-operators");
 
         var result = await builder.BuildAsync(
@@ -221,7 +266,7 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_restart_deployment", DryRunJson(dryRun))
             .With("diff_deployment", DiffJson([diff]));
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "restart_deployment",
@@ -241,7 +286,7 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_set_deployment_image", DryRunJson(dryRun))
             .With("diff_deployment", DiffJson([diff]));
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "set_deployment_image",
@@ -265,7 +310,7 @@ public sealed class KubernetesPlanBuilderTests
     public async Task BuildAsync_SetDeploymentImage_LatestImageTag_ReturnsPolicyFailureWithoutDryRun(string image)
     {
         var toolCaller = new FakeToolCaller();
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "set_deployment_image",
@@ -280,7 +325,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains(KubernetesAdapterConventions.PolicyCodes.ImageLatestTag, result.Message);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked, result.ReasonCode);
         Assert.Empty(toolCaller.CalledTools);
     }
 
@@ -288,7 +333,7 @@ public sealed class KubernetesPlanBuilderTests
     public async Task BuildAsync_UnsupportedTool_ReturnsFailed()
     {
         var toolCaller = new FakeToolCaller();
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "unknown_tool",
@@ -297,7 +342,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("Unsupported", result.Message);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.UnsupportedMutationTool, result.ReasonCode);
     }
 
     [Fact]
@@ -308,11 +353,11 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_apply_manifest", ApplyEvidenceJson(dryRun))
             .With("diff_manifest", DiffJson([diff]));
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "apply_manifest",
-            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: apps/v1" },
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = ValidDeploymentManifest },
             TestRequester,
             CancellationToken.None);
 
@@ -331,7 +376,7 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_scale_deployment", DryRunJson(dryRun))
             .With("diff_deployment", DiffJson([diff]));
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "scale_deployment",
@@ -352,7 +397,7 @@ public sealed class KubernetesPlanBuilderTests
     [Fact]
     public async Task BuildAsync_ApplyManifest_MissingNamespace_ReturnsFailed()
     {
-        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+        var builder = CreateBuilder(new FakeToolCaller());
 
         var result = await builder.BuildAsync(
             "apply_manifest",
@@ -361,13 +406,13 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("Missing required arguments", result.Message);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.MissingArguments, result.ReasonCode);
     }
 
     [Fact]
     public async Task BuildAsync_DeleteManifest_MissingManifest_ReturnsFailed()
     {
-        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+        var builder = CreateBuilder(new FakeToolCaller());
 
         var result = await builder.BuildAsync(
             "delete_manifest",
@@ -376,13 +421,13 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("Missing required arguments", result.Message);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.MissingArguments, result.ReasonCode);
     }
 
     [Fact]
     public async Task BuildAsync_ScaleDeployment_MissingName_ReturnsFailed()
     {
-        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+        var builder = CreateBuilder(new FakeToolCaller());
 
         var result = await builder.BuildAsync(
             "scale_deployment",
@@ -391,13 +436,13 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("Missing required arguments", result.Message);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.MissingArguments, result.ReasonCode);
     }
 
     [Fact]
     public async Task BuildAsync_RestartDeployment_MissingName_ReturnsFailed()
     {
-        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+        var builder = CreateBuilder(new FakeToolCaller());
 
         var result = await builder.BuildAsync(
             "restart_deployment",
@@ -406,13 +451,13 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("Missing required arguments", result.Message);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.MissingArguments, result.ReasonCode);
     }
 
     [Fact]
     public async Task BuildAsync_SetDeploymentImage_MissingContainer_ReturnsFailed()
     {
-        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+        var builder = CreateBuilder(new FakeToolCaller());
 
         var result = await builder.BuildAsync(
             "set_deployment_image",
@@ -426,7 +471,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("Missing required arguments", result.Message);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.MissingArguments, result.ReasonCode);
     }
 
     [Fact]
@@ -437,10 +482,10 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_apply_manifest", ApplyEvidenceJson(dryRun))
             .With("diff_manifest", DiffJson([diff]));
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var namespaceElement = JsonSerializer.SerializeToElement("demo");
-        var manifestElement = JsonSerializer.SerializeToElement("apiVersion: apps/v1");
+        var manifestElement = JsonSerializer.SerializeToElement(ValidDeploymentManifest);
 
         var result = await builder.BuildAsync(
             "apply_manifest",
@@ -465,7 +510,7 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_scale_deployment", DryRunJson(dryRun))
             .With("diff_deployment", DiffJson([diff]));
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "scale_deployment",
@@ -489,7 +534,7 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_scale_deployment", DryRunJson(dryRun))
             .With("diff_deployment", DiffJson([diff]));
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "scale_deployment",
@@ -513,7 +558,7 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_scale_deployment", DryRunJson(dryRun))
             .With("diff_deployment", DiffJson([diff]));
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "scale_deployment",
@@ -537,7 +582,7 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_scale_deployment", DryRunJson(dryRun))
             .With("diff_deployment", DiffJson([diff]));
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var replicasElement = JsonSerializer.SerializeToElement(3);
 
@@ -563,7 +608,7 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_scale_deployment", DryRunJson(dryRun))
             .With("diff_deployment", DiffJson([diff]));
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var replicasElement = JsonSerializer.SerializeToElement("3");
 
@@ -586,11 +631,11 @@ public sealed class KubernetesPlanBuilderTests
     {
         var toolCaller = new FakeToolCaller()
             .With("dry_run_apply_manifest", "null");
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "apply_manifest",
-            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: apps/v1" },
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = ValidDeploymentManifest },
             TestRequester,
             CancellationToken.None);
 
@@ -607,11 +652,11 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_apply_manifest", ApplyEvidenceJson(dryRun))
             .With("diff_manifest", "null");
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "apply_manifest",
-            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: apps/v1" },
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = ValidDeploymentManifest },
             TestRequester,
             CancellationToken.None);
 
@@ -626,7 +671,7 @@ public sealed class KubernetesPlanBuilderTests
     {
         var toolCaller = new FakeToolCaller()
             .With("dry_run_delete_manifest", "null");
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "delete_manifest",
@@ -645,7 +690,7 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_delete_manifest", DryRunJson(dryRun))
             .With("diff_manifest", "null");
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "delete_manifest",
@@ -654,7 +699,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceEmpty, result.ReasonCode);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceFailed, result.ReasonCode);
     }
 
     [Fact]
@@ -662,7 +707,7 @@ public sealed class KubernetesPlanBuilderTests
     {
         var toolCaller = new FakeToolCaller()
             .With("dry_run_scale_deployment", "null");
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "scale_deployment",
@@ -686,7 +731,7 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_scale_deployment", DryRunJson(dryRun))
             .With("diff_deployment", "null");
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "scale_deployment",
@@ -708,7 +753,7 @@ public sealed class KubernetesPlanBuilderTests
     [Fact]
     public async Task BuildAsync_ScaleDeployment_WithFractionalDoubleReplicas_ReturnsFailed()
     {
-        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+        var builder = CreateBuilder(new FakeToolCaller());
 
         var result = await builder.BuildAsync(
             "scale_deployment",
@@ -728,7 +773,7 @@ public sealed class KubernetesPlanBuilderTests
     [Fact]
     public async Task BuildAsync_ScaleDeployment_WithNonParseableStringReplicas_ReturnsFailed()
     {
-        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+        var builder = CreateBuilder(new FakeToolCaller());
 
         var result = await builder.BuildAsync(
             "scale_deployment",
@@ -742,13 +787,13 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("Missing required arguments", result.Message);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.MissingArguments, result.ReasonCode);
     }
 
     [Fact]
     public async Task BuildAsync_ScaleDeployment_WithNullReplicas_ReturnsFailed()
     {
-        var builder = new KubernetesPlanBuilder(new FakeToolCaller());
+        var builder = CreateBuilder(new FakeToolCaller());
 
         var result = await builder.BuildAsync(
             "scale_deployment",
@@ -762,7 +807,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("Missing required arguments", result.Message);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.MissingArguments, result.ReasonCode);
     }
 
     [Fact]
@@ -770,7 +815,7 @@ public sealed class KubernetesPlanBuilderTests
     {
         var toolCaller = new FakeToolCaller()
             .With("dry_run_restart_deployment", "null");
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "restart_deployment",
@@ -779,7 +824,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("dry-run failed", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed, result.ReasonCode);
     }
 
     [Fact]
@@ -789,7 +834,7 @@ public sealed class KubernetesPlanBuilderTests
         var toolCaller = new FakeToolCaller()
             .With("dry_run_restart_deployment", DryRunJson(dryRun))
             .With("diff_deployment", "null");
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "restart_deployment",
@@ -798,7 +843,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("Diff evidence failed", result.Message);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceFailed, result.ReasonCode);
         Assert.NotNull(result.Audit);
         Assert.Equal(ApprovalConventions.AuditEvents.DiffFailed, result.Audit.EventName);
     }
@@ -808,7 +853,7 @@ public sealed class KubernetesPlanBuilderTests
     {
         var toolCaller = new FakeToolCaller()
             .With("dry_run_set_deployment_image", "null");
-        var builder = new KubernetesPlanBuilder(toolCaller);
+        var builder = CreateBuilder(toolCaller);
 
         var result = await builder.BuildAsync(
             "set_deployment_image",
@@ -823,7 +868,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Contains("dry-run failed", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.DryRunFailed, result.ReasonCode);
     }
 
     private sealed class FakeToolCaller : IToolCaller

@@ -7,4 +7,12 @@ package_ecosystems:
   - "github-actions"
 use_semgrep: true
 use_docker: true
-use_codecov: true
+use_codecov: false
+coverage_provider: "sonarcloud"
+release_strategy: "manual-tag"
+ci_branches: ["main", "dev"]
+release_branches: ["main"]
+deploy_branches: ["dev"]
+use_dependency_scan: true
+use_sonar: true
+use_container_scan: true
