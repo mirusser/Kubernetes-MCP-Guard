@@ -88,6 +88,7 @@ internal static class RunProfileConventions
         public const string Resource = "resource";
         public const string RuntimeMode = "runtimeMode";
         public const string Scope = "scope";
+        public const string UseDPoP = "useDPoP";
         public const string Type = "type";
         public const string Version = "version";
         public const string ClientId = "clientId";
@@ -150,6 +151,7 @@ internal static class RunProfileConventions
         public const string ObserverAspnetcoreUrls = "InfraGate__Observer__AspNetCoreUrls";
         public const string ObserverClientId = "InfraGate__Observer__ClientCredentials__ClientId";
         public const string ObserverClientSecret = "InfraGate__Observer__ClientCredentials__ClientSecret";
+        public const string ObserverUseDPoP = "InfraGate__Observer__ClientCredentials__UseDPoP";
         public const string ObserverCycleIntervalSeconds = "InfraGate__Observer__CycleIntervalSeconds";
         public const string ObserverCycleWallClockCapSeconds = "InfraGate__Observer__WallClockCapSeconds";
         public const string ObserverFileSinkRoot = "InfraGate__Observer__FileSinkRoot";
@@ -169,6 +171,7 @@ internal static class RunProfileConventions
         public const string PlannerExecutorHandoffUrl = "InfraGate__Planner__ExecutorHandoffUrl";
         public const string PlannerClientId = "InfraGate__Planner__ClientCredentials__ClientId";
         public const string PlannerClientSecret = "InfraGate__Planner__ClientCredentials__ClientSecret";
+        public const string PlannerUseDPoP = "InfraGate__Planner__ClientCredentials__UseDPoP";
         public const string PlannerOAuthAuthority = "InfraGate__Planner__ClientCredentials__Authority";
         public const string PlannerOAuthScope = "InfraGate__Planner__ClientCredentials__Scope";
         public const string PlannerLlmProvider = "InfraGate__Planner__LlmProvider";
@@ -182,6 +185,7 @@ internal static class RunProfileConventions
         public const string ExecutorGatewayBaseUrl = "InfraGate__Executor__GatewayBaseUrl";
         public const string ExecutorClientId = "InfraGate__Executor__ClientCredentials__ClientId";
         public const string ExecutorClientSecret = "InfraGate__Executor__ClientCredentials__ClientSecret";
+        public const string ExecutorUseDPoP = "InfraGate__Executor__ClientCredentials__UseDPoP";
         public const string ExecutorOAuthAuthority = "InfraGate__Executor__ClientCredentials__Authority";
         public const string ExecutorOAuthScope = "InfraGate__Executor__ClientCredentials__Scope";
         public const string ExecutorConcurrencyCap = "InfraGate__Executor__ConcurrencyCap";

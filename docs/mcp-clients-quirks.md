@@ -109,3 +109,17 @@ Claude Code caches MCP OAuth state in `~/.claude/.credentials.json` under a `mcp
 Clear the stale `infra-gate` entries from `~/.claude/.credentials.json`. Open the file and delete any keys under `mcpOAuth` whose name starts with `infra-gate` and whose `accessToken` value is empty or expired. Leave the `claudeAiOauth` block and `organizationUuid` intact.
 
 After editing, restart Claude Code and use `/mcp` to go through a clean OAuth flow.
+
+---
+
+## All Clients — DPoP (Demonstrating Proof-of-Possession) Support
+
+### Problem
+
+InfraGate implements RFC 9449 (DPoP) to prevent JWT bearer token replay attacks. Internal services and the Approval UI are strictly required to use DPoP-bound tokens. However, most external MCP clients (including Claude Code and Cursor) do not yet support DPoP during their OAuth flow.
+
+### Workaround / Behavior
+
+To maintain compatibility with current MCP clients, the Keycloak `mcp-client` configuration **does not enforce** DPoP binding. Standard OAuth bearer tokens will be accepted from this client. This is a deliberate compromise documented as a residual security risk.
+
+If an MCP client ever attempts to send a `DPoP` header but provides an invalid proof or signature, the Gateway *will* reject it (a malformed DPoP request is strictly rejected). But if the client simply uses standard Bearer authentication with no `DPoP` header, the Gateway will process it normally (provided the token is valid).

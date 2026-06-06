@@ -11,7 +11,8 @@ public sealed record class GatewayAuthOptions(
     string ApprovalOAuthClientId = GatewayAuthConventions.DefaultApprovalOAuthClientId,
     string? ApprovalOAuthAuthorizationEndpoint = null,
     string? ApprovalOAuthTokenEndpoint = null,
-    string ApprovalOAuthCallbackPath = GatewayAuthConventions.Approvals.DefaultCallbackPath)
+    string ApprovalOAuthCallbackPath = GatewayAuthConventions.Approvals.DefaultCallbackPath,
+    bool RequireDPoP = false)
 {
     public string ApprovalAuthorizationEndpoint =>
         string.IsNullOrWhiteSpace(ApprovalOAuthAuthorizationEndpoint)
@@ -46,6 +47,7 @@ public sealed record class GatewayAuthOptions(
         string? approvalTokenEndpoint = authSettings?.ApprovalOAuthTokenEndpoint;
         string approvalCallbackPath = authSettings?.ApprovalOAuthCallbackPath ??
             GatewayAuthConventions.Approvals.DefaultCallbackPath;
+        bool requireDPoP = authSettings?.RequireDPoP ?? false;
 
         return new GatewayAuthOptions(
             oauthAuthority,
@@ -56,7 +58,8 @@ public sealed record class GatewayAuthOptions(
             approvalClientId,
             approvalAuthorizationEndpoint,
             approvalTokenEndpoint,
-            approvalCallbackPath);
+            approvalCallbackPath,
+            RequireDPoP: requireDPoP);
     }
 
     private static string TrimTrailingSlash(string value) => value.TrimEnd('/');

@@ -43,7 +43,7 @@ However, the audit identified **13 findings** ranging from Medium to Critical se
 - **No user-to-plan binding** means any authenticated principal can approve and execute a plan they did not create.
 - **JWT Bearer tokens are replayable** with no proof-of-possession or revocation mechanism.
 
-> **Re-assessment (2026-06-05):** Of the top 4 concerns above, F-01 (auto-approval) and F-08 (user-to-plan binding) are now **mitigated**. F-13 (scope split) is fully addressed with `mcp:tools.read`/`mcp:tools.write` for human operators and role-based scopes (`mcp:tools.readonly`/`.propose`/`.execute`) for agents. F-07 (JWT replay) remains unaddressed. See individual findings for detailed Implementation Notes.
+> **Re-assessment (2026-06-06):** Of the top 4 concerns above, F-01 (auto-approval) and F-08 (user-to-plan binding) are now **mitigated**. F-13 (scope split) is fully addressed with `mcp:tools.read`/`mcp:tools.write` for human operators and role-based scopes (`mcp:tools.readonly`/`.propose`/`.execute`) for agents. F-07 (JWT replay) is partially mitigated with DPoP for internal clients. See individual findings for detailed Implementation Notes.
 
 ---
 
@@ -282,7 +282,7 @@ RBAC split implemented in `deploy/minikube/rbac.yaml`: `infra-gate-mcp-manager` 
 **Severity:** High
 **Diagram:** OAuth Login & Authorization (Diagram 1) & Read-Only Tool Call (Diagram 2)
 **Status:** New finding
-**Resolution:** ❌ **NOT MITIGATED** (re-assessed 2026-06-05)
+**Resolution:** ⚠️ **PARTIALLY MITIGATED** (re-assessed 2026-06-06)
 
 #### Description
 
@@ -303,9 +303,12 @@ Once leaked, the token is valid for its full lifetime and grants access to all t
 - If DPoP is out of scope, enforce very short token lifetimes (2–5 minutes) with silent refresh via refresh token rotation.
 - Ensure all Gateway and client log configurations explicitly scrub `Authorization` headers and Bearer token values.
 
-#### Implementation Notes (2026-06-05)
+#### Implementation Notes (2026-06-06)
 
-No DPoP implementation found. No proof-of-possession binding. No `Authorization` header scrubbing in log output. JWT validation uses standard `ValidateLifetime = true` with IdentityModel defaults (`GatewayAuthentication.cs:104-127`). Client credentials tokens use default 300s expiry with 30s refresh skew (`ClientCredentialsTokenProvider.cs`). No refresh token rotation for OAuth authorization-code flow.
+DPoP (Demonstrating Proof-of-Possession) is now implemented and enforced for controlled internal clients (Planner, Observer, Executor) and the Approval UI. The Gateway verifies the DPoP proof signature, lifetime, `jti` replay, and matches the `jkt` claim against the access token. However, two gaps remain:
+1. The `jti` replay store (`InMemoryDpopProofReplayStore`) is in-memory only, meaning replay detection is not distributed across multiple Gateway replicas.
+2. External MCP clients (like Claude Code) do not yet broadly support DPoP, so the Keycloak `mcp-client` allows standard bearer tokens as a fallback.
+Thus, this finding is downgraded to partially mitigated.
 
 ---
 
@@ -511,7 +514,7 @@ The naming follows `mcp:tools.{role}` (e.g., `mcp:tools.read`) rather than the s
 | F-04 | Disk exhaustion & path traversal in ApprovalStore | **High** | Original | Diagram 3 | ✅ Mitigated |
 | F-05 | Loopback port hijacking in DCR | **Medium** | Original | Diagram 1 | ⚠️ Partial |
 | F-06 | Subprocess blast radius under shared Service Account | **High** | Original | Diagram 2 | ⚠️ Partial |
-| F-07 | JWT Bearer replay — no proof-of-possession | **High** | New | Diagrams 1 & 2 | ❌ Not mitigated |
+| F-07 | JWT Bearer replay — no proof-of-possession | **High** | New | Diagrams 1 & 2 | ⚠️ Partial |
 | F-08 | No user-to-plan binding — cross-user plan approval | **High** | New | Diagram 3 | ✅ Mitigated |
 | F-09 | No JWT revocation mechanism | **Medium** | New | Diagrams 1 & 2 | ❌ Not mitigated |
 | F-10 | Subprocess binary integrity not verified | **High** | New | Diagrams 2 & 3 | ❌ Not mitigated |
@@ -536,7 +539,7 @@ The naming follows `mcp:tools.{role}` (e.g., `mcp:tools.read`) rather than the s
 
 | Priority | Finding | Reason | Status |
 |---|---|---|---|
-| 5 | **F-07** — DPoP or short-lived tokens + log scrubbing | Significantly reduces replay window | ❌ Open |
+| 5 | **F-07** — DPoP or short-lived tokens + log scrubbing | Significantly reduces replay window | ⚠️ Partial — DPoP for internal clients, in-memory replay store |
 | 6 | **F-09** — Token revocation / introspection | Enables incident response to stolen tokens | ❌ Open |
 | 7 | **F-10** — Binary hash pinning at startup | Low-cost, high-value supply-chain control | ❌ Open |
 | 8 | **F-06** — Split Service Accounts by read/write | Reduces blast radius of subprocess compromise | ⚠️ Partial — RBAC split exists, single subprocess instance |

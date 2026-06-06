@@ -17,4 +17,5 @@ internal sealed record class ObserverProfile(
     string? ObserverHostPath,
     string? AuditConnectionString,
     string? SkipCycleWhenNoWarningEvents,
-    IReadOnlyList<string>? AllowedNamespaces);
+    IReadOnlyList<string>? AllowedNamespaces,
+    string? UseDPoP = null);

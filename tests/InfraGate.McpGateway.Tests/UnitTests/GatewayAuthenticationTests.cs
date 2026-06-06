@@ -4,9 +4,11 @@ using System.Text.Json;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -180,6 +182,155 @@ public sealed class GatewayAuthenticationTests
         Assert.Contains(Issuer.TrimEnd('/'), jwtOptions.TokenValidationParameters.ValidIssuers);
     }
 
+    // ── FromConfiguration binding ──────────────────────────────────────────
+
+    [Fact]
+    public void AddGatewayAuthentication_ApprovalOAuth_DoesNotPersistTokensInCookie()
+    {
+        using var server = CreateOAuthServer(out _);
+        var monitor = server.Host.Services.GetRequiredService<IOptionsMonitor<OAuthOptions>>();
+        var oauthOptions = monitor.Get(GatewayAuthConventions.Schemes.ApprovalOAuth);
+
+        Assert.False(oauthOptions.SaveTokens);
+    }
+
+    [Fact]
+    public void FromConfiguration_RequireDPoP_IsBoundWhenTrue()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [GatewayAuthConventions.ConfigurationKeys.OAuthAuthority] = Issuer,
+                [GatewayAuthConventions.ConfigurationKeys.RequireDPoP] = "true"
+            })
+            .Build();
+
+        var options = GatewayAuthOptions.FromConfiguration(config);
+
+        Assert.True(options.RequireDPoP);
+    }
+
+    [Fact]
+    public void FromConfiguration_RequireDPoP_DefaultsFalseWhenAbsent()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [GatewayAuthConventions.ConfigurationKeys.OAuthAuthority] = Issuer
+            })
+            .Build();
+
+        var options = GatewayAuthOptions.FromConfiguration(config);
+
+        Assert.False(options.RequireDPoP);
+    }
+
+    // ── DPoP integration tests ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task McpEndpoint_WithDpopRequired_RejectsBearerToken()
+    {
+        using var dpopFactory = new DpopProofTestFactory();
+        using var server = CreateDpopServer(out var signingKey);
+        using var client = server.CreateClient();
+        var accessToken = dpopFactory.CreateDpopBoundAccessToken(signingKey, Issuer, Resource, Scope);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task McpEndpoint_WithDpopRequired_RejectsDpopTokenWithoutProofHeader()
+    {
+        using var dpopFactory = new DpopProofTestFactory();
+        using var server = CreateDpopServer(out var signingKey);
+        using var client = server.CreateClient();
+        var accessToken = dpopFactory.CreateDpopBoundAccessToken(signingKey, Issuer, Resource, Scope);
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue(GatewayAuthConventions.DPoP.Scheme, accessToken);
+
+        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("wrong-ath")]
+    [InlineData("wrong-htm")]
+    [InlineData("wrong-htu")]
+    [InlineData("expired-iat")]
+    [InlineData("wrong-key")]
+    public async Task McpEndpoint_WithDpopRequired_RejectsInvalidDpopProof(string invalidCase)
+    {
+        using var dpopFactory = new DpopProofTestFactory();
+        using var server = CreateDpopServer(out var signingKey);
+        using var client = server.CreateClient();
+        var uri = $"http://localhost{McpGatewayConventions.McpPath}";
+        var accessToken = dpopFactory.CreateDpopBoundAccessToken(signingKey, Issuer, Resource, Scope);
+        var proof = invalidCase switch
+        {
+            "wrong-ath" => dpopFactory.CreateDpopProof(accessToken, uri: uri, overrideAth: "aW52YWxpZA"),
+            "wrong-htm" => dpopFactory.CreateDpopProof(accessToken, uri: uri, overrideHtm: "POST"),
+            "wrong-htu" => dpopFactory.CreateDpopProof(accessToken, uri: uri, overrideHtu: "http://other.example.com/mcp"),
+            "expired-iat" => dpopFactory.CreateDpopProof(accessToken, uri: uri, iatOffsetSeconds: -400),
+            "wrong-key" => dpopFactory.CreateDpopProofWithWrongKey(accessToken, uri: uri),
+            _ => throw new InvalidOperationException()
+        };
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue(GatewayAuthConventions.DPoP.Scheme, accessToken);
+        client.DefaultRequestHeaders.Add(GatewayAuthConventions.DPoP.ProofHeaderName, proof);
+
+        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task McpEndpoint_WithDpopRequired_RejectsReusedProofJti()
+    {
+        using var dpopFactory = new DpopProofTestFactory();
+        using var server = CreateDpopServer(out var signingKey);
+        var uri = $"http://localhost{McpGatewayConventions.McpPath}";
+        var accessToken = dpopFactory.CreateDpopBoundAccessToken(signingKey, Issuer, Resource, Scope);
+        const string sharedJti = "replay-test-jti";
+        var proof = dpopFactory.CreateDpopProof(accessToken, uri: uri, jti: sharedJti);
+
+        using var client1 = server.CreateClient();
+        client1.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue(GatewayAuthConventions.DPoP.Scheme, accessToken);
+        client1.DefaultRequestHeaders.Add(GatewayAuthConventions.DPoP.ProofHeaderName, proof);
+        var first = await client1.GetAsync(McpGatewayConventions.McpPath);
+        first.EnsureSuccessStatusCode();
+
+        using var client2 = server.CreateClient();
+        client2.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue(GatewayAuthConventions.DPoP.Scheme, accessToken);
+        client2.DefaultRequestHeaders.Add(GatewayAuthConventions.DPoP.ProofHeaderName, proof);
+        var second = await client2.GetAsync(McpGatewayConventions.McpPath);
+        Assert.Equal(HttpStatusCode.Unauthorized, second.StatusCode);
+    }
+
+    [Fact]
+    public async Task McpEndpoint_WithDpopRequired_AllowsValidDpopBoundToken()
+    {
+        using var dpopFactory = new DpopProofTestFactory();
+        using var server = CreateDpopServer(out var signingKey);
+        using var client = server.CreateClient();
+        var uri = $"http://localhost{McpGatewayConventions.McpPath}";
+        var accessToken = dpopFactory.CreateDpopBoundAccessToken(signingKey, Issuer, Resource, Scope);
+        var proof = dpopFactory.CreateDpopProof(accessToken, uri: uri);
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue(GatewayAuthConventions.DPoP.Scheme, accessToken);
+        client.DefaultRequestHeaders.Add(GatewayAuthConventions.DPoP.ProofHeaderName, proof);
+
+        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("ok", await response.Content.ReadAsStringAsync());
+    }
+
     private static TestServer CreateOAuthServer() =>
         CreateOAuthServer(out _);
 
@@ -202,6 +353,53 @@ public sealed class GatewayAuthenticationTests
                 services.AddRouting();
                 services.AddSingleton(options);
                 services.AddGatewayAuthentication(options);
+                services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, jwtOptions =>
+                {
+                    jwtOptions.Configuration = new OpenIdConnectConfiguration
+                    {
+                        Issuer = Issuer
+                    };
+                    jwtOptions.Configuration.SigningKeys.Add(key);
+                    jwtOptions.TokenValidationParameters.IssuerSigningKey = key;
+                    jwtOptions.TokenValidationParameters.ValidIssuer = Issuer;
+                    jwtOptions.TokenValidationParameters.ValidAudience = Resource;
+                });
+            })
+            .Configure(app =>
+            {
+                app.UseRouting();
+                app.UseAuthentication();
+                app.UseAuthorization();
+                app.UseEndpoints(endpoints =>
+                {
+                    endpoints.MapGet(McpGatewayConventions.McpPath, () => "ok")
+                        .RequireAuthorization(GatewayAuthConventions.Schemes.PolicyName);
+                });
+            }));
+    }
+
+    private static TestServer CreateDpopServer(out SecurityKey signingKey)
+    {
+        var key = new SymmetricSecurityKey("0123456789abcdef0123456789abcdef"u8.ToArray())
+        {
+            KeyId = "test-key"
+        };
+        signingKey = key;
+        var options = new GatewayAuthOptions(
+            Issuer,
+            Resource,
+            Scope,
+            OAuthRequireHttpsMetadata: false,
+            RequireDPoP: true);
+
+        return new TestServer(new WebHostBuilder()
+            .ConfigureServices(services =>
+            {
+                services.AddRouting();
+                services.AddSingleton(options);
+                services.AddGatewayAuthentication(options);
+                services.AddSingleton<InfraGate.McpGateway.Auth.Dpop.IDpopProofReplayStore, InfraGate.McpGateway.Auth.Dpop.InMemoryDpopProofReplayStore>();
+                services.AddSingleton<InfraGate.McpGateway.Auth.Dpop.IDpopProofValidator, InfraGate.McpGateway.Auth.Dpop.DpopProofValidator>();
                 services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, jwtOptions =>
                 {
                     jwtOptions.Configuration = new OpenIdConnectConfiguration

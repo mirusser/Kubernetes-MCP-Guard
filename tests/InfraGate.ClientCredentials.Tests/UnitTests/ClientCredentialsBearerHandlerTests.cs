@@ -35,6 +35,33 @@ public sealed class ClientCredentialsBearerHandlerTests
     }
 
     [Fact]
+    public async Task SendAsync_WithDpopProvider_InjectsDpopAuthorizationAndProofHeader()
+    {
+        var tokenProvider = new StubDpopTokenProvider("my-access-token", "my-dpop-proof");
+        using var innerHandler = new FakeInnerHandler(HttpStatusCode.OK);
+        using var handler = new ClientCredentialsBearerHandler(
+            tokenProvider,
+            NullLogger<ClientCredentialsBearerHandler>.Instance)
+        {
+            InnerHandler = innerHandler
+        };
+        var httpClient = new HttpClient(handler);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "http://example.com/api?ignored=true");
+
+        using var response = await httpClient.SendAsync(request);
+
+        Assert.NotNull(innerHandler.LastRequest);
+        Assert.Equal("DPoP", innerHandler.LastRequest!.Headers.Authorization!.Scheme);
+        Assert.Equal("my-access-token", innerHandler.LastRequest!.Headers.Authorization!.Parameter);
+        var proof = Assert.Single(innerHandler.LastRequest.Headers.GetValues("DPoP"));
+        Assert.Equal("my-dpop-proof", proof);
+        Assert.Equal(HttpMethod.Get, tokenProvider.LastRequest!.Method);
+        Assert.Equal(
+            "http://example.com/api",
+            tokenProvider.LastRequest.RequestUri!.GetLeftPart(UriPartial.Path));
+    }
+
+    [Fact]
     public async Task SendAsync_On401_RefreshesTokenAndRetriesOnce()
     {
         var tokenProvider = new Mock<IClientCredentialsTokenProvider>();
@@ -110,6 +137,28 @@ public sealed class ClientCredentialsBearerHandlerTests
                 : statusCodes[^1];
             Interlocked.Increment(ref callIndex);
             return Task.FromResult(new HttpResponseMessage(status));
+        }
+    }
+
+    private sealed class StubDpopTokenProvider(string token, string proof) :
+        IClientCredentialsTokenProvider,
+        IClientCredentialsDpopProofProvider
+    {
+        public HttpRequestMessage? LastRequest { get; private set; }
+
+        public bool IsDPoPEnabled => true;
+
+        public Task<string> GetTokenAsync(CancellationToken cancellationToken) => Task.FromResult(token);
+
+        public Task<string> RefreshTokenAsync(CancellationToken cancellationToken) => Task.FromResult(token);
+
+        public Task<string> CreateDpopProofAsync(
+            string accessToken,
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            return Task.FromResult(proof);
         }
     }
 }

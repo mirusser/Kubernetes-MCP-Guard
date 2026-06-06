@@ -162,6 +162,7 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.ObserverHostPath,
                 RunProfileConventions.YamlKeys.PlannerHandoffUrl,
                 RunProfileConventions.YamlKeys.Scope,
+                RunProfileConventions.YamlKeys.UseDPoP,
                 RunProfileConventions.YamlKeys.SkipCycleWhenNoWarningEvents,
             ],
             StringComparer.Ordinal);
@@ -182,7 +183,8 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.MaxToolIterations,
                 RunProfileConventions.YamlKeys.OAuthAuthority,
                 RunProfileConventions.YamlKeys.PlannerHostPath,
-                RunProfileConventions.YamlKeys.Scope
+                RunProfileConventions.YamlKeys.Scope,
+                RunProfileConventions.YamlKeys.UseDPoP
             ],
             StringComparer.Ordinal);
 
@@ -197,6 +199,7 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.GatewayBaseUrl,
                 RunProfileConventions.YamlKeys.OAuthAuthority,
                 RunProfileConventions.YamlKeys.Scope,
+                RunProfileConventions.YamlKeys.UseDPoP,
                 RunProfileConventions.YamlKeys.WatchTimeoutSeconds
             ],
             StringComparer.Ordinal);
@@ -533,7 +536,8 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ObserverHostPath),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ObserverAuditConnectionString),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.SkipCycleWhenNoWarningEvents),
-            GetOptionalScalarSequence(mapping, RunProfileConventions.YamlKeys.AllowedNamespaces));
+            GetOptionalScalarSequence(mapping, RunProfileConventions.YamlKeys.AllowedNamespaces),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.UseDPoP));
     }
 
     private static PlannerProfile? ReadPlanner(YamlMappingNode node)
@@ -566,7 +570,8 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.BatchWallClockCapSeconds),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.MaxToolIterations),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.FileSinkRoot),
-            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.PlannerHostPath));
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.PlannerHostPath),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.UseDPoP));
     }
 
     private static ExecutorProfile? ReadExecutor(YamlMappingNode node)
@@ -594,7 +599,8 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.Scope),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ConcurrencyCap),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.WatchTimeoutSeconds),
-            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ExecutorHostPath));
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ExecutorHostPath),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.UseDPoP));
     }
 
     private static AgentGuardrailsProfile? ReadAgentGuardrails(YamlMappingNode node)

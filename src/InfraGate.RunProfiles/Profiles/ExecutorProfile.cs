@@ -9,4 +9,5 @@ internal sealed record class ExecutorProfile(
     string? OAuthScope,
     string? ConcurrencyCap,
     string? WatchTimeoutSeconds,
-    string? ExecutorHostPath);
+    string? ExecutorHostPath,
+    string? UseDPoP = null);

@@ -264,6 +264,7 @@ internal static class EnvFileRenderer
             !string.IsNullOrEmpty(planner.ClientSecret) ||
             !string.IsNullOrEmpty(planner.OAuthAuthority) ||
             !string.IsNullOrEmpty(planner.OAuthScope) ||
+            !string.IsNullOrEmpty(planner.UseDPoP) ||
             !string.IsNullOrEmpty(planner.LlmProvider) ||
             !string.IsNullOrEmpty(planner.LlmModel) ||
             !string.IsNullOrEmpty(planner.AnomalyWallClockCapSeconds) ||
@@ -286,6 +287,7 @@ internal static class EnvFileRenderer
         AppendIfSet(builder, RunProfileConventions.Env.PlannerClientSecret, planner.ClientSecret);
         AppendIfSet(builder, RunProfileConventions.Env.PlannerOAuthAuthority, planner.OAuthAuthority);
         AppendIfSet(builder, RunProfileConventions.Env.PlannerOAuthScope, planner.OAuthScope);
+        AppendIfSet(builder, RunProfileConventions.Env.PlannerUseDPoP, planner.UseDPoP);
         AppendIfSet(builder, RunProfileConventions.Env.PlannerLlmProvider, planner.LlmProvider);
         AppendIfSet(builder, RunProfileConventions.Env.PlannerLlmModel, planner.LlmModel);
         AppendIfSet(builder, RunProfileConventions.Env.PlannerAnomalyWallClockCapSeconds, planner.AnomalyWallClockCapSeconds);
@@ -310,6 +312,7 @@ internal static class EnvFileRenderer
             !string.IsNullOrEmpty(executor.ClientSecret) ||
             !string.IsNullOrEmpty(executor.OAuthAuthority) ||
             !string.IsNullOrEmpty(executor.OAuthScope) ||
+            !string.IsNullOrEmpty(executor.UseDPoP) ||
             !string.IsNullOrEmpty(executor.ConcurrencyCap) ||
             !string.IsNullOrEmpty(executor.WatchTimeoutSeconds) ||
             !string.IsNullOrEmpty(executor.ExecutorHostPath);
@@ -327,6 +330,7 @@ internal static class EnvFileRenderer
         AppendIfSet(builder, RunProfileConventions.Env.ExecutorClientSecret, executor.ClientSecret);
         AppendIfSet(builder, RunProfileConventions.Env.ExecutorOAuthAuthority, executor.OAuthAuthority);
         AppendIfSet(builder, RunProfileConventions.Env.ExecutorOAuthScope, executor.OAuthScope);
+        AppendIfSet(builder, RunProfileConventions.Env.ExecutorUseDPoP, executor.UseDPoP);
         AppendIfSet(builder, RunProfileConventions.Env.ExecutorConcurrencyCap, executor.ConcurrencyCap);
         AppendIfSet(builder, RunProfileConventions.Env.ExecutorWatchTimeoutSeconds, executor.WatchTimeoutSeconds);
         AppendIfSet(builder, RunProfileConventions.Env.ExecutorHostPath, executor.ExecutorHostPath);
@@ -347,6 +351,7 @@ internal static class EnvFileRenderer
             !string.IsNullOrEmpty(observer.ClientId) ||
             !string.IsNullOrEmpty(observer.ClientSecret) ||
             !string.IsNullOrEmpty(observer.Scope) ||
+            !string.IsNullOrEmpty(observer.UseDPoP) ||
             !string.IsNullOrEmpty(observer.LlmProvider) ||
             !string.IsNullOrEmpty(observer.LlmModel) ||
             !string.IsNullOrEmpty(observer.CycleCadenceSeconds) ||
@@ -372,6 +377,7 @@ internal static class EnvFileRenderer
         AppendIfSet(builder, RunProfileConventions.Env.ObserverClientId, observer.ClientId);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverClientSecret, observer.ClientSecret);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverScope, observer.Scope);
+        AppendIfSet(builder, RunProfileConventions.Env.ObserverUseDPoP, observer.UseDPoP);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverLlmProvider, observer.LlmProvider);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverLlmModel, observer.LlmModel);
         AppendIfSet(builder, RunProfileConventions.Env.ObserverCycleIntervalSeconds, observer.CycleCadenceSeconds);

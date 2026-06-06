@@ -29,8 +29,6 @@ internal sealed class SanitizingToolCaller(
 
         if (sanitized.HasFindings || sanitized.ManifestRedacted)
         {
-            GuardrailContext.MarkResponseFindings();
-
             var auditIdentity = GatewayAuditIdentityResolver.Resolve(
                 httpContextAccessor?.HttpContext?.User);
 
@@ -56,6 +54,8 @@ internal sealed class SanitizingToolCaller(
             {
                 // Audit write failure is non-fatal; the response is still returned.
             }
+
+            GuardrailContext.MarkResponseFindings();
         }
 
         return sanitized.Text;
