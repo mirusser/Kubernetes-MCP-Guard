@@ -15,6 +15,84 @@ public sealed class ToolScopeCatalogTests
         Assert.Contains(McpGatewayConventions.ToolScopeRequirements.WriteScope, scopes);
     }
 
+    [Theory]
+    [InlineData("request_restart_deployment")]
+    [InlineData("request_scale_deployment")]
+    public void GetSynthesizedScopes_RequestDeploymentTools_ReturnsMutationAndWriteScopes(string toolName)
+    {
+        var scopes = ToolScopeCatalog.GetSynthesizedScopes(toolName);
+
+        Assert.Equal(
+            [
+                McpGatewayConventions.ToolScopeRequirements.MutationScope,
+                McpGatewayConventions.ToolScopeRequirements.WriteScope
+            ],
+            scopes);
+    }
+
+    [Fact]
+    public void GetSynthesizedScopes_DownstreamToolWithoutRequestPrefix_ReturnsNull()
+    {
+        var scopes = ToolScopeCatalog.GetSynthesizedScopes("get_k8s_status");
+
+        Assert.Null(scopes);
+    }
+
+    [Fact]
+    public void GetRequiredScopes_DownstreamReadOnlyHint_ReturnsMutationReadOnlyAndReadScopes()
+    {
+        var scopes = ToolScopeCatalog.GetRequiredScopes("get_k8s_status", hasReadOnlyHint: true);
+
+        Assert.Equal(
+            [
+                McpGatewayConventions.ToolScopeRequirements.MutationScope,
+                McpGatewayConventions.ToolScopeRequirements.ReadOnlyScope,
+                McpGatewayConventions.ToolScopeRequirements.ReadScope
+            ],
+            scopes);
+    }
+
+    [Fact]
+    public void GetRequiredScopes_DownstreamWithoutReadOnlyHint_ReturnsMutationAndWriteScopes()
+    {
+        var scopes = ToolScopeCatalog.GetRequiredScopes("delete_something", hasReadOnlyHint: false);
+
+        Assert.Equal(
+            [
+                McpGatewayConventions.ToolScopeRequirements.MutationScope,
+                McpGatewayConventions.ToolScopeRequirements.WriteScope
+            ],
+            scopes);
+    }
+
+    [Fact]
+    public void GetRequiredScopes_ApplyApprovedPlan_ReturnsMutationExecuteAndWriteScopes()
+    {
+        var scopes = ToolScopeCatalog.GetRequiredScopes(McpGatewayConventions.ToolNames.ApplyApprovedPlan, hasReadOnlyHint: false);
+
+        Assert.Equal(
+            [
+                McpGatewayConventions.ToolScopeRequirements.MutationScope,
+                McpGatewayConventions.ToolScopeRequirements.ExecuteScope,
+                McpGatewayConventions.ToolScopeRequirements.WriteScope
+            ],
+            scopes);
+    }
+
+    [Fact]
+    public void GetRequiredScopes_ProposePlan_ReturnsMutationProposeAndWriteScopes()
+    {
+        var scopes = ToolScopeCatalog.GetRequiredScopes(McpGatewayConventions.ToolNames.ProposePlan, hasReadOnlyHint: false);
+
+        Assert.Equal(
+            [
+                McpGatewayConventions.ToolScopeRequirements.MutationScope,
+                McpGatewayConventions.ToolScopeRequirements.ProposeScope,
+                McpGatewayConventions.ToolScopeRequirements.WriteScope
+            ],
+            scopes);
+    }
+
     [Fact]
     public void GetSynthesizedScopes_RequestTools_DoesNotIncludeReadScope()
     {
@@ -137,6 +215,42 @@ public sealed class ToolScopeCatalogTests
         var user = CreateUserWithScopes(McpGatewayConventions.ToolScopeRequirements.WriteScope);
 
         var visible = ToolScopeCatalog.IsVisibleTo(McpGatewayConventions.ToolNames.ApplyApprovedPlan, hasReadOnlyHint: false, user);
+
+        Assert.True(visible);
+    }
+
+    [Fact]
+    public void IsVisibleTo_ReadScopeUserWithReadOnlyHint_ReturnsTrue()
+    {
+        var user = CreateUserWithScopes(McpGatewayConventions.ToolScopeRequirements.ReadScope);
+
+        var visible = ToolScopeCatalog.IsVisibleTo("get_k8s_status", hasReadOnlyHint: true, user);
+
+        Assert.True(visible);
+    }
+
+    [Fact]
+    public void IsVisibleTo_ReadScopeUserWithoutReadOnlyHint_ReturnsFalse()
+    {
+        var user = CreateUserWithScopes(McpGatewayConventions.ToolScopeRequirements.ReadScope);
+
+        var visible = ToolScopeCatalog.IsVisibleTo("scale_deployment", hasReadOnlyHint: false, user);
+
+        Assert.False(visible);
+    }
+
+    [Theory]
+    [InlineData("get_k8s_status", true)]
+    [InlineData("scale_deployment", false)]
+    [InlineData("request_scale_deployment", false)]
+    [InlineData("request_restart_deployment", false)]
+    [InlineData(McpGatewayConventions.ToolNames.ApplyApprovedPlan, false)]
+    [InlineData(McpGatewayConventions.ToolNames.ProposePlan, false)]
+    public void IsVisibleTo_WriteScopeUser_ReturnsTrueForAllTools(string toolName, bool hasReadOnlyHint)
+    {
+        var user = CreateUserWithScopes(McpGatewayConventions.ToolScopeRequirements.WriteScope);
+
+        var visible = ToolScopeCatalog.IsVisibleTo(toolName, hasReadOnlyHint, user);
 
         Assert.True(visible);
     }
