@@ -206,14 +206,11 @@ jobs:
 
       - name: Semgrep Scan
         id: semgrep
-        uses: semgrep/semgrep-action@v1
         env:
           SEMGREP_RULES: p/auto p/secrets p/owasp-top-ten
-        with:
-          config: >-
-            p/auto
-            p/secrets
-            p/owasp-top-ten
+        run: |
+          python3 -m pip install semgrep==1.165.0
+          semgrep ci --config p/auto --config p/secrets --config p/owasp-top-ten
 
       - name: Upload SARIF to GitHub Security
         if: always()

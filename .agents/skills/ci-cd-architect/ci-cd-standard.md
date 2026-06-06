@@ -526,7 +526,7 @@ Every project MUST include automated security scanning via Semgrep. This is a la
 
 **[RULE: CI-CDW-52] [L1+]** The `semgrep.yml` workflow MUST include `SEMGREP_BASELINE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}` in its `env` block so that Semgrep CI reports only NEW findings on PRs (diff-aware mode). On push to main, the variable evaluates to an empty string and Semgrep performs a full scan of the entire codebase. This prevents green PRs from being silently rejected by a red main-branch scan due to pre-existing findings.
 
-**[RULE: CI-CDW-53] [L2+]** The SARIF upload step in both `semgrep.yml` and `semgrep-scheduled.yml` MUST be guarded with `if: always() && hashFiles('semgrep.sarif') != ''` to prevent spurious failures when `semgrep-action@v1` does not produce a SARIF output file.
+**[RULE: CI-CDW-53] [L2+]** The SARIF upload step in both `semgrep.yml` and `semgrep-scheduled.yml` MUST be guarded with `if: always() && hashFiles('semgrep.sarif') != ''` to prevent spurious failures when the Semgrep scan does not produce a SARIF output file.
 
 **[RULE: CI-CDW-53a] [SHOULD]** Projects SHOULD include a `.semgrep.yml` project-level triage config at the repository root to document accepted findings that are not fixable (e.g., HTTP-only IoT devices on a local LAN, root-required Docker containers). Each entry requires a `rule_id`, `paths`, and `reason`. Without a triage file, unfixable findings MUST be triaged in the GitHub Security tab after each push-to-main scan.
 
@@ -565,14 +565,11 @@ jobs:
 
       - name: Semgrep Scan
         id: semgrep
-        uses: semgrep/semgrep-action@v1
         env:
           SEMGREP_RULES: p/auto p/secrets p/owasp-top-ten
-        with:
-          config: >-
-            p/auto
-            p/secrets
-            p/owasp-top-ten
+        run: |
+          python3 -m pip install semgrep==1.165.0
+          semgrep ci --config p/auto --config p/secrets --config p/owasp-top-ten
 
       - name: Upload SARIF to GitHub Security
         id: upload-sarif
@@ -965,4 +962,4 @@ See `templates/auto-tag.yml.j2` for the Jinja2 template.
 - Initial standard: Unicode CI pipeline (lint, test, docker-smoke), Docker publish, auto-tag, unified action versions, Semgrep security scanning, Dependabot dependency management, documentation validation (CAFDS), Codecov integration, .NET CI variant, PR feedback patterns, concurrency best practices.
 - Scope: Python + Docker (primary), .NET + NuGet (variant), polyglot projects.
 - Rules: `[CI-CDW-1]` through `[CI-CDW-81]` covering workflow files, action versions, Python version, CI structure, lint quality gates, test coverage, Docker smoke, publish gates, attestation, release strategy, documentation validation, project config contract, customizations, source layout variants, Docker-less projects, service integration, standard versioning, non-MCP smoke, Semgrep scanning, Dependabot, docs validation, concurrency, .NET variants, PR feedback, container scanning, dependency vulnerability scans, Sonar/SonarCloud reporting, branch policy, integration tests, safety E2E, coverage providers, Python metadata consistency, and docs strictness/exemptions.
-- Action versions pinned: checkout@v6, setup-python@v6, buildx@v4, login@v4, metadata@v6, build-push@v7, attest@v4, gh-release@v3, codecov@v6, upload-artifact@v7, download-artifact@v8, semgrep-action@v1, upload-sarif@v4, cache@v5, setup-dotnet@v5, github-script@v9, changed-files@v47, test-reporter@v3.
+- Action versions pinned: checkout@v6, setup-python@v6, buildx@v4, login@v4, metadata@v6, build-push@v7, attest@v4, gh-release@v3, codecov@v6, upload-artifact@v7, download-artifact@v8, semgrep CLI 1.165.0, upload-sarif@v4, cache@v5, setup-dotnet@v5, github-script@v9, changed-files@v47, test-reporter@v3.

@@ -30,7 +30,7 @@ This document tracks the history of GitHub Action versions used across CI/CD sta
 | `actions/upload-artifact` | `v7` | Upload build artifacts |
 | `actions/download-artifact` | `v8` | Download artifacts between jobs |
 | `actions/cache` | `v5` | Cache dependencies (NuGet, pip) |
-| `semgrep/semgrep-action` | `v1` | Security scanning |
+| Semgrep CLI | `1.165.0` | Security scanning (installed via pip, not a GitHub Action) |
 | `github/codeql-action/upload-sarif` | `v4` | Upload SARIF to Security tab |
 | `actions/setup-dotnet` | `v5` | Set up .NET SDK |
 | `actions/github-script` | `v9` | Post/update PR comments |
