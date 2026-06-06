@@ -95,26 +95,34 @@ public static class RfcRagTools
     }
 
     [McpServerTool(Name = "find_updates_obsoletes", ReadOnly = true, OpenWorld = false)]
-    [Description("Find RFCs that update or obsolete a given RFC.")]
+    [Description("Find RFCs that update or obsolete a given RFC (back-reference lookup).")]
     public static async Task<string> FindUpdatesObsoletes(
         ISearchService search,
         [Description("RFC number whose metadata relationships should be retrieved.")] int rfcNumber,
         CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<RfcSection> sections = await search.GetRfcAsync(rfcNumber, cancellationToken).ConfigureAwait(false);
-        if (sections.Count == 0)
+        RfcMetadata? metadata = await search.GetRfcMetadataAsync(rfcNumber, cancellationToken).ConfigureAwait(false);
+        if (metadata is null)
         {
             return ToJson(new { error = $"RFC {rfcNumber} is not indexed." });
         }
 
-        var parser = new RfcParser();
-        RfcDocument document = await parser.ParseAsync(sections[0].SourcePath, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<RfcMetadata> backRefs = await search.FindBackReferencesAsync(rfcNumber, cancellationToken).ConfigureAwait(false);
+
         return ToJson(new
         {
             rfcNumber,
-            document.Metadata.Title,
-            document.Metadata.Updates,
-            document.Metadata.Obsoletes
+            metadata.Title,
+            updates = metadata.Updates,
+            obsoletes = metadata.Obsoletes,
+            updated_by = backRefs
+                .Where(r => !metadata.Obsoletes.Contains(r.Number))
+                .Select(r => new { r.Number, r.Title })
+                .ToArray(),
+            obsoleted_by = backRefs
+                .Where(r => metadata.Obsoletes.Contains(r.Number))
+                .Select(r => new { r.Number, r.Title })
+                .ToArray()
         });
     }
 

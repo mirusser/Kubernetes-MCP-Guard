@@ -44,6 +44,7 @@ incremental SHA256-based skip detection and complete in seconds.
 | `InfraGate__RfcRag__PostgresConnectionString` | (required) | PostgreSQL connection string |
 | `InfraGate__RfcRag__EmbeddingModel` | `openai/text-embedding-3-small` | OpenRouter embedding model |
 | `InfraGate__RfcRag__EmbeddingBatchSize` | `20` | Batch size for embedding API calls |
+| `InfraGate__RfcRag__OpenRouterEmbeddingEndpoint` | `https://openrouter.ai/api/v1` | OpenRouter API base URL for embedding requests |
 | `InfraGate__RfcRag__RunMigrationsOnStartup` | `true` | Auto-apply SQL schema migrations |
 | `InfraGate__OpenRouter__ApiKey` | (required) | OpenRouter API key |
 
@@ -55,7 +56,7 @@ Returns ranked sections with excerpts.
 
 ```
 Parameters: query (string), limit (int, default=10)
-Returns: JSON array of { rfcNumber, title, section, heading, excerpt, score }
+Returns: JSON array of { rfcNumber, title, section, heading, excerpt, sourcePath, url, score }
 ```
 
 ### `get_rfc`
@@ -63,7 +64,7 @@ Retrieve the full text of an RFC by its number.
 
 ```
 Parameters: rfcNumber (int)
-Returns: Full RFC text with section markers
+Returns: JSON object with { rfcNumber, title, sourcePath, url, text, sections } (where sections is a JSON array of RfcSection objects)
 ```
 
 ### `get_rfc_section`
@@ -71,7 +72,7 @@ Retrieve a specific section of an RFC.
 
 ```
 Parameters: rfcNumber (int), section (string, e.g. "6.3", "4.1.2")
-Returns: Exact section text with heading
+Returns: JSON object with { id, rfcNumber, title, section, heading, text, sourcePath, url }
 ```
 
 ### `search_normative`
@@ -80,6 +81,7 @@ Search for normative keywords (RFC 2119/8174) across indexed RFCs.
 ```
 Parameters: keyword (string), rfcNumbers (int[]?, optional), limit (int, default=20)
 Valid keywords: MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RECOMMENDED, MAY, OPTIONAL
+Returns: JSON array of { rfcNumber, title, section, heading, excerpt, score }
 ```
 
 ### `search_abnf`
@@ -87,6 +89,7 @@ Search ABNF grammar definitions by rule name or fragment.
 
 ```
 Parameters: query (string), rfcNumbers (int[]?, optional), limit (int, default=20)
+Returns: JSON array of { rfcNumber, title, section, heading, excerpt, score }
 ```
 
 ### `find_updates_obsoletes`
@@ -94,7 +97,7 @@ Find RFCs that update or obsolete a given RFC.
 
 ```
 Parameters: rfcNumber (int)
-Returns: { updated_by: [...], obsoleted_by: [...], updates: [...], obsoletes: [...] }
+Returns: { rfcNumber, title, updates: [...], obsoletes: [...], updated_by: [{number, title}], obsoleted_by: [{number, title}] }
 ```
 
 ### `rfc_stats`
@@ -102,7 +105,7 @@ Get statistics about the indexed RFC corpus.
 
 ```
 Parameters: none
-Returns: { indexedRfcCount, totalSections, lastIndexedAt, embeddingModel }
+Returns: JSON string { indexedRfcs, sections, abnfBlocks, normativeOccurrences, lastIndexedAtUtc }
 ```
 
 ## Example Queries
@@ -113,7 +116,7 @@ Returns: { indexedRfcCount, totalSections, lastIndexedAt, embeddingModel }
 → get_rfc_section(9110, "8.6")
 
 "Find all TLS 1.3 handshake ABNF"
-→ search_abnf("handshake", rfcs=[8446])
+→ search_abnf("handshake", rfcNumbers=[8446])
 
 "Which RFCs MUST NOT allow unencrypted communication?"
 → search_normative("MUST NOT", limit=10)
@@ -183,12 +186,22 @@ dotnet test tests/InfraGate.RfcRag.Tests/ --filter "Category=Integration"
 
 ## Contents
 
-- `RfcParser.cs` — parses raw RFC `.txt` files: strips page headers/footers, extracts metadata, splits into sections, detects ABNF blocks, extracts normative keywords
-- `RfcIndexer.cs` — walks the RFC mirror, parses each RFC, generates embeddings via OpenRouter, stores in PostgreSQL
-- `RfcRepository.cs` — Dapper-based data access for RFC sections, ABNF blocks, normative occurrences
-- `SearchService.cs` — hybrid search combining vector similarity, full-text lexical search, and exact section lookup
-- `RfcRagTools.cs` — MCP tool definitions exposed to coding agents
-- `Program.cs` — stdio MCP server with auto-indexing on startup
+- `RfcParser.cs`: parses raw RFC `.txt` files, strips page headers/footers, extracts metadata, splits into sections, detects ABNF blocks, extracts normative keywords.
+- `RfcIndexer.cs`: walks the RFC mirror, parses each RFC, generates embeddings via OpenRouter, stores in PostgreSQL.
+- `RfcRepository.cs`: Dapper-based data access for RFC sections, ABNF blocks, normative occurrences.
+- `SearchService.cs`: hybrid search combining vector similarity, full-text lexical search, and exact section lookup.
+- `RfcRagTools.cs`: MCP tool definitions exposed to coding agents.
+- `Program.cs`: stdio MCP server with auto-indexing on startup.
+- `ServiceCollectionExtensions.cs`: dependency injection registration for RFC RAG services and adapters.
+- `RfcRagMigrationRunner.cs`: applies database schema migrations for the RFC RAG tables.
+- `RfcDocument.cs`: represents a parsed RFC document with metadata and sections.
+- `Settings/RfcRagOptions.cs`: configuration options for the RFC RAG pipeline.
+- `RfcRagConventions.cs`: database schema and table name conventions.
+- `EmbeddingService.cs`: generates text embeddings in batches using the configured generator.
+- `ISearchService.cs`: interface for RFC search and retrieval operations.
+- `IIndexerService.cs`: interface for the RFC indexing service.
+- `SearchResult.cs`: represents a ranked search result from hybrid search.
+- `Models/`: database entity models including `RfcSection.cs`, `RfcAbnfBlock.cs`, `NormativeOccurrence.cs`, and `RfcMetadata.cs`.
 
 ## Boundaries
 

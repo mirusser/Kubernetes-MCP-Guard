@@ -10,6 +10,7 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         NpgsqlDataSource? dataSource = null)
     {
+        ArgumentNullException.ThrowIfNull(services);
         if (dataSource is not null)
         {
             services.TryAddSingleton(dataSource);
@@ -39,9 +40,9 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<RfcRagOptions>>().Value;
-            var openRouterKey = Environment.GetEnvironmentVariable("InfraGate__OpenRouter__ApiKey")
+            var openRouterKey = Environment.GetEnvironmentVariable(RfcRagOptions.OpenRouterApiKeyEnvironmentVariable)
                 ?? throw new InvalidOperationException(
-                    "InfraGate__OpenRouter__ApiKey environment variable is required for OpenRouter embeddings.");
+                    $"{RfcRagOptions.OpenRouterApiKeyEnvironmentVariable} environment variable is required for OpenRouter embeddings.");
 
             var openAiOptions = new OpenAIClientOptions
             {
@@ -82,16 +83,12 @@ internal sealed class OpenAiEmbeddingGeneratorAdapter : IEmbeddingGenerator<stri
         CancellationToken cancellationToken = default)
     {
         var inputs = values.ToList();
+        var response = await client.GenerateEmbeddingsAsync(inputs, options: null, cancellationToken).ConfigureAwait(false);
+
         var results = new List<Embedding<float>>(inputs.Count);
-
-        foreach (string input in inputs)
+        foreach (OpenAI.Embeddings.OpenAIEmbedding item in response.Value)
         {
-            OpenAI.Embeddings.OpenAIEmbedding response = await client.GenerateEmbeddingAsync(
-                input,
-                options: null,
-                cancellationToken).ConfigureAwait(false);
-
-            results.Add(new Embedding<float>(response.ToFloats()));
+            results.Add(new Embedding<float>(item.ToFloats()));
         }
 
         return new GeneratedEmbeddings<Embedding<float>>(results);

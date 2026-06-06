@@ -9,6 +9,9 @@ public sealed class RfcRagOptions
     /// <summary>Configuration section name.</summary>
     public const string SectionName = "InfraGate:RfcRag";
 
+    /// <summary>Environment variable for the OpenRouter API key (reuses existing InfraGate convention).</summary>
+    public const string OpenRouterApiKeyEnvironmentVariable = "InfraGate__OpenRouter__ApiKey";
+
     /// <summary>Path to the local RFC mirror directory containing .txt files.</summary>
     public string RfcMirrorPath { get; set; } = string.Empty;
 

@@ -1,6 +1,7 @@
 using Dapper;
 using InfraGate.RfcRag.Models;
 using InfraGate.RfcRag.Settings;
+using InfraGate.RfcRag.Tests.Fakes;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -13,7 +14,6 @@ namespace InfraGate.RfcRag.Tests.IntegrationTests;
 public sealed class RfcRagIntegrationTests : IAsyncLifetime
 {
     private const string PostgresImage = "pgvector/pgvector:pg17";
-    private const int EmbeddingDimensions = 1536;
 
     private static readonly string[] ExpectedTables =
     [
@@ -75,6 +75,10 @@ public sealed class RfcRagIntegrationTests : IAsyncLifetime
         IReadOnlyList<SearchResult> results = await search.SearchAsync("HTTP semantics", 10, CancellationToken.None);
 
         Assert.True(indexedCount > 0 && results.Count > 0);
+        var result = results[0];
+        Assert.Equal(9110, result.RfcNumber);
+        Assert.Contains("HTTP Semantics", result.Title);
+        Assert.NotNull(result.Section);
     }
 
     [Fact]
@@ -88,7 +92,10 @@ public sealed class RfcRagIntegrationTests : IAsyncLifetime
 
         RfcSection? section = await search.GetSectionAsync(2119, "1", CancellationToken.None);
 
-        Assert.Contains("MUST", section?.Text);
+        Assert.NotNull(section);
+        Assert.Contains("MUST", section.Text);
+        Assert.Equal("1", section.Section);
+        Assert.Equal(2119, section.RfcNumber);
     }
 
     [Fact]
@@ -103,6 +110,7 @@ public sealed class RfcRagIntegrationTests : IAsyncLifetime
         IReadOnlyList<SearchResult> results = await search.SearchNormativeAsync("MUST", null, 20, CancellationToken.None);
 
         Assert.Contains(results, result => result.RfcNumber == 2119);
+        Assert.Contains(results, result => result.Excerpt.Contains("MUST"));
     }
 
     [Fact]
@@ -117,6 +125,7 @@ public sealed class RfcRagIntegrationTests : IAsyncLifetime
         await indexer.IndexAllAsync(CancellationToken.None);
         int incrementalCount = await indexer.GetIndexedCountAsync(CancellationToken.None);
 
+        Assert.True(originalCount > 0);
         Assert.Equal(originalCount, incrementalCount);
     }
 
@@ -153,41 +162,4 @@ public sealed class RfcRagIntegrationTests : IAsyncLifetime
 
     private static EmbeddingService CreateEmbeddingService() =>
         new(new FakeEmbeddingGenerator(), 5, NullLogger<EmbeddingService>.Instance);
-
-    private sealed class FakeEmbeddingGenerator : IEmbeddingGenerator<string, Embedding<float>>
-    {
-        // Required by the embedding generator shape even though the fake metadata is constant.
-#pragma warning disable MA0041
-        public EmbeddingGeneratorMetadata Metadata => new("fake", new Uri("http://localhost"));
-#pragma warning restore MA0041
-
-        public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
-            IEnumerable<string> values,
-            EmbeddingGenerationOptions? options = null,
-            CancellationToken cancellationToken = default)
-        {
-            var list = values.ToList();
-            var results = new List<Embedding<float>>(list.Count);
-
-            for (int i = 0; i < list.Count; i++)
-            {
-                float[] vector = new float[EmbeddingDimensions];
-                int hash = list[i].GetHashCode(StringComparison.Ordinal);
-                for (int j = 0; j < EmbeddingDimensions; j++)
-                {
-                    vector[j] = (float)((hash * (j + 1) * 0.001) % 1.0);
-                }
-
-                results.Add(new Embedding<float>(vector));
-            }
-
-            return Task.FromResult(new GeneratedEmbeddings<Embedding<float>>(results));
-        }
-
-        public object? GetService(Type? serviceType, object? key = null) => null;
-
-        public void Dispose()
-        {
-        }
-    }
 }

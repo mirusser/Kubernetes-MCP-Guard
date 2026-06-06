@@ -59,6 +59,12 @@ public sealed class SearchService : ISearchService
         CancellationToken cancellationToken) =>
         repository.SearchAbnfAsync(dataSource, query, rfcNumbers, limit, cancellationToken);
 
+    public Task<RfcMetadata?> GetRfcMetadataAsync(int rfcNumber, CancellationToken cancellationToken) =>
+        repository.GetIndexedRfcMetadataAsync(dataSource, rfcNumber, cancellationToken);
+
+    public Task<IReadOnlyList<RfcMetadata>> FindBackReferencesAsync(int rfcNumber, CancellationToken cancellationToken) =>
+        repository.FindBackReferencesAsync(dataSource, rfcNumber, cancellationToken);
+
     public Task<string> GetStatsAsync(CancellationToken cancellationToken) =>
         repository.GetStatsAsync(dataSource, cancellationToken);
 }

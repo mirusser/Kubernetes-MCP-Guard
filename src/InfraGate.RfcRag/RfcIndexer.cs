@@ -88,7 +88,7 @@ public sealed class RfcIndexer : IIndexerService
             IReadOnlyList<RfcSection> sections = document.Sections
                 .Select((section, sectionIndex) => section with
                 {
-                    SourcePath = relativePath,
+                    SourcePath = sourceFile.Path,
                     SourceSha256 = sourceSha256,
                     Embedding = embeddings[sectionIndex]
                 })
@@ -153,6 +153,8 @@ public sealed class RfcIndexer : IIndexerService
                         sourceSha256,
                         document.Metadata.Title,
                         sections.Count,
+                        document.Metadata.Updates,
+                        document.Metadata.Obsoletes,
                         cancellationToken).ConfigureAwait(false);
 
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

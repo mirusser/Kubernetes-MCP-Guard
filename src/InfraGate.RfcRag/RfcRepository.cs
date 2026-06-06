@@ -130,6 +130,8 @@ public sealed class RfcRepository
         string sourceSha256,
         string title,
         int sectionCount,
+        int[] updates,
+        int[] obsoletes,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -141,14 +143,16 @@ public sealed class RfcRepository
         await connection.ExecuteAsync(new CommandDefinition(
             """
             insert into rfc_rag.indexed_rfcs
-                (rfc_number, source_path, source_sha256, title, section_count, indexed_at_utc)
+                (rfc_number, source_path, source_sha256, title, section_count, updates, obsoletes, indexed_at_utc)
             values
-                (@RfcNumber, @SourcePath, @SourceSha256, @Title, @SectionCount, now())
+                (@RfcNumber, @SourcePath, @SourceSha256, @Title, @SectionCount, @Updates, @Obsoletes, now())
             on conflict (rfc_number) do update set
                 source_path = excluded.source_path,
                 source_sha256 = excluded.source_sha256,
                 title = excluded.title,
                 section_count = excluded.section_count,
+                updates = excluded.updates,
+                obsoletes = excluded.obsoletes,
                 indexed_at_utc = now()
             """,
             new
@@ -157,7 +161,9 @@ public sealed class RfcRepository
                 SourcePath = sourcePath,
                 SourceSha256 = sourceSha256,
                 Title = title,
-                SectionCount = sectionCount
+                SectionCount = sectionCount,
+                Updates = updates,
+                Obsoletes = obsoletes
             },
             transaction,
             cancellationToken: cancellationToken)).ConfigureAwait(false);
@@ -438,6 +444,57 @@ public sealed class RfcRepository
                 )::text
                 """,
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }
+    }
+
+    public async Task<RfcMetadata?> GetIndexedRfcMetadataAsync(
+        NpgsqlDataSource dataSource,
+        int rfcNumber,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(dataSource);
+
+        var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using (connection.ConfigureAwait(false))
+        {
+            return await connection.QuerySingleOrDefaultAsync<RfcMetadata>(new CommandDefinition(
+                """
+                select
+                    rfc_number as "Number",
+                    title as "Title",
+                    updates as "Updates",
+                    obsoletes as "Obsoletes"
+                from rfc_rag.indexed_rfcs
+                where rfc_number = @RfcNumber
+                """,
+                new { RfcNumber = rfcNumber },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+        }
+    }
+
+    public async Task<IReadOnlyList<RfcMetadata>> FindBackReferencesAsync(
+        NpgsqlDataSource dataSource,
+        int rfcNumber,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(dataSource);
+
+        var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using (connection.ConfigureAwait(false))
+        {
+            var results = await connection.QueryAsync<RfcMetadata>(new CommandDefinition(
+                """
+                select
+                    rfc_number as "Number",
+                    title as "Title"
+                from rfc_rag.indexed_rfcs
+                where @RfcNumber = any(updates) or @RfcNumber = any(obsoletes)
+                order by rfc_number
+                """,
+                new { RfcNumber = rfcNumber },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            return results.AsList();
         }
     }
 

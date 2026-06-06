@@ -14,6 +14,8 @@ public sealed partial class RfcParser
 
     public async Task<RfcDocument> ParseAsync(string filePath, CancellationToken cancellationToken)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
         string fileName = Path.GetFileName(filePath);
         string rawText = await File.ReadAllTextAsync(filePath, cancellationToken).ConfigureAwait(false);
         string[] lines = rawText.Split('\n');

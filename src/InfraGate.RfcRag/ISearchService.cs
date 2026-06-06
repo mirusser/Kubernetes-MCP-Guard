@@ -20,5 +20,9 @@ public interface ISearchService
         int limit,
         CancellationToken cancellationToken);
 
+    Task<RfcMetadata?> GetRfcMetadataAsync(int rfcNumber, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<RfcMetadata>> FindBackReferencesAsync(int rfcNumber, CancellationToken cancellationToken);
+
     Task<string> GetStatsAsync(CancellationToken cancellationToken);
 }

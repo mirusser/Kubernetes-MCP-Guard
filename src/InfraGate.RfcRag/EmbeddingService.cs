@@ -17,6 +17,10 @@ public sealed class EmbeddingService
         int batchSize,
         ILogger<EmbeddingService> logger)
     {
+        ArgumentNullException.ThrowIfNull(generator);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
+        ArgumentNullException.ThrowIfNull(logger);
+
         this.generator = generator;
         this.batchSize = batchSize;
         this.logger = logger;

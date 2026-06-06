@@ -75,4 +75,20 @@ public sealed class RfcParserTests
         Assert.Contains("TLS", document.Metadata.Title);
         Assert.True(document.Sections.Count > 3, $"Expected >3 sections, got {document.Sections.Count}");
     }
+
+    [Fact]
+    public async Task ParseAsync_RealRfc2119_ExtractsAbnfBlocks()
+    {
+        string fixturePath = Path.Combine("TestData", "rfc9110.txt");
+        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+
+        Assert.NotEmpty(document.AbnfBlocks);
+    }
+
+    [Fact]
+    public async Task ParseAsync_InvalidFilename_ThrowsFormatException()
+    {
+        string fixturePath = Path.Combine("TestData", "badfile.txt");
+        await Assert.ThrowsAsync<FormatException>(() => Parser.ParseAsync(fixturePath, CancellationToken.None));
+    }
 }
