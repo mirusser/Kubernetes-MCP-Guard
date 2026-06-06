@@ -97,18 +97,18 @@ internal sealed class DpopProofValidator : IDpopProofValidator
             return DpopProofValidationResult.Failure("DPoP proof header contains an invalid jwk.");
         }
 
-        // Verify signature using the embedded public key.
-        // DPoP proofs are self-signed: no issuer, no audience, and lifetime is checked
-        // manually via the iat claim. CA5404 is intentional here.
+        // Verify signature using the embedded public key. DPoP proofs are self-signed: no issuer and no audience.
+        // Expiration is optional for DPoP proofs, but exp/nbf must be honored when present.
         var handler = new JsonWebTokenHandler();
-#pragma warning disable CA5404 // TokenValidationParameters validation intentionally disabled for self-signed DPoP proof
+#pragma warning disable CA5404 // Issuer and audience validation are intentionally disabled for self-signed DPoP proofs.
         var signatureResult = await handler.ValidateTokenAsync(
             context.DpopProofJwt,
             new TokenValidationParameters
             {
                 ValidateIssuer = false,
                 ValidateAudience = false,
-                ValidateLifetime = false,
+                ValidateLifetime = true,
+                RequireExpirationTime = false,
                 RequireSignedTokens = true,
                 IssuerSigningKey = proofJwk
             }).ConfigureAwait(false);

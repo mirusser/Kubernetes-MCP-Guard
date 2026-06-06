@@ -131,6 +131,20 @@ public sealed class DpopProofValidatorTests
     }
 
     [Fact]
+    public async Task ValidateAsync_ExpiredExpClaim_ReturnsFailure()
+    {
+        var validator = CreateValidator();
+        var token = AccessToken;
+        var proof = factory.CreateDpopProof(token, Method, Uri, expires: DateTime.UtcNow.AddMinutes(-10));
+
+        var result = await validator.ValidateAsync(
+            new DpopProofValidationContext(proof, token, Method, Uri));
+
+        Assert.False(result.IsValid);
+        Assert.NotNull(result.FailureReason);
+    }
+
+    [Fact]
     public async Task ValidateAsync_WrongAth_ReturnsFailure()
     {
         var validator = CreateValidator();

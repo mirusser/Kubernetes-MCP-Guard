@@ -61,7 +61,8 @@ internal sealed class DpopProofTestFactory : IDisposable
         int iatOffsetSeconds = 0,
         string? overrideAth = null,
         string? overrideHtm = null,
-        string? overrideHtu = null)
+        string? overrideHtu = null,
+        DateTime? expires = null)
     {
         return BuildProof(
             accessToken: accessToken,
@@ -74,7 +75,8 @@ internal sealed class DpopProofTestFactory : IDisposable
             iatOffsetSeconds: iatOffsetSeconds,
             overrideAth: overrideAth,
             overrideHtm: overrideHtm,
-            overrideHtu: overrideHtu);
+            overrideHtu: overrideHtu,
+            expires: expires);
     }
 
     public string CreateDpopProofWithWrongKey(
@@ -108,13 +110,15 @@ internal sealed class DpopProofTestFactory : IDisposable
         int iatOffsetSeconds,
         string? overrideAth = null,
         string? overrideHtm = null,
-        string? overrideHtu = null)
+        string? overrideHtu = null,
+        DateTime? expires = null)
     {
         var ath = overrideAth ?? ComputeAth(accessToken);
 
         var descriptor = new SecurityTokenDescriptor
         {
             TokenType = GatewayAuthConventions.DPoP.ProofTyp,
+            Expires = expires,
             AdditionalHeaderClaims = new Dictionary<string, object>
             {
                 ["jwk"] = new Dictionary<string, string>
