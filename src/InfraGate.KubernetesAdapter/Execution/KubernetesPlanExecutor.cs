@@ -53,6 +53,17 @@ public sealed class KubernetesPlanExecutor : IDomainPlanExecutor
             return DomainPlanExecutionResult.Blocked(driftBlock.Message, audit, driftBlock.ReasonCode);
         }
 
+        var resourceVersionBlock = await CheckResourceVersionAsync(plan, payload, ct).ConfigureAwait(false);
+        if (resourceVersionBlock is not null)
+        {
+            var audit = KubernetesAuditHelper.ApplyDriftDetected(
+                plan.Id,
+                plan.Operation,
+                payload.Namespace,
+                resourceVersionBlock.Message);
+            return DomainPlanExecutionResult.Blocked(resourceVersionBlock.Message, audit, resourceVersionBlock.ReasonCode);
+        }
+
         var storedPolicyBlock = CheckStoredPolicyFindings(plan, payload);
         if (storedPolicyBlock is not null)
         {

@@ -34,6 +34,27 @@ public sealed class KubernetesPlanBuilderTests
             [],
             []);
 
+    private const string ValidDeploymentManifest = """
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: nginx
+          namespace: demo
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: nginx
+          template:
+            metadata:
+              labels:
+                app: nginx
+            spec:
+              containers:
+              - name: app
+                image: nginx:1.27-alpine
+        """;
+
     private static string DryRunJson(KubernetesPlanDryRun dryRun) =>
         JsonSerializer.Serialize(dryRun, JsonOptions);
 
@@ -65,7 +86,7 @@ public sealed class KubernetesPlanBuilderTests
 
         var result = await builder.BuildAsync(
             "apply_manifest",
-            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: apps/v1" },
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = ValidDeploymentManifest },
             TestRequester,
             CancellationToken.None);
 
@@ -88,7 +109,7 @@ public sealed class KubernetesPlanBuilderTests
 
         var result = await builder.BuildAsync(
             "apply_manifest",
-            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: apps/v1" },
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = ValidDeploymentManifest },
             TestRequester,
             CancellationToken.None);
 
@@ -114,7 +135,7 @@ public sealed class KubernetesPlanBuilderTests
     }
 
     [Fact]
-    public async Task BuildAsync_ApplyManifest_MalformedYaml_ReturnsEmptyPolicyAndProceedsToDryRun()
+    public async Task BuildAsync_ApplyManifest_MalformedYaml_ReturnsPolicyBlocked()
     {
         var dryRun = MakeDryRun("demo", "nginx");
         var diff = MakeDiff("demo", "nginx");
@@ -129,8 +150,9 @@ public sealed class KubernetesPlanBuilderTests
             TestRequester,
             CancellationToken.None);
 
-        Assert.True(result.Succeeded, result.Message);
-        Assert.Contains(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest, toolCaller.CalledTools);
+        Assert.False(result.Succeeded);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.PolicyBlocked, result.ReasonCode);
+        Assert.DoesNotContain(KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest, toolCaller.CalledTools);
     }
 
     private const string PrivilegedDeploymentManifest = """
@@ -335,7 +357,7 @@ public sealed class KubernetesPlanBuilderTests
 
         var result = await builder.BuildAsync(
             "apply_manifest",
-            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: apps/v1" },
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = ValidDeploymentManifest },
             TestRequester,
             CancellationToken.None);
 
@@ -463,7 +485,7 @@ public sealed class KubernetesPlanBuilderTests
         var builder = CreateBuilder(toolCaller);
 
         var namespaceElement = JsonSerializer.SerializeToElement("demo");
-        var manifestElement = JsonSerializer.SerializeToElement("apiVersion: apps/v1");
+        var manifestElement = JsonSerializer.SerializeToElement(ValidDeploymentManifest);
 
         var result = await builder.BuildAsync(
             "apply_manifest",
@@ -613,7 +635,7 @@ public sealed class KubernetesPlanBuilderTests
 
         var result = await builder.BuildAsync(
             "apply_manifest",
-            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: apps/v1" },
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = ValidDeploymentManifest },
             TestRequester,
             CancellationToken.None);
 
@@ -634,7 +656,7 @@ public sealed class KubernetesPlanBuilderTests
 
         var result = await builder.BuildAsync(
             "apply_manifest",
-            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = "apiVersion: apps/v1" },
+            new Dictionary<string, object?> { ["namespace"] = "demo", ["manifest"] = ValidDeploymentManifest },
             TestRequester,
             CancellationToken.None);
 
@@ -677,7 +699,7 @@ public sealed class KubernetesPlanBuilderTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceEmpty, result.ReasonCode);
+        Assert.Equal(KubernetesAdapterConventions.ResultReasonCodes.DiffEvidenceFailed, result.ReasonCode);
     }
 
     [Fact]

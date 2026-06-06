@@ -689,6 +689,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 });
 
             Assert.Contains("Applied apps/v1 Deployment", applyText);
+            await WaitForDeploymentRolloutAsync(client, "mcp-api-demo");
 
             var statusText = await CallTextAsync(
                 client,
@@ -823,6 +824,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                     [McpGatewayConventions.ToolArguments.PlanId] = restartPlanId
                 });
             Assert.Contains("Restarted apps/v1 Deployment", restartText);
+            await WaitForDeploymentRolloutAsync(client, "mcp-api-demo");
 
             var setImageRequestText = await CallTextAsync(
                 client,
@@ -843,6 +845,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                     [McpGatewayConventions.ToolArguments.PlanId] = setImagePlanId
                 });
             Assert.Contains("Updated apps/v1 Deployment", setImageText);
+            await WaitForDeploymentRolloutAsync(client, "mcp-api-demo");
 
             var scaleRequestText = await CallTextAsync(
                 client,
@@ -862,6 +865,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                     [McpGatewayConventions.ToolArguments.PlanId] = scalePlanId
                 });
             Assert.Contains("Scaled apps/v1 Deployment", scaleText);
+            await WaitForDeploymentRolloutAsync(client, "mcp-api-demo");
 
             var deleteRequestText = await CallTextAsync(
                 client,
@@ -1158,6 +1162,83 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         var result = await client.CallToolAsync(toolName, arguments, cancellationToken: CancellationToken.None);
 
         return string.Join(Environment.NewLine, result.Content.OfType<TextContentBlock>().Select(content => content.Text));
+    }
+
+    private static async Task WaitForDeploymentRolloutAsync(McpClient client, string name)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(45);
+        string lastSummary = string.Empty;
+        int settledSamples = 0;
+
+        await Task.Delay(TimeSpan.FromSeconds(1), TimeProvider.System, CancellationToken.None);
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            lastSummary = await CallTextAsync(
+                client,
+                "get_k8s_resource",
+                new Dictionary<string, object?>
+                {
+                    [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                    [KubernetesAdapterConventions.ToolArguments.Kind] = "Deployment",
+                    [KubernetesAdapterConventions.ToolArguments.Name] = name
+                });
+
+            if (IsDeploymentRolloutSettled(lastSummary))
+            {
+                settledSamples++;
+                if (settledSamples >= 3)
+                {
+                    return;
+                }
+            }
+            else
+            {
+                settledSamples = 0;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500), TimeProvider.System, CancellationToken.None);
+        }
+
+        throw new TimeoutException($"Deployment '{name}' did not settle before the next approved mutation. Last summary: {lastSummary}");
+    }
+
+    private static bool IsDeploymentRolloutSettled(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (!document.RootElement.TryGetProperty("replicas", out var replicas))
+            {
+                return false;
+            }
+
+            int? desired = ReadReplicaCount(replicas, "desired");
+            int? ready = ReadReplicaCount(replicas, "ready");
+            int? available = ReadReplicaCount(replicas, "available");
+            int? updated = ReadReplicaCount(replicas, "updated");
+
+            return desired is not null &&
+                ready >= desired &&
+                available >= desired &&
+                updated >= desired;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static int? ReadReplicaCount(JsonElement replicas, string propertyName)
+    {
+        if (!replicas.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind is not JsonValueKind.Number ||
+            !property.TryGetInt32(out int value))
+        {
+            return null;
+        }
+
+        return value;
     }
 
     private static Task<string> RequestScalePlanAsync(McpClient client, int replicas) =>
