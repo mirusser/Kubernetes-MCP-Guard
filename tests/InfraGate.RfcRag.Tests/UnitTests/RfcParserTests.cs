@@ -91,4 +91,91 @@ public sealed class RfcParserTests
         string fixturePath = Path.Combine("TestData", "badfile.txt");
         await Assert.ThrowsAsync<FormatException>(() => Parser.ParseAsync(fixturePath, CancellationToken.None));
     }
+
+    [Fact]
+    public async Task NormativeKeywords_Dedup_DoesNotDoubleCountMustNotAsMust()
+    {
+        string fixturePath = Path.Combine("TestData", "rfc2119.txt");
+        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+
+        var mustNot = document.NormativeOccurrences.Where(n => n.Keyword == "MUST NOT").ToList();
+        var must = document.NormativeOccurrences.Where(n => n.Keyword == "MUST").ToList();
+
+        Assert.NotEmpty(mustNot);
+        Assert.NotEmpty(must);
+
+        foreach (NormativeOccurrence mn in mustNot)
+        {
+            bool hasOverlappingMust = must.Any(m =>
+                m.SectionId == mn.SectionId && m.LineOffset == mn.LineOffset);
+            Assert.False(hasOverlappingMust,
+                $"MUST NOT at section {mn.SectionId} line {mn.LineOffset} also counted as MUST");
+        }
+    }
+
+    [Fact]
+    public async Task AbnfBlocks_RealRfc9110_IncludesMultiLineDefinitions()
+    {
+        string fixturePath = Path.Combine("TestData", "rfc9110.txt");
+        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+
+        Assert.NotEmpty(document.AbnfBlocks);
+
+        bool hasMultiLineBlock = document.AbnfBlocks.Any(b => b.AbnfText.Contains('\n'));
+        Assert.True(hasMultiLineBlock, "Expected at least one ABNF block with 3+ lines");
+    }
+
+    [Fact]
+    public async Task PageHeaders_FormFeed_StripsSubsequentPageHeaders()
+    {
+        string fixturePath = Path.Combine("TestData", "rfc9999.txt");
+        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+
+        Assert.Equal(9999, document.Metadata.Number);
+
+        string combinedText = string.Join('\n', document.Sections.Select(s => s.Text));
+        Assert.DoesNotContain("[Page 2]", combinedText);
+        Assert.DoesNotContain("RFC 9999    Test RFC for Page Headers    June 2026", combinedText);
+
+        RfcSection? section2 = document.Sections.FirstOrDefault(s => s.Section == "2");
+        Assert.NotNull(section2);
+        Assert.Contains("page 2 content", section2!.Text);
+    }
+
+    [Fact]
+    public void RemoveTocBlock_StripsTocAndPreservesBody()
+    {
+        var lines = new List<string>
+        {
+            "Some preamble text.",
+            "",
+            "Table of Contents",
+            "",
+            "   1.  Introduction",
+            "     1.1.  Background",
+            "   2.  Main Content",
+            "",
+            "1.  Introduction",
+            "",
+            "This is the body."
+        };
+
+        IReadOnlyList<string> result = RfcParser.RemoveTocBlock(lines);
+
+        Assert.DoesNotContain("Table of Contents", result);
+        Assert.DoesNotContain("Main Content", result);
+        Assert.Contains("This is the body.", result);
+        // The non-indented "1.  Introduction" is the real section heading, not TOC
+        Assert.Contains("1.  Introduction", result);
+    }
+
+    [Fact]
+    public void RemoveTocBlock_NoToc_ReturnsSameList()
+    {
+        var lines = new List<string> { "Line 1", "Line 2", "Line 3" };
+        IReadOnlyList<string> result = RfcParser.RemoveTocBlock(lines);
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal("Line 1", result[0]);
+    }
 }

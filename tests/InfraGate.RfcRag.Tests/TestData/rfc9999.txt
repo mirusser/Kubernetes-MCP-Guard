@@ -1,0 +1,28 @@
+Network Working Group
+Request for Comments: 9999
+Category: Experimental
+ISSN: 2070-1721
+
+Test RFC for Page Headers
+June 2026
+
+Status of This Memo
+
+This document tests page header stripping.
+
+Copyright Notice
+
+Copyright (C) 2026 IETF Trust.
+
+1.  Introduction
+
+   This is page 1 content after the header block.
+   It should be preserved in the parsed output.
+
+   RFC 9999    Test RFC for Page Headers    June 2026
+   [Page 2]
+
+2.  Second Section
+
+   This is page 2 content after the form feed.
+   The page header should be stripped.

@@ -22,6 +22,7 @@ public sealed partial class RfcParser
         int rfcNumber = ExtractRfcNumber(fileName);
         RfcMetadata metadata = ExtractMetadata(lines, rfcNumber);
         IReadOnlyList<string> bodyLines = StripPageArtifacts(lines);
+        bodyLines = RemoveTocBlock(bodyLines);
         string url = $"https://www.rfc-editor.org/rfc/rfc{rfcNumber}.txt";
         IReadOnlyList<RfcSection> sections = SplitIntoSections(bodyLines, rfcNumber, metadata.Title, fileName, url);
         IReadOnlyList<RfcAbnfBlock> abnfBlocks = ExtractAbnfBlocks(sections);
@@ -133,6 +134,11 @@ public sealed partial class RfcParser
             if (t.Contains('\f', StringComparison.Ordinal))
             {
                 t = t.Replace("\f", "", StringComparison.Ordinal).Trim();
+                // Each form feed starts a new page — reset so its header lines
+                // (e.g. "RFC XXXX  Title  Month Year") are stripped.
+                // Reset BEFORE the empty-line guard so bare \f lines still
+                // reset the header state for the following page.
+                headerSkipped = false;
                 if (string.IsNullOrWhiteSpace(t)) continue;
             }
             if (PageFooterRegex().IsMatch(t)) continue;
@@ -145,6 +151,50 @@ public sealed partial class RfcParser
             result.Add(line.TrimEnd('\r', '\n'));
         }
         return result;
+    }
+
+    /// Remove the Table of Contents block from body lines.
+    /// TOC starts with "Table of Contents" or "Contents" on its own (trimmed) line.
+    /// TOC entries are indented lines with section numbers; the block ends just
+    /// before the first non-blank, non-indented line after the TOC marker.
+    internal static IReadOnlyList<string> RemoveTocBlock(IReadOnlyList<string> lines)
+    {
+        int tocStart = -1;
+        for (int i = 0; i < lines.Count; i++)
+        {
+            string t = lines[i].Trim();
+            if (string.Equals(t, "Table of Contents", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(t, "Contents", StringComparison.OrdinalIgnoreCase))
+            {
+                tocStart = i;
+                break;
+            }
+        }
+
+        if (tocStart < 0) return lines;
+
+        // Find end of TOC: skip blank and indented lines
+        int tocEnd = tocStart + 1;
+        while (tocEnd < lines.Count)
+        {
+            if (string.IsNullOrWhiteSpace(lines[tocEnd]))
+            {
+                tocEnd++;
+                continue;
+            }
+
+            if (char.IsWhiteSpace(lines[tocEnd][0]))
+            {
+                tocEnd++;
+                continue;
+            }
+
+            break;
+        }
+
+        if (tocEnd <= tocStart + 1) return lines;
+
+        return lines.Take(tocStart).Concat(lines.Skip(tocEnd)).ToList();
     }
 
     private static bool IsHeaderLine(string line)
@@ -191,14 +241,29 @@ public sealed partial class RfcParser
             var ls = section.Text.Split('\n'); int? abnfS = null;
             for (int i = 0; i < ls.Length; i++)
             {
-                bool isAbnf = AbnfLineRegex().IsMatch(ls[i].TrimEnd('\r'));
-                if (isAbnf && abnfS is null) abnfS = i;
-                else if (!isAbnf && abnfS is not null) { CollectAbnf(abnfS.Value, i, ls, section, blocks); abnfS = null; }
+                string line = ls[i].TrimEnd('\r');
+                if (AbnfLineRegex().IsMatch(line))
+                {
+                    abnfS ??= i;
+                }
+                else if (abnfS is not null)
+                {
+                    // Inside an ABNF block: accept continuation lines (2+ indent) and blanks.
+                    // Stop only when we hit a non-blank, non-indented line.
+                    if (string.IsNullOrWhiteSpace(line) || IsAbnfContinuationLine(line))
+                        continue;
+
+                    CollectAbnf(abnfS.Value, i, ls, section, blocks);
+                    abnfS = null;
+                }
             }
             if (abnfS is not null) CollectAbnf(abnfS.Value, ls.Length, ls, section, blocks);
         }
         return blocks;
     }
+
+    private static bool IsAbnfContinuationLine(string line) =>
+        line.Length >= 2 && line[0] == ' ' && line[1] == ' ';
 
     private static void CollectAbnf(int start, int end, string[] ls, RfcSection section, List<RfcAbnfBlock> blocks)
     {
@@ -220,6 +285,10 @@ public sealed partial class RfcParser
             var ls = section.Text.Split('\n');
             for (int i = 0; i < ls.Length; i++)
             {
+                // Track matched character ranges on this line to prevent
+                // sub-matches (e.g., "MUST" inside already-matched "MUST NOT").
+                var matchedRanges = new List<(int Start, int End)>();
+
                 foreach (string kw in NormativeKeywords)
                 {
                     int idx = 0;
@@ -227,7 +296,12 @@ public sealed partial class RfcParser
                     {
                         bool lo = idx == 0 || !char.IsLetterOrDigit(ls[i][idx - 1]);
                         bool ro = idx + kw.Length >= ls[i].Length || !char.IsLetterOrDigit(ls[i][idx + kw.Length]);
-                        if (lo && ro) occ.Add(new NormativeOccurrence { Id = Guid.NewGuid(), SectionId = section.Id, RfcNumber = section.RfcNumber, Keyword = kw, LineOffset = i });
+                        bool insideMatch = matchedRanges.Any(r => idx >= r.Start && idx < r.End);
+                        if (lo && ro && !insideMatch)
+                        {
+                            occ.Add(new NormativeOccurrence { Id = Guid.NewGuid(), SectionId = section.Id, RfcNumber = section.RfcNumber, Keyword = kw, LineOffset = i });
+                            matchedRanges.Add((idx, idx + kw.Length));
+                        }
                         idx++;
                     }
                 }

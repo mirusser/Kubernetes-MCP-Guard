@@ -377,14 +377,17 @@ public sealed class RfcRepository
         {
             var results = await connection.QueryAsync<SearchResult>(new CommandDefinition(
                 $$"""
-                select distinct on (rfc_sections.id)
-                    {{SearchResultProjection}},
-                    (1.0 / (1 + occurrences.line_offset))::float8 as "Score"
-                from rfc_rag.normative_occurrences occurrences
-                join rfc_rag.rfc_sections rfc_sections on rfc_sections.id = occurrences.section_id
-                where occurrences.keyword = upper(@Keyword)
-                  and (cast(@RfcNumbers as int[]) is null or occurrences.rfc_number = any(cast(@RfcNumbers as int[])))
-                order by rfc_sections.id, occurrences.line_offset
+                select * from (
+                    select distinct on (rfc_sections.id)
+                        {{SearchResultProjection}},
+                        (1.0 / (1 + occurrences.line_offset))::float8 as "Score"
+                    from rfc_rag.normative_occurrences occurrences
+                    join rfc_rag.rfc_sections rfc_sections on rfc_sections.id = occurrences.section_id
+                    where occurrences.keyword = upper(@Keyword)
+                      and (cast(@RfcNumbers as int[]) is null or occurrences.rfc_number = any(cast(@RfcNumbers as int[])))
+                    order by rfc_sections.id, occurrences.line_offset
+                ) ranked
+                order by "Score" desc, rfc_number, section
                 limit @Limit
                 """,
                 new { Keyword = keyword, RfcNumbers = rfcNumbers, Limit = NormalizeLimit(limit) },
@@ -409,14 +412,17 @@ public sealed class RfcRepository
         {
             var results = await connection.QueryAsync<SearchResult>(new CommandDefinition(
                 $$"""
-                select distinct on (rfc_sections.id)
-                    {{SearchResultProjection}},
-                    ts_rank(blocks.search_vector, plainto_tsquery('english', @Query))::float8 as "Score"
-                from rfc_rag.rfc_abnf_blocks blocks
-                join rfc_rag.rfc_sections rfc_sections on rfc_sections.id = blocks.section_id
-                where plainto_tsquery('english', @Query) @@ blocks.search_vector
-                  and (cast(@RfcNumbers as int[]) is null or blocks.rfc_number = any(cast(@RfcNumbers as int[])))
-                order by rfc_sections.id, "Score" desc
+                select * from (
+                    select distinct on (rfc_sections.id)
+                        {{SearchResultProjection}},
+                        ts_rank(blocks.search_vector, plainto_tsquery('english', @Query))::float8 as "Score"
+                    from rfc_rag.rfc_abnf_blocks blocks
+                    join rfc_rag.rfc_sections rfc_sections on rfc_sections.id = blocks.section_id
+                    where plainto_tsquery('english', @Query) @@ blocks.search_vector
+                      and (cast(@RfcNumbers as int[]) is null or blocks.rfc_number = any(cast(@RfcNumbers as int[])))
+                    order by rfc_sections.id, "Score" desc
+                ) ranked
+                order by "Score" desc, rfc_number, section
                 limit @Limit
                 """,
                 new { Query = query, RfcNumbers = rfcNumbers, Limit = NormalizeLimit(limit) },
