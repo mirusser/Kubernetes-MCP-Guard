@@ -29,4 +29,10 @@ public sealed class RfcRagOptions
 
     /// <summary>OpenRouter API base URL for embedding requests.</summary>
     public string OpenRouterEmbeddingEndpoint { get; set; } = "https://openrouter.ai/api/v1";
+
+    /// <summary>
+    /// Expected vector dimension for embeddings. Must match the pgvector column dimension.
+    /// Default (1536) matches text-embedding-3-small from OpenRouter/OpenAI.
+    /// </summary>
+    public int EmbeddingDimensions { get; set; } = 1536;
 }

@@ -53,10 +53,48 @@ public sealed class RfcIndexer : IIndexerService
 
         for (int index = 0; index < sourceFiles.Count; index++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            RfcSourceFile sourceFile = sourceFiles[index];
-            string sourceSha256 = await ComputeSha256Async(sourceFile.Path, cancellationToken).ConfigureAwait(false);
+            logger.LogInformation(
+                "Indexing RFC {RfcNumber} ({Current}/{Total})...",
+                sourceFiles[index].RfcNumber,
+                index + 1,
+                sourceFiles.Count);
 
+            await IndexFileAsync(sourceFiles[index], mirrorPath, force: false, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    public async Task IndexSingleAsync(int rfcNumber, bool force, CancellationToken cancellationToken)
+    {
+        string mirrorPath = ResolveMirrorPath(options.RfcMirrorPath);
+        if (!Directory.Exists(mirrorPath))
+        {
+            throw new DirectoryNotFoundException($"RFC mirror path '{mirrorPath}' does not exist.");
+        }
+
+        string filePath = Path.Combine(mirrorPath, $"rfc{rfcNumber}.txt");
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"RFC file not found at '{filePath}'.", filePath);
+        }
+
+        var sourceFile = new RfcSourceFile(filePath, rfcNumber);
+        await IndexFileAsync(sourceFile, mirrorPath, force, cancellationToken).ConfigureAwait(false);
+    }
+
+    public Task<int> GetIndexedCountAsync(CancellationToken cancellationToken) =>
+        repository.GetIndexedCountAsync(dataSource, cancellationToken);
+
+    private async Task IndexFileAsync(
+        RfcSourceFile sourceFile,
+        string mirrorPath,
+        bool force,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        string sourceSha256 = await ComputeSha256Async(sourceFile.Path, cancellationToken).ConfigureAwait(false);
+
+        if (!force)
+        {
             var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
             await using (connection.ConfigureAwait(false))
             {
@@ -68,43 +106,36 @@ public sealed class RfcIndexer : IIndexerService
                 if (string.Equals(indexedHash, sourceSha256, StringComparison.Ordinal))
                 {
                     logger.LogDebug("Skipping unchanged RFC {RfcNumber}", sourceFile.RfcNumber);
-                    continue;
+                    return;
                 }
             }
-
-            logger.LogInformation(
-                "Indexing RFC {RfcNumber} ({Current}/{Total})...",
-                sourceFile.RfcNumber,
-                index + 1,
-                sourceFiles.Count);
-
-            RfcDocument document = await parser.ParseAsync(sourceFile.Path, cancellationToken).ConfigureAwait(false);
-            string relativePath = Path.GetRelativePath(mirrorPath, sourceFile.Path);
-            IReadOnlyList<string> sectionTexts = document.Sections.Select(section => section.Text).ToArray();
-            IReadOnlyList<float[]> embeddings = await embeddingService.GenerateEmbeddingsAsync(
-                sectionTexts,
-                cancellationToken).ConfigureAwait(false);
-
-            IReadOnlyList<RfcSection> sections = document.Sections
-                .Select((section, sectionIndex) => section with
-                {
-                    SourcePath = sourceFile.Path,
-                    SourceSha256 = sourceSha256,
-                    Embedding = embeddings[sectionIndex]
-                })
-                .ToArray();
-
-            await StoreDocumentAsync(
-                document,
-                sections,
-                relativePath,
-                sourceSha256,
-                cancellationToken).ConfigureAwait(false);
         }
-    }
 
-    public Task<int> GetIndexedCountAsync(CancellationToken cancellationToken) =>
-        repository.GetIndexedCountAsync(dataSource, cancellationToken);
+        logger.LogInformation("Indexing RFC {RfcNumber}...", sourceFile.RfcNumber);
+
+        RfcDocument document = await parser.ParseAsync(sourceFile.Path, cancellationToken).ConfigureAwait(false);
+        string relativePath = Path.GetRelativePath(mirrorPath, sourceFile.Path);
+        IReadOnlyList<string> sectionTexts = document.Sections.Select(section => section.Text).ToArray();
+        IReadOnlyList<float[]> embeddings = await embeddingService.GenerateEmbeddingsAsync(
+            sectionTexts,
+            cancellationToken).ConfigureAwait(false);
+
+        IReadOnlyList<RfcSection> sections = document.Sections
+            .Select((section, sectionIndex) => section with
+            {
+                SourcePath = sourceFile.Path,
+                SourceSha256 = sourceSha256,
+                Embedding = embeddings[sectionIndex]
+            })
+            .ToArray();
+
+        await StoreDocumentAsync(
+            document,
+            sections,
+            relativePath,
+            sourceSha256,
+            cancellationToken).ConfigureAwait(false);
+    }
 
     private async Task StoreDocumentAsync(
         RfcDocument document,

@@ -8,12 +8,12 @@ Unit and integration tests for `InfraGate.RfcRag`.
 
 ```
 UnitTests/
-  RfcParserTests.cs          # 5 tests: metadata, sections, normative keywords
+  RfcParserTests.cs          # 14 tests: metadata, sections, ABNF, normative keywords, TOC stripping
 IntegrationTests/
   RfcRagIntegrationTests.cs  # 5 tests: migrations, indexing, search, sections, incremental skip
   (requires Docker)
 TestData/
-  rfc2119.txt, rfc9110.txt, rfc8446.txt  # Real RFC fixtures
+  rfc2119.txt, rfc3986.txt, rfc8446.txt, rfc9000.txt, rfc9110.txt, rfc9999.txt, badfile.txt
 ```
 
 ## Running

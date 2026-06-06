@@ -114,6 +114,32 @@ public sealed class RfcRagIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SearchAbnf_FindsGrammarBlocks_AcrossRecentRfcs()
+    {
+        await using var dataSource = await CreateMigratedDataSourceAsync();
+        IIndexerService indexer = CreateIndexer(dataSource);
+        SearchService search = CreateSearchService(dataSource);
+
+        await indexer.IndexAllAsync(CancellationToken.None);
+
+        IReadOnlyList<SearchResult> uriResults = await search.SearchAbnfAsync(
+            "URI", null, 10, CancellationToken.None);
+        Assert.Contains(uriResults, r => r.RfcNumber == 3986);
+
+        IReadOnlyList<SearchResult> httpResults = await search.SearchAbnfAsync(
+            "request-line", null, 10, CancellationToken.None);
+        Assert.Contains(httpResults, r => r.RfcNumber == 9110);
+
+        IReadOnlyList<SearchResult> quicResults = await search.SearchAbnfAsync(
+            "transport_parameters", null, 10, CancellationToken.None);
+        Assert.Contains(quicResults, r => r.RfcNumber == 9000);
+
+        IReadOnlyList<SearchResult> filteredResults = await search.SearchAbnfAsync(
+            "URI", [3986], 10, CancellationToken.None);
+        Assert.Contains(filteredResults, r => r.RfcNumber == 3986);
+    }
+
+    [Fact]
     public async Task IncrementalIndex_SkipsUnchangedRfcs()
     {
         await using var dataSource = await CreateMigratedDataSourceAsync();

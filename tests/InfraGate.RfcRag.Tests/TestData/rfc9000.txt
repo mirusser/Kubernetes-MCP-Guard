@@ -1,0 +1,298 @@
+
+
+Internet Engineering Task Force (IETF)                          J. Iyengar, Ed.
+Request for Comments: 9000                                       Fastly
+Category: Standards Track                                   M. Thomson, Ed.
+ISSN: 2070-1721                                               Mozilla
+                                                               May 2021
+
+
+                     QUIC: A UDP-Based Multiplexed and Secure Transport
+
+Abstract
+
+   This document defines the core of the QUIC transport protocol.  QUIC
+   provides applications with flow-controlled streams for structured
+   communication, low-latency connection establishment, and network
+   path migration.  QUIC includes security measures that ensure
+   confidentiality, integrity, and availability in a single handshake.
+   This document defines the QUIC transport protocol, including its
+   packet formats, frame types, and connection lifecycle.
+
+Status of This Memo
+
+   This is an Internet Standards Track document.
+
+   This document is a product of the Internet Engineering Task Force
+   (IETF).  It represents the consensus of the IETF community.  It has
+   received public review and has been approved for publication by the
+   Internet Engineering Steering Group (IESG).  Further information on
+   Internet Standards is available in Section 2 of RFC 7841.
+
+Copyright Notice
+
+   Copyright (c) 2021 IETF Trust and the persons identified as the
+   document authors.  All rights reserved.
+
+Table of Contents
+
+   1.  Introduction
+   2.  Conventions and Definitions
+   3.  QUIC Packet Formats
+     3.1.  Long Header Packets
+       3.1.1.  Version Negotiation
+     3.2.  Short Header Packets
+   4.  Frame Types and Formats
+     4.1.  STREAM Frames
+     4.2.  ACK Frames
+     4.3.  CRYPTO Frames
+     4.4.  CONNECTION_CLOSE Frames
+   5.  Connection Lifecycle
+   6.  Security Considerations
+   7.  IANA Considerations
+   Appendix A.  ABNF for Transport Parameters
+
+1.  Introduction
+
+   QUIC is a multiplexed and secure transport protocol that runs over
+   UDP.  QUIC provides features that are generally considered
+   essential to modern transport protocols, including multiplexing
+   without head-of-line blocking, connection migration, and mandatory
+   encryption.
+
+2.  Conventions and Definitions
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY",
+   and "OPTIONAL" in this document are to be interpreted as described
+   in BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in
+   all capitals, as shown here.
+
+3.  QUIC Packet Formats
+
+   QUIC defines two types of packet headers: long headers (used during
+   connection establishment) and short headers (used after the
+   connection is established).
+
+3.1.  Long Header Packets
+
+   Long header packets are used during connection establishment.  The
+   first byte of a long header packet contains the header form bit (1),
+   the fixed bit (1), and the long packet type.
+
+     Long Header Packet {
+       Header Form (1) = 1,
+       Fixed Bit (1) = 1,
+       Long Packet Type (2),
+       Type-Specific Bits (4),
+       Version (32),
+       Destination Connection ID (8..160),
+       Source Connection ID (8..160),
+       Type-Specific Payload (..),
+     }
+
+   The version field indicates the QUIC version.  The connection IDs
+   are used for connection identification and routing.
+
+3.1.1.  Version Negotiation
+
+   Version negotiation packets are sent in response to a client
+   initial packet when the server does not support the client's
+   version.
+
+     Version Negotiation Packet {
+       Header Form (1) = 1,
+       Fixed Bit (1) = 1,
+       Unused (4),
+       Version (32) = 0,
+       Destination Connection ID (8..160),
+       Source Connection ID (8..160),
+       Supported Version (32) ...,
+     }
+
+   The server MUST include at least one supported version in the
+   packet.
+
+3.2.  Short Header Packets
+
+   Short header packets are used after the connection is established.
+   The first byte of a short header packet contains the header form
+   bit (0) and the fixed bit (1).
+
+     Short Header Packet {
+       Header Form (1) = 0,
+       Fixed Bit (1) = 1,
+       Spin Bit (1),
+       Reserved Bits (2),
+       Key Phase (1),
+       Packet Number (8..32),
+       Destination Connection ID (8..160),
+       Protected Payload (..),
+     }
+
+   The packet number is used for packet protection and ACK generation.
+   The destination connection ID identifies the intended recipient.
+
+4.  Frame Types and Formats
+
+   Frames are the smallest unit of data in QUIC.  Each frame has a
+   type byte followed by type-specific fields.
+
+4.1.  STREAM Frames
+
+   STREAM frames carry application data.  They include the stream ID,
+   offset, and data.
+
+     STREAM Frame {
+       Type (i) = 0x08..0x0f,
+       Stream ID (i),
+       Offset (i),
+       Length (i),
+       Stream Data (..),
+     }
+
+   The type field uses the low 4 bits to indicate the presence of the
+   OFF bit, LEN bit, and FIN bit.
+
+4.2.  ACK Frames
+
+   ACK frames carry acknowledgment information for received packets.
+
+     ACK Frame {
+       Type (i) = 0x02..0x03,
+       Largest Acknowledged (i),
+       ACK Delay (i),
+       ACK Range Count (i),
+       First ACK Range (i),
+       ACK Range (..) ...,
+     }
+
+   The ACK Range Count specifies the number of additional ACK ranges.
+   Each ACK Range consists of a Gap and an ACK Range Length value.
+
+4.3.  CRYPTO Frames
+
+   CRYPTO frames transmit cryptographic handshake data.
+
+     CRYPTO Frame {
+       Type (i) = 0x06,
+       Offset (i),
+       Length (i),
+       Crypto Data (..),
+     }
+
+   CRYPTO frames are ordered by offset and MUST be processed in order.
+
+4.4.  CONNECTION_CLOSE Frames
+
+   CONNECTION_CLOSE frames are used to signal that the connection is
+   being closed.
+
+     CONNECTION_CLOSE Frame {
+       Type (i) = 0x1c..0x1d,
+       Error Code (i),
+       Frame Type (i),
+       Reason Phrase Length (i),
+       Reason Phrase (..),
+     }
+
+   The Frame Type field is only present in CONNECTION_CLOSE frames
+   that signal a transport error (type 0x1d).
+
+5.  Connection Lifecycle
+
+   A QUIC connection begins with a handshake using cryptographic
+   messages exchanged in CRYPTO frames.  Once the handshake completes,
+   endpoints exchange STREAM frames over short header packets.
+
+   A connection can be migrated to a new network path by sending
+   packets from a different UDP socket.  Connection migration MUST
+   use address validation to prevent amplification attacks.
+
+6.  Security Considerations
+
+   QUIC provides encryption of all transport parameters and
+   payload data.  Implementations MUST use the cryptographic
+   handshake defined in [QUIC-TLS] to establish session keys.
+
+7.  IANA Considerations
+
+   IANA has created registries for QUIC transport parameters,
+   frame types, and error codes.
+
+Appendix A.  ABNF for Transport Parameters
+
+   QUIC transport parameters are carried in the initial handshake.
+   The following ABNF defines the format of transport parameters.
+
+   transport_parameters = parameter *( "," parameter )
+
+   parameter = parameter_name "=" parameter_value
+
+   parameter_name  = 1*CHAR
+   parameter_value = 1*CHAR / hex_value
+
+   hex_value = "0x" 1*HEXDIG
+
+   ; QUIC transport parameter identifiers
+   initial_max_stream_data_bidi_local  = "initial_max_stream_data_bidi_local"
+   initial_max_stream_data_bidi_remote = "initial_max_stream_data_bidi_remote"
+   initial_max_stream_data_uni         = "initial_max_stream_data_uni"
+   initial_max_streams_bidi            = "initial_max_streams_bidi"
+   initial_max_streams_uni             = "initial_max_streams_uni"
+   initial_max_data                    = "initial_max_data"
+   active_connection_id_limit          = "active_connection_id_limit"
+   max_idle_timeout                    = "max_idle_timeout"
+
+   ; Frame types
+   frame_type = pad / ping / ack / crypto / stream
+              / max_data / max_stream_data / max_streams
+              / data_blocked / stream_data_blocked / streams_blocked
+              / new_connection_id / retire_connection_id
+              / connection_close / handshake_done
+
+   pad                = %x00
+   ping               = %x01
+   ack                = %x02-03
+   crypto             = %x06
+   stream             = %x08-0F
+   max_data           = %x10
+   max_stream_data    = %x11
+   max_streams        = %x12-13
+   data_blocked       = %x14
+   stream_data_blocked = %x15
+   streams_blocked    = %x16-17
+   new_connection_id  = %x18
+   retire_connection_id = %x19
+   connection_close   = %x1C-1D
+   handshake_done     = %x1E
+
+   ; Error codes
+   error_code = no_error / protocol_violation / internal_error
+              / flow_control_error / stream_limit_error
+              / stream_state_error / final_size_error
+              / frame_encoding_error / transport_parameter_error
+              / connection_id_limit_error / authentication_error
+              / ecn_error / version_migration_error
+
+   no_error                      = %x00
+   protocol_violation            = %x01
+   internal_error                = %x02
+   flow_control_error            = %x03
+   stream_limit_error            = %x04
+   stream_state_error            = %x05
+   final_size_error              = %x06
+   frame_encoding_error          = %x07
+   transport_parameter_error     = %x08
+   connection_id_limit_error     = %x09
+   authentication_error          = %x0A
+   ecn_error                     = %x0B
+   version_migration_error       = %x0C
+
+Authors' Addresses
+
+   Jana Iyengar
+   Fastly
+
+   Martin Thomson
+   Mozilla

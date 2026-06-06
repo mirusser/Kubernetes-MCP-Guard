@@ -23,6 +23,7 @@ public static class ServiceCollectionExtensions
                 ArgumentException.ThrowIfNullOrWhiteSpace(options.PostgresConnectionString);
 
                 var dataSourceBuilder = new NpgsqlDataSourceBuilder(options.PostgresConnectionString);
+                dataSourceBuilder.UseVector();
                 return dataSourceBuilder.Build();
             });
         }

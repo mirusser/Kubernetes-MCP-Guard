@@ -126,6 +126,35 @@ public sealed class RfcParserTests
     }
 
     [Fact]
+    public async Task ParseAsync_RealRfc3986_ExtractsUriGrammar()
+    {
+        string fixturePath = Path.Combine("TestData", "rfc3986.txt");
+        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+
+        Assert.Equal(3986, document.Metadata.Number);
+        Assert.Contains("URI", document.Metadata.Title);
+        Assert.True(document.Sections.Count > 5, $"Expected >5 sections, got {document.Sections.Count}");
+
+        Assert.NotEmpty(document.AbnfBlocks);
+        bool hasUriRule = document.AbnfBlocks.Any(b =>
+            b.RuleNames.Contains("URI", StringComparer.Ordinal));
+        Assert.True(hasUriRule, "Expected extracted ABNF to contain 'URI' rule");
+    }
+
+    [Fact]
+    public async Task ParseAsync_RealRfc9000_ExtractsQuicTransport()
+    {
+        string fixturePath = Path.Combine("TestData", "rfc9000.txt");
+        RfcDocument document = await Parser.ParseAsync(fixturePath, CancellationToken.None);
+
+        Assert.Equal(9000, document.Metadata.Number);
+        Assert.Contains("QUIC", document.Metadata.Title);
+        Assert.True(document.Sections.Count > 3, $"Expected >3 sections, got {document.Sections.Count}");
+
+        Assert.NotEmpty(document.AbnfBlocks);
+    }
+
+    [Fact]
     public async Task PageHeaders_FormFeed_StripsSubsequentPageHeaders()
     {
         string fixturePath = Path.Combine("TestData", "rfc9999.txt");

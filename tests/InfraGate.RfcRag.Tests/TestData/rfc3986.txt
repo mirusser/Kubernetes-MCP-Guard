@@ -1,0 +1,322 @@
+
+
+Internet Engineering Task Force (IETF)                       T. Berners-Lee
+Request for Comments: 3986                                         MIT/W3C
+STD: 66                                               R. Fielding, Ed.
+Obsoletes: 2732, 2396                                         Day Software
+Updates: 1738                                                L. Masinter
+Category: Standards Track                                    Adobe Systems
+ISSN: 2070-1721                                               January 2005
+
+
+                    Uniform Resource Identifier (URI): Generic Syntax
+
+Status of This Memo
+
+   This document specifies an Internet standards track protocol for the
+   Internet community, and requests discussion and suggestions for
+   improvements.  Please refer to the current edition of the "Internet
+   Official Protocol Standards" (STD 1) for the standardization state
+   and status of this protocol.  Distribution of this memo is unlimited.
+
+Copyright Notice
+
+   Copyright (C) 2005 IETF Trust and the persons identified as the
+   document authors.  All rights reserved.
+
+   This document defines the URI syntax as a generic syntax for
+   identifying resources.  It defines the grammar for URI components
+   including scheme, authority, path, query, and fragment.
+
+Table of Contents
+
+   1.  Introduction
+     1.1.  URI Syntax Overview
+   2.  Characters
+   3.  URI Syntax Components
+     3.1.  Scheme
+     3.2.  Authority
+       3.2.1.  User Information
+       3.2.2.  Host
+       3.2.3.  Port
+     3.3.  Path
+     3.4.  Query
+     3.5.  Fragment
+   4.  Usage
+   5.  Security Considerations
+   6.  IANA Considerations
+   7.  References
+   Appendix A.  Collected ABNF for URI
+
+1.  Introduction
+
+   A Uniform Resource Identifier (URI) is a compact sequence of
+   characters that identifies an abstract or physical resource.  This
+   specification defines the generic URI syntax and a process for
+   resolving URI references that might be in relative form.
+
+   The URI syntax is defined in ABNF in Appendix A and summarized
+   below.  Implementations MUST use the ABNF grammar to parse URIs
+   correctly.
+
+1.1.  URI Syntax Overview
+
+   The URI syntax is hierarchical and uses the following structure:
+
+      URI = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
+
+   The scheme component identifies the URI scheme (e.g., "http", "ftp",
+   "mailto").  The hierarchical part (hier-part) contains the authority
+   and path components.  An optional query component follows the path,
+   and an optional fragment component completes the URI.
+
+2.  Characters
+
+   URIs can be represented using a subset of US-ASCII.  Unreserved
+   characters include ALPHA, DIGIT, and a few special characters.
+   Reserved characters have special meaning in the URI syntax and MUST
+   be percent-encoded when used for other purposes.
+
+3.  URI Syntax Components
+
+3.1.  Scheme
+
+   Scheme names consist of a sequence of characters beginning with a
+   letter and followed by any combination of letters, digits, plus
+   ("+"), period ("."), or hyphen ("-").
+
+     scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+
+   Although schemes are case-insensitive, the canonical form is
+   lowercase.  Documents that use this specification MUST use lowercase
+   scheme names for consistency.
+
+3.2.  Authority
+
+   The authority component is preceded by a double slash ("//") and is
+   terminated by the next slash ("/"), question mark ("?"), or number
+   sign ("#") character, or by the end of the URI.
+
+     authority = [ userinfo "@" ] host [ ":" port ]
+
+   The authority component MAY include user information, a host
+   identifier, and a port number.
+
+3.2.1.  User Information
+
+   The userinfo subcomponent MAY include a username and optional
+   authentication information.
+
+     userinfo = *( unreserved / pct-encoded / sub-delims / ":" )
+
+   Use of the format "user:password" in the userinfo field is
+   deprecated.
+
+3.2.2.  Host
+
+   The host subcomponent MAY be a registered name (including a fully
+   qualified domain name), an IPv4 address, or an IPv6 address enclosed
+   in square brackets.
+
+     host = IP-literal / IPv4address / reg-name
+
+     IP-literal = "[" ( IPv6address / IPvFuture ) "]"
+
+     IPvFuture  = "v" 1*HEXDIG "." 1*( unreserved / sub-delims / ":" )
+
+     IPv6address =                            6( h16 ":" ) ls32
+                 /                       "::" 5( h16 ":" ) ls32
+                 / [               h16 ] "::" 4( h16 ":" ) ls32
+                 / [ *1( h16 ":" ) h16 ] "::" 3( h16 ":" ) ls32
+                 / [ *2( h16 ":" ) h16 ] "::" 2( h16 ":" ) ls32
+                 / [ *3( h16 ":" ) h16 ] "::"    h16 ":"   ls32
+                 / [ *4( h16 ":" ) h16 ] "::"              ls32
+                 / [ *5( h16 ":" ) h16 ] "::"              h16
+                 / [ *6( h16 ":" ) h16 ] "::"
+
+     h16           = 1*4HEXDIG
+     ls32          = ( h16 ":" h16 ) / IPv4address
+
+     IPv4address   = dec-octet "." dec-octet "." dec-octet "." dec-octet
+     dec-octet     = DIGIT
+                   / %x31-39 DIGIT
+                   / "1" 2DIGIT
+                   / "2" %x30-34 DIGIT
+                   / "25" %x30-35
+
+     reg-name      = *( unreserved / pct-encoded / sub-delims )
+
+3.2.3.  Port
+
+   The port subcomponent identifies the port number for the server.
+
+     port = *DIGIT
+
+   Most URI schemes define a default port number.  For example, the
+   "http" scheme uses port 80 and the "https" scheme uses port 443.
+
+3.3.  Path
+
+   The path component contains data specific to the authority (or the
+   scheme if no authority is present).  The path is terminated by the
+   first question mark ("?") or number sign ("#") character, or by the
+   end of the URI.
+
+     path          = path-abempty    ; begins with "/" or is empty
+                   / path-absolute   ; begins with "/" but not "//"
+                   / path-noscheme   ; begins with a non-colon segment
+                   / path-rootless   ; begins with a segment
+                   / path-empty      ; zero characters
+
+     path-abempty  = *( "/" segment )
+     path-absolute = "/" [ segment-nz *( "/" segment ) ]
+     path-noscheme = segment-nz-nc *( "/" segment )
+     path-rootless = segment-nz *( "/" segment )
+     path-empty    = 0<pchar>
+
+     segment       = *pchar
+     segment-nz    = 1*pchar
+     segment-nz-nc = 1*( unreserved / pct-encoded / sub-delims / "@" )
+                   ; non-zero-length segment without any colon ":"
+
+     pchar         = unreserved / pct-encoded / sub-delims / ":" / "@"
+
+3.4.  Query
+
+   The query component contains non-hierarchical data that, along with
+   data in the path component, identifies a resource within the scope
+   of the URI's scheme and naming authority.
+
+     query = *( pchar / "/" / "?" )
+
+   Query components are often used to carry form data or search
+   parameters.  The query string is traditionally a sequence of
+   key=value pairs separated by "&" or ";".
+
+3.5.  Fragment
+
+   The fragment identifier component allows indirect identification of
+   a secondary resource.
+
+     fragment = *( pchar / "/" / "?" )
+
+   The fragment identifier is processed solely by the user agent and
+   is not sent to the server during retrieval.  The semantics of the
+   fragment are defined by the primary resource's MIME type.
+
+4.  Usage
+
+   URIs are used in many protocols and applications.  HTTP uses URIs
+   to identify resources and specify targets for requests.  XML uses
+   URIs as namespace identifiers.  The ABNF grammar in Appendix A
+   provides the normative definition that all implementations MUST
+   follow to ensure interoperability.
+
+5.  Security Considerations
+
+   URI authors MUST NOT include unencoded ASCII control characters or
+   spaces in URIs.  Care MUST be taken when interpreting percent-
+   encoded octets that might be confused with reserved characters.
+
+6.  IANA Considerations
+
+   IANA maintains the URI Schemes registry at
+   https://www.iana.org/assignments/uri-schemes/.
+
+7.  References
+
+   [RFC5234] Crocker, D., Ed., and P. Overell, "Augmented BNF for
+             Syntax Specifications: ABNF", STD 68, RFC 5234,
+             January 2008.
+
+Appendix A.  Collected ABNF for URI
+
+   URI           = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
+
+   hier-part     = "//" authority path-abempty
+                 / path-absolute
+                 / path-rootless
+                 / path-empty
+
+   URI-reference = URI / relative-ref
+
+   absolute-URI  = scheme ":" hier-part [ "?" query ]
+
+   relative-ref  = relative-part [ "?" query ] [ "#" fragment ]
+
+   relative-part = "//" authority path-abempty
+                 / path-absolute
+                 / path-noscheme
+                 / path-empty
+
+   scheme        = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+
+   authority     = [ userinfo "@" ] host [ ":" port ]
+   userinfo      = *( unreserved / pct-encoded / sub-delims / ":" )
+   host          = IP-literal / IPv4address / reg-name
+   port          = *DIGIT
+
+   IP-literal    = "[" ( IPv6address / IPvFuture ) "]"
+
+   IPvFuture     = "v" 1*HEXDIG "." 1*( unreserved / sub-delims / ":" )
+
+   IPv6address   =                            6( h16 ":" ) ls32
+                 /                       "::" 5( h16 ":" ) ls32
+                 / [               h16 ] "::" 4( h16 ":" ) ls32
+                 / [ *1( h16 ":" ) h16 ] "::" 3( h16 ":" ) ls32
+                 / [ *2( h16 ":" ) h16 ] "::" 2( h16 ":" ) ls32
+                 / [ *3( h16 ":" ) h16 ] "::"    h16 ":"   ls32
+                 / [ *4( h16 ":" ) h16 ] "::"              ls32
+                 / [ *5( h16 ":" ) h16 ] "::"              h16
+                 / [ *6( h16 ":" ) h16 ] "::"
+
+   h16           = 1*4HEXDIG
+   ls32          = ( h16 ":" h16 ) / IPv4address
+
+   IPv4address   = dec-octet "." dec-octet "." dec-octet "." dec-octet
+   dec-octet     = DIGIT                 ; 0-9
+                 / %x31-39 DIGIT         ; 10-99
+                 / "1" 2DIGIT            ; 100-199
+                 / "2" %x30-34 DIGIT     ; 200-249
+                 / "25" %x30-35          ; 250-255
+
+   reg-name      = *( unreserved / pct-encoded / sub-delims )
+
+   path          = path-abempty    ; begins with "/" or is empty
+                 / path-absolute   ; begins with "/" but not "//"
+                 / path-noscheme   ; begins with a non-colon segment
+                 / path-rootless   ; begins with a segment
+                 / path-empty      ; zero characters
+
+   path-abempty  = *( "/" segment )
+   path-absolute = "/" [ segment-nz *( "/" segment ) ]
+   path-noscheme = segment-nz-nc *( "/" segment )
+   path-rootless = segment-nz *( "/" segment )
+   path-empty    = 0<pchar>
+
+   segment       = *pchar
+   segment-nz    = 1*pchar
+   segment-nz-nc = 1*( unreserved / pct-encoded / sub-delims / "@" )
+   pchar         = unreserved / pct-encoded / sub-delims / ":" / "@"
+
+   query         = *( pchar / "/" / "?" )
+   fragment      = *( pchar / "/" / "?" )
+
+   pct-encoded   = "%" HEXDIG HEXDIG
+
+   unreserved    = ALPHA / DIGIT / "-" / "." / "_" / "~"
+   reserved      = gen-delims / sub-delims
+   gen-delims    = ":" / "/" / "?" / "#" / "[" / "]" / "@"
+   sub-delims    = "!" / "$" / "&" / "'" / "(" / ")"
+                 / "*" / "+" / "," / ";" / "="
+
+Authors' Addresses
+
+   Tim Berners-Lee
+   MIT/W3C
+
+   Roy T. Fielding
+   Day Software
+
+   Larry Masinter
+   Adobe Systems
