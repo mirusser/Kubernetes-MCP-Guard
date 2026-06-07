@@ -29,23 +29,32 @@ public sealed partial class RfcParser
         }
 
         string title = ExtractTitle(rawText, fileName);
-        string cleanedText = StripPageHeadersFooters(rawText);
         int rfcNumber = ExtractRfcNumber(fileName);
         if (rfcNumber == 0)
         {
             throw new FormatException($"Could not extract RFC number from filename '{fileName}'.");
         }
 
+        // Final safety net: if ExtractTitle somehow returned empty/whitespace
+        // (shouldn't happen after the fallback change in ExtractTitle), use
+        // a placeholder so the downstream DB upsert doesn't crash indexing.
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            title = $"RFC {rfcNumber}";
+        }
+
+        string cleanedText = StripPageHeadersFooters(rawText);
+
         var metadata = new RfcMetadata
         {
             Number = rfcNumber,
             Title = title,
-            Date = ExtractField(cleanedText, "Date:"),
+            Date = ExtractField(cleanedText, "Date"),
             Category = ExtractCategory(cleanedText),
-            Obsoletes = ExtractIntArray(cleanedText, "Obsoletes:"),
-            Updates = ExtractIntArray(cleanedText, "Updates:"),
+            Obsoletes = ExtractIntArray(cleanedText, "Obsoletes"),
+            Updates = ExtractIntArray(cleanedText, "Updates"),
             Authors = ExtractAuthors(cleanedText),
-            Issn = ExtractField(cleanedText, "ISSN:")
+            Issn = ExtractField(cleanedText, "ISSN")
         };
 
         string bodyText = StripFrontMatter(cleanedText);
@@ -106,7 +115,7 @@ public sealed partial class RfcParser
             }
 
             if (titleLines.Count > 0)
-                return string.Join(" ", titleLines);
+                return string.Join(" ", titleLines).Trim();
         }
 
         // Fallback: walk backwards from "Status of This Memo" to find indented title.
@@ -141,10 +150,14 @@ public sealed partial class RfcParser
             }
 
             if (titleLines.Count > 0)
-                return string.Join(" ", titleLines);
+                return string.Join(" ", titleLines).Trim();
         }
 
-        return fileName;
+        // Final fallback: extract RFC number from the filename so the title is
+        // never empty or whitespace. Some RFC files have unusual formatting that
+        // the indented-title heuristics cannot parse.
+        var rfcMatch = RfcNumberRegex().Match(fileName);
+        return rfcMatch.Success ? $"RFC {rfcMatch.Groups[1].Value}" : fileName;
     }
 
     private static string ExtractField(string text, string fieldName)

@@ -1,8 +1,8 @@
-# InfraGate.RfcRag
+# RFCs RAG
 
 Local RAG (Retrieval-Augmented Generation) MCP server for RFCs. Indexes a local RFC mirror
 into PostgreSQL with pgvector for vector search and PostgreSQL full-text search for lexical
-retrieval, then exposes MCP tools for coding agents to search and cite RFCs with section-level
+retrieval, then exposes MCP tools for AI agents to search and cite RFCs with section-level
 precision.
 
 **Owns:** RFC parsing, section-based chunking, hybrid search (vector + lexical + exact),
@@ -21,16 +21,32 @@ ABNF grammar extraction, normative keyword indexing, MCP tool exposure
 # 1. Set up RFC mirror (one-time)
 rsync -avz --delete rsync.rfc-editor.org::rfcs-text-only ~/OtherRepos/rfc-mirror/
 
-# 2. Set environment variables
+# 2. Configure environment
+#
+# Option A — .env file (recommended):
+cp deploy/compose/rfc-rag.env.example .env.rfc-rag
+# edit .env.rfc-rag with your settings (especially OpenRouter API key,
+# Postgres connection string for your local instance, and mirror path)
+set -a && source .env.rfc-rag && set +a
+
+# Option B — manual export:
 export InfraGate__RfcRag__PostgresConnectionString="Host=localhost;Database=rfc_rag;Username=postgres;Password=postgres"
 export InfraGate__RfcRag__RfcMirrorPath="$HOME/OtherRepos/rfc-mirror"
 export InfraGate__OpenRouter__ApiKey="sk-or-..."
 
 # 3. Enable pgvector in PostgreSQL (one-time)
-psql "$InfraGate__RfcRag__PostgresConnectionString" -c "CREATE EXTENSION IF NOT EXISTS vector;"
+psql "Host=localhost;Database=rfc_rag;Username=postgres;Password=postgres" -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
 # 4. Build and run (auto-indexes on first start)
 dotnet run --project src/InfraGate.RfcRag/
+```
+
+To run via Docker Compose instead (no .NET SDK needed on the host):
+
+```bash
+cp deploy/compose/rfc-rag.env.example .env.rfc-rag
+# edit .env.rfc-rag with your settings
+docker compose --env-file .env.rfc-rag -f deploy/compose/rfc-rag.yaml up
 ```
 
 On first run, the server indexes all ~9,800 RFCs (~10-15 minutes). Subsequent starts use
@@ -300,4 +316,4 @@ This project depends on:
 - `Microsoft.Extensions.AI` for embedding abstraction
 - A local RFC mirror at the configured path (default: `~/OtherRepos/rfc-mirror/`)
 
-This project has no dependencies on other InfraGate projects. It is a standalone tool.
+It is a standalone tool.

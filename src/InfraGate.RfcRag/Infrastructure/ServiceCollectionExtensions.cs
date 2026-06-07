@@ -61,7 +61,7 @@ public static class ServiceCollectionExtensions
 
             var client = new OpenAIClient(new System.ClientModel.ApiKeyCredential(openRouterKey), openAiOptions);
             var embeddingClient = client.GetEmbeddingClient(options.EmbeddingModel);
-            return new OpenAiEmbeddingGeneratorAdapter(embeddingClient);
+            return embeddingClient.AsIEmbeddingGenerator();
         });
 
         services.TryAddSingleton<EmbeddingService>(sp =>

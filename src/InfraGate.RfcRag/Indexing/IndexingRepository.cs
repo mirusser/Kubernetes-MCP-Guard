@@ -52,7 +52,7 @@ public sealed class IndexingRepository
                 cmd.Parameters.AddWithValue("SourcePath", section.SourcePath);
                 cmd.Parameters.AddWithValue("Url", section.Url);
                 cmd.Parameters.AddWithValue("SourceSha256", section.SourceSha256);
-                cmd.Parameters.Add(new NpgsqlParameter("Embedding", NpgsqlDbType.Array | NpgsqlDbType.Real) { Value = section.Embedding });
+                cmd.Parameters.Add(new NpgsqlParameter("Embedding", NpgsqlDbType.Array | NpgsqlDbType.Real) { Value = (object?)section.Embedding ?? DBNull.Value });
                 batch.BatchCommands.Add(cmd);
             }
 
@@ -170,6 +170,10 @@ public sealed class IndexingRepository
         int sectionCount,
         int[] updates,
         int[] obsoletes,
+        string? date,
+        string? category,
+        string[] authors,
+        string? issn,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -181,9 +185,11 @@ public sealed class IndexingRepository
         await connection.ExecuteAsync(new CommandDefinition(
             """
             insert into rfc_rag.indexed_rfcs
-                (rfc_number, source_path, source_sha256, title, section_count, updates, obsoletes, indexed_at_utc)
+                (rfc_number, source_path, source_sha256, title, section_count,
+                 updates, obsoletes, rfc_date, category, authors, issn, indexed_at_utc)
             values
-                (@RfcNumber, @SourcePath, @SourceSha256, @Title, @SectionCount, @Updates, @Obsoletes, now())
+                (@RfcNumber, @SourcePath, @SourceSha256, @Title, @SectionCount,
+                 @Updates, @Obsoletes, @Date, @Category, @Authors, @Issn, now())
             on conflict (rfc_number) do update set
                 source_path = excluded.source_path,
                 source_sha256 = excluded.source_sha256,
@@ -191,6 +197,10 @@ public sealed class IndexingRepository
                 section_count = excluded.section_count,
                 updates = excluded.updates,
                 obsoletes = excluded.obsoletes,
+                rfc_date = excluded.rfc_date,
+                category = excluded.category,
+                authors = excluded.authors,
+                issn = excluded.issn,
                 indexed_at_utc = now()
             """,
             new
@@ -201,7 +211,11 @@ public sealed class IndexingRepository
                 Title = title,
                 SectionCount = sectionCount,
                 Updates = updates,
-                Obsoletes = obsoletes
+                Obsoletes = obsoletes,
+                Date = date,
+                Category = category,
+                Authors = authors,
+                Issn = issn
             },
             transaction,
             cancellationToken: cancellationToken)).ConfigureAwait(false);

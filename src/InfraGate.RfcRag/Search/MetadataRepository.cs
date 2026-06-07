@@ -33,7 +33,11 @@ public sealed class MetadataRepository
                     rfc_number as "Number",
                     title as "Title",
                     updates as "Updates",
-                    obsoletes as "Obsoletes"
+                    obsoletes as "Obsoletes",
+                    rfc_date as "Date",
+                    category as "Category",
+                    authors as "Authors",
+                    issn as "Issn"
                 from rfc_rag.indexed_rfcs
                 where rfc_number = @RfcNumber
                 """,
@@ -84,7 +88,9 @@ public sealed class MetadataRepository
                 """
                 select
                     rfc_number as "Number",
-                    title as "Title"
+                    title as "Title",
+                    updates as "Updates",
+                    obsoletes as "Obsoletes"
                 from rfc_rag.indexed_rfcs
                 where @RfcNumber = any(updates) or @RfcNumber = any(obsoletes)
                 order by rfc_number

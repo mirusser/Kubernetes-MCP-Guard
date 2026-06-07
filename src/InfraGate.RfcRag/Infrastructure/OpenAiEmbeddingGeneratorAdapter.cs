@@ -1,37 +1,19 @@
-using Microsoft.Extensions.AI;
-using OpenAI.Embeddings;
+using OpenAI;
 
 namespace InfraGate.RfcRag.Infrastructure;
 
-internal sealed class OpenAiEmbeddingGeneratorAdapter : IEmbeddingGenerator<string, Embedding<float>>
+/// <summary>
+/// Factory for creating an <see cref="IEmbeddingGenerator{TInput,TEmbedding}"/> backed by
+/// OpenRouter (or any OpenAI-compatible endpoint). Uses the official MEAI adapter from
+/// <c>Microsoft.Extensions.AI.OpenAI</c> which handles encoding format negotiation correctly.
+/// </summary>
+internal static class OpenAiEmbeddingGeneratorAdapter
 {
-    private readonly EmbeddingClient client;
-
-    public OpenAiEmbeddingGeneratorAdapter(EmbeddingClient client)
+    internal static IEmbeddingGenerator<string, Embedding<float>> Create(
+        string apiKey, string endpoint, string model)
     {
-        this.client = client;
+        var clientOptions = new OpenAIClientOptions { Endpoint = new Uri(endpoint) };
+        var openAiClient = new OpenAIClient(new System.ClientModel.ApiKeyCredential(apiKey), clientOptions);
+        return openAiClient.GetEmbeddingClient(model).AsIEmbeddingGenerator();
     }
-
-    public static EmbeddingGeneratorMetadata Metadata => new("OpenRouter", new Uri("https://openrouter.ai"));
-
-    public async Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
-        IEnumerable<string> values,
-        Microsoft.Extensions.AI.EmbeddingGenerationOptions? options = null,
-        CancellationToken cancellationToken = default)
-    {
-        var inputs = values.ToList();
-        var response = await client.GenerateEmbeddingsAsync(inputs, options: null, cancellationToken).ConfigureAwait(false);
-
-        var results = new List<Embedding<float>>(inputs.Count);
-        foreach (OpenAIEmbedding item in response.Value)
-        {
-            results.Add(new Embedding<float>(item.ToFloats()));
-        }
-
-        return new GeneratedEmbeddings<Embedding<float>>(results);
-    }
-
-    public object? GetService(Type? serviceType, object? key = null) => null;
-
-    public void Dispose() { }
 }

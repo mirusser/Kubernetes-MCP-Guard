@@ -29,15 +29,15 @@ public sealed class RfcRagIntegrationTests : IAsyncLifetime
 
     private PostgreSqlContainer? container;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         container = new PostgreSqlBuilder(PostgresImage)
             .Build();
 
-        await container.StartAsync();
+        await container.StartAsync(TestContext.Current.CancellationToken);
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (container is not null)
         {

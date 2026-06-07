@@ -198,6 +198,10 @@ public sealed class RfcIndexer : IIndexerService
                         sections.Count,
                         document.Metadata.Updates,
                         document.Metadata.Obsoletes,
+                        document.Metadata.Date,
+                        document.Metadata.Category,
+                        document.Metadata.Authors,
+                        document.Metadata.Issn,
                         cancellationToken).ConfigureAwait(false);
 
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

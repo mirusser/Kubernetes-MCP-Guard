@@ -163,11 +163,11 @@ public static class RfcRagTools
             updates = metadata.Updates,
             obsoletes = metadata.Obsoletes,
             updated_by = backRefs
-                .Where(r => !metadata.Obsoletes.Contains(r.Number))
+                .Where(r => r.Updates.Contains(rfcNumber))
                 .Select(r => new { r.Number, r.Title })
                 .ToArray(),
             obsoleted_by = backRefs
-                .Where(r => metadata.Obsoletes.Contains(r.Number))
+                .Where(r => r.Obsoletes.Contains(rfcNumber))
                 .Select(r => new { r.Number, r.Title })
                 .ToArray()
         });

@@ -13,6 +13,7 @@ tests/InfraGate.RfcRag.Tests/TestData/
 deploy/generated/*.env
 *-generated.txt
 generated-keys.txt
+.env.rfc-rag
 
 # ── Secrets & environment ────────────────────────────────────────────────────
 *.env
@@ -239,4 +240,3 @@ agents/
 .agents/skills/wpf
 .agents/skills/writing-mstest-tests
 .agents/skills/xunit
-.env.rfc-rag
