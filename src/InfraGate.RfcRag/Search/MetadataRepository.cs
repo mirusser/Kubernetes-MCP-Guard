@@ -22,7 +22,7 @@ public sealed class MetadataRepository
     /// </summary>
     public async Task<RfcMetadata?> GetIndexedRfcMetadataAsync(
         int rfcNumber,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using (connection.ConfigureAwait(false))
@@ -46,9 +46,9 @@ public sealed class MetadataRepository
     /// List indexed RFCs with pagination.
     /// </summary>
     public async Task<IReadOnlyList<RfcMetadata>> ListIndexedAsync(
-        int limit = 100,
-        int offset = 0,
-        CancellationToken cancellationToken = default)
+        int limit,
+        int offset,
+        CancellationToken cancellationToken)
     {
         var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using (connection.ConfigureAwait(false))
@@ -75,7 +75,7 @@ public sealed class MetadataRepository
     /// </summary>
     public async Task<IReadOnlyList<RfcMetadata>> FindBackReferencesAsync(
         int rfcNumber,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using (connection.ConfigureAwait(false))

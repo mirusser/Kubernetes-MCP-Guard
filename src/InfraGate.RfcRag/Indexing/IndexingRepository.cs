@@ -21,7 +21,7 @@ public sealed class IndexingRepository
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         IReadOnlyList<RfcSection> sections,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(transaction);
@@ -46,7 +46,7 @@ public sealed class IndexingRepository
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         IReadOnlyList<RfcAbnfBlock> blocks,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(transaction);
@@ -71,7 +71,7 @@ public sealed class IndexingRepository
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         IReadOnlyList<NormativeOccurrence> occurrences,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(transaction);
@@ -96,7 +96,7 @@ public sealed class IndexingRepository
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         int rfcNumber,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(transaction);
@@ -123,7 +123,7 @@ public sealed class IndexingRepository
         int sectionCount,
         int[] updates,
         int[] obsoletes,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(transaction);
@@ -166,7 +166,7 @@ public sealed class IndexingRepository
     /// </summary>
     public async Task<string?> GetIndexedRfcHashAsync(
         int rfcNumber,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using (connection.ConfigureAwait(false))

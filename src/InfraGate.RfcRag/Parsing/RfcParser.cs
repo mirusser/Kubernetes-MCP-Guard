@@ -5,12 +5,14 @@ namespace InfraGate.RfcRag.Parsing;
 
 public sealed partial class RfcParser
 {
-    private static readonly string[] NormativeKeywords =
-    [
-        "MUST NOT", "MUST", "REQUIRED", "SHALL NOT", "SHALL",
-        "SHOULD NOT", "SHOULD", "NOT RECOMMENDED", "RECOMMENDED",
-        "MAY", "OPTIONAL"
-    ];
+    // Longest-first alternation ensures "MUST NOT" is matched before "MUST" at the same position,
+    // preventing "MUST NOT" from being counted as both "MUST NOT" and "MUST".
+    private static readonly Regex NormativeKeywordsRegex = new(
+        @"\b(MUST NOT|MUST|REQUIRED|SHALL NOT|SHALL|SHOULD NOT|SHOULD|NOT RECOMMENDED|RECOMMENDED|MAY|OPTIONAL)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(1000));
+
+
 
     public async Task<RfcDocument> ParseAsync(string filePath, CancellationToken cancellationToken)
     {
@@ -22,6 +24,8 @@ public sealed partial class RfcParser
         string title = ExtractTitle(rawText, fileName);
         string cleanedText = StripPageHeadersFooters(rawText);
         int rfcNumber = ExtractRfcNumber(fileName);
+        if (rfcNumber == 0)
+            throw new FormatException($"Could not extract RFC number from filename '{fileName}'.");
 
         var metadata = new RfcMetadata
         {
@@ -60,18 +64,75 @@ public sealed partial class RfcParser
 
     private static string ExtractTitle(string rawText, string fileName)
     {
-        var match = TitleRegex().Match(rawText);
-        if (match.Success)
-            return match.Groups[1].Value.Trim();
-
-        // Fallback: use first non-empty line
-        using var reader = new StringReader(rawText);
-        string? line;
-        while ((line = reader.ReadLine()) is not null)
+        // RFC titles are indented (5+ leading spaces) on their own line(s) between
+        // the header metadata block and "Abstract". Walk backwards from Abstract to
+        // find the indented title, handling multi-line titles.
+        int abstractPos = rawText.IndexOf("Abstract", StringComparison.Ordinal);
+        if (abstractPos > 0)
         {
-            line = line.Trim();
-            if (line.Length > 0)
-                return line;
+            string beforeAbstract = rawText[..abstractPos];
+            var lines = beforeAbstract.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            var titleLines = new List<string>();
+            bool foundIndented = false;
+
+            for (int i = lines.Length - 1; i >= 0; i--)
+            {
+                string trimmed = lines[i].TrimEnd();
+                if (trimmed.Length == 0)
+                {
+                    if (foundIndented) break; // blank line after title ends the title block
+                    continue; // skip leading blank lines
+                }
+
+                bool startsWithFiveSpaces = lines[i].Length > 5 && lines[i].AsSpan(0, 5).IndexOfAnyExcept(' ') < 0;
+                if (startsWithFiveSpaces && !trimmed.StartsWith("Abstract", StringComparison.Ordinal))
+                {
+                    foundIndented = true;
+                    titleLines.Insert(0, trimmed);
+                }
+                else if (foundIndented)
+                {
+                    break; // non-indented line after title ends the title block
+                }
+            }
+
+            if (titleLines.Count > 0)
+                return string.Join(" ", titleLines);
+        }
+
+        // Fallback: walk backwards from "Status of This Memo" to find indented title.
+        // Needed for RFCs without an Abstract heading (e.g. RFC 3986).
+        int statusPos = rawText.IndexOf("Status of This Memo", StringComparison.OrdinalIgnoreCase);
+        if (statusPos > 0)
+        {
+            string beforeStatus = rawText[..statusPos];
+            var lines = beforeStatus.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            var titleLines = new List<string>();
+            bool foundIndented = false;
+
+            for (int i = lines.Length - 1; i >= 0; i--)
+            {
+                string trimmed = lines[i].TrimEnd();
+                if (trimmed.Length == 0)
+                {
+                    if (foundIndented) break;
+                    continue;
+                }
+
+                bool startsWithFiveSpaces = lines[i].Length > 5 && lines[i].AsSpan(0, 5).IndexOfAnyExcept(' ') < 0;
+                if (startsWithFiveSpaces && !trimmed.StartsWith("Status of This Memo", StringComparison.OrdinalIgnoreCase))
+                {
+                    foundIndented = true;
+                    titleLines.Insert(0, trimmed);
+                }
+                else if (foundIndented)
+                {
+                    break;
+                }
+            }
+
+            if (titleLines.Count > 0)
+                return string.Join(" ", titleLines);
         }
 
         return fileName;
@@ -137,15 +198,51 @@ public sealed partial class RfcParser
 
     private static string StripFrontMatter(string text)
     {
-        // Remove everything up to and including the "Status of This Memo" or first major section
-        int statusIndex = text.IndexOf("Status of This Memo", StringComparison.Ordinal);
-        if (statusIndex >= 0)
+        // Find "Status of This Memo" and strip everything up to and including
+        // the indented status paragraph that follows it.
+        int statusIndex = text.IndexOf("Status of This Memo", StringComparison.OrdinalIgnoreCase);
+        if (statusIndex < 0)
+            return text;
+
+        // Walk forward from Status heading, skipping blank lines and the indented
+        // status paragraph. Stop at the first non-indented, non-blank line
+        // (typically "Abstract", "Copyright Notice", or a section heading like "1.  ").
+        int pos = statusIndex + "Status of This Memo".Length;
+
+        while (pos < text.Length)
         {
-            int nextSection = text.IndexOf("\n\r\n", statusIndex, StringComparison.Ordinal);
-            if (nextSection < 0)
-                nextSection = text.IndexOf("\n\n\n", statusIndex, StringComparison.Ordinal);
-            if (nextSection > 0)
-                return text[(nextSection + 3)..];
+            int nextNewline = text.IndexOf('\n', pos);
+            if (nextNewline < 0)
+                return text;
+
+            int lineLen = nextNewline - pos;
+            if (lineLen == 0)
+            {
+                // Empty line — skip
+                pos = nextNewline + 1;
+                continue;
+            }
+
+            ReadOnlySpan<char> span = text.AsSpan(pos, lineLen);
+            bool allWhitespace = true;
+            foreach (char c in span)
+            {
+                if (!char.IsWhiteSpace(c))
+                {
+                    allWhitespace = false;
+                    break;
+                }
+            }
+
+            if (allWhitespace || char.IsWhiteSpace(span[0]))
+            {
+                // Whitespace-only or indented line — skip (still in status paragraph)
+                pos = nextNewline + 1;
+                continue;
+            }
+
+            // First non-indented, non-blank line — start of real content
+            return text[pos..];
         }
 
         return text;
@@ -220,7 +317,7 @@ public sealed partial class RfcParser
 
             // Check for section heading like "1.", "1.1.", "Appendix A.", etc.
             var sectionMatch = SectionHeadingRegex().Match(stripped);
-            if (sectionMatch.Success && stripped.TrimEnd().EndsWith(sectionMatch.Groups[0].Value.TrimEnd(), StringComparison.Ordinal))
+            if (sectionMatch.Success)
             {
                 FlushSection();
                 currentSection = sectionMatch.Groups[1].Value;
@@ -228,7 +325,10 @@ public sealed partial class RfcParser
                 currentLines.Clear();
                 sectionCounter++;
 
-                // Skip the heading line itself (don't add to section text)
+                // Include the heading text as the first line of section body.
+                // For old-style RFCs the body starts on the same line as the heading ("1. MUST ...").
+                // For new-style RFCs the heading is a short label and the body follows separately.
+                currentLines.Add(currentHeading);
                 continue;
             }
 
@@ -246,25 +346,65 @@ public sealed partial class RfcParser
         int rfcNumber)
     {
         var blocks = new List<RfcAbnfBlock>();
-        var abnfRegex = AbnfBlockRegex();
+        var ruleRegex = AbnfRuleRegex();
 
         foreach (var section in sections)
         {
-            var matches = abnfRegex.Matches(section.Text);
-            foreach (Match match in matches)
-            {
-                string abnfText = match.Groups[1].Value.Trim();
-                var ruleNames = ExtractRuleNames(abnfText);
+            string[] lines = section.Text.Split('\n');
 
-                blocks.Add(new RfcAbnfBlock
+            // Count rule definition lines in this section.
+            // Only sections with at least 1 rule line are grammar sections;
+            // this captures single-rule subsections such as "request-line = method SP ...".
+            int ruleCount = 0;
+            foreach (string line in lines)
+            {
+                if (ruleRegex.IsMatch(line))
+                    ruleCount++;
+            }
+
+            if (ruleCount < 1)
+                continue;
+
+            // Group contiguous rule definition + continuation lines into blocks.
+            int i = 0;
+            while (i < lines.Length)
+            {
+                // Skip non-rule lines
+                while (i < lines.Length && !ruleRegex.IsMatch(lines[i]))
+                    i++;
+
+                if (i >= lines.Length)
+                    break;
+
+                int blockStart = i;
+                i++;
+
+                // Include continuation lines: non-blank, indented, not a new rule
+                while (i < lines.Length)
                 {
-                    Id = Guid.NewGuid(),
-                    SectionId = section.Id,
-                    RfcNumber = rfcNumber,
-                    Section = section.Section,
-                    AbnfText = abnfText,
-                    RuleNames = ruleNames
-                });
+                    string trimmed = lines[i].Trim();
+                    if (trimmed.Length == 0)
+                        break;
+                    if (ruleRegex.IsMatch(lines[i]))
+                        break;
+                    if (!char.IsWhiteSpace(lines[i][0]))
+                        break;
+                    i++;
+                }
+
+                string blockText = string.Join("\n", lines, blockStart, i - blockStart).Trim();
+                if (blockText.Length > 0)
+                {
+                    blocks.Add(new RfcAbnfBlock
+                    {
+                        Id = Guid.NewGuid(),
+                        SectionId = section.Id,
+                        RfcNumber = rfcNumber,
+                        Section = section.Section,
+                        AbnfText = blockText,
+                        RuleNames = ExtractRuleNames(blockText)
+                    });
+                }
             }
         }
 
@@ -303,28 +443,17 @@ public sealed partial class RfcParser
             string? line;
             while ((line = reader.ReadLine()) is not null)
             {
-                string upperLine = line.ToUpperInvariant();
-                foreach (string keyword in NormativeKeywords)
+                var matches = NormativeKeywordsRegex.Matches(line);
+                foreach (Match match in matches)
                 {
-                    int index = 0;
-                    while ((index = upperLine.IndexOf(keyword, index, StringComparison.Ordinal)) >= 0)
+                    occurrences.Add(new NormativeOccurrence
                     {
-                        // Verify it's a standalone keyword (not part of a longer word)
-                        if ((index == 0 || !char.IsLetterOrDigit(upperLine[index - 1])) &&
-                            (index + keyword.Length >= upperLine.Length || !char.IsLetterOrDigit(upperLine[index + keyword.Length])))
-                        {
-                            occurrences.Add(new NormativeOccurrence
-                            {
-                                Id = Guid.NewGuid(),
-                                SectionId = section.Id,
-                                RfcNumber = rfcNumber,
-                                Keyword = keyword,
-                                LineOffset = lineOffset
-                            });
-                        }
-
-                        index += keyword.Length;
-                    }
+                        Id = Guid.NewGuid(),
+                        SectionId = section.Id,
+                        RfcNumber = rfcNumber,
+                        Keyword = match.Groups[1].Value.ToUpperInvariant(),
+                        LineOffset = lineOffset
+                    });
                 }
 
                 lineOffset++;
@@ -340,7 +469,7 @@ public sealed partial class RfcParser
     /// continues through subsequent indented lines until a non-indented,
     /// non-empty line is found (real content heading).
     /// </summary>
-    public static IReadOnlyList<string> RemoveTocBlock(IReadOnlyList<string> lines)
+    private static IReadOnlyList<string> RemoveTocBlock(IReadOnlyList<string> lines)
     {
         var result = new List<string>(lines.Count);
         bool inToc = false;
@@ -370,9 +499,6 @@ public sealed partial class RfcParser
     [GeneratedRegex(@"rfc(\d+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex RfcNumberRegex();
 
-    [GeneratedRegex(@"^(.+?)(?:\r?\n|$)", RegexOptions.Multiline, 1000)]
-    private static partial Regex TitleRegex();
-
     [GeneratedRegex(@"([A-Za-z\s/]+):\s*(.*?)(?=\n[A-Za-z\s/]+:\s|\n{2,}|\Z)", RegexOptions.Singleline, 1000)]
     private static partial Regex FieldRegex();
 
@@ -385,23 +511,20 @@ public sealed partial class RfcParser
     [GeneratedRegex(@"Authors?:\s*(.+?)(?:\r?\n\s)", RegexOptions.Singleline, 1000)]
     private static partial Regex AuthorsRegex();
 
-    [GeneratedRegex(@"(?m)^RFC\s+\d+\s+.*$", RegexOptions.None, 1000)]
+    [GeneratedRegex(@"(?m)^[^\S\r\n]*RFC\s+\d+\s+.*$", RegexOptions.None, 1000)]
     private static partial Regex PageHeaderRegex();
 
-    [GeneratedRegex(@"(?m)^\[Page\s+\d+\]$", RegexOptions.None, 1000)]
+    [GeneratedRegex(@"(?m)^[^\S\r\n]*\[Page\s+\d+\]$", RegexOptions.None, 1000)]
     private static partial Regex PageFooterRegex();
 
-    [GeneratedRegex(@"(?m)^\[Page\s+\d+\]", RegexOptions.None, 1000)]
+    [GeneratedRegex(@"(?m)^[^\S\r\n]*\[Page\s+\d+\]", RegexOptions.None, 1000)]
     private static partial Regex PageArtifactRegex();
 
     [GeneratedRegex(@"Table of Contents\s*$.*?(?=^\d+\.\s)", RegexOptions.Singleline | RegexOptions.Multiline, 1000)]
     private static partial Regex TocRegex();
 
-    [GeneratedRegex(@"^(\d+(?:\.\d+)*|Appendix\s+[A-Z](?:\.\d+)*)\s+(.+?)$", RegexOptions.Multiline, 1000)]
+    [GeneratedRegex(@"^(\d+(?:\.\d+)*|Appendix\s+[A-Z](?:\.\d+)*)\.\s+(.+?)$", RegexOptions.Multiline, 1000)]
     private static partial Regex SectionHeadingRegex();
-
-    [GeneratedRegex(@"```abnf\s*\n(.*?)\n```", RegexOptions.Singleline, 1000)]
-    private static partial Regex AbnfBlockRegex();
 
     [GeneratedRegex(@"^\s*([a-zA-Z][a-zA-Z0-9-]*)\s*=\s*/?\s*", RegexOptions.Multiline, 1000)]
     private static partial Regex AbnfRuleRegex();

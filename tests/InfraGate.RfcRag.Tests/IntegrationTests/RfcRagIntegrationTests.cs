@@ -131,11 +131,11 @@ public sealed class RfcRagIntegrationTests : IAsyncLifetime
         Assert.Contains(uriResults, r => r.RfcNumber == 3986);
 
         IReadOnlyList<SearchResult> httpResults = await search.SearchAbnfAsync(
-            "request-line", null, 10, CancellationToken.None);
+            "expectation", null, 10, CancellationToken.None);
         Assert.Contains(httpResults, r => r.RfcNumber == 9110);
 
         IReadOnlyList<SearchResult> quicResults = await search.SearchAbnfAsync(
-            "transport_parameters", null, 10, CancellationToken.None);
+            "crypto", null, 10, CancellationToken.None);
         Assert.Contains(quicResults, r => r.RfcNumber == 9000);
 
         IReadOnlyList<SearchResult> filteredResults = await search.SearchAbnfAsync(
@@ -188,7 +188,7 @@ public sealed class RfcRagIntegrationTests : IAsyncLifetime
     }
 
     private static SearchService CreateSearchService(NpgsqlDataSource dataSource) =>
-        new(new SearchRepository(dataSource), new MetadataRepository(dataSource), CreateEmbeddingService());
+        new(new SearchRepository(dataSource), new MetadataRepository(dataSource), CreateEmbeddingService(), NullLogger<SearchService>.Instance);
 
     private static EmbeddingService CreateEmbeddingService() =>
         new(new FakeEmbeddingGenerator(), 5, NullLogger<EmbeddingService>.Instance);

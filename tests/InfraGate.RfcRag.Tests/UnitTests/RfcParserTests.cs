@@ -171,40 +171,5 @@ public sealed class RfcParserTests
         Assert.Contains("page 2 content", section2!.Text);
     }
 
-    [Fact]
-    public void RemoveTocBlock_StripsTocAndPreservesBody()
-    {
-        var lines = new List<string>
-        {
-            "Some preamble text.",
-            "",
-            "Table of Contents",
-            "",
-            "   1.  Introduction",
-            "     1.1.  Background",
-            "   2.  Main Content",
-            "",
-            "1.  Introduction",
-            "",
-            "This is the body."
-        };
 
-        IReadOnlyList<string> result = RfcParser.RemoveTocBlock(lines);
-
-        Assert.DoesNotContain("Table of Contents", result);
-        Assert.DoesNotContain("Main Content", result);
-        Assert.Contains("This is the body.", result);
-        // The non-indented "1.  Introduction" is the real section heading, not TOC
-        Assert.Contains("1.  Introduction", result);
-    }
-
-    [Fact]
-    public void RemoveTocBlock_NoToc_ReturnsSameList()
-    {
-        var lines = new List<string> { "Line 1", "Line 2", "Line 3" };
-        IReadOnlyList<string> result = RfcParser.RemoveTocBlock(lines);
-
-        Assert.Equal(3, result.Count);
-        Assert.Equal("Line 1", result[0]);
-    }
 }

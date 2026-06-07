@@ -41,7 +41,6 @@ public sealed class SearchRepository
         rfc_sections.url as "Url"
         """;
 
-    private const int DefaultLimit = 10;
     private const int MaxLimit = 100;
 
     /// <summary>
@@ -49,8 +48,8 @@ public sealed class SearchRepository
     /// </summary>
     public async Task<IReadOnlyList<SearchResult>> SearchLexicalAsync(
         string query,
-        int limit = DefaultLimit,
-        CancellationToken cancellationToken = default)
+        int limit,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(query);
 
@@ -80,8 +79,8 @@ public sealed class SearchRepository
     /// </summary>
     public async Task<IReadOnlyList<SearchResult>> SearchVectorAsync(
         float[] embedding,
-        int limit = DefaultLimit,
-        CancellationToken cancellationToken = default)
+        int limit,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(embedding);
 
@@ -113,8 +112,8 @@ public sealed class SearchRepository
     public async Task<IReadOnlyList<SearchResult>> SearchHybridAsync(
         string query,
         float[] embedding,
-        int limit = DefaultLimit,
-        CancellationToken cancellationToken = default)
+        int limit,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(query);
         ArgumentNullException.ThrowIfNull(embedding);
@@ -172,7 +171,7 @@ public sealed class SearchRepository
     public async Task<RfcSection?> GetSectionAsync(
         int rfcNumber,
         string section,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(section);
 
@@ -195,7 +194,7 @@ public sealed class SearchRepository
     /// </summary>
     public async Task<IReadOnlyList<RfcSection>> GetRfcAsync(
         int rfcNumber,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using (connection.ConfigureAwait(false))
@@ -219,9 +218,9 @@ public sealed class SearchRepository
     /// </summary>
     public async Task<IReadOnlyList<SearchResult>> SearchNormativeAsync(
         string keyword,
-        int[]? rfcNumbers = null,
-        int limit = 20,
-        CancellationToken cancellationToken = default)
+        int[]? rfcNumbers,
+        int limit,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
 
@@ -237,13 +236,13 @@ public sealed class SearchRepository
                     from rfc_rag.normative_occurrences occurrences
                     join rfc_rag.rfc_sections rfc_sections on rfc_sections.id = occurrences.section_id
                     where occurrences.keyword = upper(@Keyword)
-                      and (cast(@RfcNumbers as int[]) is null or occurrences.rfc_number = any(cast(@RfcNumbers as int[])))
+                      {{(rfcNumbers is not null ? "and occurrences.rfc_number = any(@RfcNumbers)" : "")}}
                     order by rfc_sections.id, occurrences.line_offset
                 ) ranked
-                order by "Score" desc, rfc_number, section
+                order by "Score" desc, "RfcNumber", "Section"
                 limit @Limit
                 """,
-                new { Keyword = keyword, RfcNumbers = rfcNumbers, Limit = NormalizeLimit(limit) },
+                new { Keyword = keyword, RfcNumbers = rfcNumbers ?? [], Limit = NormalizeLimit(limit) },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
             return results.AsList();
@@ -255,9 +254,9 @@ public sealed class SearchRepository
     /// </summary>
     public async Task<IReadOnlyList<SearchResult>> SearchAbnfAsync(
         string query,
-        int[]? rfcNumbers = null,
-        int limit = 20,
-        CancellationToken cancellationToken = default)
+        int[]? rfcNumbers,
+        int limit,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(query);
 
@@ -272,14 +271,15 @@ public sealed class SearchRepository
                         ts_rank(blocks.search_vector, plainto_tsquery('english', @Query))::float8 as "Score"
                     from rfc_rag.rfc_abnf_blocks blocks
                     join rfc_rag.rfc_sections rfc_sections on rfc_sections.id = blocks.section_id
-                    where plainto_tsquery('english', @Query) @@ blocks.search_vector
-                      and (cast(@RfcNumbers as int[]) is null or blocks.rfc_number = any(cast(@RfcNumbers as int[])))
+                    where (plainto_tsquery('english', @Query) @@ blocks.search_vector
+                       or blocks.abnf_text ilike '%' || @Query || '%')
+                      {{(rfcNumbers is not null ? "and blocks.rfc_number = any(@RfcNumbers)" : "")}}
                     order by rfc_sections.id, "Score" desc
                 ) ranked
-                order by "Score" desc, rfc_number, section
+                order by "Score" desc, "RfcNumber", "Section"
                 limit @Limit
                 """,
-                new { Query = query, RfcNumbers = rfcNumbers, Limit = NormalizeLimit(limit) },
+                new { Query = query, RfcNumbers = rfcNumbers ?? [], Limit = NormalizeLimit(limit) },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
             return results.AsList();
