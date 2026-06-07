@@ -1,31 +1,40 @@
 using System.Text.RegularExpressions;
-using InfraGate.RfcRag.Models;
 
 namespace InfraGate.RfcRag.Parsing;
 
 public sealed partial class RfcParser
 {
-    // Longest-first alternation ensures "MUST NOT" is matched before "MUST" at the same position,
-    // preventing "MUST NOT" from being counted as both "MUST NOT" and "MUST".
-    private static readonly Regex NormativeKeywordsRegex = new(
-        @"\b(MUST NOT|MUST|REQUIRED|SHALL NOT|SHALL|SHOULD NOT|SHOULD|NOT RECOMMENDED|RECOMMENDED|MAY|OPTIONAL)\b",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled,
-        TimeSpan.FromMilliseconds(1000));
-
-
-
     public async Task<RfcDocument> ParseAsync(string filePath, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-
-        string fileName = Path.GetFileName(filePath);
         string rawText = await File.ReadAllTextAsync(filePath, cancellationToken).ConfigureAwait(false);
+        return ParseContent(rawText, Path.GetFileName(filePath));
+    }
+
+    /// <summary>
+    /// Parses an RFC document from already-read text, avoiding a second file read when the
+    /// caller already holds the file bytes (e.g. for SHA-256 hashing).
+    /// </summary>
+    public RfcDocument ParseContent(string rawText, string fileName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(rawText);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+
+        // PostgreSQL TEXT columns reject embedded null bytes (\0).
+        // Some RFC files in the mirror contain them (e.g. old format encoding artifacts).
+        // Guard with Contains to avoid the allocation in the common null-free case.
+        if (rawText.Contains('\0', StringComparison.Ordinal))
+        {
+            rawText = rawText.Replace("\0", string.Empty, StringComparison.Ordinal);
+        }
 
         string title = ExtractTitle(rawText, fileName);
         string cleanedText = StripPageHeadersFooters(rawText);
         int rfcNumber = ExtractRfcNumber(fileName);
         if (rfcNumber == 0)
+        {
             throw new FormatException($"Could not extract RFC number from filename '{fileName}'.");
+        }
 
         var metadata = new RfcMetadata
         {
@@ -443,7 +452,7 @@ public sealed partial class RfcParser
             string? line;
             while ((line = reader.ReadLine()) is not null)
             {
-                var matches = NormativeKeywordsRegex.Matches(line);
+                var matches = NormativeKeywordsRegex().Matches(line);
                 foreach (Match match in matches)
                 {
                     occurrences.Add(new NormativeOccurrence
@@ -463,38 +472,11 @@ public sealed partial class RfcParser
         return occurrences.AsReadOnly();
     }
 
-    /// <summary>
-    /// Removes the Table of Contents block from a list of text lines.
-    /// The TOC block starts with an indented "Table of Contents" line and
-    /// continues through subsequent indented lines until a non-indented,
-    /// non-empty line is found (real content heading).
-    /// </summary>
-    private static IReadOnlyList<string> RemoveTocBlock(IReadOnlyList<string> lines)
-    {
-        var result = new List<string>(lines.Count);
-        bool inToc = false;
-
-        foreach (string line in lines)
-        {
-            if (!inToc && line.TrimStart().StartsWith("Table of Contents", StringComparison.OrdinalIgnoreCase))
-            {
-                inToc = true;
-                continue;
-            }
-
-            if (inToc)
-            {
-                if (line.Length == 0 || char.IsWhiteSpace(line[0]))
-                    continue;
-
-                inToc = false;
-            }
-
-            result.Add(line);
-        }
-
-        return result;
-    }
+    // Longest-first alternation ensures "MUST NOT" is matched before "MUST" at the same position,
+    // preventing "MUST NOT" from being counted as both "MUST NOT" and "MUST".
+    [GeneratedRegex(@"\b(MUST NOT|MUST|REQUIRED|SHALL NOT|SHALL|SHOULD NOT|SHOULD|NOT RECOMMENDED|RECOMMENDED|MAY|OPTIONAL)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex NormativeKeywordsRegex();
 
     [GeneratedRegex(@"rfc(\d+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex RfcNumberRegex();

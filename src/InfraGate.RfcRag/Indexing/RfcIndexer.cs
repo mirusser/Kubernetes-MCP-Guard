@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using InfraGate.RfcRag.Models;
+using System.Text;
 
 namespace InfraGate.RfcRag.Indexing;
 
@@ -43,25 +43,34 @@ public sealed class RfcIndexer : IIndexerService
             throw new DirectoryNotFoundException($"RFC mirror path '{mirrorPath}' does not exist.");
         }
 
-        IReadOnlyList<RfcSourceFile> sourceFiles = Directory
+        IEnumerable<RfcSourceFile> sourceFiles = Directory
             .EnumerateFiles(mirrorPath, "rfc*.txt", SearchOption.AllDirectories)
             .Select(TryCreateSourceFile)
-            .OfType<RfcSourceFile>()
-            .OrderBy(file => file.RfcNumber)
-            .ToArray();
+            .OfType<RfcSourceFile>();
 
-        logger.LogInformation("Indexing {RfcCount} RFC source files from {MirrorPath}", sourceFiles.Count, mirrorPath);
+        // Single query to load all existing hashes, avoiding N individual SELECTs during the parallel loop
+        Dictionary<int, string> indexedHashes = await repository
+            .GetAllIndexedHashesAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-        for (int index = 0; index < sourceFiles.Count; index++)
+        logger.LogInformation("Indexing RFC source files from {MirrorPath}", mirrorPath);
+
+        var parallelOptions = new ParallelOptions
         {
-            logger.LogInformation(
-                "Indexing RFC {RfcNumber} ({Current}/{Total})...",
-                sourceFiles[index].RfcNumber,
-                index + 1,
-                sourceFiles.Count);
+            // I/O-bound (embedding HTTP + DB writes): higher concurrency than CPU count is correct
+            MaxDegreeOfParallelism = options.MaxIndexingParallelism,
+            CancellationToken = cancellationToken
+        };
 
-            await IndexFileAsync(sourceFiles[index], mirrorPath, force: false, cancellationToken).ConfigureAwait(false);
-        }
+        await Parallel.ForEachAsync(
+            sourceFiles,
+            parallelOptions,
+            async (sourceFile, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                logger.LogDebug("Indexing RFC {RfcNumber}...", sourceFile.RfcNumber);
+                await IndexFileAsync(sourceFile, mirrorPath, force: false, indexedHashes, ct).ConfigureAwait(false);
+            }).ConfigureAwait(false);
     }
 
     public async Task IndexSingleAsync(int rfcNumber, bool force, CancellationToken cancellationToken)
@@ -79,7 +88,7 @@ public sealed class RfcIndexer : IIndexerService
         }
 
         var sourceFile = new RfcSourceFile(filePath, rfcNumber);
-        await IndexFileAsync(sourceFile, mirrorPath, force, cancellationToken).ConfigureAwait(false);
+        await IndexFileAsync(sourceFile, mirrorPath, force, cachedHashes: null, cancellationToken).ConfigureAwait(false);
     }
 
     public Task<int> GetIndexedCountAsync(CancellationToken cancellationToken) =>
@@ -89,16 +98,20 @@ public sealed class RfcIndexer : IIndexerService
         RfcSourceFile sourceFile,
         string mirrorPath,
         bool force,
+        IReadOnlyDictionary<int, string>? cachedHashes,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        string sourceSha256 = await ComputeSha256Async(sourceFile.Path, cancellationToken).ConfigureAwait(false);
+
+        // Read file bytes once — used for both SHA-256 and parsing (avoids a second file read)
+        byte[] fileBytes = await File.ReadAllBytesAsync(sourceFile.Path, cancellationToken).ConfigureAwait(false);
+        string sourceSha256 = Convert.ToHexString(SHA256.HashData(fileBytes)).ToUpperInvariant();
 
         if (!force)
         {
-            string? indexedHash = await repository.GetIndexedRfcHashAsync(
-                sourceFile.RfcNumber,
-                cancellationToken).ConfigureAwait(false);
+            string? indexedHash = cachedHashes is not null
+                ? cachedHashes.GetValueOrDefault(sourceFile.RfcNumber)
+                : await repository.GetIndexedRfcHashAsync(sourceFile.RfcNumber, cancellationToken).ConfigureAwait(false);
 
             if (string.Equals(indexedHash, sourceSha256, StringComparison.Ordinal))
             {
@@ -109,7 +122,10 @@ public sealed class RfcIndexer : IIndexerService
 
         logger.LogInformation("Indexing RFC {RfcNumber}...", sourceFile.RfcNumber);
 
-        RfcDocument document = await parser.ParseAsync(sourceFile.Path, cancellationToken).ConfigureAwait(false);
+        // Decode text from already-read bytes; no second file read needed
+        string rawText = Encoding.UTF8.GetString(fileBytes);
+        RfcDocument document = parser.ParseContent(rawText, Path.GetFileName(sourceFile.Path));
+
         string relativePath = Path.GetRelativePath(mirrorPath, sourceFile.Path);
         IReadOnlyList<string> sectionTexts = document.Sections.Select(section => section.Text).ToArray();
         IReadOnlyList<float[]> embeddings = await embeddingService.GenerateEmbeddingsAsync(
@@ -193,12 +209,6 @@ public sealed class RfcIndexer : IIndexerService
                 }
             }
         }
-    }
-
-    private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
-    {
-        byte[] bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
-        return Convert.ToHexString(SHA256.HashData(bytes)).ToUpperInvariant();
     }
 
     private static string ResolveMirrorPath(string mirrorPath)

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.AI;
 
 namespace InfraGate.RfcRag.Tests.Fakes;
@@ -22,10 +24,14 @@ internal sealed class FakeEmbeddingGenerator : IEmbeddingGenerator<string, Embed
         for (int i = 0; i < list.Count; i++)
         {
             float[] vector = new float[EmbeddingDimensions];
-            int hash = list[i].GetHashCode(StringComparison.Ordinal);
+            // Use SHA256 for a process-stable deterministic hash.
+            // GetHashCode(StringComparison.Ordinal) is randomized per-process in .NET 7+
+            // and would produce different vector orderings each test run.
+            byte[] hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(list[i]));
+            int seed = BitConverter.ToInt32(hashBytes, 0);
             for (int j = 0; j < EmbeddingDimensions; j++)
             {
-                vector[j] = (float)((hash * (j + 1) * 0.001) % 1.0);
+                vector[j] = (float)((seed * (j + 1) * 0.001) % 1.0);
             }
 
             results.Add(new Embedding<float>(vector));

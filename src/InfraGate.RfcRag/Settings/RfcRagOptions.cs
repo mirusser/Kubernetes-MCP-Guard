@@ -35,4 +35,16 @@ public sealed record class RfcRagOptions
     /// Default (1536) matches text-embedding-3-small from OpenRouter/OpenAI.
     /// </summary>
     public int EmbeddingDimensions { get; init; } = 1536;
+
+    /// <summary>
+    /// Maximum number of RFC files indexed concurrently.
+    /// I/O-bound (embedding API + DB), so higher than CPU count is appropriate.
+    /// </summary>
+    public int MaxIndexingParallelism { get; init; } = 16;
+
+    /// <summary>
+    /// Maximum number of concurrent embedding API requests across all in-flight files.
+    /// Caps burst traffic to the embedding provider while allowing intra-file batch parallelism.
+    /// </summary>
+    public int MaxEmbeddingConcurrency { get; init; } = 8;
 }

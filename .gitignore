@@ -6,6 +6,7 @@ obj/
 TestResults/
 coverage-report/
 expected-*.txt
+tests/InfraGate.RfcRag.Tests/TestData/
 
 # ── Generated files ──────────────────────────────────────────────────────────
 /deploy/generated

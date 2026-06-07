@@ -1,5 +1,4 @@
-using Dapper;
-using InfraGate.RfcRag.Models;
+using NpgsqlTypes;
 
 namespace InfraGate.RfcRag.Indexing;
 
@@ -27,18 +26,37 @@ public sealed class IndexingRepository
         ArgumentNullException.ThrowIfNull(transaction);
         ArgumentNullException.ThrowIfNull(sections);
 
-        foreach (RfcSection section in sections)
+        if (sections.Count == 0)
         {
-            await connection.ExecuteAsync(new CommandDefinition(
-                """
-                insert into rfc_rag.rfc_sections
-                    (id, rfc_number, title, section, heading, text, source_path, url, source_sha256, embedding)
-                values
-                    (@Id, @RfcNumber, @Title, @Section, @Heading, @Text, @SourcePath, @Url, @SourceSha256, cast(@Embedding as vector))
-                """,
-                section,
-                transaction,
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+            return;
+        }
+
+        var batch = new NpgsqlBatch(connection, transaction);
+        await using (batch.ConfigureAwait(false))
+        {
+            foreach (RfcSection section in sections)
+            {
+                var cmd = new NpgsqlBatchCommand(
+                    """
+                    insert into rfc_rag.rfc_sections
+                        (id, rfc_number, title, section, heading, text, source_path, url, source_sha256, embedding)
+                    values
+                        (@Id, @RfcNumber, @Title, @Section, @Heading, @Text, @SourcePath, @Url, @SourceSha256, cast(@Embedding as vector))
+                    """);
+                cmd.Parameters.AddWithValue("Id", section.Id);
+                cmd.Parameters.AddWithValue("RfcNumber", section.RfcNumber);
+                cmd.Parameters.AddWithValue("Title", section.Title);
+                cmd.Parameters.AddWithValue("Section", section.Section);
+                cmd.Parameters.AddWithValue("Heading", (object?)section.Heading ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("Text", section.Text);
+                cmd.Parameters.AddWithValue("SourcePath", section.SourcePath);
+                cmd.Parameters.AddWithValue("Url", section.Url);
+                cmd.Parameters.AddWithValue("SourceSha256", section.SourceSha256);
+                cmd.Parameters.Add(new NpgsqlParameter("Embedding", NpgsqlDbType.Array | NpgsqlDbType.Real) { Value = section.Embedding });
+                batch.BatchCommands.Add(cmd);
+            }
+
+            await batch.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -52,18 +70,33 @@ public sealed class IndexingRepository
         ArgumentNullException.ThrowIfNull(transaction);
         ArgumentNullException.ThrowIfNull(blocks);
 
-        foreach (RfcAbnfBlock block in blocks)
+        if (blocks.Count == 0)
         {
-            await connection.ExecuteAsync(new CommandDefinition(
-                """
-                insert into rfc_rag.rfc_abnf_blocks
-                    (id, section_id, rfc_number, section, abnf_text, rule_names)
-                values
-                    (@Id, @SectionId, @RfcNumber, @Section, @AbnfText, @RuleNames)
-                """,
-                block,
-                transaction,
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+            return;
+        }
+
+        var batch = new NpgsqlBatch(connection, transaction);
+        await using (batch.ConfigureAwait(false))
+        {
+            foreach (RfcAbnfBlock block in blocks)
+            {
+                var cmd = new NpgsqlBatchCommand(
+                    """
+                    insert into rfc_rag.rfc_abnf_blocks
+                        (id, section_id, rfc_number, section, abnf_text, rule_names)
+                    values
+                        (@Id, @SectionId, @RfcNumber, @Section, @AbnfText, @RuleNames)
+                    """);
+                cmd.Parameters.AddWithValue("Id", block.Id);
+                cmd.Parameters.AddWithValue("SectionId", block.SectionId);
+                cmd.Parameters.AddWithValue("RfcNumber", block.RfcNumber);
+                cmd.Parameters.AddWithValue("Section", block.Section);
+                cmd.Parameters.AddWithValue("AbnfText", block.AbnfText);
+                cmd.Parameters.AddWithValue("RuleNames", block.RuleNames);
+                batch.BatchCommands.Add(cmd);
+            }
+
+            await batch.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -77,18 +110,32 @@ public sealed class IndexingRepository
         ArgumentNullException.ThrowIfNull(transaction);
         ArgumentNullException.ThrowIfNull(occurrences);
 
-        foreach (NormativeOccurrence occurrence in occurrences)
+        if (occurrences.Count == 0)
         {
-            await connection.ExecuteAsync(new CommandDefinition(
-                """
-                insert into rfc_rag.normative_occurrences
-                    (id, section_id, rfc_number, keyword, line_offset)
-                values
-                    (@Id, @SectionId, @RfcNumber, @Keyword, @LineOffset)
-                """,
-                occurrence,
-                transaction,
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+            return;
+        }
+
+        var batch = new NpgsqlBatch(connection, transaction);
+        await using (batch.ConfigureAwait(false))
+        {
+            foreach (NormativeOccurrence occurrence in occurrences)
+            {
+                var cmd = new NpgsqlBatchCommand(
+                    """
+                    insert into rfc_rag.normative_occurrences
+                        (id, section_id, rfc_number, keyword, line_offset)
+                    values
+                        (@Id, @SectionId, @RfcNumber, @Keyword, @LineOffset)
+                    """);
+                cmd.Parameters.AddWithValue("Id", occurrence.Id);
+                cmd.Parameters.AddWithValue("SectionId", occurrence.SectionId);
+                cmd.Parameters.AddWithValue("RfcNumber", occurrence.RfcNumber);
+                cmd.Parameters.AddWithValue("Keyword", occurrence.Keyword);
+                cmd.Parameters.AddWithValue("LineOffset", occurrence.LineOffset);
+                batch.BatchCommands.Add(cmd);
+            }
+
+            await batch.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -161,8 +208,23 @@ public sealed class IndexingRepository
     }
 
     /// <summary>
-    /// Gets the stored SHA256 hash for an indexed RFC (used for incremental skip detection).
-    /// Opens and disposes its own connection via the injected data source.
+    /// Loads all indexed RFC hashes in a single query for bulk skip detection during IndexAllAsync.
+    /// </summary>
+    public async Task<Dictionary<int, string>> GetAllIndexedHashesAsync(CancellationToken cancellationToken)
+    {
+        var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using (connection.ConfigureAwait(false))
+        {
+            var rows = await connection.QueryAsync<(int, string)>(new CommandDefinition(
+                "select rfc_number, source_sha256 from rfc_rag.indexed_rfcs",
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+            return rows.ToDictionary(r => r.Item1, r => r.Item2);
+        }
+    }
+
+    /// <summary>
+    /// Gets the stored SHA256 hash for a single indexed RFC.
+    /// Used by IndexSingleAsync for per-file incremental detection.
     /// </summary>
     public async Task<string?> GetIndexedRfcHashAsync(
         int rfcNumber,

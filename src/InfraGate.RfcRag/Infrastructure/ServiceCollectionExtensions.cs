@@ -69,7 +69,7 @@ public static class ServiceCollectionExtensions
             var generator = sp.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>();
             var options = sp.GetRequiredService<IOptions<RfcRagOptions>>().Value;
             var logger = sp.GetRequiredService<ILogger<EmbeddingService>>();
-            return new EmbeddingService(generator, options.EmbeddingBatchSize, logger);
+            return new EmbeddingService(generator, options.EmbeddingBatchSize, options.MaxEmbeddingConcurrency, logger);
         });
 
         return services;
