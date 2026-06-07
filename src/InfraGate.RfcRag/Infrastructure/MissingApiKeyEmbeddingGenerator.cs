@@ -4,9 +4,9 @@ namespace InfraGate.RfcRag.Infrastructure;
 
 /// <summary>
 /// Placeholder <see cref="IEmbeddingGenerator{TIn, TOut}"/> registered when
-/// <c>InfraGate__OpenRouter__ApiKey</c> is not configured. Throws a clear error
-/// only when <see cref="GenerateAsync"/> is actually called — not at DI resolve time.
-/// This lets the MCP server start without an API key; only indexing fails.
+/// <c>InfraGate__OpenRouter__ApiKey</c> is not configured. Returns zero-vector
+/// embeddings instead of throwing, so search queries fall back gracefully to
+/// full-text lexical search through the hybrid RRF pipeline.
 /// </summary>
 internal sealed class MissingApiKeyEmbeddingGenerator : IEmbeddingGenerator<string, Embedding<float>>
 {
@@ -19,8 +19,14 @@ internal sealed class MissingApiKeyEmbeddingGenerator : IEmbeddingGenerator<stri
         EmbeddingGenerationOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        throw new InvalidOperationException(
-            $"{RfcRagOptions.OpenRouterApiKeyEnvironmentVariable} is not configured. " +
-            "Set this environment variable to enable embedding generation and RFC indexing.");
+        var list = values.ToList();
+        var results = new List<Embedding<float>>(list.Count);
+
+        for (int i = 0; i < list.Count; i++)
+        {
+            results.Add(new Embedding<float>(ReadOnlyMemory<float>.Empty));
+        }
+
+        return Task.FromResult(new GeneratedEmbeddings<Embedding<float>>(results));
     }
 }

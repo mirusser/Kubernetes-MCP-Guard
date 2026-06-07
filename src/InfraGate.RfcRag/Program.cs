@@ -2,6 +2,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 namespace InfraGate.RfcRag;
@@ -11,6 +13,8 @@ internal static class Program
     public static async Task Main(string[] args)
     {
         var builder = Host.CreateApplicationBuilder(args);
+        builder.Logging.ClearProviders();
+        builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
         AddRfcRagConfiguration(builder.Configuration, args);
 
         builder.Services.Configure<RfcRagOptions>(
@@ -32,7 +36,11 @@ internal static class Program
         builder.Services
             .AddMcpServer()
             .WithStdioServerTransport()
-            .WithToolsFromAssembly();
+            .WithToolsFromAssembly()
+            .WithListResourcesHandler(static (_, _) =>
+                new ValueTask<ListResourcesResult>(new ListResourcesResult { Resources = [] }))
+            .WithListPromptsHandler(static (_, _) =>
+                new ValueTask<ListPromptsResult>(new ListPromptsResult { Prompts = [] }));
 
         var app = builder.Build();
 

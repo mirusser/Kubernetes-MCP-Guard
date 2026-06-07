@@ -19,8 +19,15 @@ public static class RfcRagTools
         [Description("Maximum ranked sections to return, from 1 to 100.")] int limit = 10,
         CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<SearchResult> results = await search.SearchAsync(query, limit, cancellationToken).ConfigureAwait(false);
-        return ToJson(results);
+        try
+        {
+            IReadOnlyList<SearchResult> results = await search.SearchAsync(query, limit, cancellationToken).ConfigureAwait(false);
+            return ToJson(results);
+        }
+        catch (Exception)
+        {
+            return "[]";
+        }
     }
 
     [McpServerTool(Name = "get_rfc", ReadOnly = true, OpenWorld = false)]
@@ -95,12 +102,19 @@ public static class RfcRagTools
         [Description("Maximum results to return, from 1 to 100.")] int limit = 20,
         CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<SearchResult> results = await search.SearchNormativeAsync(
-            keyword,
-            rfcNumbers,
-            limit,
-            cancellationToken).ConfigureAwait(false);
-        return ToJson(results);
+        try
+        {
+            IReadOnlyList<SearchResult> results = await search.SearchNormativeAsync(
+                keyword,
+                rfcNumbers,
+                limit,
+                cancellationToken).ConfigureAwait(false);
+            return ToJson(results);
+        }
+        catch (Exception)
+        {
+            return "[]";
+        }
     }
 
     [McpServerTool(Name = "search_abnf", ReadOnly = true, OpenWorld = false)]
@@ -112,12 +126,19 @@ public static class RfcRagTools
         [Description("Maximum results to return, from 1 to 100.")] int limit = 20,
         CancellationToken cancellationToken = default)
     {
-        IReadOnlyList<SearchResult> results = await search.SearchAbnfAsync(
-            query,
-            rfcNumbers,
-            limit,
-            cancellationToken).ConfigureAwait(false);
-        return ToJson(results);
+        try
+        {
+            IReadOnlyList<SearchResult> results = await search.SearchAbnfAsync(
+                query,
+                rfcNumbers,
+                limit,
+                cancellationToken).ConfigureAwait(false);
+            return ToJson(results);
+        }
+        catch (Exception)
+        {
+            return "[]";
+        }
     }
 
     [McpServerTool(Name = "find_updates_obsoletes", ReadOnly = true, OpenWorld = false)]

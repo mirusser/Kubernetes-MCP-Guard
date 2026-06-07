@@ -142,6 +142,42 @@ public sealed class RfcRagToolsTests
     }
 
     [Fact]
+    public async Task SearchRfc_EmptyDb_ReturnsEmptyArray()
+    {
+        var fake = new FakeSearchService { SearchResults = [] };
+
+        string json = await RfcRagTools.SearchRfc(fake, "HTTP", 10, CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(JsonValueKind.Array, doc.RootElement.ValueKind);
+        Assert.Empty(doc.RootElement.EnumerateArray());
+    }
+
+    [Fact]
+    public async Task SearchNormative_EmptyDb_ReturnsEmptyArray()
+    {
+        var fake = new FakeSearchService { SearchResults = [] };
+
+        string json = await RfcRagTools.SearchNormative(fake, "MUST", null, 10, CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(JsonValueKind.Array, doc.RootElement.ValueKind);
+        Assert.Empty(doc.RootElement.EnumerateArray());
+    }
+
+    [Fact]
+    public async Task SearchAbnf_EmptyDb_ReturnsEmptyArray()
+    {
+        var fake = new FakeSearchService { SearchResults = [] };
+
+        string json = await RfcRagTools.SearchAbnf(fake, "ALPHA", null, 10, CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(JsonValueKind.Array, doc.RootElement.ValueKind);
+        Assert.Empty(doc.RootElement.EnumerateArray());
+    }
+
+    [Fact]
     public async Task FindUpdatesObsoletes_MissingRfc_ReturnsError()
     {
         var fake = new FakeSearchService { Metadata = null };

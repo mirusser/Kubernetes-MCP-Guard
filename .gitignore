@@ -238,3 +238,4 @@ agents/
 .agents/skills/wpf
 .agents/skills/writing-mstest-tests
 .agents/skills/xunit
+.env.rfc-rag
