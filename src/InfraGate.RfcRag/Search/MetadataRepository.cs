@@ -37,7 +37,8 @@ public sealed class MetadataRepository
                     rfc_date as "Date",
                     category as "Category",
                     authors as "Authors",
-                    issn as "Issn"
+                    issn as "Issn",
+                    grammar_style as "GrammarStyle"
                 from rfc_rag.indexed_rfcs
                 where rfc_number = @RfcNumber
                 """,

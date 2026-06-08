@@ -77,7 +77,7 @@ public sealed class RfcParserTests
     }
 
     [Fact]
-    public async Task ParseAsync_RealRfc2119_ExtractsAbnfBlocks()
+    public async Task ParseAsync_RealRfc9110_ExtractsAbnfBlocks()
     {
         string fixturePath = Path.Combine("TestData", "rfc9110.txt");
         RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
@@ -171,5 +171,39 @@ public sealed class RfcParserTests
         Assert.Contains("page 2 content", section2!.Text);
     }
 
+    [Fact]
+    public async Task ParseAsync_RealRfc8446_DetectsTlsPresentationLang()
+    {
+        string fixturePath = Path.Combine("TestData", "rfc8446.txt");
+        RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
 
+        Assert.Equal(GrammarStyleConstants.TlsPresentationLang, document.Metadata.GrammarStyle);
+    }
+
+    [Fact]
+    public async Task ParseAsync_RealRfc9110_DetectsAbnf()
+    {
+        string fixturePath = Path.Combine("TestData", "rfc9110.txt");
+        RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
+
+        Assert.Equal(GrammarStyleConstants.Abnf, document.Metadata.GrammarStyle);
+    }
+
+    [Fact]
+    public async Task ParseAsync_RealRfc2119_DetectsNone()
+    {
+        string fixturePath = Path.Combine("TestData", "rfc2119.txt");
+        RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
+
+        Assert.Equal(GrammarStyleConstants.None, document.Metadata.GrammarStyle);
+    }
+
+    [Fact]
+    public async Task ParseAsync_RealRfc9052_DetectsCddl()
+    {
+        string fixturePath = Path.Combine("TestData", "rfc9052.txt");
+        RfcDocument document = await parser.ParseAsync(fixturePath, CancellationToken.None);
+
+        Assert.Equal(GrammarStyleConstants.Cddl, document.Metadata.GrammarStyle);
+    }
 }

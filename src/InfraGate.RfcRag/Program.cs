@@ -29,6 +29,21 @@ builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
     .WithToolsFromAssembly()
+    .WithRequestFilters(filters =>
+    {
+        filters.AddCallToolFilter(next => (request, cancellationToken) =>
+        {
+            var services = request.Services;
+            if (services is null)
+            {
+                return next(request, cancellationToken);
+            }
+
+            var logger = services.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("InfraGate.RfcRag.ToolExceptionFilter");
+            return ToolExceptionFilter.CreateSafetyNet(next, logger)(request, cancellationToken);
+        });
+    })
     .WithListResourcesHandler(static (_, _) =>
         new ValueTask<ListResourcesResult>(new ListResourcesResult { Resources = [] }))
     .WithListPromptsHandler(static (_, _) =>

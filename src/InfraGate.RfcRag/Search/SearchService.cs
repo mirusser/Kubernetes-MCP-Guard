@@ -1,7 +1,3 @@
-using InfraGate.RfcRag.Indexing;
-using InfraGate.RfcRag.Models;
-using Microsoft.Extensions.Logging;
-
 namespace InfraGate.RfcRag.Search;
 
 public sealed class SearchService : ISearchService
@@ -50,7 +46,7 @@ public sealed class SearchService : ISearchService
         catch (Exception ex)
         {
             logger.LogError(ex, "search_rfc failed for query={Query}", query);
-            return [];
+            throw;
         }
     }
 
@@ -74,7 +70,7 @@ public sealed class SearchService : ISearchService
         catch (Exception ex)
         {
             logger.LogError(ex, "search_normative failed for keyword={Keyword}", keyword);
-            return [];
+            throw;
         }
     }
 
@@ -92,7 +88,7 @@ public sealed class SearchService : ISearchService
         catch (Exception ex)
         {
             logger.LogError(ex, "search_abnf failed for query={Query}", query);
-            return [];
+            throw;
         }
     }
 
@@ -107,4 +103,62 @@ public sealed class SearchService : ISearchService
 
     public Task<string> GetStatsAsync(CancellationToken cancellationToken) =>
         metadataRepository.GetStatsAsync(cancellationToken);
+
+    public Task<IReadOnlyDictionary<string, string?>> GetTocAsync(
+        int rfcNumber,
+        CancellationToken cancellationToken) =>
+        searchRepository.GetTocAsync(rfcNumber, cancellationToken);
+
+    public Task<(RfcSection Parent, IReadOnlyList<RfcSection> Children)> GetSectionWithChildrenAsync(
+        int rfcNumber,
+        string section,
+        int depth,
+        CancellationToken cancellationToken) =>
+        searchRepository.GetSectionWithChildrenAsync(rfcNumber, section, depth, cancellationToken);
+
+    public async Task<IReadOnlyDictionary<string, RfcSection>> GetSectionWithExpandedTypesAsync(
+        int rfcNumber,
+        string section,
+        CancellationToken cancellationToken)
+    {
+        RfcSection? target = await searchRepository.GetSectionAsync(rfcNumber, section, cancellationToken).ConfigureAwait(false);
+        if (target is null)
+            return new Dictionary<string, RfcSection>(StringComparer.Ordinal);
+
+        var typeNames = ExtractPascalCaseTypeNames(target.Text, target.Heading);
+        if (typeNames.Count == 0)
+            return new Dictionary<string, RfcSection>(StringComparer.Ordinal);
+
+        IReadOnlyList<RfcSection> rfcSections = await searchRepository.GetRfcAsync(rfcNumber, cancellationToken).ConfigureAwait(false);
+        var knownHeadings = rfcSections
+            .Where(rfcSection => rfcSection.Heading is not null)
+            .Select(rfcSection => rfcSection.Heading!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        string[] matchingTypeNames = typeNames
+            .Where(knownHeadings.Contains)
+            .ToArray();
+
+        return await searchRepository.FindSectionsByHeadingsAsync(rfcNumber, matchingTypeNames, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static List<string> ExtractPascalCaseTypeNames(string sectionText, string? sectionHeading)
+    {
+        var typeNames = new HashSet<string>(StringComparer.Ordinal);
+        var words = sectionText.Split(new[] { ' ', '\n', '\r', '\t', '(', ')', '{', '}', ',', '.', ':', ';', '[', ']' },
+            StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (string word in words)
+        {
+            if (word.Length >= 2 && char.IsUpper(word[0]) && word.All(c => char.IsLetterOrDigit(c) || c == '_'))
+            {
+                typeNames.Add(word);
+            }
+        }
+
+        if (sectionHeading is not null)
+            typeNames.Remove(sectionHeading);
+
+        return typeNames.ToList();
+    }
 }

@@ -174,6 +174,7 @@ public sealed class IndexingRepository
         string? category,
         string[] authors,
         string? issn,
+        string grammarStyle,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -186,10 +187,10 @@ public sealed class IndexingRepository
             """
             insert into rfc_rag.indexed_rfcs
                 (rfc_number, source_path, source_sha256, title, section_count,
-                 updates, obsoletes, rfc_date, category, authors, issn, indexed_at_utc)
+                 updates, obsoletes, rfc_date, category, authors, issn, grammar_style, indexed_at_utc)
             values
                 (@RfcNumber, @SourcePath, @SourceSha256, @Title, @SectionCount,
-                 @Updates, @Obsoletes, @Date, @Category, @Authors, @Issn, now())
+                 @Updates, @Obsoletes, @Date, @Category, @Authors, @Issn, @GrammarStyle, now())
             on conflict (rfc_number) do update set
                 source_path = excluded.source_path,
                 source_sha256 = excluded.source_sha256,
@@ -201,6 +202,7 @@ public sealed class IndexingRepository
                 category = excluded.category,
                 authors = excluded.authors,
                 issn = excluded.issn,
+                grammar_style = excluded.grammar_style,
                 indexed_at_utc = now()
             """,
             new
@@ -215,7 +217,8 @@ public sealed class IndexingRepository
                 Date = date,
                 Category = category,
                 Authors = authors,
-                Issn = issn
+                Issn = issn,
+                GrammarStyle = grammarStyle
             },
             transaction,
             cancellationToken: cancellationToken)).ConfigureAwait(false);

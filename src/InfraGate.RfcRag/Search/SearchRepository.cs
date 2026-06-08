@@ -1,6 +1,3 @@
-using Dapper;
-using InfraGate.RfcRag.Models;
-
 namespace InfraGate.RfcRag.Search;
 
 /// <summary>
@@ -204,7 +201,11 @@ public sealed class SearchRepository
                 select {{SectionProjection}}
                 from rfc_rag.rfc_sections
                 where rfc_number = @RfcNumber
-                order by section
+                order by
+                  case when section ~ '^[0-9]+(\.[0-9]+)*$'
+                    then string_to_array(section, '.')::int[]
+                  end nulls last,
+                  section
                 """,
                 new { RfcNumber = rfcNumber },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
@@ -286,5 +287,101 @@ public sealed class SearchRepository
         }
     }
 
+    public async Task<(RfcSection Parent, IReadOnlyList<RfcSection> Children)> GetSectionWithChildrenAsync(
+        int rfcNumber,
+        string section,
+        int depth,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(section);
+
+        var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using (connection.ConfigureAwait(false))
+        {
+            RfcSection? parent = await connection.QuerySingleOrDefaultAsync<RfcSection>(new CommandDefinition(
+                $$"""
+                select {{SectionProjection}}
+                from rfc_rag.rfc_sections
+                where rfc_number = @RfcNumber and section = @Section
+                """,
+                new { RfcNumber = rfcNumber, Section = section },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            if (parent is null)
+                return (new RfcSection(), []);
+
+            if (depth <= 0)
+                return (parent, []);
+
+            string sectionPattern = section + @"\.";
+            var children = await connection.QueryAsync<RfcSection>(new CommandDefinition(
+                $$"""
+                select {{SectionProjection}}
+                from rfc_rag.rfc_sections
+                where rfc_number = @RfcNumber and section ~ ('^' || @SectionPattern || '[^.]+$')
+                order by
+                  case when section ~ '^[0-9]+(\.[0-9]+)*$'
+                    then string_to_array(section, '.')::int[]
+                  end nulls last,
+                  section
+                """,
+                new { RfcNumber = rfcNumber, SectionPattern = sectionPattern },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            return (parent, children.AsList());
+        }
+    }
+
+    public async Task<IReadOnlyDictionary<string, RfcSection>> FindSectionsByHeadingsAsync(
+        int rfcNumber,
+        IReadOnlyList<string> typeNames,
+        CancellationToken cancellationToken)
+    {
+        if (typeNames.Count == 0)
+            return new Dictionary<string, RfcSection>(StringComparer.Ordinal);
+
+        var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using (connection.ConfigureAwait(false))
+        {
+            var matches = await connection.QueryAsync<RfcSection>(new CommandDefinition(
+                $$"""
+                select {{SectionProjection}}
+                from rfc_rag.rfc_sections
+                where rfc_number = @RfcNumber and heading = any(@TypeNames)
+                """,
+                new { RfcNumber = rfcNumber, TypeNames = typeNames.ToArray() },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            return matches
+                .GroupBy(r => r.Heading, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key!, group => group.First(), StringComparer.Ordinal);
+        }
+    }
+
     private static int NormalizeLimit(int limit) => Math.Clamp(limit, 1, MaxLimit);
+
+    public async Task<IReadOnlyDictionary<string, string?>> GetTocAsync(
+        int rfcNumber,
+        CancellationToken cancellationToken)
+    {
+        var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using (connection.ConfigureAwait(false))
+        {
+            var rows = await connection.QueryAsync<(string, string?)>(new CommandDefinition(
+                """
+                select section, heading
+                from rfc_rag.rfc_sections
+                where rfc_number = @RfcNumber
+                order by
+                  case when section ~ '^[0-9]+(\.[0-9]+)*$'
+                    then string_to_array(section, '.')::int[]
+                  end nulls last,
+                  section
+                """,
+                new { RfcNumber = rfcNumber },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+            return rows.ToDictionary(r => r.Item1, r => r.Item2, StringComparer.Ordinal);
+        }
+    }
 }

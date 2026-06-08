@@ -49,7 +49,7 @@ services:
     ports:
       - "${PG_BIND_ADDRESS:-127.0.0.1}:${PG_BIND_PORT:-5433}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ${PG_DATA_HOST_PATH:-./pgdata}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-rfc_rag} -d ${PG_DATABASE:-rfc_rag}"]
       interval: 5s
@@ -72,5 +72,3 @@ services:
       - ${RFC_MIRROR_HOST_PATH:-/home/user/rfc-mirror}:/rfc-mirror:ro
     restart: unless-stopped
 
-volumes:
-  pgdata:

@@ -77,19 +77,27 @@ Returns: JSON array of { rfcNumber, title, section, heading, excerpt, sourcePath
 ```
 
 ### `get_rfc`
-Retrieve the full text of an RFC by its number.
+Retrieve RFC metadata, table of contents, and a preview of the first 20 sections. Breaking change: the top-level `text` field has been removed. Full section content is available via `get_rfc_section`.
 
 ```
 Parameters: rfcNumber (int)
-Returns: JSON object with { rfcNumber, title, sourcePath, url, text, sections } (where sections is a JSON array of RfcSection objects)
+Returns: JSON object with { rfcNumber, title, sourcePath, url, sectionCount, toc, sections } (where toc is a section→heading map and sections is a preview array of the first 20 RfcSection objects)
 ```
 
 ### `get_rfc_section`
-Retrieve a specific section of an RFC.
+Retrieve a specific section of an RFC. Supports child section expansion and type-reference resolution.
 
 ```
-Parameters: rfcNumber (int), section (string, e.g. "6.3", "4.1.2")
-Returns: JSON object with { id, rfcNumber, title, section, heading, text, sourcePath, url }
+Parameters: rfcNumber (int), section (string, e.g. "6.3"), depth (int, default=0, 1=include immediate children), expand (bool, default=false, resolves type references; ignored when depth>0)
+Returns: JSON object with { section, children? } when depth>0, { section, expandedTypes? } when expand=true, or plain RfcSection when depth=0 and expand=false
+```
+
+### `get_rfc_toc`
+Get the table of contents for an RFC as a flat section→heading map.
+
+```
+Parameters: rfcNumber (int)
+Returns: JSON object mapping section identifiers to heading strings (null for untitled sections)
 ```
 
 ### `search_normative`
@@ -126,11 +134,11 @@ Returns: JSON string { indexedRfcs, sections, abnfBlocks, normativeOccurrences, 
 ```
 
 ### `get_rfc_metadata`
-Retrieve metadata for a specific RFC (title, updates, obsoletes).
+Retrieve metadata for a specific RFC (title, updates, obsoletes, grammar style).
 
 ```
 Parameters: rfcNumber (int)
-Returns: JSON object with { rfcNumber, title, updates, obsoletes, updated_by, obsoleted_by }
+Returns: JSON object with { number, title, date, category, updates, obsoletes, authors, issn, grammarStyle, updated_by, obsoleted_by }
 ```
 
 ### `list_indexed_rfcs`

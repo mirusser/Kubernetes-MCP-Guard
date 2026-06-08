@@ -202,6 +202,7 @@ public sealed class RfcIndexer : IIndexerService
                         document.Metadata.Category,
                         document.Metadata.Authors,
                         document.Metadata.Issn,
+                        document.Metadata.GrammarStyle,
                         cancellationToken).ConfigureAwait(false);
 
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

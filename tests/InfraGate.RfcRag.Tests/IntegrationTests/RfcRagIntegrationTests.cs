@@ -120,6 +120,24 @@ public sealed class RfcRagIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task GetIndexedRfcMetadataAsync_AfterIndexing_IncludesGrammarStyle()
+    {
+        await using var dataSource = await CreateMigratedDataSourceAsync();
+        IIndexerService indexer = CreateIndexer(dataSource);
+        var metadataRepository = new MetadataRepository(dataSource);
+
+        await indexer.IndexAllAsync(CancellationToken.None);
+
+        RfcMetadata? tlsMetadata = await metadataRepository.GetIndexedRfcMetadataAsync(8446, CancellationToken.None);
+        RfcMetadata? rfc2119Metadata = await metadataRepository.GetIndexedRfcMetadataAsync(2119, CancellationToken.None);
+
+        Assert.NotNull(tlsMetadata);
+        Assert.Equal(GrammarStyleConstants.TlsPresentationLang, tlsMetadata.GrammarStyle);
+        Assert.NotNull(rfc2119Metadata);
+        Assert.Equal(GrammarStyleConstants.None, rfc2119Metadata.GrammarStyle);
+    }
+
+    [Fact]
     public async Task SearchAbnf_FindsGrammarBlocks_AcrossRecentRfcs()
     {
         await using var dataSource = await CreateMigratedDataSourceAsync();

@@ -2,7 +2,13 @@
 
 ## Overview
 
-Improve the `InfraGate.RfcRag` MCP server based on real friction observed during agent-driven RFC research sessions. The six pain points discovered are: (1) no section tree navigation, (2) no grammar-style metadata (ABNF vs TLS-presentation-lang vs CDDL), (3) parent sections return only prose with no way to fetch children in one call, (4) full-document retrieval is too large to use, (5) no cross-reference expansion for types referenced across sections, and (6) silent exception swallowing in search tools. Each maps to a concrete, testable change in the existing codebase.
+Improve the `InfraGate.RfcRag` MCP server based on real friction observed during agent-driven RFC research sessions. The six pain points discovered are:   
+(1) no section tree navigation,  
+(2) no grammar-style metadata (ABNF vs TLS-presentation-lang vs CDDL),  
+(3) parent sections return only prose with no way to fetch children in one call,  
+(4) full-document retrieval is too large to use,   
+(5) no cross-reference expansion for types referenced across sections,  
+(6) silent exception swallowing in search tools. Each maps to a concrete, testable change in the existing codebase.
 
 The project is a standalone .NET 10 MCP server using PostgreSQL + pgvector with Dapper, ModelContextProtocol 1.3.0, and `Microsoft.Extensions.AI` for embedding generation. No internal dependencies on other InfraGate projects.
 

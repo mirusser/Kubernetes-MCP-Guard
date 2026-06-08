@@ -29,4 +29,12 @@ public interface ISearchService
     Task<IReadOnlyList<RfcMetadata>> ListIndexedAsync(int limit, int offset, CancellationToken cancellationToken);
 
     Task<string> GetStatsAsync(CancellationToken cancellationToken);
+
+    Task<IReadOnlyDictionary<string, string?>> GetTocAsync(int rfcNumber, CancellationToken cancellationToken);
+
+    Task<(RfcSection Parent, IReadOnlyList<RfcSection> Children)> GetSectionWithChildrenAsync(
+        int rfcNumber, string section, int depth, CancellationToken cancellationToken);
+
+    Task<IReadOnlyDictionary<string, RfcSection>> GetSectionWithExpandedTypesAsync(
+        int rfcNumber, string section, CancellationToken cancellationToken);
 }

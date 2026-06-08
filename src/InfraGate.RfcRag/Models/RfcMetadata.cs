@@ -28,4 +28,7 @@ public sealed record class RfcMetadata
 
     /// <summary>ISSN (always "2070-1721" for modern RFCs).</summary>
     public string? Issn { get; init; }
+
+    /// <summary>Grammar style detected during parsing: "abnf", "tls-presentation-lang", "cddl", "asn.1", or "none".</summary>
+    public string GrammarStyle { get; init; } = GrammarStyleConstants.None;
 }

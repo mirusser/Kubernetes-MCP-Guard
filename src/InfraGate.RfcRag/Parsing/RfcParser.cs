@@ -65,6 +65,8 @@ public sealed partial class RfcParser
         var abnfBlocks = ExtractAbnfBlocks(bodyText, sections, rfcNumber);
         var normativeOccurrences = ExtractNormativeOccurrences(bodyText, sections, rfcNumber);
 
+        metadata = metadata with { GrammarStyle = DetectGrammarStyle(sections) };
+
         return new RfcDocument
         {
             Metadata = metadata,
@@ -303,7 +305,6 @@ public sealed partial class RfcParser
         var currentLines = new List<string>();
         string? currentSection = null;
         string? line;
-        int sectionCounter = 0;
 
         void FlushSection()
         {
@@ -345,7 +346,6 @@ public sealed partial class RfcParser
                 currentSection = sectionMatch.Groups[1].Value;
                 currentHeading = sectionMatch.Groups[2].Value.Trim();
                 currentLines.Clear();
-                sectionCounter++;
 
                 // Include the heading text as the first line of section body.
                 // For old-style RFCs the body starts on the same line as the heading ("1. MUST ...").
@@ -485,6 +485,63 @@ public sealed partial class RfcParser
         return occurrences.AsReadOnly();
     }
 
+    private static string DetectGrammarStyle(IReadOnlyList<RfcSection> sections)
+    {
+        int abnfLines = 0;
+        int tlsLines = 0;
+        int cddlLines = 0;
+        int asn1Lines = 0;
+
+        var abnfRuleRegex = AbnfRuleRegex();
+        var tlsStructRegex = TlsStructRegex();
+        var tlsEnumRegex = TlsEnumRegex();
+        var tlsSelectRegex = TlsSelectRegex();
+        var cddlGroupRegex = CddlGroupRegex();
+        var cddlTypeRuleRegex = CddlTypeRuleRegex();
+        var asn1Regex = Asn1Regex();
+
+        foreach (RfcSection section in sections)
+        {
+            string[] lines = section.Text.Split('\n');
+            foreach (string line in lines)
+            {
+                if (cddlGroupRegex.IsMatch(line) || cddlTypeRuleRegex.IsMatch(line))
+                {
+                    cddlLines++;
+                    continue;
+                }
+                if (abnfRuleRegex.IsMatch(line))
+                    abnfLines++;
+                if (tlsStructRegex.IsMatch(line) || tlsEnumRegex.IsMatch(line) || tlsSelectRegex.IsMatch(line))
+                    tlsLines++;
+                if (asn1Regex.IsMatch(line))
+                    asn1Lines++;
+            }
+        }
+
+        int totalGrammarLines = abnfLines + tlsLines + cddlLines + asn1Lines;
+        if (totalGrammarLines == 0)
+            return GrammarStyleConstants.None;
+
+        if (abnfLines > totalGrammarLines / 2)
+            return GrammarStyleConstants.Abnf;
+        if (tlsLines > totalGrammarLines / 2)
+            return GrammarStyleConstants.TlsPresentationLang;
+        if (cddlLines > totalGrammarLines / 2)
+            return GrammarStyleConstants.Cddl;
+        if (asn1Lines > totalGrammarLines / 2)
+            return GrammarStyleConstants.Asn1;
+
+        if (abnfLines >= tlsLines && abnfLines >= cddlLines && abnfLines >= asn1Lines)
+            return GrammarStyleConstants.Abnf;
+        if (tlsLines >= cddlLines && tlsLines >= asn1Lines)
+            return GrammarStyleConstants.TlsPresentationLang;
+        if (cddlLines >= asn1Lines)
+            return GrammarStyleConstants.Cddl;
+
+        return GrammarStyleConstants.Asn1;
+    }
+
     // Longest-first alternation ensures "MUST NOT" is matched before "MUST" at the same position,
     // preventing "MUST NOT" from being counted as both "MUST NOT" and "MUST".
     [GeneratedRegex(@"\b(MUST NOT|MUST|REQUIRED|SHALL NOT|SHALL|SHOULD NOT|SHOULD|NOT RECOMMENDED|RECOMMENDED|MAY|OPTIONAL)\b",
@@ -520,6 +577,24 @@ public sealed partial class RfcParser
 
     [GeneratedRegex(@"^(\d+(?:\.\d+)*|Appendix\s+[A-Z](?:\.\d+)*)\.\s+(.+?)$", RegexOptions.Multiline, 1000)]
     private static partial Regex SectionHeadingRegex();
+
+    [GeneratedRegex(@"^\w[\w-]*\s+(::=)|\s*DEFINITIONS\s+::", RegexOptions.Multiline | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex Asn1Regex();
+
+    [GeneratedRegex(@"^\s*\w[\w-]*\s*=\s*[\{\(]", RegexOptions.Multiline | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex CddlGroupRegex();
+
+    [GeneratedRegex(@"^\s*\w[\w-]*\s*=\s*\w[\w-]*\s*(?:/|\()", RegexOptions.Multiline | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex CddlTypeRuleRegex();
+
+    [GeneratedRegex(@"^\s*struct\s*\{", RegexOptions.Multiline | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex TlsStructRegex();
+
+    [GeneratedRegex(@"^\s*enum\s*\{", RegexOptions.Multiline | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex TlsEnumRegex();
+
+    [GeneratedRegex(@"^\s*select\s*\(", RegexOptions.Multiline | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex TlsSelectRegex();
 
     [GeneratedRegex(@"^\s*([a-zA-Z][a-zA-Z0-9-]*)\s*=\s*/?\s*", RegexOptions.Multiline, 1000)]
     private static partial Regex AbnfRuleRegex();
