@@ -28,7 +28,7 @@ internal sealed class SmtpClientFactory : ISmtpClientFactory
             mime.Body = new TextPart(TextFormat.Plain) { Text = message.Body ?? string.Empty };
 
             using var client = new SmtpClient();
-            var secureOptions = options.EnableSsl
+            SecureSocketOptions secureOptions = options.EnableSsl
                 ? SecureSocketOptions.StartTls
                 : SecureSocketOptions.None;
             await client.ConnectAsync(options.Host, options.Port, secureOptions, cancellationToken)

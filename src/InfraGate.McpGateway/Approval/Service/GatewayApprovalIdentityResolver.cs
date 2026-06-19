@@ -12,14 +12,14 @@ internal static class GatewayApprovalIdentityResolver
             return null;
         }
 
-        var subject = ClaimValue(user, GatewayAuthConventions.Claims.Subject) ??
+        string? subject = ClaimValue(user, GatewayAuthConventions.Claims.Subject) ??
                       ClaimValue(user, GatewayAuthConventions.Claims.ClientId);
         if (string.IsNullOrWhiteSpace(subject))
         {
             return null;
         }
 
-        var displayName = ClaimValue(user, GatewayAuthConventions.Claims.PreferredUsername) ??
+        string displayName = ClaimValue(user, GatewayAuthConventions.Claims.PreferredUsername) ??
                           ClaimValue(user, GatewayAuthConventions.Claims.Email) ??
                           subject;
 

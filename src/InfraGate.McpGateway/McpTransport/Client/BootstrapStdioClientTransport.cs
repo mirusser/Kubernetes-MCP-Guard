@@ -54,7 +54,7 @@ internal sealed class BootstrapStdioClientTransport(
                 .ConfigureAwait(false);
             await startedProcess.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
 
-            var sessionTransport = await ConnectStreamTransportAsync(
+            ITransport sessionTransport = await ConnectStreamTransportAsync(
                 startedProcess.StandardOutput.BaseStream,
                 startedProcess.StandardInput.BaseStream,
                 loggerFactory,
@@ -97,7 +97,7 @@ internal sealed class BootstrapStdioClientTransport(
 
         if (options.EnvironmentVariables is not null)
         {
-            foreach (var (name, value) in options.EnvironmentVariables)
+            foreach ((string? name, string? value) in options.EnvironmentVariables)
             {
                 if (value is null)
                 {
@@ -141,9 +141,9 @@ internal sealed class BootstrapStdioClientTransport(
 
         if (!process.HasExited)
         {
-            var exitTask = process.WaitForExitAsync();
+            Task exitTask = process.WaitForExitAsync();
             var timeoutTask = Task.Delay(shutdownTimeout, TimeProvider.System);
-            var completedTask = await Task.WhenAny(exitTask, timeoutTask).ConfigureAwait(false);
+            Task completedTask = await Task.WhenAny(exitTask, timeoutTask).ConfigureAwait(false);
             if (completedTask != exitTask && !process.HasExited)
             {
                 KillProcess(process);

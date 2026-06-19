@@ -12,7 +12,7 @@ public static partial class PromptInjectionGuard
             return;
         }
 
-        foreach (var (category, pattern) in Patterns)
+        foreach ((string? category, Regex? pattern) in Patterns)
         {
             if (pattern.IsMatch(text))
             {
@@ -33,7 +33,7 @@ public static partial class PromptInjectionGuard
             return false;
         }
 
-        var hasInvalidChar = false;
+        bool hasInvalidChar = false;
         foreach (char c in text)
         {
             if (c is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '+' or '/' or '=')
@@ -65,7 +65,7 @@ public static partial class PromptInjectionGuard
 
     private static void TryScanEmbeddedBase64Payloads(string text, string location, List<GuardrailFinding> findings)
     {
-        var matches = EmbeddedBase64Regex().Matches(text);
+        MatchCollection matches = EmbeddedBase64Regex().Matches(text);
         foreach (Match match in matches)
         {
             byte[] decoded;
@@ -99,14 +99,14 @@ public static partial class PromptInjectionGuard
         }
 
         // Justification: S3267 — .Count(predicate) is already the canonical LINQ form; there is no foreach+if loop to simplify with .Where().
-        var printable = decodedText.Count(c => !char.IsControl(c) || c == '\n' || c == '\r' || c == '\t');
+        int printable = decodedText.Count(c => !char.IsControl(c) || c == '\n' || c == '\r' || c == '\t');
 
         if (printable < decodedText.Length * 0.7)
         {
             return false;
         }
 
-        foreach (var (category, pattern) in Patterns)
+        foreach ((string? category, Regex? pattern) in Patterns)
         {
             if (pattern.IsMatch(decodedText))
             {

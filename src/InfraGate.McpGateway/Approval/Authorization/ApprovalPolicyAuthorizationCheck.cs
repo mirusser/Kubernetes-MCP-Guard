@@ -8,7 +8,7 @@ public sealed class ApprovalPolicyAuthorizationCheck : IAuthorizationCheck
 {
     public Task<AuthorizationResult> EvaluateAsync(IAuthorizationContext context, CancellationToken cancellationToken)
     {
-        var result = context.ApprovalPolicy.Type switch
+        AuthorizationResult result = context.ApprovalPolicy.Type switch
         {
             ApprovalConventions.ApprovalPolicyTypes.SameSubject =>
                 SameSubject(context),

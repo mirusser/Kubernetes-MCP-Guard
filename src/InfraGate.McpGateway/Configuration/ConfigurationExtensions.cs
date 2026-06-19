@@ -135,7 +135,7 @@ internal static class ConfigurationExtensions
     {
         private void RegisterDownstreamAuth(McpGatewayOptions options)
         {
-            var downstreamAuth = options.DownstreamAuth;
+            DownstreamAuthOptions? downstreamAuth = options.DownstreamAuth;
             if (downstreamAuth is null || !downstreamAuth.Required)
             {
                 services.AddSingleton<IDownstreamServiceTokenProvider, NullDownstreamServiceTokenProvider>();

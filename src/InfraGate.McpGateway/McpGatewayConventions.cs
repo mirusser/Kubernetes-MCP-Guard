@@ -21,6 +21,7 @@ internal static class McpGatewayConventions
         public const string MeterName = "InfraGate.McpGateway";
         public const string MeterVersion = "1.0";
         public const string GuardrailAuditWriteFailedCounterName = "infragate.gateway.guardrail.audit_write.failed";
+        public const string EmailFailedCounterName = "infragate.gateway.email.failed";
 
         public static class Tags
         {
@@ -152,6 +153,7 @@ internal static class McpGatewayConventions
         public const string LogoutPath = "/approvals/logout";
         public const string CodeFormField = "code";
         public const string RequestVerificationToken = "__RequestVerificationToken";
+        public const string ReturnUrlQueryKey = "ReturnUrl";
     }
 
     public static class ApprovalReasonCodes
@@ -207,6 +209,19 @@ internal static class McpGatewayConventions
         public const string WarnRedactAction = "warn_redact";
         public const string RedactManifestAction = "redact_manifest";
         public const string DenyAction = "scope.denied";
+
+        public static class EntryFields
+        {
+            public const string Timestamp = "timestamp";
+            public const string ToolName = "toolName";
+            public const string Direction = "direction";
+            public const string Action = "action";
+            public const string Categories = "categories";
+            public const string PlanId = "planId";
+            public const string Subject = "subject";
+            public const string AuthenticationType = "authenticationType";
+            public const string IdentityKind = "identityKind";
+        }
     }
 
     public static class GuardrailCategories

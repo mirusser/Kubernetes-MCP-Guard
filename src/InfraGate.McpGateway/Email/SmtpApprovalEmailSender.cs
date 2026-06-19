@@ -22,7 +22,7 @@ internal sealed class SmtpApprovalEmailSender(
             content.Subject,
             content.BodyPlaintext);
 
-        using var client = smtpClientFactory.Create(options);
+        using ISmtpClient client = smtpClientFactory.Create(options);
         await client.SendMailAsync(message, cancellationToken).ConfigureAwait(false);
 
         logger.LogInformation("smtp email sent");

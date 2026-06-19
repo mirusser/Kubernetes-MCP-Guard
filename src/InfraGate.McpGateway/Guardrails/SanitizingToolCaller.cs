@@ -25,11 +25,11 @@ internal sealed class SanitizingToolCaller(
             rawResponse = "Tool call failed";
         }
 
-        var sanitized = PromptInjectionGuard.SanitizeResponse(rawResponse ?? string.Empty);
+        ResponseSanitizationResult sanitized = PromptInjectionGuard.SanitizeResponse(rawResponse ?? string.Empty);
 
         if (sanitized.HasFindings || sanitized.ManifestRedacted)
         {
-            var auditIdentity = GatewayAuditIdentityResolver.Resolve(
+            GatewayAuditIdentity auditIdentity = GatewayAuditIdentityResolver.Resolve(
                 httpContextAccessor?.HttpContext?.User);
 
             try

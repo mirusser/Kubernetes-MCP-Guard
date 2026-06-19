@@ -70,7 +70,7 @@ public sealed record class McpGatewayOptions(
             DefaultApprovalChallengeTtl);
         string operatorGroup = approvalSettings?.OperatorGroup ?? McpGatewayConventions.DefaultOperatorGroup;
         string? operatorEmail = approvalSettings?.OperatorEmail;
-        var smtp = CreateSmtpOptions(
+        SmtpApprovalEmailOptions? smtp = CreateSmtpOptions(
             approvalSettings?.Smtp?.Host,
             approvalSettings?.Smtp?.Port,
             approvalSettings?.Smtp?.From,
@@ -103,7 +103,7 @@ public sealed record class McpGatewayOptions(
             return;
         }
 
-        var downstreamAuth = DownstreamAuth;
+        DownstreamAuthOptions? downstreamAuth = DownstreamAuth;
         if (downstreamAuth is null || !downstreamAuth.Required)
         {
             throw new InvalidOperationException(

@@ -9,7 +9,7 @@ public static partial class PromptInjectionGuard
     public static GuardScanResult ScanArguments(IReadOnlyDictionary<string, object?> arguments)
     {
         var findings = new List<GuardrailFinding>();
-        foreach (var (name, value) in arguments)
+        foreach ((string? name, object? value) in arguments)
         {
             ScanValue(value, name, findings);
         }
@@ -49,7 +49,7 @@ public static partial class PromptInjectionGuard
         string location,
         List<GuardrailFinding> findings)
     {
-        foreach (var (name, child) in dictionary)
+        foreach ((string? name, object? child) in dictionary)
         {
             ScanValue(child, $"{location}.{name}", findings);
         }
@@ -65,8 +65,8 @@ public static partial class PromptInjectionGuard
 
     private static void ScanEnumerable(IEnumerable enumerable, string location, List<GuardrailFinding> findings)
     {
-        var index = 0;
-        foreach (var item in enumerable)
+        int index = 0;
+        foreach (object? item in enumerable)
         {
             ScanValue(item, $"{location}[{index}]", findings);
             index++;
@@ -81,15 +81,15 @@ public static partial class PromptInjectionGuard
                 AddTextFindings(element.GetString() ?? string.Empty, location, findings);
                 break;
             case JsonValueKind.Object:
-                foreach (var property in element.EnumerateObject())
+                foreach (JsonProperty property in element.EnumerateObject())
                 {
                     ScanJsonElement(property.Value, $"{location}.{property.Name}", findings);
                 }
 
                 break;
             case JsonValueKind.Array:
-                var index = 0;
-                foreach (var item in element.EnumerateArray())
+                int index = 0;
+                foreach (JsonElement item in element.EnumerateArray())
                 {
                     ScanJsonElement(item, $"{location}[{index}]", findings);
                     index++;
@@ -117,7 +117,7 @@ public static partial class PromptInjectionGuard
 
     private static void ScanJsonObject(JsonObject jsonObject, string location, List<GuardrailFinding> findings)
     {
-        foreach (var (name, child) in jsonObject)
+        foreach ((string? name, JsonNode? child) in jsonObject)
         {
             if (child is not null)
             {
@@ -128,9 +128,9 @@ public static partial class PromptInjectionGuard
 
     private static void ScanJsonArray(JsonArray jsonArray, string location, List<GuardrailFinding> findings)
     {
-        for (var i = 0; i < jsonArray.Count; i++)
+        for (int i = 0; i < jsonArray.Count; i++)
         {
-            var child = jsonArray[i];
+            JsonNode? child = jsonArray[i];
             if (child is not null)
             {
                 ScanJsonNode(child, $"{location}[{i}]", findings);

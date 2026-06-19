@@ -29,7 +29,7 @@ internal static class ToolScopeCatalog
     // For downstream tools, the caller must supply hasReadOnlyHint (from the tool's annotation).
     internal static IReadOnlyList<string> GetRequiredScopes(string toolName, bool hasReadOnlyHint)
     {
-        var synthesized = GetSynthesizedScopes(toolName);
+        IReadOnlyList<string>? synthesized = GetSynthesizedScopes(toolName);
         if (synthesized is not null)
             return synthesized;
 

@@ -25,22 +25,22 @@ internal sealed class DownstreamMcpClient(
         IReadOnlyDictionary<string, object?> arguments,
         CancellationToken cancellationToken)
     {
-        var mcpClient = await GetClientAsync(cancellationToken).ConfigureAwait(false);
+        McpClient mcpClient = await GetClientAsync(cancellationToken).ConfigureAwait(false);
         await callLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             return await WithAuthRetryAsync(async token =>
             {
-                var meta = BuildAuthMeta(token);
-                var requestOptions = meta is not null ? new RequestOptions { Meta = meta } : null;
-                var result = await mcpClient.CallToolAsync(
+                JsonObject? meta = BuildAuthMeta(token);
+                RequestOptions? requestOptions = meta is not null ? new RequestOptions { Meta = meta } : null;
+                CallToolResult result = await mcpClient.CallToolAsync(
                     toolName,
                     arguments,
                     progress: null,
                     options: requestOptions,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
-                var text = string.Join(
+                string text = string.Join(
                     Environment.NewLine,
                     result.Content.OfType<TextContentBlock>().Select(content => content.Text));
 
@@ -63,12 +63,12 @@ internal sealed class DownstreamMcpClient(
 
     public async Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken)
     {
-        var mcpClient = await GetClientAsync(cancellationToken).ConfigureAwait(false);
+        McpClient mcpClient = await GetClientAsync(cancellationToken).ConfigureAwait(false);
         return await WithAuthRetryAsync(async token =>
         {
-            var meta = BuildAuthMeta(token);
-            var requestOptions = meta is not null ? new RequestOptions { Meta = meta } : null;
-            var tools = await mcpClient.ListToolsAsync(requestOptions, cancellationToken: cancellationToken).ConfigureAwait(false);
+            JsonObject? meta = BuildAuthMeta(token);
+            RequestOptions? requestOptions = meta is not null ? new RequestOptions { Meta = meta } : null;
+            IList<McpClientTool> tools = await mcpClient.ListToolsAsync(requestOptions, cancellationToken: cancellationToken).ConfigureAwait(false);
             return tools
                 .Select(t => new DownstreamTool(
                     t.Name,
@@ -112,7 +112,7 @@ internal sealed class DownstreamMcpClient(
                 return client;
             }
 
-            var transportOptions = CreateTransportOptions();
+            StdioClientTransportOptions transportOptions = CreateTransportOptions();
             string? bootstrapLine = await CreateBootstrapLineAsync(cancellationToken).ConfigureAwait(false);
             IClientTransport transport = bootstrapLine is null
                 ? new StdioClientTransport(transportOptions)

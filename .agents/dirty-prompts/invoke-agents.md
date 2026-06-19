@@ -1,3 +1,3 @@
  ```text
-   subagent agent="dotnet-standard" task="Review staged changes against code standards" agentScope="both"
+   subagent agent="dotnet-standard" task="Review staged changes against code standards" agentScope="user"
  ```

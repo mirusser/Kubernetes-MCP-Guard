@@ -26,7 +26,7 @@ internal sealed class PlanStatusResourceHandler(
     public async Task<ReadResourceResult> ReadAsync(ReadResourceRequestParams request, CancellationToken ct)
     {
         string planId = ParsePlanStatusUri(request.Uri);
-        var status = await approvalPlans.GetPlanStatusAsync(planId, ct).ConfigureAwait(false);
+        PlanStatusResult status = await approvalPlans.GetPlanStatusAsync(planId, ct).ConfigureAwait(false);
         string uri = NotificationsConventions.Resources.PlanStatusUri(planId);
 
         return new ReadResourceResult

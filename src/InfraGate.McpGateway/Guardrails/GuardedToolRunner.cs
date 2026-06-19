@@ -44,7 +44,7 @@ public sealed partial class GuardedToolRunner(
             logger.LogError(ex, "Downstream call to '{ToolName}' threw an exception", toolName);
             return $"Tool call failed: {ex.GetType().Name}: {ex.Message}";
         }
-        var response = await SanitizeAndAuditResponseAsync(toolName, arguments, downstreamText, cancellationToken).ConfigureAwait(false);
+        ResponseSanitizationResult response = await SanitizeAndAuditResponseAsync(toolName, arguments, downstreamText, cancellationToken).ConfigureAwait(false);
 
         return !requestHasFindings && !response.HasFindings
             ? response.Text
@@ -56,13 +56,13 @@ public sealed partial class GuardedToolRunner(
         IReadOnlyDictionary<string, object?> arguments,
         CancellationToken cancellationToken)
     {
-        var requestScan = PromptInjectionGuard.ScanArguments(arguments);
+        GuardScanResult requestScan = PromptInjectionGuard.ScanArguments(arguments);
         if (!requestScan.HasFindings)
         {
             return false;
         }
 
-        var auditIdentity = GetAuditIdentity();
+        AuditIdentity auditIdentity = GetAuditIdentity();
         await TryWriteAuditAsync(
             new GuardrailAuditEvent(
                 toolName,
@@ -84,10 +84,10 @@ public sealed partial class GuardedToolRunner(
         string responseText,
         CancellationToken cancellationToken)
     {
-        var response = PromptInjectionGuard.SanitizeResponse(responseText);
+        ResponseSanitizationResult response = PromptInjectionGuard.SanitizeResponse(responseText);
         if (response.HasFindings || response.ManifestRedacted)
         {
-            var auditIdentity = GetAuditIdentity();
+            AuditIdentity auditIdentity = GetAuditIdentity();
             await TryWriteAuditAsync(
                 new GuardrailAuditEvent(
                     toolName,
@@ -136,14 +136,14 @@ public sealed partial class GuardedToolRunner(
 
     private AuditIdentity GetAuditIdentity()
     {
-        var identity = GatewayAuditIdentityResolver.Resolve(httpContextAccessor?.HttpContext?.User);
+        GatewayAuditIdentity identity = GatewayAuditIdentityResolver.Resolve(httpContextAccessor?.HttpContext?.User);
 
         return new AuditIdentity(identity.Subject, identity.AuthenticationType, identity.IdentityKind);
     }
 
     private static string? ExtractPlanId(IReadOnlyDictionary<string, object?> arguments, string? text)
     {
-        if (arguments.TryGetValue(McpGatewayConventions.ToolArguments.PlanId, out var planId) &&
+        if (arguments.TryGetValue(McpGatewayConventions.ToolArguments.PlanId, out object? planId) &&
             planId is string planIdText &&
             !string.IsNullOrWhiteSpace(planIdText))
         {
@@ -155,7 +155,7 @@ public sealed partial class GuardedToolRunner(
             return null;
         }
 
-        var match = PlanIdRegex().Match(text);
+        Match match = PlanIdRegex().Match(text);
 
         return match.Success ? match.Groups[McpGatewayConventions.RegexGroups.Id].Value : null;
     }
