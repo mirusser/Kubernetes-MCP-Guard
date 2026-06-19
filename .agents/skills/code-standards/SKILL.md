@@ -9,6 +9,64 @@ description: Apply this repository's coding standards when Codex makes, reviews,
 
 Apply these standards alongside the repo's `AGENTS.md` instructions. Keep changes simple, surgical, and easy to verify.
 
+## Review Checklist
+
+Use this checklist when reviewing staged or proposed changes. Verify each category against the changed files and list concrete findings. When using the `dotnet-standard` agent, spawn one `dotnet-standard-fixer` subagent per category that has findings.
+
+### C1 — Naming and Conventions
+- [ ] Private fields use lower camel case without `_` prefix.
+- [ ] `var` is only used when the type is obvious from the right-hand side; primitives use explicit types.
+- [ ] Boolean members are named as questions (`IsReady`, `HasFailed`, `CanRetry`); no negated names.
+- [ ] Async methods end in `Async`.
+- [ ] Public/internal APIs prefer `IReadOnlyList<T>` / `IReadOnlyDictionary<K,V>`.
+
+### C2 — Types and Organization
+- [ ] One meaningful top-level type per file; no broad "grab bag" files.
+- [ ] File-scoped namespaces are used in new files.
+- [ ] `global using` directives are centralized in `GlobalUsings.cs`.
+- [ ] Classes are `sealed` by default unless subclassing is intentional.
+- [ ] Records are used for immutable value objects and DTOs; classes are used for behavior-heavy types.
+
+### C3 — Magic Strings and External Contracts
+- [ ] Repeated or external-contract strings (tool names, JSON keys, env vars, HTTP paths, Kubernetes apiVersion/kind, audit event names) are extracted to named constants, enums, or convention helpers.
+- [ ] New literals do not duplicate existing convention values.
+- [ ] Behavior and public contracts are preserved when changing literals.
+
+### C4 — Async, I/O, and Cancellation
+- [ ] `CancellationToken` is passed through all async I/O and external calls.
+- [ ] `ConfigureAwait(false)` is called on awaited tasks in library/tool code.
+- [ ] `using var` is used unless early disposal is needed.
+- [ ] Dependencies use constructor injection; configuration uses options records.
+
+### C5 — Pattern Matching and Modern C#
+- [ ] `is` patterns are preferred over `as`-casts with null checks.
+- [ ] `switch` expressions are used for exhaustive dispatch.
+- [ ] Hard casts `(T)obj` are avoided without a clear invariant.
+- [ ] Primary constructors are used where applicable.
+
+### C6 — Logging, Exceptions, and Guards
+- [ ] Logging uses `ILogger<T>` message templates, not string interpolation.
+- [ ] Specific exceptions are caught except at top-level boundaries.
+- [ ] Exceptions are not swallowed silently.
+- [ ] Guard helpers (`ThrowIfNull`, `ThrowIfNullOrEmpty`, `ThrowIfNegativeOrZero`) are used.
+- [ ] Exceptions are not used for control flow.
+
+### C7 — Analyzer and Build Hygiene
+- [ ] `.editorconfig`, analyzer, nullable, and warning settings are respected.
+- [ ] No broad `NoWarn`, disabled nullable contexts, or project-wide analyzer changes are introduced.
+- [ ] Public surface is minimal; `internal` is preferred unless cross-project use is intentional.
+
+### C8 — Tests
+- [ ] Test classes are named `{TypeUnderTest}Tests`.
+- [ ] `[Theory]` with `[InlineData]` or `[MemberData]` is preferred over duplicated `[Fact]` tests.
+- [ ] Tests have no shared mutable state.
+- [ ] Tests assert observable outputs, not implementation details.
+- [ ] Tests are named `Method_State_ExpectedResult`.
+
+### C9 — Formatting
+- [ ] Code matches surrounding formatting exactly.
+- [ ] No column-aligned spacing is introduced.
+
 ## Magic Strings
 
 Avoid repeated or unexplained string literals. Prefer named conventions when a string is repeated, part of an external contract (MCP tool names, JSON keys, env vars, HTTP paths, Kubernetes apiVersion/kind, audit event names), used for both declaration and invocation, or easy to mistype.
