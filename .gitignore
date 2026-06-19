@@ -66,6 +66,7 @@ InfraGate.sln.DotSettings.user
 
 # ── Agent runtime & skills ───────────────────────────────────────────────────
 agents/
+!.pi/
 .agents/tmp/
 .agents/skills/analyzer-config
 .agents/skills/analyzing-dotnet-performance
