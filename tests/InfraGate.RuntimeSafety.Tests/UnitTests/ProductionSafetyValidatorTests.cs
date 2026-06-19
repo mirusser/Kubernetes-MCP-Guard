@@ -72,7 +72,7 @@ public sealed class ProductionSafetyValidatorTests
     }
 
     [Theory]
-    [InlineData("openrouter/free")]
+    [InlineData(ProductionSafetyValidator.OpenRouterFreeRoute)]
     [InlineData("deepseek/deepseek-v4-flash:free")]
     public void RequireExplicitNonDemoLlmRoute_WithFreeRoute_Throws(string model)
     {
