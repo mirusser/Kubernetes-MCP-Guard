@@ -173,7 +173,10 @@ public sealed class KubernetesPlanExecutor : IDomainPlanExecutor
 
     private async Task<ResultFailure?> CheckLiveDriftAsync(KubernetesPlan plan, KubernetesPlanPayload payload, CancellationToken ct)
     {
-        if (payload.Diffs.Length == 0)
+        var hasLiveDriftCheck = plan.Envelope.FreshnessPolicy.Checks
+            .Any(c => string.Equals(c.Type, KubernetesAdapterConventions.FreshnessCheckTypes.LiveDrift, StringComparison.Ordinal));
+
+        if (!hasLiveDriftCheck || payload.Diffs.Length == 0)
         {
             return null;
         }

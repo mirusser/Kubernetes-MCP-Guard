@@ -441,6 +441,47 @@ public sealed class KubernetesPlanExecutorTests
     }
 
     [Fact]
+    public async Task CheckPreExecutionAsync_LiveDriftNotInFreshnessPolicy_SkipsDriftCheck()
+    {
+        var diff = MakeDiff("demo", "nginx");
+        var dryRun = MakeDryRun("demo", "nginx");
+        var payload = new KubernetesPlanPayload(
+            "demo",
+            "Restart deployment nginx.",
+            new Dictionary<string, string>
+            {
+                [KubernetesAdapterConventions.PlanParameters.Name] = "nginx"
+            },
+            [new KubernetesObjectRef("apps/v1", "Deployment", "demo", "nginx")])
+        {
+            DryRun = dryRun,
+            Diffs = [diff]
+        };
+
+        var envelope = KubernetesApprovalAdapter.ToEnvelope(
+            KubernetesApprovalAdapter.CreateEnvelope(
+                ApprovalIds.NewPlanId(),
+                KubernetesAdapterConventions.PlanOperations.Restart,
+                DateTimeOffset.UtcNow,
+                TestRequester,
+                payload,
+                freshnessPolicy: new FreshnessPolicy(
+                [
+                    new FreshnessCheck(KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun, new Dictionary<string, string>())
+                ])));
+
+        var toolCaller = new FakeToolCaller()
+            .With(KubernetesAdapterConventions.EvidenceTools.DryRunRestartDeployment, DryRunJson(dryRun));
+
+        var executor = CreateExecutor(toolCaller);
+        var result = await executor.CheckPreExecutionAsync(envelope, CancellationToken.None);
+
+        Assert.True(result.IsSuccessful);
+        Assert.DoesNotContain(KubernetesAdapterConventions.EvidenceTools.CheckLiveDrift, toolCaller.CalledTools);
+        Assert.Contains(KubernetesAdapterConventions.EvidenceTools.DryRunRestartDeployment, toolCaller.CalledTools);
+    }
+
+    [Fact]
     public async Task CheckPreExecutionAsync_PreExecuteDryRunFails_BlocksExecution()
     {
         var diff = MakeDiff("demo", "nginx");

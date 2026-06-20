@@ -90,9 +90,9 @@ public sealed class DryRunFailureTests(SafetyE2EFixture fixture)
 
         // Rewrite the planned target name to a deployment that does not exist, then
         // refresh the digest-bound envelope fields and approve that mutated plan.
-        // Result: grant validation succeeds, drift check sees the original Objects[]
-        // (still unchanged in the cluster), and the pre-apply dry-run patches a
-        // non-existent target -> 404 -> dry-run fails.
+        // Result: grant validation succeeds, and the pre-apply dry-run patches a
+        // non-existent target -> 404 -> dry-run fails. Drop freshness checks that
+        // depend on the original target so the test isolates the dry-run failure.
         // String-based replace is too brittle because ApprovalStore writes pending plans
         // with WriteIndented = true (key/value separated by ": ", not ":").
         var pendingJson = await File.ReadAllTextAsync(pendingPath, CancellationToken.None);
@@ -108,6 +108,12 @@ public sealed class DryRunFailureTests(SafetyE2EFixture fixture)
             ?? throw new InvalidOperationException("Failed to deserialize modified pending plan.");
         var tamperedPayload = tamperedEnvelope.Payload.Deserialize<KubernetesPlanPayload>(rewriteOptions)
             ?? throw new InvalidOperationException("Failed to deserialize modified Kubernetes payload.");
+        var dryRunOnlyFreshnessPolicy = new FreshnessPolicy(
+        [
+            new FreshnessCheck(
+                KubernetesAdapterConventions.FreshnessCheckTypes.PreExecuteDryRun,
+                new Dictionary<string, string>(StringComparer.Ordinal))
+        ]);
         var refreshedEnvelope = KubernetesApprovalAdapter.ToEnvelope(
             KubernetesApprovalAdapter.CreateEnvelope(
                 tamperedEnvelope.Id,
@@ -116,7 +122,7 @@ public sealed class DryRunFailureTests(SafetyE2EFixture fixture)
                 tamperedEnvelope.Requester,
                 tamperedPayload,
                 tamperedEnvelope.ReviewSurfaceContext,
-                tamperedEnvelope.FreshnessPolicy));
+                dryRunOnlyFreshnessPolicy));
         root = JsonSerializer.SerializeToNode(refreshedEnvelope, rewriteOptions)
             ?? throw new InvalidOperationException("Failed to serialize refreshed pending plan.");
 

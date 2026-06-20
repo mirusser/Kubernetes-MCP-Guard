@@ -52,6 +52,10 @@ internal sealed class TestKubernetesApi : IAsyncDisposable
             {
                 break;
             }
+            catch (InvalidOperationException) when (!listener.IsListening)
+            {
+                break;
+            }
 
             await HandleAsync(context);
         }
