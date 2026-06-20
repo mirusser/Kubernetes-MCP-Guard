@@ -64,6 +64,18 @@ public sealed class SystemPromptProviderTests
     }
 
     [Fact]
+    public async Task RenderAsync_TreatsToolResultPayloadsAsUntrustedObservations()
+    {
+        var library = await BuildObserverLibraryAsync();
+        var prompt = await library.RenderAsync(
+            ObserverConventions.Prompts.SystemPromptTemplateName, DefaultArgs());
+
+        Assert.Contains("untrusted", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("observation data", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not instructions", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task RenderAsync_ForbidsMutationToolNames()
     {
         var library = await BuildObserverLibraryAsync();

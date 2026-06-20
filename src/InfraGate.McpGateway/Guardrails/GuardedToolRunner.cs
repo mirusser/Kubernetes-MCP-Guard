@@ -32,7 +32,21 @@ public sealed partial class GuardedToolRunner(
         IReadOnlyDictionary<string, object?> arguments,
         CancellationToken cancellationToken)
     {
-        bool requestHasFindings = await AuditRequestAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
+        GuardedToolCallResult result = await CallForModelVisibleResponseAsync(toolName, arguments, cancellationToken)
+            .ConfigureAwait(false);
+
+        return !result.HasGuardrailFindings
+            ? result.Text
+            : FormatWarningResponse(result.Text);
+    }
+
+    internal async Task<GuardedToolCallResult> CallForModelVisibleResponseAsync(
+        string toolName,
+        IReadOnlyDictionary<string, object?> arguments,
+        CancellationToken cancellationToken)
+    {
+        GuardScanResult requestScan = await ScanAndAuditRequestAsync(toolName, arguments, cancellationToken)
+            .ConfigureAwait(false);
 
         string downstreamText;
         try
@@ -42,13 +56,28 @@ public sealed partial class GuardedToolRunner(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Downstream call to '{ToolName}' threw an exception", toolName);
-            return $"Tool call failed: {ex.GetType().Name}: {ex.Message}";
+            string errorText = $"Tool call failed: {ex.GetType().Name}: {ex.Message}";
+            return new GuardedToolCallResult(
+                errorText,
+                McpGatewayConventions.ModelVisibleToolResult.StatusError,
+                requestScan.Categories,
+                requestScan.HasFindings
+                    ? McpGatewayConventions.GuardrailAudit.WarnAction
+                    : McpGatewayConventions.ModelVisibleToolResult.GuardrailActionAllow);
         }
-        ResponseSanitizationResult response = await SanitizeAndAuditResponseAsync(toolName, arguments, downstreamText, cancellationToken).ConfigureAwait(false);
 
-        return !requestHasFindings && !response.HasFindings
-            ? response.Text
-            : FormatWarningResponse(response.Text);
+        ResponseSanitizationResult response = await SanitizeAndAuditResponseAsync(toolName, arguments, downstreamText, cancellationToken).ConfigureAwait(false);
+        string[] categories = requestScan.Categories
+            .Concat(response.Categories)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(category => category, StringComparer.Ordinal)
+            .ToArray();
+
+        return new GuardedToolCallResult(
+            response.Text,
+            McpGatewayConventions.ModelVisibleToolResult.StatusSuccess,
+            categories,
+            DetermineGuardrailAction(requestScan, response));
     }
 
     internal async Task<bool> AuditRequestAsync(
@@ -56,10 +85,21 @@ public sealed partial class GuardedToolRunner(
         IReadOnlyDictionary<string, object?> arguments,
         CancellationToken cancellationToken)
     {
+        GuardScanResult requestScan = await ScanAndAuditRequestAsync(toolName, arguments, cancellationToken)
+            .ConfigureAwait(false);
+
+        return requestScan.HasFindings;
+    }
+
+    private async Task<GuardScanResult> ScanAndAuditRequestAsync(
+        string toolName,
+        IReadOnlyDictionary<string, object?> arguments,
+        CancellationToken cancellationToken)
+    {
         GuardScanResult requestScan = PromptInjectionGuard.ScanArguments(arguments);
         if (!requestScan.HasFindings)
         {
-            return false;
+            return requestScan;
         }
 
         AuditIdentity auditIdentity = GetAuditIdentity();
@@ -75,7 +115,7 @@ public sealed partial class GuardedToolRunner(
                 auditIdentity.IdentityKind),
             cancellationToken).ConfigureAwait(false);
 
-        return true;
+        return requestScan;
     }
 
     internal async Task<ResponseSanitizationResult> SanitizeAndAuditResponseAsync(
@@ -106,6 +146,23 @@ public sealed partial class GuardedToolRunner(
         }
 
         return response;
+    }
+
+    private static string DetermineGuardrailAction(GuardScanResult requestScan, ResponseSanitizationResult response)
+    {
+        if (response.HasFindings)
+        {
+            return McpGatewayConventions.GuardrailAudit.WarnRedactAction;
+        }
+
+        if (response.ManifestRedacted)
+        {
+            return McpGatewayConventions.GuardrailAudit.RedactManifestAction;
+        }
+
+        return requestScan.HasFindings
+            ? McpGatewayConventions.GuardrailAudit.WarnAction
+            : McpGatewayConventions.ModelVisibleToolResult.GuardrailActionAllow;
     }
 
     private async Task TryWriteAuditAsync(

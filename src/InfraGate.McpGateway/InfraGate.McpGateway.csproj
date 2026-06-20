@@ -16,6 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Shared\ModelVisibleToolResultConventions.cs" Link="ModelVisibleToolResultConventions.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\InfraGate.Approvals\InfraGate.Approvals.csproj" />
     <ProjectReference Include="..\InfraGate.Approvals.Postgres\InfraGate.Approvals.Postgres.csproj" />
     <ProjectReference Include="..\InfraGate.ClientCredentials\InfraGate.ClientCredentials.csproj" />

@@ -5,7 +5,7 @@
 **Re-assessed:** 2026-06-05 (against current codebase; see Implementation Notes per finding)  
 **Scope:** Architecture & request-flow diagrams covering OAuth Login & Authorization, Read-Only Tool Calls, and Approval-Gated Mutations.  
 **Method:** Static architectural analysis of Mermaid sequence diagrams and system description.  
-**Status:** 13 findings identified — 6 from initial audit (verified & extended), 7 new. **Re-assessment: 6 mitigated, 2 partial, 5 unaddressed.**
+**Status:** 13 findings identified — 6 from initial audit (verified & extended), 7 new. **Re-assessment: 6 mitigated, 4 partial, 3 unaddressed.**
 
 ---
 
@@ -168,7 +168,7 @@ The SHA-256 hash mitigates the case where the *pending plan file itself* is tamp
 **Severity:** High
 **Diagram:** Read-Only Tool Call (Diagram 2)
 **Status:** Original finding — confirmed
-**Resolution:** ❌ **NOT MITIGATED** (re-assessed 2026-06-05)
+**Resolution:** ✅ **MITIGATED WITH RESIDUAL RISK** (re-assessed 2026-06-20)
 
 #### Description
 
@@ -190,13 +190,17 @@ If any such payload reaches the LLM, it can override the system prompt and hijac
 - Consider a secondary LLM pass specifically tasked with classifying tool output as benign or suspicious before it reaches the primary model context.
 - Use the audit log (`GuardrailAuditStore`) as a detection signal, not a prevention mechanism — assume some injections will pass.
 
-#### Implementation Notes (2026-06-05)
+#### Implementation Notes (2026-06-20)
 
-Still regex/rule-based only. The five-category scanner lives in `PromptInjectionGuard.Regex.cs:153-180` with redaction in `PromptInjectionGuard.Sanitization.cs`. One improvement: **base64 decode-and-scan** was added (`PromptInjectionGuard.Regex.cs:29-117`) to catch encoded payloads. But all major gaps remain:
-- No schema-enforced tool output envelope — tool results returned as plain text blocks (`GatewayToolDispatcher.cs`).
-- No secondary LLM classification pass — `ModelVisibleContentOptions.cs:37-41` explicitly throws `InvalidOperationException` for `SemanticClassifierEnabled`.
-- No Unicode homoglyph or zero-width character detection.
-- `GuardrailAuditStore` is JSONL append-only on disk (`GuardrailAuditStore.cs:10-37`), local only.
+Mitigated by changing the prevention boundary from text sanitization to structural output isolation:
+
+- Read-only downstream tool calls now return a `model_visible_tool_result` JSON envelope from `GatewayToolDispatcher.HandleReadOnlyAsync` via `ModelVisibleToolResultEnvelope`. Gateway-owned metadata (`schemaVersion`, `kind`, `toolName`, `source`, `status`, `guardrail`) is separated from Kubernetes-derived content under `untrusted.payload`.
+- `GuardedToolRunner.CallForModelVisibleResponseAsync` preserves scanner/audit behavior while reporting guardrail action and categories as structured envelope metadata instead of prepending `Guardrail warning:` prose to model-visible read-only responses.
+- The deterministic scanner now normalizes zero-width format characters and a small set of common Greek/Cyrillic homoglyphs before matching, and it evaluates combined text across fields to catch split-field payloads.
+- Observer and Planner system prompts explicitly state that `untrusted.payload` is observation data only, not instructions, policy, secrets to reveal, or tool-calling guidance.
+- Agent-layer tool results pass through `IModelVisibleContentGuard` in `ToolCallingAgentFactory`; enveloped tool results preserve trusted metadata while replacing only `untrusted.payload` when a guard redacts, quarantines, or blocks content. Gateway and agent tests cover the envelope contract, error envelope, payload isolation, and F-03 corpus cases.
+
+Residual risk remains for sophisticated semantic prompt injections that evade deterministic classification. ADR-0030 still defers a local semantic classifier sidecar; `.agents/Plans/loose/2026-06-03-local-semantic-classifier-research-plan.md` must pass candidate, license, provenance, and corpus-bakeoff review before any classifier becomes a runtime dependency.
 
 ---
 
@@ -510,7 +514,7 @@ The naming follows `mcp:tools.{role}` (e.g., `mcp:tools.read`) rather than the s
 |---|---|---|---|---|---|
 | F-01 | Auto-approval loophole — human presence not provable | **Critical** | Original (extended) | Diagram 3 | ✅ Mitigated |
 | F-02 | TOCTOU via stale dry-run / force-conflicts | **High** | Original | Diagram 3 | ✅ Mitigated |
-| F-03 | Prompt injection sanitization fallacy | **High** | Original | Diagram 2 | ❌ Not mitigated |
+| F-03 | Prompt injection sanitization fallacy | **High** | Original | Diagram 2 | ✅ Mitigated with residual risk |
 | F-04 | Disk exhaustion & path traversal in ApprovalStore | **High** | Original | Diagram 3 | ✅ Mitigated |
 | F-05 | Loopback port hijacking in DCR | **Medium** | Original | Diagram 1 | ⚠️ Partial |
 | F-06 | Subprocess blast radius under shared Service Account | **High** | Original | Diagram 2 | ⚠️ Partial |
@@ -550,7 +554,7 @@ The naming follows `mcp:tools.{role}` (e.g., `mcp:tools.read`) rather than the s
 |---|---|---|---|
 | 9 | **F-01** — OOB approval channel | Full fix requires external infrastructure | ✅ Done — browser-based approval with OAuth PKCE |
 | 10 | **F-12** — Remote audit log shipping | Requires out-of-process log sink | ⚠️ Partial — PG audit has hash chaining, no SIEM shipping |
-| 11 | **F-03** — Schema-enforced tool output isolation | Requires LLM prompt engineering + testing | ❌ Open |
+| 11 | ✅ **F-03** — Schema-enforced tool output isolation | Requires LLM prompt engineering + testing | ✅ Done — read-only tool-result envelope + model-visible guard path; semantic classifier remains deferred by ADR-0030 |
 | 12 | **F-11** — JWKS `kid` pinning + bounded cache TTL | Configuration-level fix once token plumbing is stable | ❌ Open |
 | 13 | **F-05** — Subprocess / container isolation | Deployment environment dependent | ⚠️ Partial — container isolation added, no OS-level checks |
 

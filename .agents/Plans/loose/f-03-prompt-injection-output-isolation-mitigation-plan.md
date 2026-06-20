@@ -1,5 +1,9 @@
 # Implementation Plan: F-03 Prompt Injection Output Isolation Mitigation
 
+## Status
+
+Implemented 2026-06-20. The local semantic classifier sidecar remains deferred by ADR-0030; the implemented mitigation uses output isolation, deterministic scanner hardening, agent model-visible guard enforcement, prompt updates, tests, and audit-status documentation.
+
 ## Overview
 
 Mitigate F-03 from `.agents/Plans/loose/security-audit.md` by changing prompt-injection handling from "regex sanitizer as prevention" to layered model-visible output isolation. Kubernetes-derived tool output should be treated as hostile by default, returned to model-facing clients in a strict envelope, evaluated through the existing model-visible content guard seam, and backed by adversarial regression tests. Existing regex/base64 scanning remains useful as detection and redaction, but it must no longer be the primary security claim.
@@ -60,8 +64,8 @@ Adversarial corpus + envelope contract
 
 ### Phase 1: Contract and Regression Foundation
 
-- [ ] Task 1: Build the F-03 adversarial corpus and benign Kubernetes fixtures
-- [ ] Task 2: Define the model-visible tool-result envelope contract
+- [x] Task 1: Build the F-03 adversarial corpus and benign Kubernetes fixtures
+- [x] Task 2: Define the model-visible tool-result envelope contract
 
 ## Task 1: Build the F-03 adversarial corpus and benign Kubernetes fixtures
 
@@ -69,14 +73,14 @@ Adversarial corpus + envelope contract
 
 **Acceptance criteria:**
 
-- [ ] Corpus includes base64/encoded payloads, split-field payloads, zero-width characters, Unicode homoglyphs, non-Latin instruction variants, indirect instruction patterns, and clean Kubernetes status/log samples.
-- [ ] Each hostile sample has a tag explaining the bypass class it represents.
-- [ ] Clean samples include realistic pod status, events, labels, annotations, and logs that should remain usable.
+- [x] Corpus includes base64/encoded payloads, split-field payloads, zero-width characters, Unicode homoglyphs, non-Latin instruction variants, indirect instruction patterns, and clean Kubernetes status/log samples.
+- [x] Each hostile sample has a tag explaining the bypass class it represents.
+- [x] Clean samples include realistic pod status, events, labels, annotations, and logs that should remain usable.
 
 **Verification:**
 
-- [ ] Tests or snapshot fixtures are added without changing production behavior.
-- [ ] Initial tests document which samples currently pass through as residual risk.
+- [x] Tests or snapshot fixtures are added without changing production behavior.
+- [x] Initial tests document which samples currently pass through as residual risk.
 
 **Dependencies:** None
 
@@ -94,15 +98,15 @@ Adversarial corpus + envelope contract
 
 **Acceptance criteria:**
 
-- [ ] Envelope has a version marker, tool name, source classification, generated timestamp, guardrail decision metadata, and an `untrusted` payload field.
-- [ ] The untrusted payload is always JSON-escaped data, never interpolated into surrounding prose or Markdown.
-- [ ] Error/result status is explicit and not inferred from free-form text.
-- [ ] Contract tests prove serialized output is valid JSON and contains no unescaped attacker text outside the untrusted field.
+- [x] Envelope has a version marker, tool name, source classification, generated timestamp, guardrail decision metadata, and an `untrusted` payload field.
+- [x] The untrusted payload is always JSON-escaped data, never interpolated into surrounding prose or Markdown.
+- [x] Error/result status is explicit and not inferred from free-form text.
+- [x] Contract tests prove serialized output is valid JSON and contains no unescaped attacker text outside the untrusted field.
 
 **Verification:**
 
-- [ ] Contract tests pass for representative success, warning/redaction, and error outputs.
-- [ ] Human review confirms the contract wording does not itself introduce model instructions inside untrusted data.
+- [x] Contract tests pass for representative success, warning/redaction, and error outputs.
+- [x] Human review confirms the contract wording does not itself introduce model instructions inside untrusted data.
 
 **Dependencies:** Task 1
 
@@ -116,14 +120,14 @@ Adversarial corpus + envelope contract
 
 ## Checkpoint: Foundation
 
-- [ ] F-03 corpus exists and current gaps are visible.
-- [ ] Envelope contract is reviewed before Gateway dispatch behavior changes.
-- [ ] No production code ships with only partial contract support.
+- [x] F-03 corpus exists and current gaps are visible.
+- [x] Envelope contract is reviewed before Gateway dispatch behavior changes.
+- [x] No production code ships with only partial contract support.
 
 ### Phase 2: Gateway Output Isolation
 
-- [ ] Task 3: Wrap read-only downstream results in the envelope at the Gateway boundary
-- [ ] Task 4: Harden detection as audit-only defense-in-depth
+- [x] Task 3: Wrap read-only downstream results in the envelope at the Gateway boundary
+- [x] Task 4: Harden detection as audit-only defense-in-depth
 
 ## Task 3: Wrap read-only downstream results in the envelope at the Gateway boundary
 
@@ -131,15 +135,15 @@ Adversarial corpus + envelope contract
 
 **Acceptance criteria:**
 
-- [ ] `GatewayToolDispatcher.HandleReadOnlyAsync` returns the envelope for read-only downstream tools instead of raw plain text.
-- [ ] `GuardedToolRunner` still scans and audits request/response findings, but the returned model-visible shape is always the envelope.
-- [ ] Guardrail warnings are represented as structured metadata, not prepended prose that can be confused with tool data.
-- [ ] Existing approval-plan status and execution-result contracts are reviewed and either excluded with rationale or wrapped consistently if model-visible.
+- [x] `GatewayToolDispatcher.HandleReadOnlyAsync` returns the envelope for read-only downstream tools instead of raw plain text.
+- [x] `GuardedToolRunner` still scans and audits request/response findings, but the returned model-visible shape is always the envelope.
+- [x] Guardrail warnings are represented as structured metadata, not prepended prose that can be confused with tool data.
+- [x] Existing approval-plan status and execution-result contracts are reviewed and either excluded with rationale or wrapped consistently if model-visible.
 
 **Verification:**
 
-- [ ] Gateway dispatcher unit tests prove read-only results are enveloped.
-- [ ] Existing gateway tests pass: `dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj`
+- [x] Gateway dispatcher unit tests prove read-only results are enveloped.
+- [x] Existing gateway tests pass: `dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj`
 
 **Dependencies:** Task 2
 
@@ -158,15 +162,15 @@ Adversarial corpus + envelope contract
 
 **Acceptance criteria:**
 
-- [ ] Scanner normalizes text with a documented Unicode normalization strategy before matching.
-- [ ] Zero-width/control-format characters are detected or normalized in a way covered by tests.
-- [ ] Split-field corpus cases produce at least an audit finding when fields are evaluated as a combined payload for one tool response.
-- [ ] Findings remain warnings/quarantine signals and do not replace the envelope boundary.
+- [x] Scanner normalizes text with a documented Unicode normalization strategy before matching.
+- [x] Zero-width/control-format characters are detected or normalized in a way covered by tests.
+- [x] Split-field corpus cases produce at least an audit finding when fields are evaluated as a combined payload for one tool response.
+- [x] Findings remain warnings/quarantine signals and do not replace the envelope boundary.
 
 **Verification:**
 
-- [ ] F-03 corpus tests pass for deterministic scanner coverage where expected.
-- [ ] Clean Kubernetes fixtures do not regress into broad false positives.
+- [x] F-03 corpus tests pass for deterministic scanner coverage where expected.
+- [x] Clean Kubernetes fixtures do not regress into broad false positives.
 
 **Dependencies:** Task 3
 
@@ -179,14 +183,14 @@ Adversarial corpus + envelope contract
 
 ## Checkpoint: Gateway Boundary
 
-- [ ] Gateway read-only tool output no longer returns raw Kubernetes text as top-level model-visible prose.
-- [ ] Audit and telemetry still record guardrail findings.
-- [ ] No auth, scope, or approval-path behavior changed except intentional result shaping.
+- [x] Gateway read-only tool output no longer returns raw Kubernetes text as top-level model-visible prose.
+- [x] Audit and telemetry still record guardrail findings.
+- [x] No auth, scope, or approval-path behavior changed except intentional result shaping.
 
 ### Phase 3: Agent Ingestion Enforcement
 
-- [ ] Task 5: Enforce envelope-aware model-visible guard evaluation in Agent MCP ingestion
-- [ ] Task 6: Update Observer and Planner prompts/docs to treat tool data as opaque
+- [x] Task 5: Enforce envelope-aware model-visible guard evaluation in Agent MCP ingestion
+- [x] Task 6: Update Observer and Planner prompts/docs to treat tool data as opaque
 
 ## Task 5: Enforce envelope-aware model-visible guard evaluation in Agent MCP ingestion
 
@@ -194,15 +198,15 @@ Adversarial corpus + envelope contract
 
 **Acceptance criteria:**
 
-- [ ] Agent tool-result middleware recognizes the envelope and preserves its trusted metadata for logs/metrics.
-- [ ] Quarantine/block decisions replace only the model-visible payload with bounded placeholders and forensic digests.
-- [ ] Production configuration does not silently fall back to `AllowAllModelVisibleContentGuard` when content guarding is expected.
-- [ ] Tests prove hostile tool results do not reach the LLM as actionable instructions.
+- [x] Agent tool-result middleware recognizes the envelope and preserves its trusted metadata for logs/metrics.
+- [x] Quarantine/block decisions replace only the model-visible payload with bounded placeholders and forensic digests.
+- [x] Production configuration does not silently fall back to `AllowAllModelVisibleContentGuard` when content guarding is expected.
+- [x] Tests prove hostile tool results do not reach the LLM as actionable instructions.
 
 **Verification:**
 
-- [ ] Agent guardrail tests pass: `dotnet test tests/InfraGate.AgentGuardrails.Tests/InfraGate.AgentGuardrails.Tests.csproj`
-- [ ] Observer/Planner unit tests covering tool-result ingestion pass if touched.
+- [x] Agent guardrail tests pass: `dotnet test tests/InfraGate.AgentGuardrails.Tests/InfraGate.AgentGuardrails.Tests.csproj`
+- [x] Observer/Planner unit tests covering tool-result ingestion pass if touched.
 
 **Dependencies:** Task 3
 
@@ -222,14 +226,14 @@ Adversarial corpus + envelope contract
 
 **Acceptance criteria:**
 
-- [ ] Observer and Planner prompt templates include concise tool-result boundary rules.
-- [ ] Rules are phrased as operating constraints, not long defensive prose that bloats prompts.
-- [ ] README/configuration docs describe the envelope and guard behavior for maintainers.
+- [x] Observer and Planner prompt templates include concise tool-result boundary rules.
+- [x] Rules are phrased as operating constraints, not long defensive prose that bloats prompts.
+- [x] README/configuration docs describe the envelope and guard behavior for maintainers.
 
 **Verification:**
 
-- [ ] Prompt rendering tests pass if prompt templates have snapshot/contract tests.
-- [ ] Documentation review confirms F-03 status is not overstated before all tests pass.
+- [x] Prompt rendering tests pass if prompt templates have snapshot/contract tests.
+- [x] Documentation review confirms F-03 status is not overstated before all tests pass.
 
 **Dependencies:** Task 5
 
@@ -245,14 +249,14 @@ Adversarial corpus + envelope contract
 
 ## Checkpoint: Agent Boundary
 
-- [ ] Controlled agents receive enveloped tool results and guard decisions before model ingestion.
-- [ ] Prompt/library docs match the implemented behavior.
-- [ ] F-03 adversarial samples are covered by automated tests.
+- [x] Controlled agents receive enveloped tool results and guard decisions before model ingestion.
+- [x] Prompt/library docs match the implemented behavior.
+- [x] F-03 adversarial samples are covered by automated tests.
 
 ### Phase 4: Optional Semantic Classifier Gate and Final Audit Update
 
-- [ ] Task 7: Complete or explicitly defer the local semantic classifier research gate
-- [ ] Task 8: Update security audit status with evidence
+- [x] Task 7: Complete or explicitly defer the local semantic classifier research gate
+- [x] Task 8: Update security audit status with evidence
 
 ## Task 7: Complete or explicitly defer the local semantic classifier research gate
 
@@ -261,13 +265,13 @@ Adversarial corpus + envelope contract
 **Acceptance criteria:**
 
 - [ ] The research plan records selected/rejected candidates and repo-specific corpus measurements.
-- [ ] If a classifier is selected, implementation is behind `IModelVisibleContentGuard` with timeout, size bound, fail-closed production behavior, metrics, and tests.
-- [ ] If no classifier is selected, F-03 is documented as mitigated by envelope isolation plus deterministic guardrails, with residual risk explicitly stated.
+- [x] If a classifier is selected, implementation is behind `IModelVisibleContentGuard` with timeout, size bound, fail-closed production behavior, metrics, and tests. No classifier was selected in this slice.
+- [x] If no classifier is selected, F-03 is documented as mitigated by envelope isolation plus deterministic guardrails, with residual risk explicitly stated.
 
 **Verification:**
 
-- [ ] Human review of classifier selection/defer decision.
-- [ ] If implemented, classifier adapter tests and sidecar smoke tests pass.
+- [x] Human review of classifier selection/defer decision.
+- [x] If implemented, classifier adapter tests and sidecar smoke tests pass. Not applicable; classifier remains deferred.
 
 **Dependencies:** Tasks 1-6
 
@@ -286,14 +290,14 @@ Adversarial corpus + envelope contract
 
 **Acceptance criteria:**
 
-- [ ] F-03 implementation notes cite the envelope boundary, guard enforcement, corpus tests, and any classifier decision.
-- [ ] Summary table resolution is updated to either mitigated or partial with a clear rationale.
-- [ ] README references stay consistent with the audit language.
+- [x] F-03 implementation notes cite the envelope boundary, guard enforcement, corpus tests, and any classifier decision.
+- [x] Summary table resolution is updated to either mitigated or partial with a clear rationale.
+- [x] README references stay consistent with the audit language.
 
 **Verification:**
 
-- [ ] Relevant tests from prior tasks pass in one final run.
-- [ ] Markdown links and file paths in the updated audit are valid.
+- [x] Relevant tests from prior tasks pass in one final run.
+- [x] Markdown links and file paths in the updated audit are valid.
 
 **Dependencies:** Task 7
 

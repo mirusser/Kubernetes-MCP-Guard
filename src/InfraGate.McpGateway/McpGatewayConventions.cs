@@ -1,3 +1,4 @@
+using InfraGate;
 using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpGateway;
@@ -200,6 +201,27 @@ internal static class McpGatewayConventions
         public const string TimedOut = "timedOut";
     }
 
+    public static class ModelVisibleToolResult
+    {
+        public const string SchemaVersion = ModelVisibleToolResultConventions.SchemaVersion;
+        public const string Kind = ModelVisibleToolResultConventions.Kind;
+        public const string ToolName = ModelVisibleToolResultConventions.ToolName;
+        public const string Source = ModelVisibleToolResultConventions.Source;
+        public const string GeneratedAtUtc = ModelVisibleToolResultConventions.GeneratedAtUtc;
+        public const string Status = ModelVisibleToolResultConventions.Status;
+        public const string Guardrail = ModelVisibleToolResultConventions.Guardrail;
+        public const string GuardrailAction = ModelVisibleToolResultConventions.GuardrailAction;
+        public const string GuardrailCategories = ModelVisibleToolResultConventions.GuardrailCategories;
+        public const string Untrusted = ModelVisibleToolResultConventions.Untrusted;
+        public const string UntrustedPayload = ModelVisibleToolResultConventions.UntrustedPayload;
+
+        public const string KindValue = ModelVisibleToolResultConventions.KindValue;
+        public const string SourceReadOnlyToolValue = ModelVisibleToolResultConventions.SourceReadOnlyToolValue;
+        public const string StatusSuccess = ModelVisibleToolResultConventions.StatusSuccess;
+        public const string StatusError = ModelVisibleToolResultConventions.StatusError;
+        public const string GuardrailActionAllow = ModelVisibleToolResultConventions.GuardrailActionAllow;
+    }
+
     public static class GuardrailAudit
     {
         public const string OAuthAuthenticationType = "oauth-jwt";
@@ -237,7 +259,9 @@ internal static class McpGatewayConventions
 
     public static class GuardrailLocations
     {
+        public const string CombinedInput = "request.combined";
         public const string Response = "response";
+        public const string ResponseCombined = Response + ".combined";
         public const string ResponseManifest = Response + ".manifest";
         public const string ResponseLine = Response + ".line";
     }

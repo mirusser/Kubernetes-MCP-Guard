@@ -24,6 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\..\src\Shared\ModelVisibleToolResultConventions.cs" Link="ModelVisibleToolResultConventions.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\InfraGate.AgentLlm\InfraGate.AgentLlm.csproj" />
   </ItemGroup>
 

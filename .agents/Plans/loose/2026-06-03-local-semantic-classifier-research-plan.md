@@ -18,6 +18,8 @@ The classifier must run locally/offline, require no paid API, keep Observer and 
 
 Do not implement `InfraGate.AgentGuardrails.LocalClassifier` yet.
 
+**F-03 follow-up (2026-06-20):** the prompt-injection mitigation deliberately ships without a semantic classifier. The current production boundary is structural `model_visible_tool_result` output isolation, deterministic scanner hardening, and model-visible guard enforcement. This research gate remains open; no candidate has passed the maintenance, licensing, provenance, runtime-fit, and repo-corpus bakeoff gates below.
+
 The original candidates, Protect AI LLM Guard and InjecGuard/PIGuard, remain useful baselines, but
 their maintenance posture is not assumed acceptable. Candidate freshness, release cadence, license,
 model provenance, dependency risk, and container/runtime fit are hard gates before production wiring.

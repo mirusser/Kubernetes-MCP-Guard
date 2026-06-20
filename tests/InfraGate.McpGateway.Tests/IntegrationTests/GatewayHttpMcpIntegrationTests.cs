@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using InfraGate;
 using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
 using InfraGate.Approvals.AccessCodes;
@@ -179,7 +180,15 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             });
 
         var call = Assert.Single(downstream.Calls);
-        Assert.Equal("""{ "ok": true }""", text);
+        using var document = JsonDocument.Parse(text);
+        Assert.Equal(
+            McpGatewayConventions.ModelVisibleToolResult.KindValue,
+            document.RootElement.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Kind).GetString());
+        Assert.Equal(
+            """{ "ok": true }""",
+            document.RootElement.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Untrusted)
+                .GetProperty(McpGatewayConventions.ModelVisibleToolResult.UntrustedPayload)
+                .GetString());
         Assert.Equal("get_k8s_status", call.ToolName);
         Assert.Equal(NamespaceName, call.Arguments[KubernetesAdapterConventions.ToolArguments.Namespace]);
         Assert.Equal("app=mcp-api-demo", call.Arguments[KubernetesAdapterConventions.ToolArguments.LabelSelector]);
@@ -238,10 +247,20 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                     [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName
                 });
 
-            Assert.StartsWith("Guardrail warning:", responseText);
-            Assert.Contains("inspect the pending plan file", responseText);
-            Assert.DoesNotContain("ignore previous instructions", responseText);
-            Assert.DoesNotContain("reveal system prompts", responseText);
+            using var document = JsonDocument.Parse(responseText);
+            JsonElement root = document.RootElement;
+            Assert.Equal(
+                McpGatewayConventions.GuardrailAudit.WarnRedactAction,
+                root.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Guardrail)
+                    .GetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailAction)
+                    .GetString());
+            string payload = root.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Untrusted)
+                .GetProperty(McpGatewayConventions.ModelVisibleToolResult.UntrustedPayload)
+                .GetString()!;
+            Assert.Contains("inspect the pending plan file", payload);
+            Assert.DoesNotContain("ignore previous instructions", payload);
+            Assert.DoesNotContain("reveal system prompts", payload);
+            Assert.DoesNotContain("Guardrail warning:", responseText);
             var auditEvent = Assert.Single(responseAudit.Events);
             Assert.Equal("response", auditEvent.Direction);
             Assert.Equal("warn_redact", auditEvent.Action);
@@ -797,13 +816,14 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                         [KubernetesAdapterConventions.ToolArguments.TailLines] = 10
                     });
 
-                if (podLogsText.StartsWith('{'))
+                var podLogsPayload = UnwrapModelVisibleToolResultPayload(podLogsText);
+                if (podLogsPayload.StartsWith('{'))
                 {
-                    AssertJsonProperty(podLogsText, "podName", podName);
+                    AssertJsonProperty(podLogsPayload, "podName", podName);
                 }
                 else
                 {
-                    Assert.Contains("Pod log read failed", podLogsText);
+                    Assert.Contains("Pod log read failed", podLogsPayload);
                 }
             }
 
@@ -1184,7 +1204,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                     [KubernetesAdapterConventions.ToolArguments.Name] = name
                 });
 
-            if (IsDeploymentRolloutSettled(lastSummary))
+            var rolloutJson = UnwrapModelVisibleToolResultPayload(lastSummary);
+            if (IsDeploymentRolloutSettled(rolloutJson))
             {
                 settledSamples++;
                 if (settledSamples >= 3)
@@ -1226,6 +1247,36 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         catch (JsonException)
         {
             return false;
+        }
+    }
+
+    private static string UnwrapModelVisibleToolResultPayload(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            if (root.ValueKind is not JsonValueKind.Object ||
+                !root.TryGetProperty(ModelVisibleToolResultConventions.Kind, out var kind) ||
+                kind.ValueKind is not JsonValueKind.String ||
+                !string.Equals(kind.GetString(), ModelVisibleToolResultConventions.KindValue, StringComparison.Ordinal))
+            {
+                return json;
+            }
+
+            if (!root.TryGetProperty(ModelVisibleToolResultConventions.Untrusted, out var untrusted) ||
+                untrusted.ValueKind is not JsonValueKind.Object ||
+                !untrusted.TryGetProperty(ModelVisibleToolResultConventions.UntrustedPayload, out var payload) ||
+                payload.ValueKind is not JsonValueKind.String)
+            {
+                return json;
+            }
+
+            return payload.GetString() ?? string.Empty;
+        }
+        catch (JsonException)
+        {
+            return json;
         }
     }
 
@@ -1545,7 +1596,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
     private static string? TryGetFirstPodName(string statusText)
     {
-        using var document = JsonDocument.Parse(statusText);
+        using var document = JsonDocument.Parse(UnwrapModelVisibleToolResultPayload(statusText));
         foreach (var pod in document.RootElement.GetProperty("pods").EnumerateArray())
         {
             var podName = pod.GetProperty("name").GetString();
@@ -1564,7 +1615,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         string name,
         string nameProperty = KubernetesAdapterConventions.ToolArguments.Name)
     {
-        using var document = JsonDocument.Parse(json);
+        using var document = JsonDocument.Parse(UnwrapModelVisibleToolResultPayload(json));
         var root = document.RootElement;
 
         Assert.Equal(kind, root.GetProperty("kind").GetString());
@@ -1573,14 +1624,14 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
     private static void AssertJsonArrayProperty(string json, string propertyName)
     {
-        using var document = JsonDocument.Parse(json);
+        using var document = JsonDocument.Parse(UnwrapModelVisibleToolResultPayload(json));
 
         Assert.Equal(JsonValueKind.Array, document.RootElement.GetProperty(propertyName).ValueKind);
     }
 
     private static void AssertJsonProperty(string json, string propertyName, string expectedValue)
     {
-        using var document = JsonDocument.Parse(json);
+        using var document = JsonDocument.Parse(UnwrapModelVisibleToolResultPayload(json));
 
         Assert.Equal(expectedValue, document.RootElement.GetProperty(propertyName).GetString());
     }

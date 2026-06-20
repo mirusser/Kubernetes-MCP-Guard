@@ -172,11 +172,13 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         }
 
         IReadOnlyDictionary<string, object?> arguments = ToolArgumentConverter.ConvertArguments(request.Arguments);
-        string result = await guardedRunner.CallAsync(toolName, arguments, ct).ConfigureAwait(false);
+        GuardedToolCallResult result = await guardedRunner.CallForModelVisibleResponseAsync(toolName, arguments, ct)
+            .ConfigureAwait(false);
+        string envelope = ModelVisibleToolResultEnvelope.Serialize(toolName, result, TimeProvider.System.GetUtcNow());
 
         return new CallToolResult
         {
-            Content = [new TextContentBlock { Text = result }]
+            Content = [new TextContentBlock { Text = envelope }]
         };
     }
 

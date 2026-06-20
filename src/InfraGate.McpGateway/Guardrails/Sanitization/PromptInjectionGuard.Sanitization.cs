@@ -63,8 +63,12 @@ public static partial class PromptInjectionGuard
             return false;
         }
 
+        var textValues = new List<string>();
+        CollectJsonTextValues(root, textValues);
+
         int initialCount = findings.Count;
         root = RedactJsonNode(root, McpGatewayConventions.GuardrailLocations.Response, findings);
+        AddCombinedTextFindings(textValues, McpGatewayConventions.GuardrailLocations.ResponseCombined, findings);
         if (findings.Count == initialCount)
         {
             return true;
@@ -72,6 +76,32 @@ public static partial class PromptInjectionGuard
 
         redactedText = root?.ToJsonString(JsonOptions) ?? text;
         return true;
+    }
+
+    private static void CollectJsonTextValues(JsonNode? node, List<string> textValues)
+    {
+        switch (node)
+        {
+            case null:
+                return;
+            case JsonValue value when value.TryGetValue<string>(out var text):
+                textValues.Add(text);
+                return;
+            case JsonObject jsonObject:
+                foreach ((string? _, JsonNode? child) in jsonObject)
+                {
+                    CollectJsonTextValues(child, textValues);
+                }
+
+                return;
+            case JsonArray jsonArray:
+                foreach (JsonNode? child in jsonArray)
+                {
+                    CollectJsonTextValues(child, textValues);
+                }
+
+                return;
+        }
     }
 
     private static JsonNode? RedactJsonNode(JsonNode? node, string location, List<GuardrailFinding> findings)

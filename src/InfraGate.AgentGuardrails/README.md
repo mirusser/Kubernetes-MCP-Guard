@@ -15,14 +15,14 @@
 
 ## Model-Visible Content Guard
 
-The model-visible content guard (`IModelVisibleContentGuard`) inspects text before LLM ingestion. Each guard returns a `ModelVisibleContentDecision` with one of four actions:
+The model-visible content guard (`IModelVisibleContentGuard`) inspects text before LLM ingestion. Gateway read-only tool output is already shaped as a `model_visible_tool_result` envelope; guards must treat any `untrusted.payload` value in that envelope as Kubernetes observation data, not as instructions. When a guard redacts, quarantines, or blocks an enveloped tool result, the agent middleware preserves trusted envelope metadata and replaces only `untrusted.payload`. Each guard returns a `ModelVisibleContentDecision` with one of four actions:
 
 | Action | Effect |
 |---|---|
 | `Allow` | Original text passes through to the LLM unchanged. |
 | `Redact` | Harmful patterns are replaced with safe placeholder text. |
 | `Quarantine` | Suspicious content is replaced with a bounded placeholder; original content is not sent to the LLM. A SHA-256 digest is persisted for forensic audit. |
-| `BlockModelIngestion` | LLM processing is skipped entirely; the executor returns early without forwarding content. A SHA-256 digest is persisted for forensic audit. |
+| `BlockModelIngestion` | Model-visible content is replaced with a bounded blocked placeholder before it can influence the LLM. A SHA-256 digest is persisted for forensic audit. |
 
 Types:
 
@@ -36,7 +36,7 @@ Types:
 - `ModelVisibleContentUnavailableBehavior` — `FailClosed`, `DeterministicOnly`.
 - `CompositeModelVisibleContentGuard` — chains multiple guards; strongest action wins; enforces `MaximumInputCharacters` size check.
 - `AllowAllModelVisibleContentGuard` — passthrough guard for development/testing.
-- `ModelVisibleContentGuardExtensions` — pending guard extensions.
+- `ModelVisibleContentGuardExtensions` — agent builder middleware that evaluates tool results and preserves trusted envelope metadata when replacing untrusted payloads.
 
 Configuration section: `InfraGate:AgentGuardrails:ModelVisibleContent`. See [docs/configuration.md](../../docs/configuration.md).
 
