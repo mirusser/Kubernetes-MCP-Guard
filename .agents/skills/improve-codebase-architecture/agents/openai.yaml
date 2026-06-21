@@ -1,4 +1,0 @@
-interface:
-  display_name: "Improve codebase architecture"
-  short_description: "Improve codebase architecture"
-  default_prompt: "Use $iprove-codebase-architecture when working on a new idea/implementation against existing repo domain or reviewing new idea/plans/implementatios"
