@@ -12,7 +12,13 @@ public sealed record class GatewayAuthOptions(
     string? ApprovalOAuthAuthorizationEndpoint = null,
     string? ApprovalOAuthTokenEndpoint = null,
     string ApprovalOAuthCallbackPath = GatewayAuthConventions.Approvals.DefaultCallbackPath,
-    bool RequireDPoP = false)
+    bool RequireDPoP = false,
+    bool TokenIntrospectionEnabled = false,
+    string? TokenIntrospectionEndpoint = null,
+    string? TokenIntrospectionClientId = null,
+    string? TokenIntrospectionClientSecret = null,
+    int TokenIntrospectionCacheSeconds = GatewayAuthConventions.DefaultTokenIntrospectionCacheSeconds,
+    int MaxAcceptedAccessTokenLifetimeSeconds = GatewayAuthConventions.DefaultMaxAcceptedAccessTokenLifetimeSeconds)
 {
     public string ApprovalAuthorizationEndpoint =>
         string.IsNullOrWhiteSpace(ApprovalOAuthAuthorizationEndpoint)
@@ -48,6 +54,14 @@ public sealed record class GatewayAuthOptions(
         string approvalCallbackPath = authSettings?.ApprovalOAuthCallbackPath ??
             GatewayAuthConventions.Approvals.DefaultCallbackPath;
         bool requireDPoP = authSettings?.RequireDPoP ?? false;
+        bool tokenIntrospectionEnabled = authSettings?.TokenIntrospectionEnabled ?? false;
+        string? tokenIntrospectionEndpoint = authSettings?.TokenIntrospectionEndpoint;
+        string? tokenIntrospectionClientId = authSettings?.TokenIntrospectionClientId;
+        string? tokenIntrospectionClientSecret = authSettings?.TokenIntrospectionClientSecret;
+        int tokenIntrospectionCacheSeconds = authSettings?.TokenIntrospectionCacheSeconds ??
+            GatewayAuthConventions.DefaultTokenIntrospectionCacheSeconds;
+        int maxAcceptedAccessTokenLifetimeSeconds = authSettings?.MaxAcceptedAccessTokenLifetimeSeconds ??
+            GatewayAuthConventions.DefaultMaxAcceptedAccessTokenLifetimeSeconds;
 
         return new GatewayAuthOptions(
             oauthAuthority,
@@ -59,7 +73,13 @@ public sealed record class GatewayAuthOptions(
             approvalAuthorizationEndpoint,
             approvalTokenEndpoint,
             approvalCallbackPath,
-            RequireDPoP: requireDPoP);
+            RequireDPoP: requireDPoP,
+            TokenIntrospectionEnabled: tokenIntrospectionEnabled,
+            TokenIntrospectionEndpoint: tokenIntrospectionEndpoint,
+            TokenIntrospectionClientId: tokenIntrospectionClientId,
+            TokenIntrospectionClientSecret: tokenIntrospectionClientSecret,
+            TokenIntrospectionCacheSeconds: tokenIntrospectionCacheSeconds,
+            MaxAcceptedAccessTokenLifetimeSeconds: maxAcceptedAccessTokenLifetimeSeconds);
     }
 
     private static string TrimTrailingSlash(string value) => value.TrimEnd('/');

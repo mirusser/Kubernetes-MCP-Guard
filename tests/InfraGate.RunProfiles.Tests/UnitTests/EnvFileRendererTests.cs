@@ -169,18 +169,30 @@ public sealed class EnvFileRendererTests
         var profile = CreateMinimalProfile() with
         {
             IdentityProvider = new IdentityProviderProfile(
-                "http://auth:8080/realms/master",
-                "http://auth:8080/realms/master/.well-known/openid-configuration",
-                "gateway-client",
-                "openid profile",
-                "false",
-                "true")
+                RealmImport: null,
+                Authority: "http://auth:8080/realms/master",
+                MetadataAddress: "http://auth:8080/realms/master/.well-known/openid-configuration",
+                Resource: "gateway-client",
+                Scope: "openid profile",
+                RequireHttpsMetadata: "false",
+                TokenIntrospectionEnabled: "true",
+                TokenIntrospectionEndpoint: "http://auth:8080/realms/master/protocol/openid-connect/token/introspect",
+                TokenIntrospectionClientId: "infra-gate-token-introspection",
+                TokenIntrospectionClientSecret: "secret-placeholder",
+                TokenIntrospectionCacheSeconds: "15",
+                MaxAcceptedAccessTokenLifetimeSeconds: "300")
         };
 
         string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
 
         Assert.Contains("# Identity Provider", result, StringComparison.Ordinal);
         Assert.Contains($"{RunProfileConventions.Env.OauthAuthority}=http://auth:8080/realms/master", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.TokenIntrospectionEnabled}=true", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.TokenIntrospectionEndpoint}=http://auth:8080/realms/master/protocol/openid-connect/token/introspect", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.TokenIntrospectionClientId}=infra-gate-token-introspection", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.TokenIntrospectionClientSecret}=secret-placeholder", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.TokenIntrospectionCacheSeconds}=15", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.MaxAcceptedAccessTokenLifetimeSeconds}=300", result, StringComparison.Ordinal);
     }
 
     [Fact]

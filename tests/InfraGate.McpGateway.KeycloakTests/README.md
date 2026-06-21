@@ -4,8 +4,12 @@
 
 ## What It Covers
 
-- `KeycloakIntegrationTests.cs`: OIDC discovery, anonymous loopback DCR policy, `mcp-client` authorization-code + PKCE coverage, wrong-verifier rejection, valid-token access, wrong-audience rejection, missing-scope rejection, token claim shape, DPoP token acquisition and validation for controlled clients, and the approval browser OAuth callback/cookie path with a real Keycloak-issued token backchannel.
+- `KeycloakIntegrationTests.cs`: OIDC discovery, anonymous loopback DCR policy, `mcp-client` authorization-code + PKCE coverage, wrong-verifier rejection, valid-token access, gateway token introspection with the dedicated Keycloak client, wrong-audience rejection, missing-scope rejection, token claim shape, DPoP token acquisition and validation for controlled clients, and the approval browser OAuth callback/cookie path with a real Keycloak-issued token backchannel.
 - `KeycloakRealmFileTests.cs`: fast deploy/test realm alignment coverage that does not start Docker.
+
+## Introspection and Revocation
+
+The integration suite proves that a real Keycloak-issued access token is accepted when gateway introspection is enabled. It does **not** prove that a revoked or session-invalidated token is rejected, because Keycloak's default self-contained access tokens remain introspectable as `active` until expiry unless the realm is explicitly configured to check session state at introspection time. Inactive/revoked introspection behavior is covered by `HttpTokenIntrospectionClientTests` in the main gateway test project using a fake introspection endpoint.
 
 ## Running Tests
 

@@ -227,6 +227,12 @@ profiles:
       authority: https://issuer.example.com/realms/infra-gate
       metadataAddress: https://issuer.example.com/.well-known/openid-configuration
       resource: https://gateway.example.com/mcp
+      tokenIntrospectionEnabled: "true"
+      tokenIntrospectionEndpoint: https://issuer.example.com/realms/infra-gate/protocol/openid-connect/token/introspect
+      tokenIntrospectionClientId: infra-gate-token-introspection
+      tokenIntrospectionClientSecret: <secret-from-secret-manager>
+      tokenIntrospectionCacheSeconds: "30"
+      maxAcceptedAccessTokenLifetimeSeconds: "300"
     approvalAuthority:
       baseUrl: https://gateway.example.com
       oauthAuthorizationEndpoint: https://issuer.example.com/realms/infra-gate/protocol/openid-connect/auth

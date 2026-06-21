@@ -88,6 +88,12 @@ internal static class RunProfileConventions
         public const string Resource = "resource";
         public const string RuntimeMode = "runtimeMode";
         public const string Scope = "scope";
+        public const string TokenIntrospectionCacheSeconds = "tokenIntrospectionCacheSeconds";
+        public const string TokenIntrospectionClientId = "tokenIntrospectionClientId";
+        public const string TokenIntrospectionClientSecret = "tokenIntrospectionClientSecret";
+        public const string TokenIntrospectionEnabled = "tokenIntrospectionEnabled";
+        public const string TokenIntrospectionEndpoint = "tokenIntrospectionEndpoint";
+        public const string MaxAcceptedAccessTokenLifetimeSeconds = "maxAcceptedAccessTokenLifetimeSeconds";
         public const string UseDPoP = "useDPoP";
         public const string Type = "type";
         public const string Version = "version";
@@ -147,6 +153,12 @@ internal static class RunProfileConventions
         public const string OauthRequireHttpsMetadata = "InfraGate__Auth__OAuthRequireHttpsMetadata";
         public const string OauthResource = "InfraGate__Auth__OAuthResource";
         public const string OauthScope = "InfraGate__Auth__OAuthScope";
+        public const string TokenIntrospectionEnabled = "InfraGate__Auth__TokenIntrospectionEnabled";
+        public const string TokenIntrospectionEndpoint = "InfraGate__Auth__TokenIntrospectionEndpoint";
+        public const string TokenIntrospectionClientId = "InfraGate__Auth__TokenIntrospectionClientId";
+        public const string TokenIntrospectionClientSecret = "InfraGate__Auth__TokenIntrospectionClientSecret";
+        public const string TokenIntrospectionCacheSeconds = "InfraGate__Auth__TokenIntrospectionCacheSeconds";
+        public const string MaxAcceptedAccessTokenLifetimeSeconds = "InfraGate__Auth__MaxAcceptedAccessTokenLifetimeSeconds";
         public const string OpenRouterApiKey = "InfraGate__OpenRouter__ApiKey";
         public const string ObserverAspnetcoreUrls = "InfraGate__Observer__AspNetCoreUrls";
         public const string ObserverClientId = "InfraGate__Observer__ClientCredentials__ClientId";

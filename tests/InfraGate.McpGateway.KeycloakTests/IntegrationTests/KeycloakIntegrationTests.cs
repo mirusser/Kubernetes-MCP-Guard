@@ -56,6 +56,8 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
     private const string GatewayServiceClientId = "infra-gate-gateway-service";
     private const string GatewayServiceClientSecret = "gateway-service-secret";
     private const string GatewayServiceScope = "mcp:downstream";
+    private const string TokenIntrospectionClientId = "infra-gate-token-introspection";
+    private const string TokenIntrospectionClientSecret = "token-introspection-secret";
     private const string RunKeycloakTestsEnvVar = "INFRA_GATE_RUN_KEYCLOAK_TESTS";
     private const string McpClientId = "mcp-client";
     private const string SmokeClientId = "mcp-smoke-client";
@@ -129,6 +131,45 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         string token = await AcquireTokenAsync(SmokeClientId);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
+        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ValidToken_WithGatewayIntrospectionEnabled_AllowsToolCall()
+    {
+        using var server = CreateGatewayServer(
+            authority: RealmAuthority(),
+            tokenIntrospectionEnabled: true);
+        using var client = server.CreateClient();
+
+        string token = await AcquireTokenAsync(SmokeClientId);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+
+        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact(Skip = "Keycloak Testcontainers session invalidation does not reliably mark self-contained access tokens inactive via introspection within test time bounds.")]
+    public async Task RevokedSessionToken_WithGatewayIntrospectionEnabled_RejectsToolCall()
+    {
+        // Keycloak access tokens are self-contained by default. Session invalidation may not
+        // propagate to introspection for these tokens before their 300-second expiry. The
+        // inactive/revoked introspection path is covered by unit tests with a fake endpoint
+        // (HttpTokenIntrospectionClientTests). This skipped test documents the limitation.
+        using var server = CreateGatewayServer(
+            authority: RealmAuthority(),
+            tokenIntrospectionEnabled: true);
+        using var client = server.CreateClient();
+
+        string token = await AcquireTokenAsync(SmokeClientId);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        // In a deterministic Keycloak setup, invalidate the user/session here, wait for the
+        // introspection cache TTL, and assert the next gateway call returns Unauthorized.
         var response = await client.GetAsync(McpGatewayConventions.McpPath);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -990,7 +1031,8 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         string authority,
         string oauthResource = Resource,
         HttpMessageHandler? approvalOAuthBackchannel = null,
-        bool requireDPoP = false)
+        bool requireDPoP = false,
+        bool tokenIntrospectionEnabled = false)
     {
         var authOptions = new GatewayAuthOptions(
             OAuthAuthority: authority,
@@ -1001,7 +1043,11 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             ApprovalOAuthClientId: GatewayAuthConventions.DefaultApprovalOAuthClientId,
             ApprovalOAuthAuthorizationEndpoint: $"{authority}/protocol/openid-connect/auth",
             ApprovalOAuthTokenEndpoint: $"{authority}/protocol/openid-connect/token",
-            RequireDPoP: requireDPoP);
+            RequireDPoP: requireDPoP,
+            TokenIntrospectionEnabled: tokenIntrospectionEnabled,
+            TokenIntrospectionEndpoint: $"{authority}/protocol/openid-connect/token/introspect",
+            TokenIntrospectionClientId: TokenIntrospectionClientId,
+            TokenIntrospectionClientSecret: TokenIntrospectionClientSecret);
 
         var root = Path.Combine(Path.GetTempPath(), "kc-test", Guid.NewGuid().ToString("N"));
         var options = new McpGatewayOptions(

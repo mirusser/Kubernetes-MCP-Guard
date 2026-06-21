@@ -219,6 +219,37 @@ public sealed class RunProfileCliTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_GenerateProductionProfile_EmitsRequiredTokenIntrospectionSettings()
+    {
+        string outputPath = Path.Combine(Path.GetTempPath(), $"infragate-production-{Guid.NewGuid():N}.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        try
+        {
+            int exitCode = await RunProfileCli.ExecuteAsync(
+                ["generate", "production", "--output", outputPath],
+                output,
+                error,
+                CancellationToken.None);
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(error.ToString());
+            string envFile = await File.ReadAllTextAsync(outputPath);
+            Assert.Contains($"{RunProfileConventions.Env.TokenIntrospectionEnabled}=true", envFile, StringComparison.Ordinal);
+            Assert.Contains($"{RunProfileConventions.Env.TokenIntrospectionClientId}=infra-gate-token-introspection", envFile, StringComparison.Ordinal);
+            Assert.Contains(RunProfileConventions.Env.TokenIntrospectionClientSecret, envFile, StringComparison.Ordinal);
+            Assert.Contains($"{RunProfileConventions.Env.MaxAcceptedAccessTokenLifetimeSeconds}=300", envFile, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+        }
+    }
+
+    [Fact]
     public async Task ExecuteAsync_GenerateWithExistingForeignFile_ReturnsErrorWithoutForce()
     {
         string configPath = await WriteConfigAsync(
@@ -637,6 +668,12 @@ public sealed class RunProfileCliTests
             "InfraGate__Auth__OAuthResource",
             "InfraGate__Auth__OAuthScope",
             "InfraGate__Auth__OAuthRequireHttpsMetadata",
+            "InfraGate__Auth__TokenIntrospectionEnabled",
+            "InfraGate__Auth__TokenIntrospectionEndpoint",
+            "InfraGate__Auth__TokenIntrospectionClientId",
+            "InfraGate__Auth__TokenIntrospectionClientSecret",
+            "InfraGate__Auth__TokenIntrospectionCacheSeconds",
+            "InfraGate__Auth__MaxAcceptedAccessTokenLifetimeSeconds",
             "InfraGate__Approval__BaseUrl",
             "InfraGate__Auth__ApprovalOAuthClientId",
             "InfraGate__Auth__ApprovalOAuthCallbackPath",

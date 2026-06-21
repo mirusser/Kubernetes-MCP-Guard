@@ -355,6 +355,30 @@ public sealed class McpGatewayOptionsTests
     }
 
     [Fact]
+    public void ProductionMode_WithTokenIntrospectionDisabled_RefusesStartup()
+    {
+        var configuration = BuildProductionConfig(
+            (GatewayAuthConventions.ConfigurationKeys.TokenIntrospectionEnabled, "false"));
+
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(GatewayAuthConventions.EnvironmentVariables.TokenIntrospectionEnabled, exception.Message);
+    }
+
+    [Fact]
+    public void ProductionMode_WithLongMaxAcceptedTokenLifetime_RefusesStartup()
+    {
+        var configuration = BuildProductionConfig(
+            (GatewayAuthConventions.ConfigurationKeys.MaxAcceptedAccessTokenLifetimeSeconds, "301"));
+
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(GatewayAuthConventions.EnvironmentVariables.MaxAcceptedAccessTokenLifetimeSeconds, exception.Message);
+    }
+
+    [Fact]
     public void ProductionMode_WithValidDownstreamAuth_AllowsStartup()
     {
         var configuration = BuildProductionConfig();
@@ -451,6 +475,10 @@ public sealed class McpGatewayOptionsTests
             [GatewayAuthConventions.ConfigurationKeys.OAuthRequireHttpsMetadata] = "true",
             [GatewayAuthConventions.ConfigurationKeys.ApprovalOAuthAuthorizationEndpoint] = OAuthAuthority + "/authorize",
             [GatewayAuthConventions.ConfigurationKeys.ApprovalOAuthTokenEndpoint] = OAuthAuthority + "/token",
+            [GatewayAuthConventions.ConfigurationKeys.TokenIntrospectionEnabled] = "true",
+            [GatewayAuthConventions.ConfigurationKeys.TokenIntrospectionClientId] = "gateway-resource-server",
+            [GatewayAuthConventions.ConfigurationKeys.TokenIntrospectionClientSecret] = "secret-placeholder",
+            [GatewayAuthConventions.ConfigurationKeys.MaxAcceptedAccessTokenLifetimeSeconds] = "300",
             [McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl] = ApprovalBaseUrl,
             [McpGatewayConventions.ConfigurationKeys.GuardAuditRoot] = ProductionPath("guardrails"),
             [McpGatewayConventions.ConfigurationKeys.ApprovalRoot] = ProductionPath("approvals"),

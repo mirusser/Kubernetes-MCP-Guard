@@ -82,7 +82,13 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.RealmImport,
                 RunProfileConventions.YamlKeys.RequireHttpsMetadata,
                 RunProfileConventions.YamlKeys.Resource,
-                RunProfileConventions.YamlKeys.Scope
+                RunProfileConventions.YamlKeys.Scope,
+                RunProfileConventions.YamlKeys.TokenIntrospectionCacheSeconds,
+                RunProfileConventions.YamlKeys.TokenIntrospectionClientId,
+                RunProfileConventions.YamlKeys.TokenIntrospectionClientSecret,
+                RunProfileConventions.YamlKeys.TokenIntrospectionEnabled,
+                RunProfileConventions.YamlKeys.TokenIntrospectionEndpoint,
+                RunProfileConventions.YamlKeys.MaxAcceptedAccessTokenLifetimeSeconds
             ],
             StringComparer.Ordinal);
 
@@ -403,7 +409,13 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.MetadataAddress),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.Resource),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.Scope),
-            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.RequireHttpsMetadata));
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.RequireHttpsMetadata),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.TokenIntrospectionEnabled),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.TokenIntrospectionEndpoint),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.TokenIntrospectionClientId),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.TokenIntrospectionClientSecret),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.TokenIntrospectionCacheSeconds),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.MaxAcceptedAccessTokenLifetimeSeconds));
     }
 
     private static ApprovalAuthorityProfile? ReadApprovalAuthority(YamlMappingNode node)

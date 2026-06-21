@@ -355,7 +355,7 @@ Grant validation (`ApprovalGrantValidation.Validate`) cross-checks requester sub
 **Severity:** Medium
 **Diagram:** OAuth Login & Authorization (Diagram 1) & Read-Only Tool Call (Diagram 2)
 **Status:** New finding
-**Resolution:** ❌ **NOT MITIGATED** (re-assessed 2026-06-05)
+**Resolution:** ✅ **MITIGATED** (re-assessed 2026-06-21)
 
 #### Description
 
@@ -369,9 +369,21 @@ This means a compromised token remains fully operational for its entire lifetime
 - Alternatively, enforce very short JWT lifetimes (2–5 minutes) combined with refresh token rotation and a refresh token revocation list. Revoking the refresh token effectively invalidates the session.
 - Expose a `POST /revoke` endpoint on the Gateway that an SRE can call to immediately blacklist a token by `jti` claim.
 
-#### Implementation Notes (2026-06-05)
+#### Implementation Notes (2026-06-21)
 
-No token introspection endpoint. No revocation list or blacklist. The only logout path (`GatewayApprovalEndpoints.cs:168-171`) clears the approval cookie via `Results.SignOut(...)`, not JWT revocation. No `POST /revoke` endpoint. Token lifetime validation uses standard `ValidateLifetime = true` with no short-lifetime enforcement.
+Mitigated with standards-based issuer introspection and short access-token lifetime enforcement. The gateway does not own a `/revoke` endpoint; the IdP remains the revocation source of truth.
+
+- `GatewayAuthentication.cs` rejects tokens whose `exp - iat` or `exp - nbf` exceeds `InfraGate__Auth__MaxAcceptedAccessTokenLifetimeSeconds` (default 300 seconds) and rejects tokens missing both baseline claims when the check is enabled.
+- `HttpTokenIntrospectionClient` posts validated JWTs to the configured/discovered OAuth introspection endpoint. Only `active: true` succeeds; inactive, malformed, HTTP failure, or unavailable endpoint responses fail closed.
+- `TokenIntrospectionActivityValidator` caches only successful active introspection results, keyed by a SHA-256 hash of the token and capped by `TokenIntrospectionCacheSeconds`, JWT `exp`, and introspection `exp`. Expired entries are pruned when the cache exceeds an internal threshold so high-cardinality token streams do not grow memory unbounded.
+- `TokenClaimDates.TryGetUnixTimeClaim` returns `false` for out-of-range Unix-time claims instead of throwing, so malformed tokens fail the lifetime checks cleanly.
+- Production safety validation now requires `InfraGate__Auth__TokenIntrospectionEnabled=true`, a dedicated introspection client id/secret, and a maximum accepted token lifetime of 300 seconds or less.
+- The local/test Keycloak realm includes a dedicated `infra-gate-token-introspection` confidential client and keeps `accessTokenLifespan` at 300 seconds.
+- Run profiles can express the production introspection settings; the production profile emits the required enabled flag, client id/secret placeholder, endpoint, cache TTL, and max accepted token lifetime.
+- Documentation in `src/InfraGate.McpGateway.Auth/README.md`, `docs/configuration.md`, and `docs/production-oidc.md` describes introspection, cache behavior, max token lifetime, Keycloak endpoint path, and the fact that approval UI logout clears only the gateway cookie.
+- The Keycloak integration test README documents that the Testcontainers setup proves active-token introspection but does not reliably prove session-based revocation, because Keycloak's default self-contained access tokens remain introspectable as `active` until expiry unless the realm is configured to check session state at introspection time.
+
+Tests: `GatewayAuthenticationTests`, `HttpTokenIntrospectionClientTests`, `TokenIntrospectionActivityValidatorTests`, `TokenClaimDatesTests`, `GatewayAuthOptionsTests`, `InfraGateAuthSettingsTests`, `McpGatewayOptionsTests`, `RunProfileCliTests`, `RunProfileDocumentReaderTests`, `EnvFileRendererTests`, and `KeycloakIntegrationTests` cover active, inactive/revoked, introspection failure, malformed responses, caching, cache pruning, out-of-range claim handling, max lifetime rejection, missing baseline claims, real Keycloak active-token introspection, production run-profile generation, and existing valid JWT behavior.
 
 ---
 
@@ -520,7 +532,7 @@ The naming follows `mcp:tools.{role}` (e.g., `mcp:tools.read`) rather than the s
 | F-06 | Subprocess blast radius under shared Service Account | **High** | Original | Diagram 2 | ⚠️ Partial |
 | F-07 | JWT Bearer replay — no proof-of-possession | **High** | New | Diagrams 1 & 2 | ⚠️ Partial |
 | F-08 | No user-to-plan binding — cross-user plan approval | **High** | New | Diagram 3 | ✅ Mitigated |
-| F-09 | No JWT revocation mechanism | **Medium** | New | Diagrams 1 & 2 | ❌ Not mitigated |
+| F-09 | No JWT revocation mechanism | **Medium** | New | Diagrams 1 & 2 | ✅ Mitigated |
 | F-10 | Subprocess binary integrity not verified | **High** | New | Diagrams 2 & 3 | ❌ Not mitigated |
 | F-11 | JWKS cache poisoning / key rollover race | **Medium** | New | Diagram 1 | ❌ Not mitigated |
 | F-12 | Audit log tamper by compromised process | **Medium** | New | Diagrams 2 & 3 | ⚠️ Partial |
@@ -544,7 +556,7 @@ The naming follows `mcp:tools.{role}` (e.g., `mcp:tools.read`) rather than the s
 | Priority | Finding | Reason | Status |
 |---|---|---|---|
 | 5 | **F-07** — DPoP or short-lived tokens + log scrubbing | Significantly reduces replay window | ⚠️ Partial — DPoP for internal clients, in-memory replay store |
-| 6 | **F-09** — Token revocation / introspection | Enables incident response to stolen tokens | ❌ Open |
+| 6 | ✅ **F-09** — Token revocation / introspection | Enables incident response to stolen tokens | ✅ Done — issuer introspection + short max access-token lifetime enforced |
 | 7 | **F-10** — Binary hash pinning at startup | Low-cost, high-value supply-chain control | ❌ Open |
 | 8 | **F-06** — Split Service Accounts by read/write | Reduces blast radius of subprocess compromise | ⚠️ Partial — RBAC split exists, single subprocess instance |
 

@@ -119,6 +119,8 @@ public sealed record class McpGatewayOptions(
                 $"{GatewayAuthConventions.EnvironmentVariables.OAuthRequireHttpsMetadata} must be true in Production mode.");
         }
 
+        ValidateProductionTokenIntrospection();
+
         ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
             Auth.OAuthAuthority,
             GatewayAuthConventions.EnvironmentVariables.OAuthAuthority);
@@ -152,6 +154,42 @@ public sealed record class McpGatewayOptions(
             McpGatewayConventions.EnvironmentVariables.GuardAuditRoot,
             IsGuardAuditRootExplicit,
             DeniedGuardAuditRootNames);
+    }
+
+    private void ValidateProductionTokenIntrospection()
+    {
+        if (!Auth.TokenIntrospectionEnabled)
+        {
+            throw new InvalidOperationException(
+                $"{GatewayAuthConventions.EnvironmentVariables.TokenIntrospectionEnabled} must be true in Production mode.");
+        }
+
+        if (string.IsNullOrWhiteSpace(Auth.TokenIntrospectionClientId))
+        {
+            throw new InvalidOperationException(
+                $"{GatewayAuthConventions.EnvironmentVariables.TokenIntrospectionClientId} is required in Production mode.");
+        }
+
+        if (string.IsNullOrWhiteSpace(Auth.TokenIntrospectionClientSecret))
+        {
+            throw new InvalidOperationException(
+                $"{GatewayAuthConventions.EnvironmentVariables.TokenIntrospectionClientSecret} is required in Production mode.");
+        }
+
+        if (Auth.MaxAcceptedAccessTokenLifetimeSeconds <= 0 ||
+            Auth.MaxAcceptedAccessTokenLifetimeSeconds > GatewayAuthConventions.DefaultMaxAcceptedAccessTokenLifetimeSeconds)
+        {
+            throw new InvalidOperationException(
+                $"{GatewayAuthConventions.EnvironmentVariables.MaxAcceptedAccessTokenLifetimeSeconds} must be between 1 and " +
+                $"{GatewayAuthConventions.DefaultMaxAcceptedAccessTokenLifetimeSeconds} seconds in Production mode.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(Auth.TokenIntrospectionEndpoint))
+        {
+            ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
+                Auth.TokenIntrospectionEndpoint,
+                GatewayAuthConventions.EnvironmentVariables.TokenIntrospectionEndpoint);
+        }
     }
 
     private static TimeSpan ParseTimeSpanSeconds(string? value, TimeSpan defaultValue)

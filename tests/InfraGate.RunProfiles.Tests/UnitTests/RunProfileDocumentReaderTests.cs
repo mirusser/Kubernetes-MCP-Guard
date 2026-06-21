@@ -370,6 +370,44 @@ public sealed class RunProfileDocumentReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task ReadAsync_WithIdentityProviderIntrospection_ParsesSettings()
+    {
+        string yaml = """
+            version: 1
+            profiles:
+              p:
+                kind: compose
+                identityProvider:
+                  authority: https://issuer.example.com/realms/infra-gate
+                  tokenIntrospectionEnabled: "true"
+                  tokenIntrospectionEndpoint: https://issuer.example.com/realms/infra-gate/protocol/openid-connect/token/introspect
+                  tokenIntrospectionClientId: infra-gate-token-introspection
+                  tokenIntrospectionClientSecret: secret-placeholder
+                  tokenIntrospectionCacheSeconds: "15"
+                  maxAcceptedAccessTokenLifetimeSeconds: "300"
+                domainAdapters:
+                  - name: a
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /k
+                      allowedNamespaces:
+                        - default
+            """;
+        string path = WriteYaml(yaml);
+
+        var doc = await RunProfileDocumentReader.ReadAsync(path, CancellationToken.None);
+
+        var identityProvider = doc.Profiles[0].IdentityProvider;
+        Assert.NotNull(identityProvider);
+        Assert.Equal("true", identityProvider.TokenIntrospectionEnabled);
+        Assert.Equal("https://issuer.example.com/realms/infra-gate/protocol/openid-connect/token/introspect", identityProvider.TokenIntrospectionEndpoint);
+        Assert.Equal("infra-gate-token-introspection", identityProvider.TokenIntrospectionClientId);
+        Assert.Equal("secret-placeholder", identityProvider.TokenIntrospectionClientSecret);
+        Assert.Equal("15", identityProvider.TokenIntrospectionCacheSeconds);
+        Assert.Equal("300", identityProvider.MaxAcceptedAccessTokenLifetimeSeconds);
+    }
+
+    [Fact]
     public async Task ReadAsync_WithGenericApprovalCoreRunMigrations_ParsesBooleanTrue()
     {
         string yaml = """

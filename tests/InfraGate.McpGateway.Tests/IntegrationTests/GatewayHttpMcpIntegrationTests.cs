@@ -1157,11 +1157,14 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
     private static string CreateJwt(string subject)
     {
+        var issuedAt = DateTime.UtcNow.AddSeconds(-10);
         var descriptor = new SecurityTokenDescriptor
         {
             Issuer = Issuer,
             Audience = Resource,
-            Expires = DateTime.UtcNow.AddMinutes(30),
+            IssuedAt = issuedAt,
+            NotBefore = issuedAt,
+            Expires = issuedAt.AddMinutes(4),
             Claims = new Dictionary<string, object>
             {
                 [GatewayAuthConventions.Claims.Subject] = subject,

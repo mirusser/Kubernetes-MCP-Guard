@@ -71,7 +71,13 @@ internal static class EnvFileRenderer
             !string.IsNullOrEmpty(idp.MetadataAddress) ||
             !string.IsNullOrEmpty(idp.Resource) ||
             !string.IsNullOrEmpty(idp.Scope) ||
-            !string.IsNullOrEmpty(idp.RequireHttpsMetadata);
+            !string.IsNullOrEmpty(idp.RequireHttpsMetadata) ||
+            !string.IsNullOrEmpty(idp.TokenIntrospectionEnabled) ||
+            !string.IsNullOrEmpty(idp.TokenIntrospectionEndpoint) ||
+            !string.IsNullOrEmpty(idp.TokenIntrospectionClientId) ||
+            !string.IsNullOrEmpty(idp.TokenIntrospectionClientSecret) ||
+            !string.IsNullOrEmpty(idp.TokenIntrospectionCacheSeconds) ||
+            !string.IsNullOrEmpty(idp.MaxAcceptedAccessTokenLifetimeSeconds);
 
         if (!hasAnyValue)
         {
@@ -85,6 +91,12 @@ internal static class EnvFileRenderer
         AppendIfSet(builder, RunProfileConventions.Env.OauthResource, idp.Resource);
         AppendIfSet(builder, RunProfileConventions.Env.OauthScope, idp.Scope);
         AppendIfSet(builder, RunProfileConventions.Env.OauthRequireHttpsMetadata, idp.RequireHttpsMetadata);
+        AppendIfSet(builder, RunProfileConventions.Env.TokenIntrospectionEnabled, idp.TokenIntrospectionEnabled);
+        AppendIfSet(builder, RunProfileConventions.Env.TokenIntrospectionEndpoint, idp.TokenIntrospectionEndpoint);
+        AppendIfSet(builder, RunProfileConventions.Env.TokenIntrospectionClientId, idp.TokenIntrospectionClientId);
+        AppendIfSet(builder, RunProfileConventions.Env.TokenIntrospectionClientSecret, idp.TokenIntrospectionClientSecret);
+        AppendIfSet(builder, RunProfileConventions.Env.TokenIntrospectionCacheSeconds, idp.TokenIntrospectionCacheSeconds);
+        AppendIfSet(builder, RunProfileConventions.Env.MaxAcceptedAccessTokenLifetimeSeconds, idp.MaxAcceptedAccessTokenLifetimeSeconds);
     }
 
     private static void AppendApprovalAuthority(StringBuilder builder, RunProfile profile)
