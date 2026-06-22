@@ -45,6 +45,7 @@ internal static class RunProfileConventions
         public const string Defaults = "defaults";
         public const string DomainAdapters = "domainAdapters";
         public const string DownstreamAssembly = "downstreamAssembly";
+        public const string DownstreamAssemblyHash = "downstreamAssemblyHash";
         public const string DownstreamAuth = "downstreamAuth";
         public const string Gateway = "gateway";
         public const string AgentGuardrails = "agentGuardrails";
@@ -134,6 +135,7 @@ internal static class RunProfileConventions
         public const string BindPort = "INFRA_GATE_BIND_PORT";
         public const string DataProtectionHostPath = "INFRA_GATE_DATA_PROTECTION_HOST_PATH";
         public const string DownstreamAssembly = "InfraGate__Gateway__DownstreamAssembly";
+        public const string DownstreamAssemblyHash = "InfraGate__Gateway__DownstreamAssemblyHash";
         public const string DownstreamAuthAudience = "InfraGate__DownstreamAuth__Audience";
         public const string DownstreamAuthAuthority = "InfraGate__DownstreamAuth__Authority";
         public const string DownstreamAuthGatewayClientId = "InfraGate__DownstreamAuth__GatewayClientId";

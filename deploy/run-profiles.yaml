@@ -221,7 +221,10 @@ profiles:
   production:
     kind: compose-deploy
     runtimeMode: Production
-    gateway: {}
+    gateway:
+      # Replace with the SHA-256 hex digest of the published InfraGate.McpServer.dll inside the release image.
+      # Compute it from the image, not from a host bind-mount, and update it on every server upgrade.
+      downstreamAssemblyHash: <replace-with-sha256-of-published-assembly>
     identityProvider:
       requireHttpsMetadata: "true"
       authority: https://issuer.example.com/realms/infra-gate

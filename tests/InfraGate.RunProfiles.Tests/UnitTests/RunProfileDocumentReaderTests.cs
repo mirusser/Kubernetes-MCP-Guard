@@ -346,6 +346,33 @@ public sealed class RunProfileDocumentReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task ReadAsync_WithGatewayDownstreamAssemblyHash_ParsesHash()
+    {
+        string yaml = """
+            version: 1
+            profiles:
+              p:
+                kind: compose
+                gateway:
+                  downstreamAssembly: /app/server/InfraGate.McpServer.dll
+                  downstreamAssemblyHash: a3e5f8c9d2b1e4076f5a3c8e1d0b9a2c7f4e6d5b8c3a1f0e9d7b6c5a4f3e2d1b0
+                domainAdapters:
+                  - name: a
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /k
+                      allowedNamespaces:
+                        - default
+            """;
+        string path = WriteYaml(yaml);
+
+        var doc = await RunProfileDocumentReader.ReadAsync(path, CancellationToken.None);
+
+        Assert.Equal("/app/server/InfraGate.McpServer.dll", doc.Profiles[0].Gateway?.DownstreamAssembly);
+        Assert.Equal("a3e5f8c9d2b1e4076f5a3c8e1d0b9a2c7f4e6d5b8c3a1f0e9d7b6c5a4f3e2d1b0", doc.Profiles[0].Gateway?.DownstreamAssemblyHash);
+    }
+
+    [Fact]
     public async Task ReadAsync_WithRuntimeMode_RuntimeModeIsPopulated()
     {
         string yaml = """

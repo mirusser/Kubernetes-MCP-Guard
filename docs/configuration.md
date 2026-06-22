@@ -141,7 +141,8 @@ The Remediation Executor listens on port `3005` by default, accepts synchronous 
 | --- | --- | :---: | --- | --- | --- | --- |
 | `InfraGate__Gateway__AspNetCoreUrls` | `InfraGate.McpGateway` | No | `http://127.0.0.1:3001`; Docker/Compose profiles set `http://0.0.0.0:3001` | `http://0.0.0.0:3001` | ASP.NET Core bind URL for the HTTP MCP gateway and browser approval endpoints. `ASPNETCORE_URLS` still wins if set directly. | Bind intentionally and put the gateway behind TLS in production. |
 | `InfraGate__Gateway__DownstreamProject` | `InfraGate.McpGateway` | No | `<working directory>/src/InfraGate.McpServer/InfraGate.McpServer.csproj` | `/repo/src/InfraGate.McpServer/InfraGate.McpServer.csproj` | Downstream stdio MCP server project used when no published assembly is configured. | Prefer `InfraGate__Gateway__DownstreamAssembly` for immutable container/runtime deployments. |
-| `InfraGate__Gateway__DownstreamAssembly` | `InfraGate.McpGateway` | No | Unset | `/app/server/InfraGate.McpServer.dll` | Published downstream server assembly. When set, the gateway starts `dotnet <assembly>`. | Use a known published assembly from the same release as the gateway image. |
+| `InfraGate__Gateway__DownstreamAssembly` | `InfraGate.McpGateway` | No | Unset | `/app/server/InfraGate.McpServer.dll` | Published downstream server assembly. When set, the gateway starts `dotnet <assembly>`. | Required in Production. Use a known published assembly from the same release as the gateway image. |
+| `InfraGate__Gateway__DownstreamAssemblyHash` | `InfraGate.McpGateway` | Required in Production | Unset | `a3e5f8c9d2b1e4076f5a3c8e1d0b9a2c7f4e6d5b8c3a1f0e9d7b6c5a4f3e2d1b0` | Expected SHA-256 hex digest of the downstream server assembly. | Required in Production when `InfraGate__Gateway__DownstreamAssembly` is set. Compute the hash from the file inside the runtime image, not a host bind-mount. Update on every server upgrade. |
 | `InfraGate__Gateway__GuardAuditRoot` | `InfraGate.McpGateway` | Required in Production | `<working directory>/.mcp-guardrails` | `/data/guardrails` | Guardrail JSONL audit output root. | Store on protected durable absolute storage and monitor retention. Production refuses temp paths, default dev paths, and group/other-writable existing directories. |
 | `InfraGate__Approval__Root` | `InfraGate.McpGateway` | Required in Production | `<working directory>/.mcp-approvals` | `/data/approvals` | Retained for ASP.NET Core Data Protection key storage only. Approval state and audit are PostgreSQL-backed. | Use a durable, protected absolute path for Data Protection keys. Production requires an explicit durable path. |
 | `InfraGate__Approval__BaseUrl` | `InfraGate.McpGateway` | Required in Production | Request-derived URL, or `http://127.0.0.1:3001` when no request is available | `https://gateway.example.com` | Public base URL used when returning approval links to the MCP client. | Set explicitly to the external HTTPS URL users open in a browser. Production refuses missing, HTTP, or loopback values. |
@@ -154,6 +155,21 @@ The Remediation Executor listens on port `3005` by default, accepts synchronous 
 | `InfraGate__Approval__Smtp__User` | `InfraGate.McpGateway` | No | Unset | `smtp-user` | Optional SMTP username. | Use secret storage and least-privilege SMTP credentials. |
 | `InfraGate__Approval__Smtp__Password` | `InfraGate.McpGateway` | No | Unset | (secret) | Optional SMTP password. | Use secret storage; never commit generated env files containing this value. |
 | `InfraGate__Approval__Smtp__EnableSsl` | `InfraGate.McpGateway` | No | `true` when SMTP is configured; local Compose default `false` for Mailpit | `true` | Enables SMTP TLS/STARTTLS on the approval email client. | Keep enabled for production SMTP relays; disable only for local Mailpit or trusted development-only relays. |
+
+Compute the expected assembly hash from the file that will exist inside the runtime image:
+
+```bash
+# Linux (run inside the built image or against the published file)
+sha256sum /app/server/InfraGate.McpServer.dll
+
+# PowerShell
+Get-FileHash -Algorithm SHA256 -Path C:\app\server\InfraGate.McpServer.dll
+```
+
+> [!NOTE]
+> `InfraGate__Gateway__DownstreamAssemblyHash` is verified using a constant-time comparison. The gateway computes the SHA-256 hash once at startup; it does not verify the binary on every subprocess respawn. In Production, missing or mismatched hashes fail fast with a clear error.
+>
+> OS-level hardening (dedicated service user, file-system permissions, and binary signing) is deployment-dependent and is not enforced by the gateway process itself.
 
 ## McpGateway.Auth
 

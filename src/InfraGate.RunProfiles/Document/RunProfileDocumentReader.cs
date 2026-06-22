@@ -70,6 +70,7 @@ internal static class RunProfileDocumentReader
             [
                 RunProfileConventions.YamlKeys.AspnetcoreUrls,
                 RunProfileConventions.YamlKeys.DownstreamAssembly,
+                RunProfileConventions.YamlKeys.DownstreamAssemblyHash,
                 RunProfileConventions.YamlKeys.GuardAuditRoot
             ],
             StringComparer.Ordinal);
@@ -384,7 +385,8 @@ internal static class RunProfileDocumentReader
         return new GatewayProfile(
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.AspnetcoreUrls),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.DownstreamAssembly),
-            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.GuardAuditRoot));
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.GuardAuditRoot),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.DownstreamAssemblyHash));
     }
 
     private static IdentityProviderProfile? ReadIdentityProvider(YamlMappingNode node)

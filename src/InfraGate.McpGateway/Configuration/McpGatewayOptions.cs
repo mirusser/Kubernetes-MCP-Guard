@@ -2,6 +2,7 @@ using System.Globalization;
 using InfraGate.Approvals;
 using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.BinaryIntegrity;
 using InfraGate.McpGateway.Email;
 using InfraGate.RuntimeSafety;
 
@@ -16,6 +17,7 @@ public sealed record class McpGatewayOptions(
     string? ApprovalBaseUrl,
     TimeSpan ApprovalChallengeTtl,
     string? DownstreamAssembly = null,
+    string? DownstreamAssemblyHash = null,
     RuntimeMode RuntimeMode = RuntimeMode.Development,
     bool IsGuardAuditRootExplicit = true,
     bool IsApprovalRootExplicit = true,
@@ -56,6 +58,7 @@ public sealed record class McpGatewayOptions(
                 McpGatewayConventions.Paths.DefaultDownstreamProjectDirectory,
                 McpGatewayConventions.Paths.DefaultDownstreamProjectFileName);
         string? downstreamAssembly = gatewaySettings?.DownstreamAssembly;
+        string? downstreamAssemblyHash = gatewaySettings?.DownstreamAssemblyHash;
         string? auditRootValue = gatewaySettings?.GuardAuditRoot;
         bool isGuardAuditRootExplicit = !string.IsNullOrWhiteSpace(auditRootValue);
         string auditRoot = auditRootValue ??
@@ -87,6 +90,7 @@ public sealed record class McpGatewayOptions(
             approvalBaseUrl,
             approvalChallengeTtl,
             downstreamAssembly,
+            downstreamAssemblyHash,
             runtimeMode,
             isGuardAuditRootExplicit,
             isApprovalRootExplicit,
@@ -96,11 +100,32 @@ public sealed record class McpGatewayOptions(
             smtp);
     }
 
-    public void ValidateProductionSafety()
+    internal void ValidateProductionSafety(IDownstreamBinaryIntegrityVerifier? binaryIntegrityVerifier = null)
     {
+        binaryIntegrityVerifier ??= new Sha256DownstreamBinaryIntegrityVerifier();
+
+        if (ShouldVerifyBinaryIntegrity())
+        {
+            binaryIntegrityVerifier.Verify(DownstreamAssembly!, DownstreamAssemblyHash!);
+        }
+
         if (RuntimeMode != RuntimeMode.Production)
         {
             return;
+        }
+
+        if (string.IsNullOrWhiteSpace(DownstreamAssembly))
+        {
+            throw new InvalidOperationException(
+                $"{McpGatewayConventions.EnvironmentVariables.DownstreamAssembly} is required in Production mode. " +
+                $"Use a published downstream assembly, not dotnet run --project.");
+        }
+
+        if (string.IsNullOrWhiteSpace(DownstreamAssemblyHash))
+        {
+            throw new InvalidOperationException(
+                $"{McpGatewayConventions.EnvironmentVariables.DownstreamAssemblyHash} is required in Production mode " +
+                $"when {McpGatewayConventions.EnvironmentVariables.DownstreamAssembly} is configured.");
         }
 
         DownstreamAuthOptions? downstreamAuth = DownstreamAuth;
@@ -170,6 +195,21 @@ public sealed record class McpGatewayOptions(
             McpGatewayConventions.EnvironmentVariables.GuardAuditRoot,
             IsGuardAuditRootExplicit,
             DeniedGuardAuditRootNames);
+    }
+
+    private bool ShouldVerifyBinaryIntegrity()
+    {
+        if (string.IsNullOrWhiteSpace(DownstreamAssembly))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(DownstreamAssemblyHash))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private void ValidateProductionTokenIntrospection()

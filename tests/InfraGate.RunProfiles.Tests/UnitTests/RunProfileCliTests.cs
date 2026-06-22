@@ -662,6 +662,7 @@ public sealed class RunProfileCliTests
             "InfraGate__Runtime__Environment",
             "InfraGate__Gateway__AspNetCoreUrls",
             "InfraGate__Gateway__DownstreamAssembly",
+            "InfraGate__Gateway__DownstreamAssemblyHash",
             "InfraGate__Gateway__GuardAuditRoot",
             "InfraGate__Auth__OAuthAuthority",
             "InfraGate__Auth__OAuthMetadataAddress",
@@ -1027,6 +1028,44 @@ public sealed class RunProfileCliTests
         string content = await File.ReadAllTextAsync(outputPath);
         Assert.Contains("INFRA_GATE_BIND_ADDRESS=10.0.0.1", content, StringComparison.Ordinal);
         Assert.DoesNotContain("INFRA_GATE_BIND_ADDRESS=127.0.0.1", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetDownstreamAssemblyHash_OverridesValue()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                gateway:
+                  downstreamAssembly: /app/server/InfraGate.McpServer.dll
+                  downstreamAssemblyHash: original-hash00000000000000000000000000000000000000000000000000000000
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--output", outputPath,
+             "--set", "gateway.downstreamAssemblyHash=override-hash0000000000000000000000000000000000000000000000000000000"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        Assert.Contains($"{RunProfileConventions.Env.DownstreamAssemblyHash}=override-hash0000000000000000000000000000000000000000000000000000000", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("original-hash", content, StringComparison.Ordinal);
     }
 
     [Fact]

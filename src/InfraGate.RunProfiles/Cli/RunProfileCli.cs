@@ -401,6 +401,7 @@ internal static class RunProfileCli
         {
             RunProfileConventions.YamlKeys.AspnetcoreUrls => profile with { AspnetcoreUrls = value },
             RunProfileConventions.YamlKeys.DownstreamAssembly => profile with { DownstreamAssembly = value },
+            RunProfileConventions.YamlKeys.DownstreamAssemblyHash => profile with { DownstreamAssemblyHash = value },
             RunProfileConventions.YamlKeys.GuardAuditRoot => profile with { GuardAuditRoot = value },
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };

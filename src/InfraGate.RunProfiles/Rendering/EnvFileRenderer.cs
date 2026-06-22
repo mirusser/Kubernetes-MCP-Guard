@@ -55,6 +55,7 @@ internal static class EnvFileRenderer
         builder.AppendLine("# Gateway");
         AppendIfSet(builder, RunProfileConventions.Env.AspnetcoreUrls, profile.Gateway.AspnetcoreUrls);
         AppendIfSet(builder, RunProfileConventions.Env.DownstreamAssembly, profile.Gateway.DownstreamAssembly);
+        AppendIfSet(builder, RunProfileConventions.Env.DownstreamAssemblyHash, profile.Gateway.DownstreamAssemblyHash);
         AppendIfSet(builder, RunProfileConventions.Env.GuardAuditRoot, profile.Gateway.GuardAuditRoot);
     }
 

@@ -39,18 +39,18 @@ Implement binary-integrity verification for the downstream MCP server so that F-
 
 ### Phase 1: Configuration and conventions
 
-* [ ] **Task 1 — Add configuration constants.**
+* [x] **Task 1 — Add configuration constants.**
   * Add `DownstreamAssemblyHash` to `McpGatewayConventions.ConfigurationKeys` (`InfraGate:Gateway:DownstreamAssemblyHash`).
   * Add `DownstreamAssemblyHash` to `McpGatewayConventions.EnvironmentVariables` (`InfraGate__Gateway__DownstreamAssemblyHash`).
   * **Verification:** The new constants compile and are referenced by Task 2.
 
-* [ ] **Task 2 — Bind the setting.**
+* [x] **Task 2 — Bind the setting.**
   * Add `string? DownstreamAssemblyHash { get; init; }` to `InfraGateGatewaySettings`.
   * Add `string? DownstreamAssemblyHash = null` to the `McpGatewayOptions` positional record (place it after `DownstreamAssembly`) and populate it in `FromConfiguration` from the gateway settings.
   * Update any production call sites that construct `McpGatewayOptions` directly (e.g., opt-in E2E tests running in `Production` mode) to supply the new required values; existing Development-mode call sites are unaffected because the parameter is optional.
   * **Verification:** `InfraGateGatewaySettingsTests` and the binding assertions in `McpGatewayOptionsTests` pass.
 
-* [ ] **Task 3 — Add run-profile support.**
+* [x] **Task 3 — Add run-profile support.**
   * Add `DownstreamAssemblyHash` constant to `RunProfileConventions.YamlKeys` and `RunProfileConventions.Env`.
   * Add `string? DownstreamAssemblyHash` to `GatewayProfile`.
   * Read the value in `RunProfileDocumentReader.ReadGateway`, add the key to `KnownGatewayKeys`, and pass the value to the `GatewayProfile` constructor.
@@ -59,7 +59,7 @@ Implement binary-integrity verification for the downstream MCP server so that F-
   * Add `downstreamAssemblyHash` to `RunProfileCli.ApplyGatewayOverride` so `--set gateway.downstreamAssemblyHash=...` works.
   * **Verification:** Run-profile reader, renderer, and CLI `--set` tests added in Task 4 pass.
 
-* [ ] **Task 4 — Update existing settings tests.**
+* [x] **Task 4 — Update existing settings tests.**
   * Add binding coverage in `InfraGateGatewaySettingsTests`.
   * Add run-profile reader/renderer coverage in `RunProfileDocumentReaderTests`, `EnvFileRendererTests`, and `RunProfileCliTests`.
   * Update `RunProfileCliTests.ComposeStackProfileKeys` to include `InfraGate__Gateway__DownstreamAssemblyHash` now emitted by the `production` profile.
@@ -68,7 +68,7 @@ Implement binary-integrity verification for the downstream MCP server so that F-
 
 ### Phase 2: Binary integrity verification
 
-* [ ] **Task 5 — Create the verifier module.**
+* [x] **Task 5 — Create the verifier module.**
   * Add a new internal seam under `src/InfraGate.McpGateway/BinaryIntegrity/` (one top-level type per file per repo convention):
     * `IDownstreamBinaryIntegrityVerifier` with one synchronous method: `void Verify(string assemblyPath, string expectedHashHex);`.
     * `DownstreamBinaryIntegrityException` carrying `FilePath` and `Algorithm` (`SHA-256`).
@@ -82,13 +82,13 @@ Implement binary-integrity verification for the downstream MCP server so that F-
   * Keep this module single-purpose: `McpGatewayOptions` decides **when** to verify; this module decides **how**.
   * **Verification:** `Sha256DownstreamBinaryIntegrityVerifierTests` from Task 9 pass and the fake can drive `McpGatewayOptionsTests` without file I/O.
 
-* [ ] **Task 6 — Integrate verification at startup.**
+* [x] **Task 6 — Integrate verification at startup.**
   * Change `McpGatewayOptions.ValidateProductionSafety()` to accept an optional `IDownstreamBinaryIntegrityVerifier? binaryIntegrityVerifier = null` parameter; when null, use `new Sha256DownstreamBinaryIntegrityVerifier()`.
   * Pass `DownstreamAssembly` to the verifier as configured; `File.OpenRead` resolves relative paths from the current working directory, matching `dotnet <assembly>` behavior.
   * `ConfigurationExtensions.AddInfraGateServices()` calls `options.ValidateProductionSafety()` with no arguments; the default verifier keeps the synchronous startup contract intact.
   * **Verification:** Gateway project builds and `ConfigurationExtensions.AddInfraGateServices()` resolves the default verifier without DI changes.
 
-* [ ] **Task 7 — Enforce production requirement.**
+* [x] **Task 7 — Enforce production requirement.**
   * In `ValidateProductionSafety`, when `RuntimeMode == Production`:
     * If `DownstreamAssembly` is null, empty, or whitespace, throw `InvalidOperationException` referencing `InfraGate__Gateway__DownstreamAssembly`.
     * If `DownstreamAssemblyHash` is null, empty, or whitespace, throw `InvalidOperationException` referencing `InfraGate__Gateway__DownstreamAssemblyHash`.
@@ -96,7 +96,7 @@ Implement binary-integrity verification for the downstream MCP server so that F-
   * In Development mode, call the verifier only when both `DownstreamAssembly` and `DownstreamAssemblyHash` are non-empty; do not require either.
   * **Verification:** The production-safety tests listed in Task 8 pass.
 
-* [ ] **Task 8 — Update production-safety tests.**
+* [x] **Task 8 — Update production-safety tests.**
   * Update `McpGatewayOptionsTests.BuildProductionConfig()` to set:
     * `McpGatewayConventions.ConfigurationKeys.DownstreamAssembly` to a stable dummy path (e.g., `/app/server/InfraGate.McpServer.dll`).
     * `McpGatewayConventions.ConfigurationKeys.DownstreamAssemblyHash` to a dummy 64-character hex string.
@@ -113,7 +113,7 @@ Implement binary-integrity verification for the downstream MCP server so that F-
 
 ### Phase 3: Verification unit tests
 
-* [ ] **Task 9 — Add `Sha256DownstreamBinaryIntegrityVerifierTests`.**
+* [x] **Task 9 — Add `Sha256DownstreamBinaryIntegrityVerifierTests`.**
   * `Verify_KnownBytes_ReturnsWithoutThrowing` — temp file with known bytes, matching lower-case SHA-256.
   * `Verify_KnownBytesUpperCaseHash_ReturnsWithoutThrowing` — matching upper-case SHA-256.
   * `Verify_MismatchedHash_ThrowsDownstreamBinaryIntegrityException` — assert exception `FilePath` and `Algorithm` properties, not message text.
@@ -125,7 +125,7 @@ Implement binary-integrity verification for the downstream MCP server so that F-
 
 ### Phase 4: Documentation and deployment
 
-* [ ] **Task 10 — Update `docs/configuration.md`.**
+* [x] **Task 10 — Update `docs/configuration.md`.**
   * Add a row for `InfraGate__Gateway__DownstreamAssemblyHash` in the McpGateway table:
     * Required: Required in Production (because `DownstreamAssembly` is required in Production).
     * Default: Unset.
@@ -135,28 +135,28 @@ Implement binary-integrity verification for the downstream MCP server so that F-
   * Add a one-line operator example: `sha256sum /app/server/InfraGate.McpServer.dll` (Linux) or `Get-FileHash -Algorithm SHA256 ...` (PowerShell).
   * **Verification:** The new row appears in the McpGateway section and the configuration doc builds/preview without broken Markdown.
 
-* [ ] **Task 11 — Update production run profile.**
+* [x] **Task 11 — Update production run profile.**
   * Add `downstreamAssemblyHash` under `gateway` **only** in the `production` profile of `deploy/run-profiles.yaml`.
   * Use a placeholder value such as `<replace-with-sha256-of-published-assembly>` and a YAML comment explaining it must be computed from the release image.
   * Do **not** add it to `defaults.gateway`, otherwise Development profiles would inherit an invalid or stale hash.
   * **Verification:** `dotnet run --project src/InfraGate.RunProfiles -- generate production --output /tmp/production.env` emits `InfraGate__Gateway__DownstreamAssemblyHash`, and non-production profiles do not.
 
-* [ ] **Task 12 — Update `src/InfraGate.McpGateway/README.md`.**
+* [x] **Task 12 — Update `src/InfraGate.McpGateway/README.md`.**
   * In the "Trusted launch" security control, mention that production deployments must pin the downstream assembly hash via `InfraGate__Gateway__DownstreamAssemblyHash` and that the gateway refuses to start if the DLL is tampered with.
   * Link to `docs/configuration.md` for the env var reference and hash-computation examples.
   * **Verification:** README prose matches the new behavior and the relative link to `docs/configuration.md` resolves.
 
-* [ ] **Task 13 — Capture OS-level hardening as a documentation follow-up.**
+* [x] **Task 13 — Capture OS-level hardening as a documentation follow-up.**
   * Add a note in the README or `docs/configuration.md` that F-10 hardening item 4 (dedicated OS user, binary signing) is deployment-dependent and not implemented by this change.
   * **Verification:** The note is present and does not claim the gateway enforces OS-level isolation or binary signatures.
 
 ### Checkpoint: Implementation complete
 
-* [ ] `dotnet build` succeeds with no warnings.
-* [ ] All modified and new unit tests pass (`rtk test dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj tests/InfraGate.RunProfiles.Tests/InfraGate.RunProfiles.Tests.csproj`).
-* [ ] Generated env files from the `production` profile include `InfraGate__Gateway__DownstreamAssemblyHash`.
-* [ ] Running the gateway in Production with a mismatched or missing hash fails fast with a clear error message.
-* [ ] Running the gateway in Development without a hash still starts successfully.
+* [x] `dotnet build` succeeds with no warnings.
+* [x] All modified and new unit tests pass (`rtk test dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj tests/InfraGate.RunProfiles.Tests/InfraGate.RunProfiles.Tests.csproj`).
+* [x] Generated env files from the `production` profile include `InfraGate__Gateway__DownstreamAssemblyHash`.
+* [x] Running the gateway in Production with a mismatched or missing hash fails fast with a clear error message.
+* [x] Running the gateway in Development without a hash still starts successfully.
 
 ## Risks and mitigations
 

@@ -44,6 +44,7 @@ internal static class McpGatewayConventions
         public const string ApprovalRoot = "InfraGate:Approval:Root";
         public const string AspNetCoreUrls = "InfraGate:Gateway:AspNetCoreUrls";
         public const string DownstreamAssembly = "InfraGate:Gateway:DownstreamAssembly";
+        public const string DownstreamAssemblyHash = "InfraGate:Gateway:DownstreamAssemblyHash";
         public const string DownstreamProject = "InfraGate:Gateway:DownstreamProject";
         public const string GuardAuditRoot = "InfraGate:Gateway:GuardAuditRoot";
         public const string OperatorEmail = "InfraGate:Approval:OperatorEmail";
@@ -61,6 +62,7 @@ internal static class McpGatewayConventions
     {
         public const string AspNetCoreUrls = "InfraGate__Gateway__AspNetCoreUrls";
         public const string DownstreamAssembly = "InfraGate__Gateway__DownstreamAssembly";
+        public const string DownstreamAssemblyHash = "InfraGate__Gateway__DownstreamAssemblyHash";
         public const string DownstreamProject = "InfraGate__Gateway__DownstreamProject";
         public const string GuardAuditRoot = "InfraGate__Gateway__GuardAuditRoot";
         public const string ApprovalBaseUrl = "InfraGate__Approval__BaseUrl";

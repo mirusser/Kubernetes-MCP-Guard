@@ -42,6 +42,7 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
         {
             AspnetcoreUrls = profile.AspnetcoreUrls ?? defaults.AspnetcoreUrls,
             DownstreamAssembly = profile.DownstreamAssembly ?? defaults.DownstreamAssembly,
+            DownstreamAssemblyHash = profile.DownstreamAssemblyHash ?? defaults.DownstreamAssemblyHash,
             GuardAuditRoot = profile.GuardAuditRoot ?? defaults.GuardAuditRoot
         };
     }

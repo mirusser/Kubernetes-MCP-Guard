@@ -67,6 +67,41 @@ public sealed class RunProfileDocumentTests
     }
 
     [Fact]
+    public void FindProfileWithDefaults_GatewayDefaults_MergesDownstreamAssemblyHash()
+    {
+        var profile = MakeProfile("my-profile") with
+        {
+            Gateway = new GatewayProfile(null, "/app/server.dll", null, null)
+        };
+        var defaults = new ProfileDefaults(
+            Gateway: new GatewayProfile(null, null, null, "default-hash0000000000000000000000000000000000000000000000000000000"),
+            null, null, null, null, null, null, null, null, null);
+        var doc = new RunProfileDocument([profile]);
+
+        var merged = doc.FindProfileWithDefaults("my-profile", defaults);
+
+        Assert.Equal("/app/server.dll", merged.Gateway?.DownstreamAssembly);
+        Assert.Equal("default-hash0000000000000000000000000000000000000000000000000000000", merged.Gateway?.DownstreamAssemblyHash);
+    }
+
+    [Fact]
+    public void FindProfileWithDefaults_GatewayDefaults_ProfileHashTakesPrecedence()
+    {
+        var profile = MakeProfile("my-profile") with
+        {
+            Gateway = new GatewayProfile(null, "/app/server.dll", null, "profile-hash000000000000000000000000000000000000000000000000000000")
+        };
+        var defaults = new ProfileDefaults(
+            Gateway: new GatewayProfile(null, null, null, "default-hash0000000000000000000000000000000000000000000000000000000"),
+            null, null, null, null, null, null, null, null, null);
+        var doc = new RunProfileDocument([profile]);
+
+        var merged = doc.FindProfileWithDefaults("my-profile", defaults);
+
+        Assert.Equal("profile-hash000000000000000000000000000000000000000000000000000000", merged.Gateway?.DownstreamAssemblyHash);
+    }
+
+    [Fact]
     public void FindProfileWithDefaults_NullGatewayProfile_DefaultsDoNotMaterialize()
     {
         var profile = MakeProfile("my-profile");

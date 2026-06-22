@@ -298,6 +298,24 @@ public sealed class EnvFileRendererTests
     }
 
     [Fact]
+    public void Render_WithGatewayDownstreamAssemblyHash_EmitsHash()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            Gateway = new GatewayProfile(
+                AspnetcoreUrls: "http://localhost:3001",
+                DownstreamAssembly: "/app/server/InfraGate.McpServer.dll",
+                GuardAuditRoot: null,
+                DownstreamAssemblyHash: "a3e5f8c9d2b1e4076f5a3c8e1d0b9a2c7f4e6d5b8c3a1f0e9d7b6c5a4f3e2d1b0")
+        };
+
+        string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
+
+        Assert.Contains("# Gateway", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.DownstreamAssemblyHash}=a3e5f8c9d2b1e4076f5a3c8e1d0b9a2c7f4e6d5b8c3a1f0e9d7b6c5a4f3e2d1b0", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Render_NullGatewayProfile_OmitsGatewaySection()
     {
         var profile = CreateMinimalProfile() with { Gateway = null };
