@@ -13,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 
@@ -258,6 +259,27 @@ public sealed class GatewayAuthenticationTests
         Assert.Equal(metadataAddress, jwtOptions.MetadataAddress);
         Assert.Contains(Issuer, jwtOptions.TokenValidationParameters.ValidIssuers);
         Assert.Contains(Issuer.TrimEnd('/'), jwtOptions.TokenValidationParameters.ValidIssuers);
+    }
+
+    [Fact]
+    public void AddGatewayAuthentication_SetsBoundedJwksRefreshIntervals()
+    {
+        var options = new GatewayAuthOptions(
+            Issuer,
+            Resource,
+            Scope,
+            OAuthRequireHttpsMetadata: false);
+        var services = new ServiceCollection();
+
+        services.AddGatewayAuthentication(options);
+        using var provider = services.BuildServiceProvider();
+        var jwtOptions = provider
+            .GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
+            .Get(JwtBearerDefaults.AuthenticationScheme);
+
+        var manager = Assert.IsType<ConfigurationManager<OpenIdConnectConfiguration>>(jwtOptions.ConfigurationManager);
+        Assert.Equal(GatewayAuthConventions.DefaultJwksAutomaticRefreshInterval, manager.AutomaticRefreshInterval);
+        Assert.Equal(GatewayAuthConventions.DefaultJwksMinimumRefreshInterval, manager.RefreshInterval);
     }
 
     // ── FromConfiguration binding ──────────────────────────────────────────

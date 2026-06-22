@@ -390,6 +390,54 @@ public sealed class McpGatewayOptionsTests
     }
 
     [Fact]
+    public void ValidateProductionSafety_WithHttpDownstreamAuthority_RefusesStartup()
+    {
+        var configuration = BuildProductionConfig(
+            (DownstreamAuthConventions.ConfigurationKeys.Authority, "http://idp.example.com"));
+
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.Authority, exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithLoopbackDownstreamAuthority_RefusesStartup()
+    {
+        var configuration = BuildProductionConfig(
+            (DownstreamAuthConventions.ConfigurationKeys.Authority, "https://127.0.0.1:8443/realms/test"));
+
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.Authority, exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithHttpDownstreamMetadataAddress_RefusesStartup()
+    {
+        var configuration = BuildProductionConfig(
+            (DownstreamAuthConventions.ConfigurationKeys.MetadataAddress, "http://idp.example.com/.well-known/openid-configuration"));
+
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.MetadataAddress, exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithDownstreamRequireHttpsMetadataFalse_RefusesStartup()
+    {
+        var configuration = BuildProductionConfig(
+            (DownstreamAuthConventions.ConfigurationKeys.RequireHttpsMetadata, "false"));
+
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+
+        Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata, exception.Message);
+    }
+
+    [Fact]
     public void DevelopmentMode_WithDownstreamAuthRequired_False_AllowsStartup()
     {
         var configuration = BuildConfig(

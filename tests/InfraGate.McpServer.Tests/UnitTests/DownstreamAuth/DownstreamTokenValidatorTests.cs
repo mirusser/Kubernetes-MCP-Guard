@@ -24,6 +24,7 @@ public sealed class DownstreamTokenValidatorTests : IDisposable
     public DownstreamTokenValidatorTests()
     {
         signingKey = CreateRsaKey();
+        signingKey.KeyId = "rsa-test-key";
         wrongKey = CreateRsaKey();
 
         options = new DownstreamAuthOptions
@@ -219,6 +220,31 @@ public sealed class DownstreamTokenValidatorTests : IDisposable
         Assert.DoesNotContain(token, result.FailureReason ?? "");
     }
 
+    [Fact]
+    public async Task ValidateAsync_InvalidToken_LogMessageUsesSafeReason()
+    {
+        var logger = new CapturingLogger<DownstreamTokenValidator>();
+        var validatorWithLogger = new DownstreamTokenValidator(
+            options,
+            logger,
+            staticKeys: [signingKey]);
+
+        string token = CreateToken(
+            issuer: TestIssuer,
+            audience: "urn:wrong:audience",
+            scope: TestScope,
+            clientId: TestGatewayClientId,
+            key: signingKey);
+
+        var result = await validatorWithLogger.ValidateAsync(token, CancellationToken.None);
+
+        Assert.False(result.IsValid);
+        Assert.Single(logger.Messages);
+        Assert.Equal(
+            "Downstream token validation failed: Downstream auth token audience is invalid.",
+            logger.Messages[0]);
+    }
+
     // Test 11: Wrong client ID (azp) is refused when GatewayClientId is configured
     [Fact]
     public async Task ValidateAsync_WrongClientId_ReturnsFailure()
@@ -261,6 +287,56 @@ public sealed class DownstreamTokenValidatorTests : IDisposable
             key: signingKey);
 
         var result = await noClientIdValidator.ValidateAsync(token, CancellationToken.None);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_UnknownKid_ReturnsFailure()
+    {
+        var unknownKidKey = new RsaSecurityKey(signingKey.Rsa!.ExportParameters(true))
+        {
+            KeyId = "unknown-kid"
+        };
+        string token = CreateToken(
+            issuer: TestIssuer,
+            audience: TestAudience,
+            scope: TestScope,
+            clientId: TestGatewayClientId,
+            key: unknownKidKey);
+
+        var result = await validator.ValidateAsync(token, CancellationToken.None);
+
+        Assert.False(result.IsValid);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_MissingKid_ReturnsFailure()
+    {
+        var noKidKey = new RsaSecurityKey(signingKey.Rsa!.ExportParameters(true));
+        string token = CreateToken(
+            issuer: TestIssuer,
+            audience: TestAudience,
+            scope: TestScope,
+            clientId: TestGatewayClientId,
+            key: noKidKey);
+
+        var result = await validator.ValidateAsync(token, CancellationToken.None);
+
+        Assert.False(result.IsValid);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_ValidKid_ReturnsSuccess()
+    {
+        string token = CreateToken(
+            issuer: TestIssuer,
+            audience: TestAudience,
+            scope: TestScope,
+            clientId: TestGatewayClientId,
+            key: signingKey);
+
+        var result = await validator.ValidateAsync(token, CancellationToken.None);
 
         Assert.True(result.IsValid);
     }

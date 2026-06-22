@@ -23,6 +23,10 @@
 - Valid OAuth tokens that lack the required scope return `403 Forbidden` with a `WWW-Authenticate` Bearer challenge containing `error="insufficient_scope"`, the required `scope`, and `resource_metadata`.
 - Approval UI browser sessions use OAuth authorization-code + PKCE and sign into a gateway cookie. Raw OAuth tokens are not persisted into the approval cookie. Approval UI logout clears only that gateway cookie; revoke or invalidate access tokens at the IdP.
 - OAuth identities are normalized for guardrail audit entries.
+- Inbound JWTs are rejected when the `kid` header is missing or does not match a key in the active JWKS (`TryAllIssuerSigningKeys = false`).
+- JWKS metadata is refreshed in the background at most every 5 minutes, with a 1-minute minimum refresh interval, using an explicit `ConfigurationManager<OpenIdConnectConfiguration>`.
+- Transient JWKS/metadata fetch failures after a successful fetch are served from the cached last-known-good configuration; first-fetch failure remains fail-closed.
+- Local development can use HTTP-over-loopback issuers; Production enforces HTTPS and non-loopback endpoints for both gateway and downstream auth.
 - Do not move auth env var names or scheme names without updating gateway setup and tests.
 
 ## Settings

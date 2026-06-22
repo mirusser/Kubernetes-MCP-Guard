@@ -268,7 +268,8 @@ public sealed class KubernetesEvidenceServiceTests
             "metadata": {
                 "name": "nginx",
                 "namespace": "demo",
-                "resourceVersion": "{{resourceVersion}}"
+                "resourceVersion": "{{resourceVersion}}",
+                "generation": {{resourceVersion}}
             },
             "spec": {
                 "replicas": 1,

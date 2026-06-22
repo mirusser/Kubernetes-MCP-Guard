@@ -28,7 +28,10 @@ public sealed class DownstreamAuthFilterTests : IDisposable
 
     public DownstreamAuthFilterTests()
     {
-        signingKey = new RsaSecurityKey(RSA.Create(2048));
+        signingKey = new RsaSecurityKey(RSA.Create(2048))
+        {
+            KeyId = "test-key"
+        };
     }
 
     public void Dispose()

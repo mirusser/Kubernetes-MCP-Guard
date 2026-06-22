@@ -12,6 +12,8 @@ public static class GatewayAuthConventions
     public const string DefaultApprovalOAuthClientId = "infra-gate-approval-ui";
     public const int DefaultTokenIntrospectionCacheSeconds = 30;
     public const int DefaultMaxAcceptedAccessTokenLifetimeSeconds = 300;
+    public static readonly TimeSpan DefaultJwksAutomaticRefreshInterval = TimeSpan.FromSeconds(300);
+    public static readonly TimeSpan DefaultJwksMinimumRefreshInterval = TimeSpan.FromSeconds(60);
     public const string AuthorizationScheme = "Bearer";
 
     public static class EnvironmentVariables

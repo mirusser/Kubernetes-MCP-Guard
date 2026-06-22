@@ -30,6 +30,8 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -188,6 +190,65 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         var response = await client.GetAsync(McpGatewayConventions.McpPath);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task TokenWithUnknownKid_FromKeycloak_Rejects()
+    {
+        using var rsa = RSA.Create(2048);
+        var signingKey = new RsaSecurityKey(rsa) { KeyId = "unknown-kid" };
+
+        using var server = CreateGatewayServer(authority: RealmAuthority());
+        using var client = server.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            CreateSelfSignedToken(RealmAuthority(), signingKey, kid: signingKey.KeyId));
+
+        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task TokenWithMissingKid_FromKeycloak_Rejects()
+    {
+        using var rsa = RSA.Create(2048);
+        var signingKey = new RsaSecurityKey(rsa);
+
+        using var server = CreateGatewayServer(authority: RealmAuthority());
+        using var client = server.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            CreateSelfSignedToken(RealmAuthority(), signingKey, kid: null));
+
+        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    private static string CreateSelfSignedToken(string issuer, RsaSecurityKey signingKey, string? kid)
+    {
+        var keyToUse = new RsaSecurityKey(signingKey.Rsa!.ExportParameters(true))
+        {
+            KeyId = kid
+        };
+        var issued = DateTime.UtcNow.AddSeconds(-10);
+        var descriptor = new SecurityTokenDescriptor
+        {
+            Issuer = issuer,
+            Audience = Resource,
+            IssuedAt = issued,
+            NotBefore = issued,
+            Expires = issued.AddMinutes(4),
+            Claims = new Dictionary<string, object>
+            {
+                [GatewayAuthConventions.Claims.Subject] = DemoUsername,
+                [GatewayAuthConventions.Claims.Scope] = Scope
+            },
+            SigningCredentials = new SigningCredentials(keyToUse, SecurityAlgorithms.RsaSha256)
+        };
+
+        return new JsonWebTokenHandler().CreateToken(descriptor);
     }
 
     [Fact]

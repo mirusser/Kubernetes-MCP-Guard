@@ -13,6 +13,9 @@ To configure an external OIDC provider, the Gateway expects the following:
 - **Issuer**: Access tokens must have an `iss` claim matching `InfraGate__Auth__OAuthAuthority`.
 - **JWKS/Discovery**: The issuer must expose `.well-known/openid-configuration` and JWKS metadata for signature validation.
 - **JWT validation**: Tokens must have a valid signature, lifetime (`exp` and related lifetime checks), issuer, and audience.
+- **Strict `kid` matching**: Tokens must include a `kid` header that matches a key in the issuer's active JWKS. Tokens with a missing or unknown `kid` are rejected.
+- **Bounded JWKS refresh**: The gateway refreshes issuer metadata/JWKS in the background at most every 5 minutes, with a 1-minute minimum refresh interval. Rotated-out keys stop being trusted within that window.
+- **JWKS fetch-failure fallback**: After a successful initial fetch, transient metadata/JWKS fetch failures return the cached last-known-good key set. First-fetch failure remains fail-closed.
 - **Maximum token lifetime**: Access-token lifetime (`exp - iat`, or `exp - nbf` when `iat` is absent) must not exceed `InfraGate__Auth__MaxAcceptedAccessTokenLifetimeSeconds`; Production mode requires 300 seconds or less.
 - **Token introspection/revocation**: Production mode requires gateway-side OAuth token introspection. The issuer must expose an introspection endpoint that returns `active: true` only for currently valid, non-revoked tokens.
 - **Audience**: Tokens must include an `aud` value matching `InfraGate__Auth__OAuthResource`; trailing slash differences are normalized by the gateway.
@@ -73,6 +76,14 @@ TAG=v1.0.0 docker compose --env-file /etc/infra-gate/production.env -f deploy/co
 ```
 
 The production Compose path runs only the gateway. TLS may terminate at a host reverse proxy, but the public OAuth/resource/approval URLs in the env file must remain HTTPS and non-loopback.
+
+## Downstream stdio auth
+
+When `InfraGate__DownstreamAuth__Required=true` (required in Production), the same JWKS hardening applies to the gateway-to-server stdio token validator:
+
+- `InfraGate__DownstreamAuth__Authority` — downstream OAuth issuer. Must be HTTPS and non-loopback in Production.
+- `InfraGate__DownstreamAuth__MetadataAddress` — optional OIDC discovery URL. Must be HTTPS and non-loopback in Production when set.
+- `InfraGate__DownstreamAuth__RequireHttpsMetadata` — must be `true` in Production.
 
 ## Local Keycloak Demo
 

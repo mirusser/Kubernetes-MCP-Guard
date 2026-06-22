@@ -113,6 +113,22 @@ public sealed record class McpGatewayOptions(
 
         downstreamAuth.Validate();
 
+        if (!downstreamAuth.RequireHttpsMetadata)
+        {
+            throw new InvalidOperationException(
+                $"{DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata} must be true in Production mode.");
+        }
+
+        ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
+            downstreamAuth.Authority,
+            DownstreamAuthConventions.EnvironmentVariables.Authority);
+        if (!string.IsNullOrWhiteSpace(downstreamAuth.MetadataAddress))
+        {
+            ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
+                downstreamAuth.MetadataAddress,
+                DownstreamAuthConventions.EnvironmentVariables.MetadataAddress);
+        }
+
         if (!Auth.OAuthRequireHttpsMetadata)
         {
             throw new InvalidOperationException(

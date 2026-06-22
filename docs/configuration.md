@@ -177,6 +177,13 @@ The Remediation Executor listens on port `3005` by default, accepts synchronous 
 
 Approval UI logout signs out only the gateway browser cookie. It does not revoke bearer access tokens at the IdP; use issuer session/token revocation or Keycloak admin session invalidation for incident response. DPoP reduces replay risk for bound tokens but is not a revocation mechanism and does not cover ordinary bearer tokens.
 
+**JWKS validation hardening (F-11):**
+
+- Inbound JWTs must carry a `kid` header that matches a key currently present in the issuer JWKS. Tokens with a missing or unknown `kid` are rejected; the validator does not fall back to trying every key in the set.
+- The gateway and downstream validator both use an explicit `ConfigurationManager<OpenIdConnectConfiguration>` with a 5-minute automatic refresh interval and a 1-minute minimum refresh interval. Rotated-out keys stop being trusted within that window.
+- Transient JWKS/metadata fetch failures after a successful fetch are served from the cached last-known-good configuration. First-fetch failure remains fail-closed.
+- These intervals are constants, not operator-tunable settings, to keep the security-critical default small and consistent.
+
 > [!WARNING]
 > **DPoP Replay Store Limitation:** The Gateway currently uses an in-memory DPoP proof replay store (`InMemoryDpopProofReplayStore`) to mitigate token replay attacks. Because this store is in-memory and not backed by shared storage (e.g., Redis or PostgreSQL), DPoP replay detection is local to the instance. In multi-replica gateway deployments, replayed DPoP tokens might be accepted if they hit a different replica than the original request. Single-replica deployments are unaffected.
 

@@ -69,137 +69,137 @@ Foundation first (confirm behavior), then vertical slices per validation path (e
 
 ### Phase 0: Confirm library behavior and config surface
 
-- [ ] **Task 1: Confirm IdentityModel 8.18.0 key-resolution and refresh semantics; pin the levers with a characterization test.**
+- [x] **Task 1: Confirm IdentityModel 8.18.0 key-resolution and refresh semantics; pin the levers with a characterization test.**
   - Description: De-risk the central assumption before building. Confirm, against `Microsoft.IdentityModel.Tokens` 8.18.0, that (a) `TryAllIssuerSigningKeys` defaults to `true` and setting it `false` makes unknown-`kid` tokens fail, (b) a custom `ConfigurationManager` assigned to `JwtBearerOptions.ConfigurationManager` overrides the Authority-derived default, and (c) `ConfigurationManager` serves the cached config when a background refresh fails. Also confirm no *other* component validates inbound JWTs (Observer/Planner/Executor reference JwtBearer but are token *clients*, not resource servers — verify they host no JWKS-validating endpoint).
   - Acceptance criteria:
-    - [ ] A throwaway/characterization test proves an unknown-`kid` token is accepted with default TVP and rejected with `TryAllIssuerSigningKeys = false`. This test (or its assertion) becomes the real regression test in Task 3 — the behavior, not the recollected default, is authoritative.
-    - [ ] Confirmed list of inbound-JWT validators is exactly: gateway `ConfigureJwtBearerOptions` and `DownstreamTokenValidator`. Any additional validator found is added to scope explicitly.
+    - [x] A throwaway/characterization test proves an unknown-`kid` token is accepted with default TVP and rejected with `TryAllIssuerSigningKeys = false`. This test (or its assertion) becomes the real regression test in Task 3 — the behavior, not the recollected default, is authoritative.
+    - [x] Confirmed list of inbound-JWT validators is exactly: gateway `ConfigureJwtBearerOptions` and `DownstreamTokenValidator`. Any additional validator found is added to scope explicitly.
   - Verification:
-    - [ ] Run the characterization test locally; capture pass/fail output.
+    - [x] Run the characterization test locally; capture pass/fail output.
   - Likely files: `tests/InfraGate.McpGateway.Tests/UnitTests/GatewayAuthenticationTests.cs` (scratch assertion), read-only sweep of `src/InfraGate.{Observer,Planner,Executor}`.
   - Scope: **S**
 
-- [ ] **Task 2: Define the JWKS-hardening configuration surface.**
+- [x] **Task 2: Define the JWKS-hardening configuration surface.**
   - Description: Add default constants and (only where tests/operators need them) configuration bindings for the bounded refresh intervals, following the F-09 pattern. Decide whether `kid` strictness is a hardcoded constant (recommended — it should always be on) versus an option.
   - Acceptance criteria:
-    - [ ] New default constants live next to existing ones (`GatewayAuthConventions` and `DownstreamAuthConventions.Defaults`), e.g. `JwksAutomaticRefresh` (≈5 min) and `JwksMinimumRefreshInterval` (≈1 min floor).
-    - [ ] `TryAllIssuerSigningKeys = false` is applied unconditionally (not a tunable knob) on both paths.
-    - [ ] If refresh intervals are made configurable, the new keys follow the `InfraGate__Auth__...` / `InfraGate__DownstreamAuth__...` naming and bind through `InfraGateAuthSettings` / `DownstreamAuthOptions`; otherwise they remain internal constants. Default to constants unless a test requires otherwise (Simplicity First).
+    - [x] New default constants live next to existing ones (`GatewayAuthConventions` and `DownstreamAuthConventions.Defaults`), e.g. `JwksAutomaticRefresh` (≈5 min) and `JwksMinimumRefreshInterval` (≈1 min floor).
+    - [x] `TryAllIssuerSigningKeys = false` is applied unconditionally (not a tunable knob) on both paths.
+    - [x] If refresh intervals are made configurable, the new keys follow the `InfraGate__Auth__...` / `InfraGate__DownstreamAuth__...` naming and bind through `InfraGateAuthSettings` / `DownstreamAuthOptions`; otherwise they remain internal constants. Default to constants unless a test requires otherwise (Simplicity First).
   - Verification:
-    - [ ] Review against `GatewayAuthConventions.cs`, `GatewayAuthOptions.cs`, `InfraGateAuthSettings.cs`, `DownstreamAuthConventions.cs`, `DownstreamAuthOptions.cs` before implementation.
+    - [x] Review against `GatewayAuthConventions.cs`, `GatewayAuthOptions.cs`, `InfraGateAuthSettings.cs`, `DownstreamAuthConventions.cs`, `DownstreamAuthOptions.cs` before implementation.
   - Likely files: `src/InfraGate.McpGateway.Auth/GatewayAuthConventions.cs`, `src/InfraGate.DownstreamAuth/DownstreamAuthConventions.cs` (+ options/settings only if made configurable).
   - Scope: **S**
 
 ### Checkpoint: Behavior and config review
 
-- [ ] Library default for `TryAllIssuerSigningKeys` is empirically confirmed, not assumed.
-- [ ] The set of inbound-JWT validators is confirmed complete.
-- [ ] Reviewer agrees `kid` strictness is unconditional and refresh intervals default to bounded constants.
+- [x] Library default for `TryAllIssuerSigningKeys` is empirically confirmed, not assumed.
+- [x] The set of inbound-JWT validators is confirmed complete.
+- [x] Reviewer agrees `kid` strictness is unconditional and refresh intervals default to bounded constants.
 
 ### Phase 1: Gateway JWKS hardening (primary — Diagram 1)
 
-- [ ] **Task 3: Enforce strict `kid` matching on the gateway.**
+- [x] **Task 3: Enforce strict `kid` matching on the gateway.**
   - Description: Set `TryAllIssuerSigningKeys = false` in the gateway `TokenValidationParameters` (`ConfigureJwtBearerOptions`, around line 137-145).
   - Acceptance criteria:
-    - [ ] A token signed by a key whose `kid` is not in the active JWKS is rejected with `401`.
-    - [ ] A token with no `kid` header is rejected.
-    - [ ] A token signed by the current JWKS key is still accepted (no regression).
+    - [x] A token signed by a key whose `kid` is not in the active JWKS is rejected with `401`.
+    - [x] A token with no `kid` header is rejected.
+    - [x] A token signed by the current JWKS key is still accepted (no regression).
   - Verification:
-    - [ ] Extend `GatewayAuthenticationTests` with TestServer cases for unknown-`kid`, missing-`kid`, and valid-`kid` using locally-minted signing keys.
+    - [x] Extend `GatewayAuthenticationTests` with TestServer cases for unknown-`kid`, missing-`kid`, and valid-`kid` using locally-minted signing keys.
   - Likely files: `src/InfraGate.McpGateway.Auth/GatewayAuthentication.cs`, `tests/InfraGate.McpGateway.Tests/UnitTests/GatewayAuthenticationTests.cs`.
   - Dependencies: Task 1, Task 2.
   - Scope: **S**
 
-- [ ] **Task 4: Bound the gateway JWKS cache and degrade safely on fetch failure.**
+- [x] **Task 4: Bound the gateway JWKS cache and degrade safely on fetch failure.**
   - Description: Construct a `ConfigurationManager<OpenIdConnectConfiguration>` from the resolved metadata address (`OAuthMetadataAddress` ?? `Authority` + `/.well-known/openid-configuration`) with bounded `AutomaticRefreshInterval` and `RefreshInterval`, an `HttpDocumentRetriever { RequireHttps = options.OAuthRequireHttpsMetadata }`, and assign it to `jwtOptions.ConfigurationManager`. Rely on the manager's cached-config-on-background-failure behavior for fetch resilience; do **not** enable blanket `ValidateWithLKG`.
   - Acceptance criteria:
-    - [ ] Rotated keys are picked up within the bounded `AutomaticRefreshInterval` (provable with a short interval in test).
-    - [ ] A token signed by a key that has rotated *out* of the JWKS stops being accepted once the cache refreshes (stale-trust window is bounded, not 12 h).
-    - [ ] A transient metadata/JWKS fetch failure after at least one successful fetch does not reject tokens that the cached key set still validates, and does not trigger a synchronous refetch per request.
-    - [ ] `RequireHttps` on the retriever follows `OAuthRequireHttpsMetadata` so local-dev HTTP keeps working and Production stays HTTPS-only.
+    - [x] Rotated keys are picked up within the bounded `AutomaticRefreshInterval` (provable with a short interval in test).
+    - [x] A token signed by a key that has rotated *out* of the JWKS stops being accepted once the cache refreshes (stale-trust window is bounded, not 12 h).
+    - [x] A transient metadata/JWKS fetch failure after at least one successful fetch does not reject tokens that the cached key set still validates, and does not trigger a synchronous refetch per request.
+    - [x] `RequireHttps` on the retriever follows `OAuthRequireHttpsMetadata` so local-dev HTTP keeps working and Production stays HTTPS-only.
   - Verification:
-    - [ ] Unit/TestServer tests with a fake document retriever / short intervals covering rollover pickup and fetch-failure resilience.
+    - [x] Unit/TestServer tests with a fake document retriever / short intervals covering rollover pickup and fetch-failure resilience.
   - Likely files: `src/InfraGate.McpGateway.Auth/GatewayAuthentication.cs`, `tests/InfraGate.McpGateway.Tests/UnitTests/GatewayAuthenticationTests.cs`.
   - Dependencies: Task 3.
   - Scope: **M**
 
 ### Checkpoint: Gateway auth review
 
-- [ ] All gateway auth tests pass; DPoP-required and introspection-enabled paths (F-07, F-09) still pass.
-- [ ] Failure messages/logs reviewed for token or key-material leakage.
+- [x] All gateway auth tests pass; DPoP-required and introspection-enabled paths (F-07, F-09) still pass.
+- [x] Failure messages/logs reviewed for token or key-material leakage.
 
 ### Phase 2: Downstream server JWKS hardening (secondary — internal stdio path)
 
-- [ ] **Task 5: Apply strict `kid` matching, bounded refresh, and fetch-failure resilience to `DownstreamTokenValidator`.**
+- [x] **Task 5: Apply strict `kid` matching, bounded refresh, and fetch-failure resilience to `DownstreamTokenValidator`.**
   - Description: Set `TryAllIssuerSigningKeys = false` in the downstream `TokenValidationParameters`; bound the existing `ConfigurationManager`'s `AutomaticRefreshInterval`/`RefreshInterval`. Keep `ResolveSigningKeysAsync` serving the cached config on background-refresh failure (already its effective behavior); preserve current fail-closed on first-fetch failure.
   - Acceptance criteria:
-    - [ ] Unknown-/missing-`kid` downstream tokens are rejected; valid-`kid` tokens still validate.
-    - [ ] Rotated-out keys stop validating within the bounded interval.
-    - [ ] Behavior parity with the gateway path; no change to the static-keys test constructor.
+    - [x] Unknown-/missing-`kid` downstream tokens are rejected; valid-`kid` tokens still validate.
+    - [x] Rotated-out keys stop validating within the bounded interval.
+    - [x] Behavior parity with the gateway path; no change to the static-keys test constructor.
   - Verification:
-    - [ ] Extend the downstream validator's unit tests (static-keys constructor) for unknown/missing/valid `kid`; assert bounded-interval config.
+    - [x] Extend the downstream validator's unit tests (static-keys constructor) for unknown/missing/valid `kid`; assert bounded-interval config.
   - Likely files: `src/InfraGate.McpServer/DownstreamAuth/DownstreamTokenValidator.cs`, downstream validator tests under `tests/InfraGate.McpServer.Tests/` (and/or `tests/InfraGate.DownstreamAuth.Tests/`).
   - Dependencies: Task 2.
   - Scope: **M**
 
 ### Checkpoint: Downstream auth review
 
-- [ ] Downstream tests pass; stdio bootstrap/initialize auth (ADR 0011) unaffected.
+- [x] Downstream tests pass; stdio bootstrap/initialize auth (ADR 0011) unaffected.
 
 ### Phase 3: Production safety and run-profiles
 
-- [ ] **Task 6: Close production-safety parity for the downstream JWKS/metadata endpoint and thread any new config.**
+- [x] **Task 6: Close production-safety parity for the downstream JWKS/metadata endpoint and thread any new config.**
   - Description: Confirm whether `DownstreamAuthOptions.ValidateForServer` (or `McpGatewayOptions.ValidateProductionSafety`) already asserts HTTPS-non-loopback for the downstream `Authority`/`MetadataAddress`; add the assertion if missing (mirroring the gateway's existing `RequireHttpsNonLoopbackUri` calls). Thread any new refresh-interval settings through `deploy/run-profiles.yaml` only if they were made configurable in Task 2.
   - Acceptance criteria:
-    - [ ] In Production mode, a loopback/HTTP downstream metadata URI is rejected at startup (or confirmed already rejected, with a test asserting it).
-    - [ ] No change to local/dev profiles' ability to use HTTP over loopback.
+    - [x] In Production mode, a loopback/HTTP downstream metadata URI is rejected at startup (or confirmed already rejected, with a test asserting it).
+    - [x] No change to local/dev profiles' ability to use HTTP over loopback.
   - Verification:
-    - [ ] `RuntimeSafety` / `McpGatewayOptions` production-safety unit tests; `dotnet run --project src/InfraGate.RunProfiles -- validate` if schema changed.
+    - [x] `RuntimeSafety` / `McpGatewayOptions` production-safety unit tests; `dotnet run --project src/InfraGate.RunProfiles -- validate` if schema changed.
   - Likely files: `src/InfraGate.McpGateway/Configuration/McpGatewayOptions.cs`, `src/InfraGate.DownstreamAuth/DownstreamAuthOptions.cs`, `tests/InfraGate.McpGateway.Tests/UnitTests/McpGatewayOptionsTests.cs`, possibly `deploy/run-profiles.yaml`.
   - Dependencies: Task 5.
   - Scope: **S**
 
 ### Phase 4: Integration, ADR, docs, and audit closure
 
-- [ ] **Task 7: Add Keycloak-backed coverage for `kid` behavior where practical.**
+- [x] **Task 7: Add Keycloak-backed coverage for `kid` behavior where practical.**
   - Description: Use the existing Keycloak Testcontainers suite (already exercises real OIDC discovery + JWKS validation) to prove a real Keycloak-issued token (which always carries a `kid`) is accepted, and that a token whose `kid` is absent from the realm JWKS is rejected. If realm key-rollover is not reliably reproducible in Testcontainers, document the limitation in the test (as F-09 did) and keep rollover/fetch-failure covered by fake-retriever unit tests.
   - Acceptance criteria:
-    - [ ] Real Keycloak token with valid `kid` is accepted through the gateway JWT bearer pipeline.
-    - [ ] Unknown-`kid` token is rejected against the real realm JWKS.
-    - [ ] Any Testcontainers limitation on rollover is documented in-test with a narrower assertion.
+    - [x] Real Keycloak token with valid `kid` is accepted through the gateway JWT bearer pipeline.
+    - [x] Unknown-`kid` token is rejected against the real realm JWKS.
+    - [x] Any Testcontainers limitation on rollover is documented in-test with a narrower assertion.
   - Verification:
-    - [ ] `dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj --filter "Category=Keycloak"` when opt-in prerequisites are available.
+    - [x] `dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj --filter "Category=Keycloak"` when opt-in prerequisites are available.
   - Likely files: `tests/InfraGate.McpGateway.KeycloakTests/IntegrationTests/KeycloakIntegrationTests.cs`.
   - Dependencies: Task 3, Task 4.
   - Scope: **M**
 
-- [ ] **Task 8: Write ADR 0031 and update documentation.**
+- [x] **Task 8: Write ADR 0031 and update documentation.**
   - Description: Record the JWKS-validation hardening decision and update operator docs.
   - Acceptance criteria:
-    - [ ] `docs/adr/0031-jwks-validation-hardening.md` states: unconditional strict `kid` (`TryAllIssuerSigningKeys = false`), bounded refresh intervals, LKG used only as a fetch-failure fallback (not blanket superseded-key acceptance), and local-dev HTTP-over-loopback as an accepted risk with TLS enforced in Production.
-    - [ ] `src/InfraGate.McpGateway.Auth/README.md`, `docs/configuration.md`, and `docs/production-oidc.md` describe strict `kid` matching, the bounded JWKS cache/refresh behavior, fetch-failure degradation, and any new settings + defaults.
-    - [ ] No real tokens, keys, or secrets in any example.
+    - [x] `docs/adr/0031-jwks-validation-hardening.md` states: unconditional strict `kid` (`TryAllIssuerSigningKeys = false`), bounded refresh intervals, LKG used only as a fetch-failure fallback (not blanket superseded-key acceptance), and local-dev HTTP-over-loopback as an accepted risk with TLS enforced in Production.
+    - [x] `src/InfraGate.McpGateway.Auth/README.md`, `docs/configuration.md`, and `docs/production-oidc.md` describe strict `kid` matching, the bounded JWKS cache/refresh behavior, fetch-failure degradation, and any new settings + defaults.
+    - [x] No real tokens, keys, or secrets in any example.
   - Verification:
-    - [ ] Docs reviewed against actual constants/behavior; ADR numbering correct (0031).
+    - [x] Docs reviewed against actual constants/behavior; ADR numbering correct (0031).
   - Likely files: `docs/adr/0031-jwks-validation-hardening.md`, `src/InfraGate.McpGateway.Auth/README.md`, `docs/configuration.md`, `docs/production-oidc.md`.
   - Dependencies: Tasks 3-6.
   - Scope: **S**
 
-- [ ] **Task 9: Update the F-11 audit entry after verification.**
+- [x] **Task 9: Update the F-11 audit entry after verification.**
   - Description: Flip F-11 status only after tests prove the remediation.
   - Acceptance criteria:
-    - [ ] `.agents/Plans/loose/security-audit.md` F-11 Resolution and the Summary Table / Prioritization rows updated to reflect actual behavior.
-    - [ ] Implementation Notes cite the files/tests that enforce strict `kid`, bounded refresh, and fetch-failure degradation, and explicitly state what remains out of scope (e.g., CA-pinning in local dev).
+    - [x] `.agents/Plans/loose/security-audit.md` F-11 Resolution and the Summary Table / Prioritization rows updated to reflect actual behavior.
+    - [x] Implementation Notes cite the files/tests that enforce strict `kid`, bounded refresh, and fetch-failure degradation, and explicitly state what remains out of scope (e.g., CA-pinning in local dev).
   - Verification:
-    - [ ] Reviewer confirms the audit wording matches actual behavior.
+    - [x] Reviewer confirms the audit wording matches actual behavior.
   - Dependencies: Tasks 3-8.
   - Scope: **XS**
 
 ### Checkpoint: Complete
 
-- [ ] All unit + (opt-in) Keycloak integration tests pass.
-- [ ] Local dev (HTTP Keycloak) and the 300-second token lifespan still work end-to-end.
-- [ ] Audit entry reflects reality; ready for review.
+- [x] All unit + (opt-in) Keycloak integration tests pass.
+- [x] Local dev (HTTP Keycloak) and the 300-second token lifespan still work end-to-end.
+- [x] Audit entry reflects reality; ready for review.
 
 ## Risks and mitigations
 

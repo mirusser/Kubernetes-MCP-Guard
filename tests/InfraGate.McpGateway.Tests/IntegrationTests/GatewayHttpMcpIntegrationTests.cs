@@ -1454,7 +1454,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
               "name": "{{name}}",
               "namespace": "{{NamespaceName}}",
               "resourceVersion": "{{resourceVersion}}",
-              "generation": 1
+              "generation": {{resourceVersion}}
             },
             "spec": {
               "replicas": 1,

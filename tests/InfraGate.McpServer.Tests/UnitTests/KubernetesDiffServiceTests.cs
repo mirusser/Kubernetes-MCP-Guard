@@ -265,7 +265,7 @@ public sealed class KubernetesDiffServiceTests
         var diff = Assert.Single(diffs);
         Assert.Equal(KubernetesConventions.DiffChangeTypes.Update, diff.ChangeType);
         Assert.Contains("demo/demo", diff.Summary);
-        Assert.Contains("scale", api.LastRequest!.Path, StringComparison.Ordinal);
+        Assert.Contains("scale", api.Requests[0].Path, StringComparison.Ordinal);
     }
 
     private static string ScaleResponse() =>

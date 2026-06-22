@@ -417,10 +417,10 @@ No startup binary hash verification found in `src/InfraGate.McpGateway` or `src/
 
 ### F-11
 ### JWKS Cache Poisoning / Key Rollover Race
-**Severity:** Medium
-**Diagram:** OAuth Login & Authorization (Diagram 1)
-**Status:** New finding
-**Resolution:** ❌ **NOT MITIGATED** (re-assessed 2026-06-05)
+**Severity:** Medium  
+**Diagram:** OAuth Login & Authorization (Diagram 1)  
+**Status:** New finding  
+**Resolution:** ✅ **MITIGATED** (re-assessed 2026-06-21)
 
 #### Description
 
@@ -439,9 +439,25 @@ The Gateway validates inbound JWTs against the issuer's JWKS (JSON Web Key Set).
 - On JWKS fetch failure, use the last-known-good cached key set rather than failing open or fetching synchronously per request.
 - Pin the JWKS endpoint URI in configuration and validate the TLS certificate against a pinned CA, even in local/dev deployments.
 
-#### Implementation Notes (2026-06-05)
+#### Implementation Notes (2026-06-21)
 
-Gateway auth uses standard `AddJwtBearer` with IdentityModel's default `ConfigurationManager<OpenIdConnectConfiguration>` for OIDC discovery (`GatewayAuthentication.cs:104-127`). No custom cache TTL, no background refresh configuration, no explicit `kid` matching code found in gateway auth path. Downstream server auth (`DownstreamTokenValidator.cs:22-40`) uses similar defaults. No last-known-good cache fallback on fetch failure.
+**Strict `kid` matching** is enforced unconditionally on both validation paths. `TokenValidationParameters.TryAllIssuerSigningKeys` is set to `false` in `GatewayAuthentication.cs` (gateway JWT bearer) and `DownstreamTokenValidator.cs` (gateway-to-server stdio token). Tokens with a missing or unknown `kid` are rejected.
+
+**Bounded JWKS cache/refresh** is configured explicitly. Both paths construct a `ConfigurationManager<OpenIdConnectConfiguration>` with `AutomaticRefreshInterval = 5 minutes` and `RefreshInterval = 1 minute`, using constants in `GatewayAuthConventions` and `DownstreamAuthConventions.Defaults`. This shrinks the stale-trust window from the 12-hour framework default to the bounded interval.
+
+**Fetch-failure resilience** relies on the `ConfigurationManager` returning its cached configuration when a background refresh fails, after at least one successful fetch. First-fetch failure remains fail-closed. Blanket `ValidateWithLKG` is intentionally **not** enabled, because it would widen the stale-trust window by accepting tokens signed by rotated-out keys.
+
+**Production HTTPS enforcement** for the downstream path is closed: `McpGatewayOptions.ValidateProductionSafety` now requires `InfraGate__DownstreamAuth__RequireHttpsMetadata=true` and asserts HTTPS/non-loopback for `InfraGate__DownstreamAuth__Authority` and `InfraGate__DownstreamAuth__MetadataAddress` in Production mode. The gateway's own endpoints were already enforced.
+
+**CA pinning in local dev** is recorded as an accepted risk (see ADR-0031). Local development continues to use Keycloak over HTTP on loopback; TLS is enforced in Production.
+
+**Tests added or extended:**
+- `JwksConfigurationManagerTests` — proves `TryAllIssuerSigningKeys` defaults to `true` and that setting it `false` rejects unknown/missing `kid`, plus `ConfigurationManager` fetch-failure fallback and key-rollover behavior.
+- `GatewayAuthenticationJwksTests` — gateway-level 401/200 cases for unknown/missing/valid `kid`.
+- `DownstreamTokenValidatorTests` — unknown/missing/valid `kid` for the downstream validator.
+- `DownstreamTokenValidatorJwksTests` — downstream fetch-failure resilience and rotated-key pickup.
+- `McpGatewayOptionsTests` — Production rejects HTTP/loopback downstream authority/metadata and `RequireHttpsMetadata=false`.
+- `KeycloakIntegrationTests` — real Keycloak-backed unknown/missing `kid` rejection.
 
 ---
 
@@ -534,7 +550,7 @@ The naming follows `mcp:tools.{role}` (e.g., `mcp:tools.read`) rather than the s
 | F-08 | No user-to-plan binding — cross-user plan approval | **High** | New | Diagram 3 | ✅ Mitigated |
 | F-09 | No JWT revocation mechanism | **Medium** | New | Diagrams 1 & 2 | ✅ Mitigated |
 | F-10 | Subprocess binary integrity not verified | **High** | New | Diagrams 2 & 3 | ❌ Not mitigated |
-| F-11 | JWKS cache poisoning / key rollover race | **Medium** | New | Diagram 1 | ❌ Not mitigated |
+| F-11 | JWKS cache poisoning / key rollover race | **Medium** | New | Diagram 1 | ✅ Mitigated |
 | F-12 | Audit log tamper by compromised process | **Medium** | New | Diagrams 2 & 3 | ⚠️ Partial |
 | F-13 | Single scope for read and write operations | **High** | New | All | ✅ Mitigated |
 
@@ -567,7 +583,7 @@ The naming follows `mcp:tools.{role}` (e.g., `mcp:tools.read`) rather than the s
 | 9 | **F-01** — OOB approval channel | Full fix requires external infrastructure | ✅ Done — browser-based approval with OAuth PKCE |
 | 10 | **F-12** — Remote audit log shipping | Requires out-of-process log sink | ⚠️ Partial — PG audit has hash chaining, no SIEM shipping |
 | 11 | ✅ **F-03** — Schema-enforced tool output isolation | Requires LLM prompt engineering + testing | ✅ Done — read-only tool-result envelope + model-visible guard path; semantic classifier remains deferred by ADR-0030 |
-| 12 | **F-11** — JWKS `kid` pinning + bounded cache TTL | Configuration-level fix once token plumbing is stable | ❌ Open |
+| 12 | ✅ **F-11** — JWKS `kid` pinning + bounded cache TTL | Strict `kid` matching, bounded refresh, LKG fallback | ✅ Done |
 | 13 | **F-05** — Subprocess / container isolation | Deployment environment dependent | ⚠️ Partial — container isolation added, no OS-level checks |
 
 ---

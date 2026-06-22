@@ -10,6 +10,8 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using ModelContextProtocol.AspNetCore.Authentication;
 using ModelContextProtocol.Authentication;
@@ -140,9 +142,24 @@ public static class GatewayAuthentication
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
+            TryAllIssuerSigningKeys = false,
             ValidIssuers = DistinctValues(oauthAuthority, TrimTrailingSlash(oauthAuthority)),
             AudienceValidator = (audiences, _, _) => HasAudience(audiences, options.OAuthResource)
         };
+
+        string metadataAddress = !string.IsNullOrWhiteSpace(options.OAuthMetadataAddress)
+            ? options.OAuthMetadataAddress
+            : $"{oauthAuthority.TrimEnd('/')}{GatewayAuthConventions.TokenIntrospection.OpenIdConnectDiscoveryPath}";
+
+        jwtOptions.ConfigurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
+            metadataAddress,
+            new OpenIdConnectConfigurationRetriever(),
+            new HttpDocumentRetriever { RequireHttps = options.OAuthRequireHttpsMetadata })
+        {
+            AutomaticRefreshInterval = GatewayAuthConventions.DefaultJwksAutomaticRefreshInterval,
+            RefreshInterval = GatewayAuthConventions.DefaultJwksMinimumRefreshInterval
+        };
+
         jwtOptions.Events = CreateJwtBearerEvents(options);
     }
 

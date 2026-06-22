@@ -222,7 +222,13 @@ public sealed class KubernetesEvidenceService
             {
                 var liveJson = await ReadLiveObjectAsJsonAsync(
                     client, apiVersion, kind, ns, name, cancellationToken).ConfigureAwait(false);
-                var liveVersion = KubernetesObjectMetadataExtractor.ExtractResourceVersion(liveJson);
+
+                bool isDeployment =
+                    string.Equals(apiVersion, KubernetesConventions.KubernetesResources.AppsV1, StringComparison.Ordinal) &&
+                    string.Equals(kind, KubernetesConventions.KubernetesResources.Deployment, StringComparison.Ordinal);
+                var liveVersion = isDeployment
+                    ? KubernetesObjectMetadataExtractor.ExtractGeneration(liveJson)
+                    : KubernetesObjectMetadataExtractor.ExtractResourceVersion(liveJson);
 
                 if (!string.Equals(liveVersion, expectedVersion, StringComparison.Ordinal))
                 {
