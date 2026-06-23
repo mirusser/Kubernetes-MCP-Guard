@@ -155,6 +155,10 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    // Justification: skipped intentionally — Keycloak self-contained access tokens do not reliably
+    // propagate session invalidation to introspection within test time bounds. The inactive/revoked
+    // introspection path is covered by HttpTokenIntrospectionClientTests.
+#pragma warning disable xUnit1004 // Skipped test documents a known Keycloak introspection limitation.
     [Fact(Skip = "Keycloak Testcontainers session invalidation does not reliably mark self-contained access tokens inactive via introspection within test time bounds.")]
     public async Task RevokedSessionToken_WithGatewayIntrospectionEnabled_RejectsToolCall()
     {
@@ -176,6 +180,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
+#pragma warning restore xUnit1004
 
     [Fact]
     public async Task TokenWithoutScope_Rejects()

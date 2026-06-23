@@ -1,6 +1,6 @@
 namespace InfraGate.McpGateway.BinaryIntegrity;
 
-internal sealed class DownstreamBinaryIntegrityException : Exception
+public sealed class DownstreamBinaryIntegrityException : Exception
 {
     public DownstreamBinaryIntegrityException(string filePath, string algorithm, string message)
         : base(message)

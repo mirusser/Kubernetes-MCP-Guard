@@ -129,7 +129,7 @@ public static class GatewayAuthConventions
 
     public static class HttpClients
     {
-        public const string TokenIntrospection = "InfraGate.TokenIntrospection";
+        public const string TokenIntrospectionClient = "InfraGate.TokenIntrospection";
     }
 
     public static class TokenIntrospection

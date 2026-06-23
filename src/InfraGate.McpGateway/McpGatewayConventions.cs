@@ -207,13 +207,13 @@ internal static class McpGatewayConventions
     {
         public const string SchemaVersion = ModelVisibleToolResultConventions.SchemaVersion;
         public const string Kind = ModelVisibleToolResultConventions.Kind;
-        public const string ToolName = ModelVisibleToolResultConventions.ToolName;
+        public const string ToolNameKey = ModelVisibleToolResultConventions.ToolName;
         public const string Source = ModelVisibleToolResultConventions.Source;
         public const string GeneratedAtUtc = ModelVisibleToolResultConventions.GeneratedAtUtc;
         public const string Status = ModelVisibleToolResultConventions.Status;
         public const string Guardrail = ModelVisibleToolResultConventions.Guardrail;
         public const string GuardrailAction = ModelVisibleToolResultConventions.GuardrailAction;
-        public const string GuardrailCategories = ModelVisibleToolResultConventions.GuardrailCategories;
+        public const string GuardrailCategoriesKey = ModelVisibleToolResultConventions.GuardrailCategories;
         public const string Untrusted = ModelVisibleToolResultConventions.Untrusted;
         public const string UntrustedPayload = ModelVisibleToolResultConventions.UntrustedPayload;
 

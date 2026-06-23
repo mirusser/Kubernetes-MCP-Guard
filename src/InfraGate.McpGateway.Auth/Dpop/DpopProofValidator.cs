@@ -68,26 +68,70 @@ internal sealed class DpopProofValidator : IDpopProofValidator
             return DpopProofValidationResult.Failure("DPoP proof contains a malformed header or payload.");
         }
 
+        var headerResult = ValidateHeader(header, out var proofJwk);
+        if (headerResult is not null)
+            return headerResult;
+
+        var signatureFailure = await ValidateSignatureAsync(context.DpopProofJwt, proofJwk).ConfigureAwait(false);
+        if (signatureFailure is not null)
+            return signatureFailure;
+
+        var missingClaimMessage = TryReadRequiredClaims(payload, out var claims);
+        if (missingClaimMessage is not null)
+            return DpopProofValidationResult.Failure(missingClaimMessage);
+
+        var bindingError = ValidateRequestBinding(claims, context);
+        if (bindingError is not null)
+            return DpopProofValidationResult.Failure(bindingError);
+
+        var accessTokenBindingFailure = ValidateAccessTokenBinding(
+            context,
+            proofJwk,
+            out var replayKey);
+        if (accessTokenBindingFailure is not null)
+            return accessTokenBindingFailure;
+
+        // Check replay store last — only record the jti when all other checks pass
+        if (!await replayStore.TryAddAsync(
+                replayKey!.Value.Issuer,
+                replayKey.Value.Presenter,
+                claims.Jti,
+                MaxProofAge,
+                cancellationToken).ConfigureAwait(false))
+            return DpopProofValidationResult.Failure("DPoP proof jti has already been used.");
+
+        return DpopProofValidationResult.Success();
+    }
+
+    private static DpopProofValidationResult? ValidateHeader(JsonElement header, out JsonWebKey proofJwk)
+    {
+        proofJwk = null!;
+
         // typ must be "dpop+jwt"
         if (!header.TryGetProperty("typ", out var typEl) ||
             !string.Equals(typEl.GetString(), GatewayAuthConventions.DPoP.ProofTyp, StringComparison.Ordinal))
+        {
             return DpopProofValidationResult.Failure(
                 $"DPoP proof typ must be '{GatewayAuthConventions.DPoP.ProofTyp}'.");
+        }
 
         // alg must be asymmetric
         if (!header.TryGetProperty("alg", out var algEl) || !IsAsymmetric(algEl.GetString()))
+        {
             return DpopProofValidationResult.Failure(
                 "DPoP proof must use an asymmetric signing algorithm.");
+        }
 
         // jwk must be present and must not include private key material
         if (!header.TryGetProperty("jwk", out var jwkEl))
             return DpopProofValidationResult.Failure("DPoP proof header is missing the jwk member.");
 
         if (jwkEl.TryGetProperty("d", out _))
+        {
             return DpopProofValidationResult.Failure(
                 "DPoP proof header jwk must not contain private key material.");
+        }
 
-        JsonWebKey proofJwk;
         try
         {
             proofJwk = new JsonWebKey(jwkEl.GetRawText());
@@ -97,13 +141,20 @@ internal sealed class DpopProofValidator : IDpopProofValidator
             return DpopProofValidationResult.Failure("DPoP proof header contains an invalid jwk.");
         }
 
+        return null;
+    }
+
+    private static async Task<DpopProofValidationResult?> ValidateSignatureAsync(
+        string dpopProofJwt,
+        JsonWebKey proofJwk)
+    {
         // Verify signature using the embedded public key. DPoP proofs are self-signed: no issuer and no audience.
         // Expiration is required: exp must be present and unexpired. The iat claim is also validated
         // externally within a 300s window for replay protection.
         var handler = new JsonWebTokenHandler();
 #pragma warning disable CA5404 // Issuer and audience validation are intentionally disabled for self-signed DPoP proofs.
         var signatureResult = await handler.ValidateTokenAsync(
-            context.DpopProofJwt,
+            dpopProofJwt,
             new TokenValidationParameters
             {
                 ValidateIssuer = false,
@@ -118,43 +169,61 @@ internal sealed class DpopProofValidator : IDpopProofValidator
         if (!signatureResult.IsValid)
             return DpopProofValidationResult.Failure("DPoP proof signature is invalid.");
 
-        // Required payload claims
+        return null;
+    }
+
+    private static string? TryReadRequiredClaims(JsonElement payload, out RequiredClaims claims)
+    {
+        claims = null!;
+
         if (!TryGetString(payload, "jti", out var jti) || string.IsNullOrWhiteSpace(jti))
-            return DpopProofValidationResult.Failure("DPoP proof is missing the jti claim.");
+            return "DPoP proof is missing the jti claim.";
 
         if (!TryGetString(payload, "htm", out var htm))
-            return DpopProofValidationResult.Failure("DPoP proof is missing the htm claim.");
+            return "DPoP proof is missing the htm claim.";
 
         if (!TryGetString(payload, "htu", out var htu))
-            return DpopProofValidationResult.Failure("DPoP proof is missing the htu claim.");
+            return "DPoP proof is missing the htu claim.";
 
         if (!TryGetLong(payload, "iat", out var iat))
-            return DpopProofValidationResult.Failure("DPoP proof is missing the iat claim.");
+            return "DPoP proof is missing the iat claim.";
 
         if (!TryGetString(payload, "ath", out var ath))
-            return DpopProofValidationResult.Failure("DPoP proof is missing the ath claim.");
+            return "DPoP proof is missing the ath claim.";
 
+        claims = new RequiredClaims(jti, htm, htu, iat, ath);
+        return null;
+    }
+
+    private static string? ValidateRequestBinding(RequiredClaims claims, DpopProofValidationContext context)
+    {
         // htm must match request method
-        if (!string.Equals(htm, context.HttpMethod, StringComparison.OrdinalIgnoreCase))
-            return DpopProofValidationResult.Failure(
-                "DPoP proof htm does not match the request method.");
+        if (!string.Equals(claims.Htm, context.HttpMethod, StringComparison.OrdinalIgnoreCase))
+            return "DPoP proof htm does not match the request method.";
 
         // htu must match request URI (without query or fragment)
-        if (!HtuMatches(htu, context.HttpUri))
-            return DpopProofValidationResult.Failure(
-                "DPoP proof htu does not match the request URI.");
+        if (!HtuMatches(claims.Htu, context.HttpUri))
+            return "DPoP proof htu does not match the request URI.";
 
         // iat must be within the acceptable window
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        if (Math.Abs(now - iat) > (long)MaxProofAge.TotalSeconds)
-            return DpopProofValidationResult.Failure(
-                "DPoP proof iat is outside the acceptable time window.");
+        if (Math.Abs(now - claims.Iat) > (long)MaxProofAge.TotalSeconds)
+            return "DPoP proof iat is outside the acceptable time window.";
 
         // ath must equal base64url(SHA256(access_token))
         var expectedAth = ComputeAth(context.AccessToken);
-        if (!string.Equals(ath, expectedAth, StringComparison.Ordinal))
-            return DpopProofValidationResult.Failure(
-                "DPoP proof ath does not match the access token hash.");
+        if (!string.Equals(claims.Ath, expectedAth, StringComparison.Ordinal))
+            return "DPoP proof ath does not match the access token hash.";
+
+        return null;
+    }
+
+    private static DpopProofValidationResult? ValidateAccessTokenBinding(
+        DpopProofValidationContext context,
+        JsonWebKey proofJwk,
+        out DpopReplayKey? replayKey)
+    {
+        replayKey = null;
 
         // cnf.jkt in the access token must match the proof JWK thumbprint
         var cnfJkt = ExtractCnfJkt(context.AccessToken);
@@ -167,21 +236,12 @@ internal sealed class DpopProofValidator : IDpopProofValidator
             return DpopProofValidationResult.Failure(
                 "DPoP proof key thumbprint does not match the access token cnf.jkt.");
 
-        var replayKey = ExtractReplayKey(context.AccessToken);
+        replayKey = ExtractReplayKey(context.AccessToken);
         if (replayKey is null)
             return DpopProofValidationResult.Failure(
                 "Access token is missing issuer or presenter claim.");
 
-        // Check replay store last — only record the jti when all other checks pass
-        if (!await replayStore.TryAddAsync(
-                replayKey.Value.Issuer,
-                replayKey.Value.Presenter,
-                jti!,
-                MaxProofAge,
-                cancellationToken).ConfigureAwait(false))
-            return DpopProofValidationResult.Failure("DPoP proof jti has already been used.");
-
-        return DpopProofValidationResult.Success();
+        return null;
     }
 
     private static JsonElement ParseBase64UrlJson(string base64Url)
@@ -293,4 +353,6 @@ internal sealed class DpopProofValidator : IDpopProofValidator
     }
 
     private readonly record struct DpopReplayKey(string Issuer, string Presenter);
+
+    private sealed record class RequiredClaims(string Jti, string Htm, string Htu, long Iat, string Ath);
 }

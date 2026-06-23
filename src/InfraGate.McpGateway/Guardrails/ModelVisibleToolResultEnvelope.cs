@@ -15,14 +15,14 @@ internal static class ModelVisibleToolResultEnvelope
         {
             [McpGatewayConventions.ModelVisibleToolResult.SchemaVersion] = 1,
             [McpGatewayConventions.ModelVisibleToolResult.Kind] = McpGatewayConventions.ModelVisibleToolResult.KindValue,
-            [McpGatewayConventions.ModelVisibleToolResult.ToolName] = toolName,
+            [McpGatewayConventions.ModelVisibleToolResult.ToolNameKey] = toolName,
             [McpGatewayConventions.ModelVisibleToolResult.Source] = McpGatewayConventions.ModelVisibleToolResult.SourceReadOnlyToolValue,
             [McpGatewayConventions.ModelVisibleToolResult.GeneratedAtUtc] = generatedAtUtc,
             [McpGatewayConventions.ModelVisibleToolResult.Status] = result.Status,
             [McpGatewayConventions.ModelVisibleToolResult.Guardrail] = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [McpGatewayConventions.ModelVisibleToolResult.GuardrailAction] = result.GuardrailAction,
-                [McpGatewayConventions.ModelVisibleToolResult.GuardrailCategories] = result.Categories,
+                [McpGatewayConventions.ModelVisibleToolResult.GuardrailCategoriesKey] = result.Categories,
             },
             [McpGatewayConventions.ModelVisibleToolResult.Untrusted] = new Dictionary<string, object?>(StringComparer.Ordinal)
             {

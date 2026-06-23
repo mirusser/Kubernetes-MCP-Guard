@@ -1,4 +1,5 @@
 using System.Diagnostics.Metrics;
+using System.Text.Json.Serialization;
 using InfraGate.AgentLlm;
 using InfraGate.Planner.Audit;
 using InfraGate.Planner.Decision;
@@ -172,8 +173,19 @@ internal sealed class DecideExecutor( // NOSONAR:S107 — DI constructor; all pa
 
     private sealed record class LlmDecisionOutput
     {
-        public string? OperationType { get; set; }
-        public Dictionary<string, JsonElement>? Arguments { get; set; }
-        public string? Reasoning { get; set; }
+        public string? OperationType { get; }
+        public Dictionary<string, JsonElement>? Arguments { get; }
+        public string? Reasoning { get; }
+
+        [JsonConstructor]
+        public LlmDecisionOutput(
+            string? operationType,
+            Dictionary<string, JsonElement>? arguments,
+            string? reasoning)
+        {
+            OperationType = operationType;
+            Arguments = arguments;
+            Reasoning = reasoning;
+        }
     }
 }

@@ -28,7 +28,7 @@ public sealed class SnapshotDocumentSerializationTests
         Assert.Equal(original.Namespace, roundTripped.Namespace);
         var statusNode = roundTripped.ToolResults["get_k8s_status"];
         Assert.NotNull(statusNode);
-        Assert.True(statusNode["healthy"]?.GetValue<bool>() == true);
+        Assert.True(statusNode["healthy"]?.GetValue<bool>());
         Assert.NotNull(roundTripped.ToolResults["get_k8s_events"]);
     }
 

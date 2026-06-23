@@ -555,7 +555,7 @@ public sealed class GatewayToolDispatcherTests
             root.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Kind).GetString());
         Assert.Equal(
             "get_allowed_namespaces",
-            root.GetProperty(McpGatewayConventions.ModelVisibleToolResult.ToolName).GetString());
+            root.GetProperty(McpGatewayConventions.ModelVisibleToolResult.ToolNameKey).GetString());
         Assert.Equal(
             McpGatewayConventions.ModelVisibleToolResult.SourceReadOnlyToolValue,
             root.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Source).GetString());
@@ -568,7 +568,7 @@ public sealed class GatewayToolDispatcherTests
                 .GetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailAction)
                 .GetString());
         Assert.Empty(root.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Guardrail)
-            .GetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailCategories)
+            .GetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailCategoriesKey)
             .EnumerateArray());
         Assert.Equal(
             "downstream result",
@@ -604,12 +604,12 @@ public sealed class GatewayToolDispatcherTests
             guardrail.GetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailAction).GetString());
         Assert.Contains(
             McpGatewayConventions.GuardrailCategories.IgnoreInstructions,
-            guardrail.GetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailCategories)
+            guardrail.GetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailCategoriesKey)
                 .EnumerateArray()
                 .Select(category => category.GetString()));
         Assert.Contains(
             McpGatewayConventions.GuardrailCategories.ToolUse,
-            guardrail.GetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailCategories)
+            guardrail.GetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailCategoriesKey)
                 .EnumerateArray()
                 .Select(category => category.GetString()));
         Assert.Equal(

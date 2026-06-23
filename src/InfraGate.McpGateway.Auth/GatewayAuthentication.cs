@@ -35,7 +35,7 @@ public static class GatewayAuthentication
         if (options.TokenIntrospectionEnabled)
         {
             services.AddHttpClient<ITokenIntrospectionClient, HttpTokenIntrospectionClient>(
-                GatewayAuthConventions.HttpClients.TokenIntrospection);
+                GatewayAuthConventions.HttpClients.TokenIntrospectionClient);
             services.AddSingleton<ITokenActivityValidator, TokenIntrospectionActivityValidator>();
         }
 
@@ -165,91 +165,96 @@ public static class GatewayAuthentication
 
     private static JwtBearerEvents CreateJwtBearerEvents(GatewayAuthOptions options) => new()
     {
-        OnMessageReceived = context =>
-        {
-            // Support Authorization: DPoP <token> alongside the default Authorization: Bearer <token>
-            var authorization = context.Request.Headers.Authorization.ToString();
-            if (authorization.StartsWith(
-                    $"{GatewayAuthConventions.DPoP.Scheme} ",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                context.Token = authorization[$"{GatewayAuthConventions.DPoP.Scheme} ".Length..].Trim();
-            }
-            return Task.CompletedTask;
-        },
-
-        OnTokenValidated = async context =>
-        {
-            if (context.SecurityToken is not JsonWebToken accessToken)
-            {
-                context.Fail("Unexpected security token type.");
-                return;
-            }
-
-            if (!HasAcceptedAccessTokenLifetime(accessToken, options.MaxAcceptedAccessTokenLifetimeSeconds))
-            {
-                context.Fail("Access token lifetime exceeds the configured maximum.");
-                return;
-            }
-
-            if (options.TokenIntrospectionEnabled)
-            {
-                var tokenActivityValidator = context.HttpContext.RequestServices
-                    .GetRequiredService<ITokenActivityValidator>();
-                if (!await tokenActivityValidator.IsActiveAsync(
-                        accessToken,
-                        context.HttpContext.RequestAborted).ConfigureAwait(false))
-                {
-                    context.Fail("Access token is inactive.");
-                    return;
-                }
-            }
-
-            if (!options.RequireDPoP)
-                return;
-
-            var authorization = context.Request.Headers.Authorization.ToString();
-            if (!authorization.StartsWith(
-                    $"{GatewayAuthConventions.DPoP.Scheme} ",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                context.Fail("DPoP is required: use 'Authorization: DPoP <token>'.");
-                return;
-            }
-
-            var dpopProof = context.Request.Headers[GatewayAuthConventions.DPoP.ProofHeaderName].ToString();
-            if (string.IsNullOrWhiteSpace(dpopProof))
-            {
-                context.Fail("DPoP proof header is missing.");
-                return;
-            }
-
-            var request = context.Request;
-            var uri = $"{request.Scheme}://{request.Host}{request.PathBase}{request.Path}";
-            var validator = context.HttpContext.RequestServices
-                .GetRequiredService<IDpopProofValidator>();
-
-            var result = await validator.ValidateAsync(
-                new DpopProofValidationContext(
-                    DpopProofJwt: dpopProof,
-                    AccessToken: accessToken.EncodedToken,
-                    HttpMethod: request.Method,
-                    HttpUri: uri),
-                context.HttpContext.RequestAborted).ConfigureAwait(false);
-
-            if (!result.IsValid)
-                context.Fail($"DPoP validation failed: {result.FailureReason}");
-        },
-
-        OnForbidden = context =>
-        {
-            var resourceMetadata = ResourceMetadataUrl(context.Request);
-            context.Response.Headers.WWWAuthenticate =
-                BuildInsufficientScopeChallenge(options.OAuthScope, resourceMetadata);
-
-            return Task.CompletedTask;
-        }
+        OnMessageReceived = HandleDpopMessageReceived,
+        OnTokenValidated = context => OnTokenValidatedAsync(context, options),
+        OnForbidden = context => OnForbiddenAsync(context, options)
     };
+
+    private static Task HandleDpopMessageReceived(MessageReceivedContext context)
+    {
+        // Support Authorization: DPoP <token> alongside the default Authorization: Bearer <token>
+        var authorization = context.Request.Headers.Authorization.ToString();
+        if (authorization.StartsWith(
+                $"{GatewayAuthConventions.DPoP.Scheme} ",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            context.Token = authorization[$"{GatewayAuthConventions.DPoP.Scheme} ".Length..].Trim();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static async Task OnTokenValidatedAsync(TokenValidatedContext context, GatewayAuthOptions options)
+    {
+        if (context.SecurityToken is not JsonWebToken accessToken)
+        {
+            context.Fail("Unexpected security token type.");
+            return;
+        }
+
+        if (!HasAcceptedAccessTokenLifetime(accessToken, options.MaxAcceptedAccessTokenLifetimeSeconds))
+        {
+            context.Fail("Access token lifetime exceeds the configured maximum.");
+            return;
+        }
+
+        if (options.TokenIntrospectionEnabled)
+        {
+            var tokenActivityValidator = context.HttpContext.RequestServices
+                .GetRequiredService<ITokenActivityValidator>();
+            if (!await tokenActivityValidator.IsActiveAsync(
+                    accessToken,
+                    context.HttpContext.RequestAborted).ConfigureAwait(false))
+            {
+                context.Fail("Access token is inactive.");
+                return;
+            }
+        }
+
+        if (!options.RequireDPoP)
+            return;
+
+        var authorization = context.Request.Headers.Authorization.ToString();
+        if (!authorization.StartsWith(
+                $"{GatewayAuthConventions.DPoP.Scheme} ",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            context.Fail("DPoP is required: use 'Authorization: DPoP <token>'.");
+            return;
+        }
+
+        var dpopProof = context.Request.Headers[GatewayAuthConventions.DPoP.ProofHeaderName].ToString();
+        if (string.IsNullOrWhiteSpace(dpopProof))
+        {
+            context.Fail("DPoP proof header is missing.");
+            return;
+        }
+
+        var request = context.Request;
+        var uri = $"{request.Scheme}://{request.Host}{request.PathBase}{request.Path}";
+        var validator = context.HttpContext.RequestServices
+            .GetRequiredService<IDpopProofValidator>();
+
+        var result = await validator.ValidateAsync(
+            new DpopProofValidationContext(
+                DpopProofJwt: dpopProof,
+                AccessToken: accessToken.EncodedToken,
+                HttpMethod: request.Method,
+                HttpUri: uri),
+            context.HttpContext.RequestAborted).ConfigureAwait(false);
+
+        if (!result.IsValid)
+            context.Fail($"DPoP validation failed: {result.FailureReason}");
+    }
+
+    private static Task OnForbiddenAsync(ForbiddenContext context, GatewayAuthOptions options)
+    {
+        var resourceMetadata = ResourceMetadataUrl(context.Request);
+        context.Response.Headers.WWWAuthenticate =
+            BuildInsufficientScopeChallenge(options.OAuthScope, resourceMetadata);
+
+        return Task.CompletedTask;
+    }
 
     private static void ConfigureMcpOptions(
         McpAuthenticationOptions mcpOptions,
