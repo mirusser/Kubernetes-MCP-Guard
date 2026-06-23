@@ -268,6 +268,51 @@ public sealed partial class GatewayHttpMcpIntegrationTests
     }
 
     [Fact]
+    public async Task McpEndpoint_RedactsSensitiveDataThroughHttpTransport()
+    {
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(
+            new FakeDownstream("access key AKIAIOSFODNN7EXAMPLE exposed"),
+            audit);
+        await using var client = await CreateHttpMcpClientAsync(server);
+
+        var text = await CallTextAsync(
+            client,
+            "get_k8s_status",
+            new Dictionary<string, object?>
+            {
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                [KubernetesAdapterConventions.ToolArguments.LabelSelector] = "app=mcp-api-demo"
+            });
+
+        using var document = JsonDocument.Parse(text);
+        JsonElement root = document.RootElement;
+        Assert.Equal(
+            McpGatewayConventions.GuardrailAudit.RedactSensitiveDataAction,
+            root.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Guardrail)
+                .GetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailAction)
+                .GetString());
+        Assert.Contains(
+            McpGatewayConventions.GuardrailCategories.SensitiveData,
+            root.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Guardrail)
+                .GetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailCategoriesKey)
+                .EnumerateArray()
+                .Select(category => category.GetString()));
+        string payload = root.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Untrusted)
+            .GetProperty(McpGatewayConventions.ModelVisibleToolResult.UntrustedPayload)
+            .GetString()!;
+        Assert.Contains("[redacted: aws-key]", payload);
+        Assert.DoesNotContain("AKIAIOSFODNN7EXAMPLE", payload);
+        Assert.DoesNotContain("Guardrail warning:", text);
+        var auditEvent = Assert.Single(audit.Events);
+        Assert.Equal("response", auditEvent.Direction);
+        Assert.Equal(McpGatewayConventions.GuardrailAudit.RedactSensitiveDataAction, auditEvent.Action);
+        Assert.NotNull(auditEvent.Metadata);
+        Assert.True(auditEvent.Metadata.ContainsKey(McpGatewayConventions.GuardrailAudit.EntryFields.RedactionPatterns));
+        Assert.True(auditEvent.Metadata.ContainsKey(McpGatewayConventions.GuardrailAudit.EntryFields.RedactionCount));
+    }
+
+    [Fact]
     public async Task DownstreamMcpClient_CanStartRealStdioServerAndDryRunApplyManifest()
     {
         var repoRoot = FindRepoRoot();
@@ -938,7 +983,17 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton(options);
                 services.AddSingleton<IGuardrailAuditStore>(audit);
                 services.AddSingleton<IDownstreamMcpClient>(downstream);
-                services.AddSingleton<GuardedToolRunner>();
+                services.AddSingleton<SensitiveDataRedactor>(sp =>
+                    new SensitiveDataRedactor(
+                        McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                        sp.GetRequiredService<ILogger<SensitiveDataRedactor>>()));
+                services.AddSingleton<GuardedToolRunner>(sp =>
+                    new GuardedToolRunner(
+                        sp.GetRequiredService<IDownstreamMcpClient>(),
+                        sp.GetRequiredService<IGuardrailAuditStore>(),
+                        sp.GetRequiredService<IHttpContextAccessor>(),
+                        sp.GetRequiredService<SensitiveDataRedactor>(),
+                        sp.GetRequiredService<ILogger<GuardedToolRunner>>()));
                 services.AddSingleton<TestApprovalWorkflow>();
                 services.AddSingleton<IApprovalPlanWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
                 services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());

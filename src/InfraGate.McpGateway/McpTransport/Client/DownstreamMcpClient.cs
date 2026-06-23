@@ -55,6 +55,11 @@ internal sealed class DownstreamMcpClient(
                 return text;
             }, cancellationToken).ConfigureAwait(false);
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Downstream call to '{ToolName}' threw an unhandled exception", toolName);
+            return $"(DownstreamCallFailed) {ex.GetType().Name}: {ex.Message}";
+        }
         finally
         {
             callLock.Release();

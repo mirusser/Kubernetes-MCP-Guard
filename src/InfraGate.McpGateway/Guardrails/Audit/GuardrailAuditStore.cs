@@ -24,6 +24,15 @@ public sealed class GuardrailAuditStore(McpGatewayOptions options) : IGuardrailA
             [McpGatewayConventions.GuardrailAudit.EntryFields.AuthenticationType] = auditEvent.AuthenticationType,
             [McpGatewayConventions.GuardrailAudit.EntryFields.IdentityKind] = auditEvent.IdentityKind
         };
+
+        if (auditEvent.Metadata is not null)
+        {
+            foreach (KeyValuePair<string, object?> pair in auditEvent.Metadata)
+            {
+                entry[pair.Key] = pair.Value;
+            }
+        }
+
         string line = JsonSerializer.Serialize(entry, JsonOptions) + Environment.NewLine;
 
         await writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);

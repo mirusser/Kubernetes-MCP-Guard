@@ -34,7 +34,7 @@ The controls below are ordered by importance. The downstream service token (in-p
 - Logs and Events are untrusted Kubernetes output; keep observability reads routed through `GuardedToolRunner` so response sanitization still applies.
 - Read-only downstream tool responses are returned as a `model_visible_tool_result` JSON envelope. The top-level fields are Gateway-owned metadata; Kubernetes-derived content is isolated under `untrusted.payload` and must be treated as observation data, not instructions.
 - Suspicious input is warned and audited, but still forwarded to the downstream server.
-- Suspicious response text and echoed manifest blocks are redacted before returning under the envelope's `untrusted.payload` field.
+- Suspicious response text, echoed manifest blocks, and common secret patterns (bearer tokens, API keys, passwords, private keys, etc.) are redacted before returning under the envelope's `untrusted.payload` field.
 - Authentication behavior is provided by `InfraGate.McpGateway.Auth`; this project should not duplicate auth rules.
 - OAuth access tokens are terminated at the gateway. The downstream stdio server receives tool calls, not bearer tokens.
 - The gateway binds Same-Subject Approval challenges to the requester stored in the generic plan envelope. Operator Approval Policy challenges are decided by authenticated users in the configured operator group.

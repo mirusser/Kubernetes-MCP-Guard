@@ -3,7 +3,8 @@ namespace InfraGate.McpGateway;
 public sealed record class ResponseSanitizationResult(
     string Text,
     IReadOnlyList<GuardrailFinding> Findings,
-    bool ManifestRedacted)
+    bool ManifestRedacted,
+    bool SensitiveDataRedacted = false)
 {
     public bool HasFindings => Findings.Count > 0;
 

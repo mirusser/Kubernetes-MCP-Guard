@@ -8,4 +8,5 @@ public sealed record class GuardrailAuditEvent(
     string? PlanId,
     string? Subject,
     string? AuthenticationType,
-    string IdentityKind = "Human");
+    string IdentityKind = "Human",
+    IReadOnlyDictionary<string, object?>? Metadata = null);

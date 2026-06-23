@@ -417,13 +417,13 @@ _None._
 
 ## Verification Checklist
 
-- [ ] `dotnet build src/InfraGate.McpGateway/` succeeds
-- [ ] `dotnet test tests/InfraGate.McpGateway.Tests/` all pass
-- [ ] T1 constants and placeholder resolve correctly
-- [ ] T2 all pattern tests, timeout test, and secrets-never-stored test pass
-- [ ] T3 audit JSONL contains `redactionPatterns`/`redactionCount`, never matched values
-- [ ] T4 integration tests pass; production mode redacts and audits
-- [ ] T5 DI resolution works; no pre-existing registrations broken
-- [ ] T6 `dotnet test --filter SensitiveDataRedactor` passes
-- [ ] T7 `docs/security-model.md` reflects the new audit fields
-- [ ] LSP diagnostics clean on all changed files
+- [x] `dotnet build src/InfraGate.McpGateway/` succeeds
+- [x] `dotnet test tests/InfraGate.McpGateway.Tests/` all pass
+- [x] T1 constants and placeholder resolve correctly
+- [x] T2 all pattern tests, timeout test, and secrets-never-stored test pass
+- [x] T3 audit JSONL contains `redactionPatterns`/`redactionCount`, never matched values
+- [x] T4 integration tests pass; production mode redacts and audits
+- [x] T5 DI resolution works; no pre-existing registrations broken
+- [x] T6 `dotnet test --filter SensitiveDataRedactor` passes
+- [x] T7 `docs/security-model.md` reflects the new audit fields
+- [x] Build clean on all changed files

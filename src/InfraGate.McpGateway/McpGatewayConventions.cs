@@ -232,6 +232,7 @@ internal static class McpGatewayConventions
         public const string WarnAction = "warn";
         public const string WarnRedactAction = "warn_redact";
         public const string RedactManifestAction = "redact_manifest";
+        public const string RedactSensitiveDataAction = "redact_sensitive_data";
         public const string DenyAction = "scope.denied";
 
         public static class EntryFields
@@ -245,6 +246,8 @@ internal static class McpGatewayConventions
             public const string Subject = "subject";
             public const string AuthenticationType = "authenticationType";
             public const string IdentityKind = "identityKind";
+            public const string RedactionPatterns = "redactionPatterns";
+            public const string RedactionCount = "redactionCount";
         }
     }
 
@@ -257,6 +260,41 @@ internal static class McpGatewayConventions
         public const string AuthorityOverride = "authority-override";
         public const string ManifestEchoCategory = "manifest-echo";
         public const string ScopeDenied = "scope";
+        public const string SensitiveData = "sensitive-data";
+    }
+
+    public static class SensitiveDataRedaction
+    {
+        public static string Placeholder(string patternName) => $"[redacted: {patternName}]";
+
+        public static class Patterns
+        {
+            public const string PrivateKey = "-----BEGIN\\s+(?:RSA|EC|OPENSSH)?\\s*PRIVATE\\s+KEY-----";
+            public const string Jwt = "eyJ[a-zA-Z0-9_-]+\\.eyJ[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+";
+            public const string AwsKey = "(?:AKIA|ASIA)[0-9A-Z]{16}";
+            public const string BearerToken = "(?i)bearer\\s+[a-zA-Z0-9\\-._~+/]{20,}";
+            public const string BasicAuth = "(?i)basic\\s+[a-zA-Z0-9=+/]{20,}";
+            public const string ConnectionString = "(?i)(?:Server|Host|Data Source)\\s*=.*[Pp]assword\\s*=\\S*";
+            public const string PasswordParam = "(?i)password\\s*=\\s*\\S+";
+            public const string SecretParam = "(?i)secret\\s*=\\s*\\S+";
+            public const string TokenParam = "(?i)token\\s*=\\s*\\S+";
+            public const string ApiKeyParam = "(?i)api[_-]?key\\s*=\\s*\\S+";
+        }
+
+        public static readonly IReadOnlyList<RedactionPattern> Defaults =
+            new RedactionPattern[]
+            {
+                new("private-key", Patterns.PrivateKey),
+                new("jwt", Patterns.Jwt),
+                new("aws-key", Patterns.AwsKey),
+                new("bearer-token", Patterns.BearerToken),
+                new("basic-auth", Patterns.BasicAuth),
+                new("connection-string", Patterns.ConnectionString),
+                new("password-param", Patterns.PasswordParam),
+                new("secret-param", Patterns.SecretParam),
+                new("token-param", Patterns.TokenParam),
+                new("api-key-param", Patterns.ApiKeyParam)
+            }.AsReadOnly();
     }
 
     public static class GuardrailLocations

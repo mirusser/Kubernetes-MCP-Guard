@@ -849,10 +849,14 @@ public sealed class GatewayToolDispatcherTests
         };
         var downstream = new FakeDownstream(downstreamResponse, downstreamException);
         var audit = new InMemoryAuditStore();
+        var redactor = new SensitiveDataRedactor(
+            McpGatewayConventions.SensitiveDataRedaction.Defaults,
+            NullLogger<SensitiveDataRedactor>.Instance);
         var guardedRunner = new GuardedToolRunner(
             downstream,
             audit,
             httpContextAccessor,
+            redactor,
             NullLogger<GuardedToolRunner>.Instance);
         var gatewayApprovalService = approvals ?? new GatewayApprovalService(
             workflow,

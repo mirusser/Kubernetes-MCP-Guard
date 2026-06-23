@@ -4,11 +4,7 @@ using InfraGate.McpGateway.Auth;
 
 namespace InfraGate.McpGateway;
 
-public sealed partial class GuardedToolRunner(
-    IDownstreamMcpClient downstream,
-    IGuardrailAuditStore auditStore,
-    IHttpContextAccessor? httpContextAccessor,
-    ILogger<GuardedToolRunner> logger)
+internal sealed partial class GuardedToolRunner
 {
     private static readonly Meter Meter = new(
         McpGatewayConventions.Telemetry.MeterName,
@@ -19,12 +15,29 @@ public sealed partial class GuardedToolRunner(
     internal const string Warning =
         "Guardrail warning: Potential prompt-injection content was detected. Model-visible high-risk text was redacted where applicable.";
 
-    public GuardedToolRunner(
+    private readonly IDownstreamMcpClient downstream;
+    private readonly IGuardrailAuditStore auditStore;
+    private readonly IHttpContextAccessor? httpContextAccessor;
+    private readonly SensitiveDataRedactor redactor;
+    private readonly ILogger<GuardedToolRunner> logger;
+
+    internal GuardedToolRunner(
         IDownstreamMcpClient downstream,
         IGuardrailAuditStore auditStore,
+        IHttpContextAccessor? httpContextAccessor,
+        SensitiveDataRedactor redactor,
         ILogger<GuardedToolRunner> logger)
-        : this(downstream, auditStore, httpContextAccessor: null, logger)
     {
+        ArgumentNullException.ThrowIfNull(downstream);
+        ArgumentNullException.ThrowIfNull(auditStore);
+        ArgumentNullException.ThrowIfNull(redactor);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        this.downstream = downstream;
+        this.auditStore = auditStore;
+        this.httpContextAccessor = httpContextAccessor;
+        this.redactor = redactor;
+        this.logger = logger;
     }
 
     public async Task<string> CallAsync(
@@ -69,6 +82,7 @@ public sealed partial class GuardedToolRunner(
         ResponseSanitizationResult response = await SanitizeAndAuditResponseAsync(toolName, arguments, downstreamText, cancellationToken).ConfigureAwait(false);
         string[] categories = requestScan.Categories
             .Concat(response.Categories)
+            .Concat(response.SensitiveDataRedacted ? [McpGatewayConventions.GuardrailCategories.SensitiveData] : [])
             .Distinct(StringComparer.Ordinal)
             .OrderBy(category => category, StringComparer.Ordinal)
             .ToArray();
@@ -125,6 +139,14 @@ public sealed partial class GuardedToolRunner(
         CancellationToken cancellationToken)
     {
         ResponseSanitizationResult response = PromptInjectionGuard.SanitizeResponse(responseText);
+        string? planId = ExtractPlanId(arguments, response.Text);
+        RedactionResult redacted = redactor.Redact(response.Text);
+        ResponseSanitizationResult result = new(
+            redacted.Text,
+            response.Findings,
+            response.ManifestRedacted,
+            redacted.WasRedacted);
+
         if (response.HasFindings || response.ManifestRedacted)
         {
             AuditIdentity auditIdentity = GetAuditIdentity();
@@ -138,14 +160,28 @@ public sealed partial class GuardedToolRunner(
                     response.HasFindings
                         ? response.Categories
                         : [McpGatewayConventions.GuardrailCategories.ManifestEchoCategory],
-                    ExtractPlanId(arguments, response.Text),
+                    planId,
                     auditIdentity.Subject,
                     auditIdentity.AuthenticationType,
                     auditIdentity.IdentityKind),
                 cancellationToken).ConfigureAwait(false);
         }
 
-        return response;
+        if (redacted.WasRedacted)
+        {
+            AuditIdentity auditIdentity = GetAuditIdentity();
+            await TryWriteAuditAsync(
+                GuardrailAuditEventFactory.SensitiveData(
+                    toolName,
+                    planId,
+                    auditIdentity.Subject,
+                    auditIdentity.AuthenticationType,
+                    auditIdentity.IdentityKind,
+                    redacted),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return result;
     }
 
     private static string DetermineGuardrailAction(GuardScanResult requestScan, ResponseSanitizationResult response)
@@ -158,6 +194,11 @@ public sealed partial class GuardedToolRunner(
         if (response.ManifestRedacted)
         {
             return McpGatewayConventions.GuardrailAudit.RedactManifestAction;
+        }
+
+        if (response.SensitiveDataRedacted)
+        {
+            return McpGatewayConventions.GuardrailAudit.RedactSensitiveDataAction;
         }
 
         return requestScan.HasFindings

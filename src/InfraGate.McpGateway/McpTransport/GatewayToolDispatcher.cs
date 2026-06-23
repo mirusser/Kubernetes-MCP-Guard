@@ -80,7 +80,19 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        return await CallToolAsyncCore(request, ct).ConfigureAwait(false);
+        try
+        {
+            return await CallToolAsyncCore(request, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Unhandled exception dispatching tool '{ToolName}'", request.Name);
+            return new CallToolResult
+            {
+                Content = [new TextContentBlock { Text = $"Handler error ({ex.GetType().Name}): {ex.Message}" }],
+                IsError = true
+            };
+        }
     }
 
     private async Task<CallToolResult> CallToolAsyncCore(
@@ -200,12 +212,21 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         IReadOnlyDictionary<string, object?> args = ToolArgumentConverter.ConvertArguments(request.Arguments);
         bool requestHasFindings = await guardedRunner.AuditRequestAsync(toolName, args, ct).ConfigureAwait(false);
 
-        PlanBuildResult planResult = await domainAdapter.BuildAsync(
-            mutationToolName,
-            args,
-            new PlanRequester(identity.Subject, identity.AuthenticationType),
-            ApprovalPolicy.SameSubject(),
-            ct).ConfigureAwait(false);
+        PlanBuildResult planResult;
+        try
+        {
+            planResult = await domainAdapter.BuildAsync(
+                mutationToolName,
+                args,
+                new PlanRequester(identity.Subject, identity.AuthenticationType),
+                ApprovalPolicy.SameSubject(),
+                ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Plan building threw an unhandled exception for tool '{ToolName}'", mutationToolName);
+            return ErrorResult($"Plan building failed: {ex.GetType().Name}: {ex.Message}");
+        }
 
         if (!planResult.Succeeded || planResult.Envelope is null)
         {
