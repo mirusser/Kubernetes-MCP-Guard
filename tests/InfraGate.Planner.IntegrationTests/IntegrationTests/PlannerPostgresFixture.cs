@@ -15,8 +15,7 @@ public sealed class PlannerPostgresFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        container = new PostgreSqlBuilder()
-            .WithImage("postgres:16-alpine")
+        container = new PostgreSqlBuilder("postgres:16-alpine")
             .Build();
         await container.StartAsync();
 

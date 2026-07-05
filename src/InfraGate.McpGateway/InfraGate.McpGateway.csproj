@@ -11,8 +11,8 @@
     <InternalsVisibleTo Include="InfraGate.McpGateway.KeycloakTests" />
     <InternalsVisibleTo Include="InfraGate.McpGateway.Tests" />
     <InternalsVisibleTo Include="InfraGate.Safety.E2E.Tests" />
-    <PackageReference Include="MailKit" Version="4.16.0" />
-    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.3.0" />
+    <PackageReference Include="MailKit" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
   </ItemGroup>
 
   <ItemGroup>
