@@ -45,6 +45,4 @@ public sealed class PlannerPostgresFixture : IAsyncLifetime
 }
 
 [CollectionDefinition("PlannerPostgres")]
-public class PlannerPostgresCollection : ICollectionFixture<PlannerPostgresFixture>
-{
-}
+public class PlannerPostgresCollection : ICollectionFixture<PlannerPostgresFixture>;
