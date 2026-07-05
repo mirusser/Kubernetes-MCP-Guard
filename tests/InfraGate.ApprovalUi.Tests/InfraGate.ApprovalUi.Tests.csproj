@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\InfraGate.ApprovalUi\InfraGate.ApprovalUi.csproj" />
+    <ProjectReference Include="..\..\src\InfraGate.AuditOutbox\InfraGate.AuditOutbox.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.KubernetesAdapter\InfraGate.KubernetesAdapter.csproj" />
     <ProjectReference Include="..\..\src\InfraGate.Approvals\InfraGate.Approvals.csproj" />
   </ItemGroup>

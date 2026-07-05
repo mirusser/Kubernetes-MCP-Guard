@@ -729,6 +729,8 @@ public sealed class RunProfileCliTests
             "INFRA_GATE_APPROVAL_HOST_PATH",
             "INFRA_GATE_GUARD_AUDIT_HOST_PATH",
             "INFRA_GATE_DATA_PROTECTION_HOST_PATH",
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            "ASPIRE_DASHBOARD_TOKEN",
             "InfraGate__Observer__AspNetCoreUrls",
             "InfraGate__Observer__GatewayBaseUrl",
             "InfraGate__Observer__ClientCredentials__Authority",

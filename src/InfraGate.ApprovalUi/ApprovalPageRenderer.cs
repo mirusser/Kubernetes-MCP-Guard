@@ -53,6 +53,19 @@ public sealed class ApprovalPageRenderer : IApprovalPageRenderer, IDisposable, I
         });
     }
 
+    public Task<string> RenderAuditTimelinePageAsync(AuditTimelinePageData pageData)
+    {
+        return renderer.Dispatcher.InvokeAsync(async () =>
+        {
+            var component = await renderer.RenderComponentAsync<AuditTimelinePage>(
+                ParameterView.FromDictionary(new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["PageData"] = pageData
+                })).ConfigureAwait(false);
+            return component.ToHtmlString();
+        });
+    }
+
     public void Dispose()
     {
         renderer.Dispose();

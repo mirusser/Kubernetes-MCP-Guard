@@ -12,6 +12,12 @@ internal static class ExecutorConventions
     public const string DefaultUrl = LoopbackHttpScheme + UriSchemeSeparator + LoopbackHost + ":" + DefaultPort;
     public const string HealthEndpointPath = "/health";
     public const string A2AHandoffEndpointPath = "/a2a/executor";
+
+    public static class Health
+    {
+        public const string LivenessPath = "/healthz";
+        public const string ReadinessPath = "/readyz";
+    }
     public const string A2AHandoffAgentName = "executor-agent";
 
     public const int DefaultConcurrencyCap = 64;

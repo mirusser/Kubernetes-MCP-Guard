@@ -11,6 +11,12 @@ internal static class ObserverConventions
 
     public const string HealthEndpointPath = "/health";
     public const string ObserveNowEndpointPath = "/observe-now";
+
+    public static class Health
+    {
+        public const string LivenessPath = "/healthz";
+        public const string ReadinessPath = "/readyz";
+    }
     public const int ObserveNowTimeoutSeconds = 30;
     public const int OnDemandSlackWindowSeconds = 2;
     public const string DefaultClientId = "infra-gate-observer";

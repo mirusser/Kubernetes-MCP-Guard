@@ -9,6 +9,7 @@ public static class GatewayAuthConventions
     public const string DefaultExecuteOAuthScope = "mcp:tools.execute";
     public const string DefaultReadToolsOAuthScope = "mcp:tools.read";
     public const string DefaultWriteToolsOAuthScope = "mcp:tools.write";
+    public const string DefaultAuditReadOAuthScope = "audit:read";
     public const string DefaultApprovalOAuthClientId = "infra-gate-approval-ui";
     public const int DefaultTokenIntrospectionCacheSeconds = 30;
     public const int DefaultMaxAcceptedAccessTokenLifetimeSeconds = 300;
@@ -60,6 +61,7 @@ public static class GatewayAuthConventions
     {
         public const string PolicyName = "InfraGateMcpGateway";
         public const string ApprovalPolicyName = "InfraGateApprovalUi";
+        public const string AuditPolicyName = "InfraGateAudit";
         public const string PolicyScheme = "InfraGateGatewayBearer";
         public const string ApprovalCookie = "InfraGateApprovalCookie";
         public const string ApprovalOAuth = "InfraGateApprovalOAuth";

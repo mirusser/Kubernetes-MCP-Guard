@@ -67,6 +67,45 @@ public sealed class EnvFileRendererTests
     }
 
     [Fact]
+    public void Render_WithTelemetryProfile_EmitsTelemetrySection()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            Telemetry = new TelemetryProfile("http://aspire-dashboard:4317", null),
+        };
+
+        string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
+
+        Assert.Contains("# Telemetry", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.OtelExporterOtlpEndpoint}=http://aspire-dashboard:4317", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Render_WithDashboardToken_EmitsDashboardTokenLine()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            Telemetry = new TelemetryProfile("http://aspire-dashboard:4317", "dev-dashboard-token"),
+        };
+
+        string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
+
+        Assert.Contains($"{RunProfileConventions.Env.AspireDashboardToken}=dev-dashboard-token", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Render_NullTelemetryProfile_OmitsTelemetrySection()
+    {
+        var profile = CreateMinimalProfile() with { Telemetry = null };
+
+        string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
+
+        Assert.DoesNotContain("# Telemetry", result, StringComparison.Ordinal);
+        Assert.DoesNotContain(RunProfileConventions.Env.OtelExporterOtlpEndpoint, result, StringComparison.Ordinal);
+        Assert.DoesNotContain(RunProfileConventions.Env.AspireDashboardToken, result, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Render_WithExecutorProfile_EmitsExecutorSection()
     {
         var profile = CreateMinimalProfile() with

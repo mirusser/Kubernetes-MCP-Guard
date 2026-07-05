@@ -1,6 +1,8 @@
 # InfraGate.Observability
 
-`InfraGate.Observability` owns the full telemetry pipeline for the InfraGate agent services (Observer and Planner). It provides structured Serilog logging **and** an OpenTelemetry tracing/metrics pipeline with a Serilog span bridge.
+`InfraGate.Observability` owns the full telemetry pipeline for all four InfraGate runtime services (Gateway, Observer, Planner, Executor). It provides structured Serilog logging **and** an OpenTelemetry tracing/metrics pipeline with a Serilog span bridge.
+
+In `deploy/local-oauth/compose.yaml`, setting `OTEL_EXPORTER_OTLP_ENDPOINT` (wired by default via the `local-compose` run profile) sends traces and metrics from all four services to the dev-only `aspire-dashboard` container — see [`docs/observability-model.md`](../../docs/observability-model.md) for how to reach it and what it renders.
 
 ## Registration
 
@@ -50,4 +52,4 @@ builder.AddInfraGateTelemetry(opt =>
 
 ## Boundaries
 
-Depends on Serilog (`Serilog.Extensions.Hosting`, `Serilog.Sinks.Console`, `Serilog.Sinks.File`, `Serilog.Formatting.Compact`) and OpenTelemetry (`OpenTelemetry.Extensions.Hosting`, `OpenTelemetry.Instrumentation.Http`, `OpenTelemetry.Instrumentation.Runtime`, `OpenTelemetry.Exporter.OpenTelemetryProtocol`). Consumed by `InfraGate.Observer` and `InfraGate.Planner`. See ADR-0026 for design rationale.
+Depends on Serilog (`Serilog.Extensions.Hosting`, `Serilog.Sinks.Console`, `Serilog.Sinks.File`, `Serilog.Formatting.Compact`) and OpenTelemetry (`OpenTelemetry.Extensions.Hosting`, `OpenTelemetry.Instrumentation.Http`, `OpenTelemetry.Instrumentation.Runtime`, `OpenTelemetry.Exporter.OpenTelemetryProtocol`). Consumed by `InfraGate.McpGateway`, `InfraGate.Observer`, `InfraGate.Planner`, and `InfraGate.Executor`. See ADR-0026 for design rationale and ADR-0032 for the dashboard/audit-timeline surfaces built on top of it.

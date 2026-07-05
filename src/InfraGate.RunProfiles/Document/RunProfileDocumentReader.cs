@@ -27,7 +27,8 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.IdentityProvider,
                 RunProfileConventions.YamlKeys.OpenRouter,
                 RunProfileConventions.YamlKeys.Observer,
-                RunProfileConventions.YamlKeys.Planner
+                RunProfileConventions.YamlKeys.Planner,
+                RunProfileConventions.YamlKeys.Telemetry
             ],
             StringComparer.Ordinal);
 
@@ -47,7 +48,8 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.OpenRouter,
                 RunProfileConventions.YamlKeys.Observer,
                 RunProfileConventions.YamlKeys.Planner,
-                RunProfileConventions.YamlKeys.RuntimeMode
+                RunProfileConventions.YamlKeys.RuntimeMode,
+                RunProfileConventions.YamlKeys.Telemetry
             ],
             StringComparer.Ordinal);
 
@@ -218,6 +220,14 @@ internal static class RunProfileDocumentReader
             ],
             StringComparer.Ordinal);
 
+    private static readonly IReadOnlySet<string> KnownTelemetryKeys =
+        new HashSet<string>(
+            [
+                RunProfileConventions.YamlKeys.OtlpEndpoint,
+                RunProfileConventions.YamlKeys.DashboardToken
+            ],
+            StringComparer.Ordinal);
+
     private static readonly IReadOnlySet<string> KnownModelVisibleContentKeys =
         new HashSet<string>(
             [
@@ -287,6 +297,7 @@ internal static class RunProfileDocumentReader
             PlannerProfile? planner = ReadPlanner(profileNode);
             ExecutorProfile? executor = ReadExecutor(profileNode);
             AgentGuardrailsProfile? agentGuardrails = ReadAgentGuardrails(profileNode);
+            TelemetryProfile? telemetry = ReadTelemetry(profileNode);
 
             profiles.Add(new RunProfile(
                 profileName,
@@ -303,7 +314,8 @@ internal static class RunProfileDocumentReader
                 observer,
                 planner,
                 executor,
-                agentGuardrails));
+                agentGuardrails,
+                telemetry));
         }
 
         return new RunProfileDocument(profiles) { Defaults = defaults };
@@ -336,7 +348,8 @@ internal static class RunProfileDocumentReader
             ReadObserver(mapping),
             ReadPlanner(mapping),
             ReadExecutor(mapping),
-            ReadAgentGuardrails(mapping));
+            ReadAgentGuardrails(mapping),
+            ReadTelemetry(mapping));
     }
 
     private static DownstreamAuthProfile? ReadDownstreamAuth(YamlMappingNode node)
@@ -615,6 +628,27 @@ internal static class RunProfileDocumentReader
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.WatchTimeoutSeconds),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.ExecutorHostPath),
             GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.UseDPoP));
+    }
+
+    private static TelemetryProfile? ReadTelemetry(YamlMappingNode node)
+    {
+        if (!node.Children.TryGetValue(
+                new YamlScalarNode(RunProfileConventions.YamlKeys.Telemetry),
+                out YamlNode? value))
+        {
+            return null;
+        }
+
+        if (value is not YamlMappingNode mapping)
+        {
+            throw new InvalidOperationException(
+                $"YAML key '{RunProfileConventions.YamlKeys.Telemetry}' must be a mapping.");
+        }
+
+        ValidateKnownKeys(mapping, KnownTelemetryKeys);
+        return new TelemetryProfile(
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.OtlpEndpoint),
+            GetOptionalScalar(mapping, RunProfileConventions.YamlKeys.DashboardToken));
     }
 
     private static AgentGuardrailsProfile? ReadAgentGuardrails(YamlMappingNode node)

@@ -15,4 +15,5 @@ internal sealed record class RunProfile(
     ObserverProfile? Observer,
     PlannerProfile? Planner,
     ExecutorProfile? Executor,
-    AgentGuardrailsProfile? AgentGuardrails = null);
+    AgentGuardrailsProfile? AgentGuardrails = null,
+    TelemetryProfile? Telemetry = null);

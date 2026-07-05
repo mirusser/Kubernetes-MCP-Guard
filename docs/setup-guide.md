@@ -98,13 +98,20 @@ docker compose version
 
 ### 4. OpenRouter API key for local agents
 
-The source-build Compose stack starts the Observer and Planner by default. Both use OpenRouter, so provide one shared API key through a shell environment variable before generating the Compose env file:
+The source-build Compose stack starts the Observer and Planner by default. Both use OpenRouter, so provide one shared API key before generating the Compose env file, either by exporting it:
 
 ```bash
 export InfraGate__OpenRouter__ApiKey="<openrouter-api-key>"
 ```
 
-`scripts/generate-env.sh` writes the key only into the gitignored generated env file used by Compose.
+or once, persistently, via a local secrets file that `scripts/generate-env.sh` and `scripts/quickstart.sh` auto-source if present:
+
+```bash
+cp dev-secrets.env.example dev-secrets.env
+# edit dev-secrets.env and fill in InfraGate__OpenRouter__ApiKey
+```
+
+`dev-secrets.env` is gitignored (matches `*.env`), so it never leaves your machine. `scripts/generate-env.sh` writes the key only into the gitignored generated env file used by Compose.
 
 ### 5. Verify tools
 
@@ -233,6 +240,8 @@ Use the source-build stack when you want the Observer, Planner, and Executor con
 export InfraGate__OpenRouter__ApiKey="<openrouter-api-key>"
 ./scripts/quickstart.sh source
 ```
+
+(Or set `InfraGate__OpenRouter__ApiKey` once in `dev-secrets.env` — see [OpenRouter API key for local agents](#4-openrouter-api-key-for-local-agents) — and skip the `export` from then on.)
 
 The wrapper refreshes the demo kubeconfig and delegates to the existing Compose files. For source builds, `generate-env.sh` writes `deploy/generated/local-compose.env` from `deploy/run-profiles.yaml` (profile `local-compose`) and supplies absolute host paths via `--set` so the command is independent of the current working directory. The generated env file includes the gateway, downstream auth, Observer, Planner, and Executor local OAuth settings; the OpenRouter API key still comes from your shell environment so secrets are not committed to the run profile. Generated env files are gitignored; `deploy/local-oauth/release.env.example` is the committed no-SDK reference for the released profile.
 

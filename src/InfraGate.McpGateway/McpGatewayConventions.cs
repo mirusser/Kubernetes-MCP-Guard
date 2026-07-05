@@ -32,6 +32,12 @@ internal static class McpGatewayConventions
         }
     }
 
+    public static class Health
+    {
+        public const string LivenessPath = "/healthz";
+        public const string ReadinessPath = "/readyz";
+    }
+
     public static class ConfigurationKeys
     {
         public const string ApprovalBaseUrl = "InfraGate:Approval:BaseUrl";
@@ -154,6 +160,7 @@ internal static class McpGatewayConventions
         public const string CancelRoute = "/approvals/{challengeId}/cancel";
         public const string LoginPath = "/approvals/login";
         public const string LogoutPath = "/approvals/logout";
+        public const string AuditTimelineRoute = "/audit/timeline/{planId}";
         public const string CodeFormField = "code";
         public const string RequestVerificationToken = "__RequestVerificationToken";
         public const string ReturnUrlQueryKey = "ReturnUrl";

@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using InfraGate;
 using InfraGate.ApprovalUi;
+using InfraGate.AuditOutbox;
 using InfraGate.Approvals;
 using InfraGate.Approvals.AccessCodes;
 using InfraGate.Approvals.Audit;
@@ -19,6 +20,7 @@ using InfraGate.Approvals.PreExecution;
 using InfraGate.DownstreamAuth;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
+using InfraGate.McpGateway.Audit;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.McpGateway.Email;
@@ -656,6 +658,105 @@ public sealed partial class GatewayHttpMcpIntegrationTests
     }
 
     [Fact]
+    public async Task AuditTimelinePage_Unauthenticated_RedirectsToLogin()
+    {
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(new FakeDownstream("unused"), audit);
+        using var browser = new HttpClient(server.CreateHandler())
+        {
+            BaseAddress = server.BaseAddress
+        };
+
+        var response = await browser.GetAsync("/audit/timeline/plan-123");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.EndsWith(
+            "/approvals/login?ReturnUrl=%2Faudit%2Ftimeline%2Fplan-123",
+            response.Headers.Location?.ToString(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AuditTimelinePage_AuthenticatedWithoutScope_RedirectsToLogin()
+    {
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(
+            new FakeDownstream("unused"),
+            audit,
+            approvalOAuthScope: Scope);
+        using var browser = await CreateAuthenticatedApprovalBrowserAsync(server, "test-challenge");
+
+        var response = await browser.GetAsync("/audit/timeline/plan-123");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        string? location = response.Headers.Location?.ToString();
+        Assert.NotNull(location);
+        Assert.Contains("ReturnUrl=%2Faudit%2Ftimeline%2Fplan-123", location, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AuditTimelinePage_AuthenticatedWithScope_RendersTimeline()
+    {
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(
+            new FakeDownstream("unused"),
+            audit,
+            approvalOAuthScope: GatewayAuthConventions.DefaultAuditReadOAuthScope);
+        using var browser = await CreateAuthenticatedApprovalBrowserAsync(server, "test-challenge");
+
+        var response = await browser.GetAsync("/audit/timeline/plan-123");
+
+        response.EnsureSuccessStatusCode();
+        var pageText = await response.Content.ReadAsStringAsync();
+        Assert.Contains("data-section=\"timeline-empty\"", pageText);
+        Assert.Contains("plan-123", pageText);
+    }
+
+    [Fact]
+    public async Task ApprovalPage_RendersAuditTimelineLink()
+    {
+        var repoRoot = FindRepoRoot();
+        var serverProject = Path.Combine(repoRoot, "src", "InfraGate.McpServer", "InfraGate.McpServer.csproj");
+        var testRoot = Path.Combine(Path.GetTempPath(), "infra-gate-gateway-tests", Guid.NewGuid().ToString("N"));
+        var approvalRoot = Path.Combine(testRoot, "approvals");
+        await using var k8sApi = new TestKubernetesApi(HandleScaleKubernetesRequest);
+        var kubeconfig = await WriteKubeconfigAsync(testRoot, k8sApi.Url);
+        using var environment = EnvironmentVariableScope.Set(
+            ("InfraGate__Kubernetes__KubeConfig", kubeconfig),
+            ("InfraGate__Approval__Root", approvalRoot),
+            ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
+            (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
+        await using var downstream = new DownstreamMcpClient(
+            CreateGatewayOptions(serverProject, testRoot, repoRoot),
+            new NullDownstreamServiceTokenProvider(),
+            NullLogger<DownstreamMcpClient>.Instance,
+            NullLoggerFactory.Instance);
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(downstream, audit);
+        await using var client = await CreateHttpMcpClientAsync(server);
+
+        var request = await RequestScalePlanAsync(client, replicas: 3);
+        var planId = ParsePlanId(request);
+        var approvalRequired = await CallTextAsync(
+            client,
+            McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.PlanId] = planId
+            });
+
+        var challengeId = ParseChallengeId(approvalRequired);
+        using var browser = await CreateAuthenticatedApprovalBrowserAsync(server, challengeId);
+        var page = await browser.GetAsync($"/approvals/{challengeId}");
+        page.EnsureSuccessStatusCode();
+        var pageText = await page.Content.ReadAsStringAsync();
+
+        Assert.Contains("data-section=\"audit-timeline-link\"", pageText);
+        Assert.Contains($"/audit/timeline/{planId}", pageText);
+    }
+
+    [Fact]
     public async Task ApprovalPage_ForApplyManifest_RendersCreateAndUpdateDiffs()
     {
         var repoRoot = FindRepoRoot();
@@ -969,7 +1070,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
     private static TestServer CreateGatewayServer(
         IDownstreamMcpClient downstream,
         InMemoryAuditStore audit,
-        McpGatewayOptions? gatewayOptions = null)
+        McpGatewayOptions? gatewayOptions = null,
+        string approvalOAuthScope = Scope)
     {
         var options = gatewayOptions ?? CreateGatewayOptions("unused", Path.GetTempPath(), Directory.GetCurrentDirectory());
 
@@ -1008,6 +1110,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<IApprovalAccessCodeStore, InMemoryApprovalAccessCodeStore>();
                 services.AddSingleton<IApprovalEmailSender, NullApprovalEmailSender>();
                 services.AddSingleton<IProposePlanHandler, ProposePlanHandler>();
+                services.AddSingleton<IAuditStreamReader>(new FakeAuditStreamReader());
+                services.AddSingleton<AuditTimelineAssembler>();
                 services.AddSingleton<IApprovalPageRenderer>(sp =>
                     new ApprovalPageRenderer(sp.GetRequiredService<IServiceProvider>(), sp.GetRequiredService<ILoggerFactory>()));
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
@@ -1032,7 +1136,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 });
                 services.PostConfigure<OAuthOptions>(GatewayAuthConventions.Schemes.ApprovalOAuth, oauthOptions =>
                 {
-                    oauthOptions.Backchannel = new HttpClient(new FakeOAuthBackchannel(Subject));
+                    oauthOptions.Backchannel = new HttpClient(new FakeOAuthBackchannel(Subject, approvalOAuthScope));
                 });
                 services
                     .AddMcpServer(serverOptions =>
@@ -1210,7 +1314,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             KeyId = "test-key"
         };
 
-    private static string CreateJwt(string subject)
+    private static string CreateJwt(string subject, string scope = Scope)
     {
         var issuedAt = DateTime.UtcNow.AddSeconds(-10);
         var descriptor = new SecurityTokenDescriptor
@@ -1224,7 +1328,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             {
                 [GatewayAuthConventions.Claims.Subject] = subject,
                 [GatewayAuthConventions.Claims.PreferredUsername] = subject,
-                [GatewayAuthConventions.Claims.Scope] = Scope
+                [GatewayAuthConventions.Claims.Scope] = scope
             },
             SigningCredentials = new SigningCredentials(SigningKey(), SecurityAlgorithms.HmacSha256)
         };
@@ -1872,7 +1976,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         }
     }
 
-    private sealed class FakeOAuthBackchannel(string subject) : HttpMessageHandler
+    private sealed class FakeOAuthBackchannel(string subject, string scope = Scope) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -1880,7 +1984,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         {
             var json = JsonSerializer.Serialize(new
             {
-                access_token = CreateJwt(subject),
+                access_token = CreateJwt(subject, scope),
                 token_type = "Bearer"
             });
 
@@ -1903,6 +2007,21 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class FakeAuditStreamReader : IAuditStreamReader
+    {
+        public Task<IReadOnlyList<AuditStreamRow>> ReadByPlanIdAsync(
+            string streamSchema,
+            string planId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<AuditStreamRow>>([]);
+
+        public Task<IReadOnlyList<AuditStreamRow>> ReadByAnomalyIdAsync(
+            string streamSchema,
+            string anomalyId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<AuditStreamRow>>([]);
     }
 
     private sealed class EnvironmentVariableScope : IDisposable

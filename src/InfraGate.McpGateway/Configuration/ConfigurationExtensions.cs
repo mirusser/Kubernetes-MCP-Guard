@@ -6,6 +6,7 @@ using InfraGate.ApprovalUi;
 using InfraGate.ClientCredentials;
 using InfraGate.DownstreamAuth;
 using InfraGate.KubernetesAdapter;
+using InfraGate.McpGateway.Audit;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.McpGateway.Email;
@@ -56,6 +57,12 @@ internal static class ConfigurationExtensions
                 opt.ConsoleToStandardError = false;
             });
 
+            builder.AddInfraGateTelemetry(opt =>
+            {
+                opt.ServiceName = "infragate-gateway";
+                opt.MeterNames = [McpGatewayConventions.Telemetry.MeterName];
+            });
+
             ConfigureUrls(builder);
 
             builder.Services.AddDataProtection()
@@ -76,6 +83,7 @@ internal static class ConfigurationExtensions
                     sp.GetRequiredService<ILogger<GuardedToolRunner>>()));
             builder.Services.AddPostgresApprovalPersistence(
                 builder.Configuration[McpGatewayConventions.ConfigurationKeys.ApprovalPostgresConnectionString]);
+            builder.Services.AddSingleton<AuditTimelineAssembler>();
             builder.Services.AddSingleton<IAuthorizationCheck, ApprovalPolicyAuthorizationCheck>();
             builder.Services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
             builder.Services.AddSingleton<IApprovalPageRenderer>(sp =>

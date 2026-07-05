@@ -24,11 +24,40 @@ RUN dotnet publish src/InfraGate.McpGateway/InfraGate.McpGateway.csproj \
     --no-restore
 RUN install -d -o $APP_UID -g $APP_UID /data/approvals /data/guardrails /data/logs /data/dataprotection-keys
 
+# Build a tiny health-check binary for the chiseled runtime image (no shell/curl/wget).
+RUN mkdir -p /app/healthcheck && \
+    cat > /app/healthcheck/Program.cs <<'EOF'
+using System;
+using System.Net.Http;
+using System.Threading.Tasks;
+
+string url = args.Length > 0 ? args[0] : "http://localhost:3001/healthz";
+try
+{
+    using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+    var response = await client.GetAsync(url).ConfigureAwait(false);
+    Environment.Exit(response.IsSuccessStatusCode ? 0 : 1);
+}
+catch
+{
+    Environment.Exit(1);
+}
+EOF
+RUN dotnet new console -o /tmp/hc -n HealthCheck --force && \
+    cp /app/healthcheck/Program.cs /tmp/hc/Program.cs && \
+    dotnet publish /tmp/hc/HealthCheck.csproj \
+        --configuration Release \
+        --output /app/healthcheck \
+        --self-contained false
+
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled AS runtime
 WORKDIR /app/gateway
 COPY --from=build /app/gateway .
 COPY --from=build /app/server /app/server
+COPY --from=build /app/healthcheck /app/healthcheck
 COPY --from=build /data /data
 ENV InfraGate__Runtime__Environment=Production
 USER $APP_UID
+HEALTHCHECK --interval=5s --timeout=5s --retries=10 --start-period=15s \
+    CMD ["dotnet", "/app/healthcheck/HealthCheck.dll", "http://localhost:3001/readyz"]
 ENTRYPOINT ["dotnet", "InfraGate.McpGateway.dll"]

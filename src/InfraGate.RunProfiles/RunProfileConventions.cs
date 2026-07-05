@@ -70,6 +70,8 @@ internal static class RunProfileConventions
         public const string OauthClientId = "oauthClientId";
         public const string OauthTokenEndpoint = "oauthTokenEndpoint";
         public const string OpenRouter = "openRouter";
+        public const string OtlpEndpoint = "otlpEndpoint";
+        public const string DashboardToken = "dashboardToken";
         public const string Observer = "observer";
         public const string Planner = "planner";
         public const string Executor = "executor";
@@ -89,6 +91,7 @@ internal static class RunProfileConventions
         public const string Resource = "resource";
         public const string RuntimeMode = "runtimeMode";
         public const string Scope = "scope";
+        public const string Telemetry = "telemetry";
         public const string TokenIntrospectionCacheSeconds = "tokenIntrospectionCacheSeconds";
         public const string TokenIntrospectionClientId = "tokenIntrospectionClientId";
         public const string TokenIntrospectionClientSecret = "tokenIntrospectionClientSecret";
@@ -162,6 +165,8 @@ internal static class RunProfileConventions
         public const string TokenIntrospectionCacheSeconds = "InfraGate__Auth__TokenIntrospectionCacheSeconds";
         public const string MaxAcceptedAccessTokenLifetimeSeconds = "InfraGate__Auth__MaxAcceptedAccessTokenLifetimeSeconds";
         public const string OpenRouterApiKey = "InfraGate__OpenRouter__ApiKey";
+        public const string OtelExporterOtlpEndpoint = "OTEL_EXPORTER_OTLP_ENDPOINT";
+        public const string AspireDashboardToken = "ASPIRE_DASHBOARD_TOKEN";
         public const string ObserverAspnetcoreUrls = "InfraGate__Observer__AspNetCoreUrls";
         public const string ObserverClientId = "InfraGate__Observer__ClientCredentials__ClientId";
         public const string ObserverClientSecret = "InfraGate__Observer__ClientCredentials__ClientSecret";

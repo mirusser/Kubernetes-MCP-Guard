@@ -1,6 +1,6 @@
 TAG ?= latest
 
-.PHONY: quickstart quickstart-source quickstart-down quickstart-logs
+.PHONY: quickstart quickstart-source quickstart-down quickstart-logs dashboard-url
 
 quickstart:
 	./scripts/quickstart.sh published --tag $(TAG)
@@ -13,3 +13,6 @@ quickstart-down:
 
 quickstart-logs:
 	./scripts/quickstart.sh logs
+
+dashboard-url:
+	./scripts/print-dashboard-url.sh

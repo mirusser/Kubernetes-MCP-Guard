@@ -67,6 +67,9 @@ services:
         condition: service_healthy
       mailpit:
         condition: service_started
+    # No compose-level healthcheck override: the image's own HEALTHCHECK
+    # instruction (deploy/docker/mcp-gateway.Dockerfile) already targets
+    # /readyz with matching timing.
     env_file:
       # Compose --env-file supplies interpolation values; env_file passes the
       # same generated profile into the gateway container runtime.
@@ -104,6 +107,19 @@ services:
     networks:
       - default
 
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.2
+    hostname: aspire-dashboard
+    environment:
+      ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "false"
+      DASHBOARD__FRONTEND__AUTHMODE: BrowserToken
+      DASHBOARD__FRONTEND__BROWSERTOKEN: ${ASPIRE_DASHBOARD_TOKEN:-dev-token-change-me}
+    ports:
+      - "${ASPIRE_DASHBOARD_BIND_ADDRESS:-127.0.0.1}:${ASPIRE_DASHBOARD_UI_PORT:-18888}:18888"
+      - "${ASPIRE_DASHBOARD_BIND_ADDRESS:-127.0.0.1}:${ASPIRE_DASHBOARD_OTLP_PORT:-4317}:18889"
+    networks:
+      - default
+
   observer:
     image: ${INFRA_GATE_OBSERVER_IMAGE:-infragate-observer}
     build:
@@ -113,9 +129,18 @@ services:
       keycloak:
         condition: service_healthy
       mcp-gateway:
-        condition: service_started
+        condition: service_healthy
       planner:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      # 127.0.0.1, not localhost: this image's musl libc resolves "localhost"
+      # to ::1 first, but Kestrel binds the IPv4 wildcard only, so wget would
+      # get a spurious connection-refused over IPv6 and never fall back.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3003/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     env_file:
       - ${INFRA_GATE_GATEWAY_ENV_FILE:-../generated/local-compose.env}
     volumes:
@@ -134,9 +159,18 @@ services:
       keycloak:
         condition: service_healthy
       mcp-gateway:
-        condition: service_started
+        condition: service_healthy
       mailpit:
         condition: service_started
+    healthcheck:
+      # 127.0.0.1, not localhost: this image's musl libc resolves "localhost"
+      # to ::1 first, but Kestrel binds the IPv4 wildcard only, so wget would
+      # get a spurious connection-refused over IPv6 and never fall back.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3004/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     env_file:
       - ${INFRA_GATE_GATEWAY_ENV_FILE:-../generated/local-compose.env}
     volumes:
@@ -155,7 +189,16 @@ services:
       keycloak:
         condition: service_healthy
       planner:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      # 127.0.0.1, not localhost: this image's musl libc resolves "localhost"
+      # to ::1 first, but Kestrel binds the IPv4 wildcard only, so wget would
+      # get a spurious connection-refused over IPv6 and never fall back.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3005/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     env_file:
       - ${INFRA_GATE_GATEWAY_ENV_FILE:-../generated/local-compose.env}
     ports:

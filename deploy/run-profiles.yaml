@@ -17,6 +17,9 @@ profiles:
     kind: compose
     runtimeMode: Development
     gateway: {}
+    telemetry:
+      otlpEndpoint: http://aspire-dashboard:18889
+      dashboardToken: infra-gate-dev-dashboard-token
     identityProvider:
       realmImport: deploy/keycloak/infra-gate-realm.json
       authority: http://127.0.0.1:3010/realms/infra-gate

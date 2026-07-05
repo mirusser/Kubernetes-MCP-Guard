@@ -113,6 +113,13 @@ public static class GatewayAuthentication
             {
                 policy.AuthenticationSchemes.Add(GatewayAuthConventions.Schemes.ApprovalCookie);
                 policy.RequireAuthenticatedUser();
+            })
+            .AddPolicy(GatewayAuthConventions.Schemes.AuditPolicyName, policy =>
+            {
+                policy.AuthenticationSchemes.Add(GatewayAuthConventions.Schemes.ApprovalCookie);
+                policy.RequireAuthenticatedUser();
+                policy.RequireAssertion(context =>
+                    HasRequiredScope(context.User, GatewayAuthConventions.DefaultAuditReadOAuthScope));
             });
     }
 

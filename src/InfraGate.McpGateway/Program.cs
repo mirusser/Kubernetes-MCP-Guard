@@ -1,6 +1,7 @@
 using InfraGate.Approvals.Postgres;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Endpoints;
 using InfraGate.McpGateway.Notifications;
 using ModelContextProtocol.Protocol;
 
@@ -96,6 +97,7 @@ await app.Services.GetRequiredService<PostgresApprovalSchemaValidator>()
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.MapGatewayHealthEndpoints();
 app.MapGatewayApprovalEndpoints();
 app.MapMcp(McpGatewayConventions.McpPath)
     .RequireAuthorization(GatewayAuthConventions.Schemes.PolicyName);

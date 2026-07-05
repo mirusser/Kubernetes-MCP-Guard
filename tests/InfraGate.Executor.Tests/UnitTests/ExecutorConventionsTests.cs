@@ -15,6 +15,18 @@ public sealed class ExecutorConventionsTests
     }
 
     [Fact]
+    public void Health_LivenessPath_IsSlashHealthz()
+    {
+        Assert.Equal("/healthz", ExecutorConventions.Health.LivenessPath);
+    }
+
+    [Fact]
+    public void Health_ReadinessPath_IsSlashReadyz()
+    {
+        Assert.Equal("/readyz", ExecutorConventions.Health.ReadinessPath);
+    }
+
+    [Fact]
     public void A2AHandoffEndpointPath_IsCorrect()
     {
         Assert.Equal("/a2a/executor", ExecutorConventions.A2AHandoffEndpointPath);

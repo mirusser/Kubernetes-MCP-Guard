@@ -13,6 +13,7 @@ Defaults below come from the current source code and workflows. Paths shown as `
 | `ASPNETCORE_ENVIRONMENT` | ASP.NET components, fallback for server mode parsing | No | Used only when the two variables above are unset | `Production` | ASP.NET Core environment fallback. `Development` means development; all other values are treated as production-like. | Prefer `InfraGate__Runtime__Environment` for explicit InfraGate behavior. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | All runtime components | No | Unset | `http://localhost:4317` | Enables OTLP export for traces and metrics. If unset, only the Serilog bridge is active. | Use an authenticated OTLP collector. |
 | `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` | `InfraGate.Observer`, `InfraGate.Planner` | No | `false` | `true` | Set to `true` to include prompt/response content in spans. | **Off by default** — do not enable in production without a data-handling review. |
+| `ASPIRE_DASHBOARD_TOKEN` | `aspire-dashboard` dev compose container | No | `dev-token-change-me` (compose fallback) | `infra-gate-dev-dashboard-token` | Browser-token auth for the dev-only Aspire Dashboard UI. Sourced from `run-profiles.yaml`'s `telemetry.dashboardToken`, emitted by `InfraGate.RunProfiles` into the generated env file. | Dev/demo only — the dashboard is never deployed in production; regenerate the token before sharing a dev stack. |
 
 ## InfraGate.RfcRag
 

@@ -5,4 +5,5 @@ public interface IApprovalPageRenderer
     Task<string> RenderApprovalPageAsync(ApprovalPageData pageData);
     Task<string> RenderDecisionPageAsync(DecisionPageData decisionData);
     Task<string> RenderCodePageAsync(ApprovalCodePageData codePageData);
+    Task<string> RenderAuditTimelinePageAsync(AuditTimelinePageData pageData);
 }

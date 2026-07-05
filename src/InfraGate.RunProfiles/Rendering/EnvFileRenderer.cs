@@ -24,6 +24,7 @@ internal static class EnvFileRenderer
         AppendOpenRouter(builder, profile);
         AppendKubernetesAdapter(builder, profile);
         AppendHost(builder, profile);
+        AppendTelemetry(builder, profile);
         AppendObserver(builder, profile);
         AppendPlanner(builder, profile);
         AppendExecutor(builder, profile);
@@ -251,6 +252,21 @@ internal static class EnvFileRenderer
         {
             builder.AppendLine($"{key}={value}");
         }
+    }
+
+    private static void AppendTelemetry(StringBuilder builder, RunProfile profile)
+    {
+        if (profile.Telemetry is null
+            || (string.IsNullOrEmpty(profile.Telemetry.OtlpEndpoint)
+                && string.IsNullOrEmpty(profile.Telemetry.DashboardToken)))
+        {
+            return;
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("# Telemetry");
+        AppendIfSet(builder, RunProfileConventions.Env.OtelExporterOtlpEndpoint, profile.Telemetry.OtlpEndpoint);
+        AppendIfSet(builder, RunProfileConventions.Env.AspireDashboardToken, profile.Telemetry.DashboardToken);
     }
 
     private static void AppendList(StringBuilder builder, string key, IReadOnlyList<string> values)

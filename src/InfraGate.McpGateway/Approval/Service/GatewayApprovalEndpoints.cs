@@ -3,6 +3,7 @@ using InfraGate.Approvals;
 using InfraGate.Approvals.AccessCodes;
 using InfraGate.Approvals.Plan;
 using InfraGate.ApprovalUi;
+using InfraGate.McpGateway.Audit;
 using InfraGate.McpGateway.Auth;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -148,6 +149,21 @@ internal static class GatewayApprovalEndpoints
                     return Results.Content(html, TextHtmlContentType, Encoding.UTF8);
                 })
             .RequireAuthorization(GatewayAuthConventions.Schemes.ApprovalPolicyName);
+        endpoints.MapGet(
+                McpGatewayConventions.Approvals.AuditTimelineRoute,
+                async (
+                    string planId,
+                    [FromServices] AuditTimelineAssembler assembler,
+                    [FromServices] IApprovalPageRenderer renderer,
+                    CancellationToken cancellationToken) =>
+                {
+                    AuditTimelinePageData pageData = await assembler.BuildTimelineAsync(planId, cancellationToken)
+                        .ConfigureAwait(false);
+                    string html = await renderer.RenderAuditTimelinePageAsync(pageData).ConfigureAwait(false);
+
+                    return Results.Content(html, TextHtmlContentType, Encoding.UTF8);
+                })
+            .RequireAuthorization(GatewayAuthConventions.Schemes.AuditPolicyName);
 
         return endpoints;
     }

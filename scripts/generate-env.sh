@@ -18,6 +18,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+DEV_SECRETS_FILE="${REPO_ROOT}/dev-secrets.env"
+if [[ -f "${DEV_SECRETS_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${DEV_SECRETS_FILE}"
+  set +a
+fi
+
 if [[ $# -lt 1 || "$1" == "--help" || "$1" == "-h" ]]; then
   echo "Usage: $0 <profile> [--output <env-path>] [--set section.field=value ...] [--force]" >&2
   echo ""                                                                                  >&2
