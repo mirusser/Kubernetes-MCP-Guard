@@ -34,6 +34,11 @@ public sealed record class GatewayAuthOptions(
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
+        // Justification: IConfigurationSection.Get<T>() returns null when the "InfraGate:Auth"
+        // section is absent from every provider (no env vars, no appsettings entries). The `?.`
+        // accesses below are reachable, not gratuitous — SonarCloud's symbolic-execution engine
+        // flags a subset of these identically-shaped lines (S2589) but not all of them, which is
+        // itself evidence of analyzer noise rather than a real defect.
         var authSettings = configuration
             .GetSection("InfraGate:Auth")
             .Get<InfraGateAuthSettings>();

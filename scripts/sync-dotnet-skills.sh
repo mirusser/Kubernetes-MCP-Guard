@@ -4,7 +4,7 @@ set -euo pipefail
 SKILLS_SOURCE="$HOME/OtherRepos/dotnet-skills"
 SKILLS_TARGET="$(cd "$(dirname "$0")/.." && pwd)/.agents/skills"
 
-if [ ! -d "$SKILLS_SOURCE" ]; then
+if [[ ! -d "$SKILLS_SOURCE" ]]; then
   echo "Cloning managedcode/dotnet-skills..."
   git clone https://github.com/managedcode/dotnet-skills "$SKILLS_SOURCE"
 else
@@ -21,10 +21,10 @@ while IFS= read -r skillmd; do
   skill_name=$(basename "$skill_dir")
   target="$SKILLS_TARGET/$skill_name"
 
-  if [ -L "$target" ]; then
+  if [[ -L "$target" ]]; then
     ln -sfn "$skill_dir" "$target"
     ((linked++)) || true
-  elif [ -e "$target" ]; then
+  elif [[ -e "$target" ]]; then
     echo "  SKIP (real dir, not a symlink): $skill_name"
     ((skipped++)) || true
   else
@@ -45,10 +45,10 @@ while IFS= read -r agentmd; do
   agent_name=$(basename "$(dirname "$agentmd")")
   target="$AGENTS_TARGET/${agent_name}.agent.md"
 
-  if [ -L "$target" ]; then
+  if [[ -L "$target" ]]; then
     ln -sfn "$agentmd" "$target"
     ((linked++)) || true
-  elif [ -e "$target" ]; then
+  elif [[ -e "$target" ]]; then
     echo "  SKIP (real file, not a symlink): $agent_name"
     ((skipped++)) || true
   else

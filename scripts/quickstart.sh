@@ -152,7 +152,8 @@ parse_published() {
   local tag="latest"
 
   while [[ $# -gt 0 ]]; do
-    case "$1" in
+    local opt="$1"
+    case "$opt" in
       --tag)
         [[ $# -ge 2 ]] || die "--tag requires a value."
         tag="$2"
@@ -163,7 +164,7 @@ parse_published() {
         exit 0
         ;;
       *)
-        die "Unknown published option: $1"
+        die "Unknown published option: $opt"
         ;;
     esac
   done
