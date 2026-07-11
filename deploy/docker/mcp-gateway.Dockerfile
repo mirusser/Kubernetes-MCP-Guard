@@ -8,6 +8,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY Directory.Build.props .
+COPY Directory.Packages.props .
 COPY .editorconfig .
 COPY --from=filter /out/src/ ./src/
 RUN dotnet restore src/InfraGate.McpGateway/InfraGate.McpGateway.csproj

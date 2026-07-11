@@ -91,7 +91,7 @@ internal sealed class PostgresAuditStreamReader : IAuditStreamReader
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
             var result = new List<AuditStreamRow>();
-            foreach (IDictionary<string, object> row in rows)
+            foreach (IDictionary<string, object> row in rows.Cast<IDictionary<string, object>>())
             {
                 result.Add(MapRow(row));
             }
@@ -112,12 +112,9 @@ internal sealed class PostgresAuditStreamReader : IAuditStreamReader
         string payloadJsonText = (string)row[AuditOutboxConventions.ColumnNames.PayloadJsonText];
 
         var correlationColumns = new Dictionary<string, object?>(StringComparer.Ordinal);
-        foreach (string column in row.Keys)
+        foreach (string column in row.Keys.Where(k => !StandardColumnNames.Contains(k)))
         {
-            if (!StandardColumnNames.Contains(column))
-            {
-                correlationColumns[column] = NormalizeValue(row[column]);
-            }
+            correlationColumns[column] = NormalizeValue(row[column]);
         }
 
         var auditRow = new AuditOutboxRow(

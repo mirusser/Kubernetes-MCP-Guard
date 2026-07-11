@@ -53,9 +53,10 @@ internal sealed class SensitiveDataRedactor
                     wasRedacted = true;
                 }
             }
-            catch (RegexMatchTimeoutException)
+            catch (RegexMatchTimeoutException ex)
             {
                 logger.LogWarning(
+                    ex,
                     "Sensitive data redaction timed out for pattern '{PatternName}' after {TimeoutMs} ms; returning original text",
                     pattern.Name,
                     McpGatewayConventions.RegexTimeoutMilliseconds);

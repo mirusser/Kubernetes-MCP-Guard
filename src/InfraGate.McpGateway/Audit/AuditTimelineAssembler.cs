@@ -86,21 +86,16 @@ internal sealed class AuditTimelineAssembler(IAuditStreamReader reader)
 
     private static IEnumerable<AuditTimelineEntry> MapRows(
         string stream,
-        IReadOnlyList<AuditStreamRow> rows)
-    {
-        foreach (AuditStreamRow row in rows)
-        {
-            yield return new AuditTimelineEntry(
-                row.Row.OccurredAtUtc,
-                stream,
-                row.Row.EventName,
-                row.Row.ActorSubject,
-                row.Row.ActorClientId,
-                row.Row.Outcome,
-                row.Row.Reason,
-                ExtractDisplayFields(row.Row.PayloadJsonText));
-        }
-    }
+        IReadOnlyList<AuditStreamRow> rows) =>
+        rows.Select(row => new AuditTimelineEntry(
+            row.Row.OccurredAtUtc,
+            stream,
+            row.Row.EventName,
+            row.Row.ActorSubject,
+            row.Row.ActorClientId,
+            row.Row.Outcome,
+            row.Row.Reason,
+            ExtractDisplayFields(row.Row.PayloadJsonText)));
 
     private static IReadOnlyDictionary<string, string?> ExtractDisplayFields(string payloadJsonText)
     {

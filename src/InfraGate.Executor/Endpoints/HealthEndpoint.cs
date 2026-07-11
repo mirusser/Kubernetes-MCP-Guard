@@ -42,28 +42,9 @@ internal static class HealthEndpoint
         }
     }
 
-    private static async Task<IResult> HealthCheckHandler(
+    private static Task<IResult> HealthCheckHandler(
         IClientCredentialsTokenProvider tokenProvider,
         ILoggerFactory loggerFactory,
-        CancellationToken cancellationToken)
-    {
-        var logger = loggerFactory.CreateLogger("InfraGate.Executor.Health");
-
-        try
-        {
-            string token = await tokenProvider.GetTokenAsync(cancellationToken).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(token))
-            {
-                ExecutorLogEvents.LogHealthCheckStarting(logger);
-                return Results.Json(new { status = "starting" }, statusCode: 503);
-            }
-
-            return Results.Json(new { status = "healthy" });
-        }
-        catch (Exception ex)
-        {
-            ExecutorLogEvents.LogHealthCheckFailed(logger, ex);
-            return Results.Json(new { status = "unhealthy", reason = "token_acquisition_failed" }, statusCode: 503);
-        }
-    }
+        CancellationToken cancellationToken) =>
+        ReadinessHandler(tokenProvider, loggerFactory, cancellationToken);
 }

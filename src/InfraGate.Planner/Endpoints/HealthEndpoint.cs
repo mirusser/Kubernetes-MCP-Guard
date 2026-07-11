@@ -8,6 +8,8 @@ namespace InfraGate.Planner.Endpoints;
 
 internal static class HealthEndpoint
 {
+    private const string HealthyStatus = "healthy";
+
     public static IEndpointRouteBuilder MapPlannerHealthEndpoint(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet(PlannerConventions.HealthEndpointPath, HealthCheckHandler);
@@ -18,7 +20,7 @@ internal static class HealthEndpoint
     }
 
     private static IResult LivenessHandler() =>
-        Results.Json(new { status = "healthy" });
+        Results.Json(new { status = HealthyStatus });
 
     private static async Task<IResult> ReadinessHandler(
         IClientCredentialsTokenProvider tokenProvider,
@@ -48,10 +50,10 @@ internal static class HealthEndpoint
         var dataSource = serviceProvider.GetService<NpgsqlDataSource>();
         if (dataSource is null)
         {
-            // AuditConnectionString is documented as optional (docs/configuration.md);
-            // omitting it is a valid deployment, not a failure — surface it distinctly
+            // AuditConnectionString is documented as optional (docs/configuration.md) —
+            // omitting it is a valid deployment, not a failure. Surface it distinctly
             // rather than reporting the same "healthy" a passing Postgres check would.
-            return Results.Json(new { status = "healthy", postgres = "not_configured" });
+            return Results.Json(new { status = HealthyStatus, postgres = "not_configured" });
         }
 
         try
@@ -59,7 +61,7 @@ internal static class HealthEndpoint
             var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
             await using (connection.ConfigureAwait(false))
             {
-                return Results.Json(new { status = "healthy" });
+                return Results.Json(new { status = HealthyStatus });
             }
         }
         catch (Exception ex)
@@ -87,7 +89,7 @@ internal static class HealthEndpoint
                 return Results.Json(new { status = "starting" }, statusCode: 503);
             }
 
-            return Results.Json(new { status = "healthy" });
+            return Results.Json(new { status = HealthyStatus });
         }
         catch (Exception ex)
         {
