@@ -8,7 +8,7 @@
     <PackageVersion Include="KubernetesClient" Version="19.0.2" />
     <PackageVersion Include="MailKit" Version="4.17.0" />
     <PackageVersion Include="Meziantou.Analyzer" Version="3.0.122" />
-    <PackageVersion Include="Microsoft.AgentGovernance" Version="3.7.0" />
+    <PackageVersion Include="Microsoft.AgentGovernance" Version="4.0.0" />
     <PackageVersion Include="Microsoft.Agents.AI" Version="1.13.0" />
     <PackageVersion Include="Microsoft.Agents.AI.A2A" Version="1.13.0-preview.260703.1" />
     <PackageVersion Include="Microsoft.Agents.AI.Hosting.A2A.AspNetCore" Version="1.13.0-preview.260703.1" />
