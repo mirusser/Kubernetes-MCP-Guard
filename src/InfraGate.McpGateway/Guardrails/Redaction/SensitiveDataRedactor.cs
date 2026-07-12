@@ -37,17 +37,13 @@ internal sealed class SensitiveDataRedactor
         {
             try
             {
-                int count = 0;
-                current = regex.Replace(
-                    current,
-                    match =>
-                    {
-                        count++;
-                        return McpGatewayConventions.SensitiveDataRedaction.Placeholder(pattern.Name);
-                    });
-
+                int count = regex.Count(current);
                 if (count > 0)
                 {
+                    current = regex.Replace(
+                        current,
+                        match => McpGatewayConventions.SensitiveDataRedaction.Placeholder(pattern.Name));
+
                     counts[pattern.Name] = count;
                     matched.Add(pattern.Name);
                     wasRedacted = true;

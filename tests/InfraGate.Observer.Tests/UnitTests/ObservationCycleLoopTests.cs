@@ -186,10 +186,14 @@ public sealed class ObservationCycleLoopTests
         await firstCycleRunning.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Task.Delay(1500);
 
-        firstCycleCanComplete.SetResult(true);
-        await Task.Delay(200);
-
+        // Assert while the first cycle is still in-flight (holding the semaphore): this is the
+        // only point at which "exactly 1 call" is a deterministic invariant. Asserting after
+        // releasing firstCycleCanComplete is racy under CI thread-pool contention — a tick queued
+        // during the in-flight window can be delayed long enough to acquire the semaphore only
+        // after it's released, starting a legitimate (non-overlapping) second cycle.
         await cycleRunner.Received(1).RunAsync(Arg.Any<CancellationToken>());
+
+        firstCycleCanComplete.SetResult(true);
         await loop.StopAsync(CancellationToken.None);
     }
 

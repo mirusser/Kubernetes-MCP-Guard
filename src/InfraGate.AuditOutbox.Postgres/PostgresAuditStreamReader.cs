@@ -28,6 +28,51 @@ internal sealed class PostgresAuditStreamReader : IAuditStreamReader
         AuditOutboxConventions.ColumnNames.LastPublishError,
     }.ToFrozenSet(StringComparer.Ordinal);
 
+    // Every audit query below is a compile-time constant selected via SelectSql's switch, so no
+    // runtime value is ever interpolated into SQL text (avoids SonarQube S2077: dynamically
+    // formatted SQL). Only the @CorrelationValue parameter varies per call, via Dapper.
+    private const string ApprovalsByPlanIdSql = $"""
+        SELECT *
+        FROM {AuditOutboxConventions.Streams.Approvals}.audit_outbox
+        WHERE {AuditOutboxConventions.CorrelationColumnNames.PlanId} = @CorrelationValue
+        ORDER BY {AuditOutboxConventions.ColumnNames.AuditSequence}
+        """;
+
+    private const string ApprovalsByAnomalyIdSql = $"""
+        SELECT *
+        FROM {AuditOutboxConventions.Streams.Approvals}.audit_outbox
+        WHERE {AuditOutboxConventions.CorrelationColumnNames.AnomalyId} = @CorrelationValue
+        ORDER BY {AuditOutboxConventions.ColumnNames.AuditSequence}
+        """;
+
+    private const string ObserverByPlanIdSql = $"""
+        SELECT *
+        FROM {AuditOutboxConventions.Streams.Observer}.audit_outbox
+        WHERE {AuditOutboxConventions.CorrelationColumnNames.PlanId} = @CorrelationValue
+        ORDER BY {AuditOutboxConventions.ColumnNames.AuditSequence}
+        """;
+
+    private const string ObserverByAnomalyIdSql = $"""
+        SELECT *
+        FROM {AuditOutboxConventions.Streams.Observer}.audit_outbox
+        WHERE {AuditOutboxConventions.CorrelationColumnNames.AnomalyId} = @CorrelationValue
+        ORDER BY {AuditOutboxConventions.ColumnNames.AuditSequence}
+        """;
+
+    private const string PlannerByPlanIdSql = $"""
+        SELECT *
+        FROM {AuditOutboxConventions.Streams.Planner}.audit_outbox
+        WHERE {AuditOutboxConventions.CorrelationColumnNames.PlanId} = @CorrelationValue
+        ORDER BY {AuditOutboxConventions.ColumnNames.AuditSequence}
+        """;
+
+    private const string PlannerByAnomalyIdSql = $"""
+        SELECT *
+        FROM {AuditOutboxConventions.Streams.Planner}.audit_outbox
+        WHERE {AuditOutboxConventions.CorrelationColumnNames.AnomalyId} = @CorrelationValue
+        ORDER BY {AuditOutboxConventions.ColumnNames.AuditSequence}
+        """;
+
     private readonly NpgsqlDataSource dataSource;
 
     public PostgresAuditStreamReader(NpgsqlDataSource dataSource)
@@ -41,12 +86,10 @@ internal sealed class PostgresAuditStreamReader : IAuditStreamReader
         string planId,
         CancellationToken cancellationToken)
     {
-        ValidateStreamSchema(streamSchema);
         ArgumentException.ThrowIfNullOrWhiteSpace(planId);
 
         return ReadAsync(
-            streamSchema,
-            AuditOutboxConventions.CorrelationColumnNames.PlanId,
+            SelectSql(streamSchema, AuditOutboxConventions.CorrelationColumnNames.PlanId),
             planId,
             cancellationToken);
     }
@@ -56,35 +99,36 @@ internal sealed class PostgresAuditStreamReader : IAuditStreamReader
         string anomalyId,
         CancellationToken cancellationToken)
     {
-        ValidateStreamSchema(streamSchema);
         ArgumentException.ThrowIfNullOrWhiteSpace(anomalyId);
 
         return ReadAsync(
-            streamSchema,
-            AuditOutboxConventions.CorrelationColumnNames.AnomalyId,
+            SelectSql(streamSchema, AuditOutboxConventions.CorrelationColumnNames.AnomalyId),
             anomalyId,
             cancellationToken);
     }
 
+    private static string SelectSql(string streamSchema, string correlationColumn) =>
+        (streamSchema, correlationColumn) switch
+        {
+            (AuditOutboxConventions.Streams.Approvals, AuditOutboxConventions.CorrelationColumnNames.PlanId) => ApprovalsByPlanIdSql,
+            (AuditOutboxConventions.Streams.Approvals, AuditOutboxConventions.CorrelationColumnNames.AnomalyId) => ApprovalsByAnomalyIdSql,
+            (AuditOutboxConventions.Streams.Observer, AuditOutboxConventions.CorrelationColumnNames.PlanId) => ObserverByPlanIdSql,
+            (AuditOutboxConventions.Streams.Observer, AuditOutboxConventions.CorrelationColumnNames.AnomalyId) => ObserverByAnomalyIdSql,
+            (AuditOutboxConventions.Streams.Planner, AuditOutboxConventions.CorrelationColumnNames.PlanId) => PlannerByPlanIdSql,
+            (AuditOutboxConventions.Streams.Planner, AuditOutboxConventions.CorrelationColumnNames.AnomalyId) => PlannerByAnomalyIdSql,
+            _ => throw new ArgumentException(
+                $"Stream schema '{streamSchema}' is not a recognized audit stream.", nameof(streamSchema)),
+        };
+
     private async Task<IReadOnlyList<AuditStreamRow>> ReadAsync(
-        string streamSchema,
-        string correlationColumn,
+        string sql,
         string correlationValue,
         CancellationToken cancellationToken)
     {
-        ValidateSchemaName(streamSchema);
-
         var connection = await dataSource.OpenConnectionAsync(cancellationToken)
             .ConfigureAwait(false);
         await using (connection.ConfigureAwait(false))
         {
-            string sql = $"""
-                SELECT *
-                FROM {streamSchema}.audit_outbox
-                WHERE {correlationColumn} = @CorrelationValue
-                ORDER BY {AuditOutboxConventions.ColumnNames.AuditSequence}
-                """;
-
             var rows = await connection.QueryAsync(new CommandDefinition(
                 sql,
                 new { CorrelationValue = correlationValue },
@@ -140,37 +184,4 @@ internal sealed class PostgresAuditStreamReader : IAuditStreamReader
             DateTime dt => new DateTimeOffset(dt, TimeSpan.Zero),
             _ => throw new InvalidCastException($"Cannot convert {value.GetType().Name} to DateTimeOffset.")
         };
-
-    private static void ValidateStreamSchema(string streamSchema)
-    {
-        if (!IsKnownStream(streamSchema))
-        {
-            throw new ArgumentException(
-                $"Stream schema '{streamSchema}' is not a recognized audit stream.",
-                nameof(streamSchema));
-        }
-    }
-
-    private static bool IsKnownStream(string streamSchema) =>
-        string.Equals(streamSchema, AuditOutboxConventions.Streams.Approvals, StringComparison.Ordinal) ||
-        string.Equals(streamSchema, AuditOutboxConventions.Streams.Observer, StringComparison.Ordinal) ||
-        string.Equals(streamSchema, AuditOutboxConventions.Streams.Planner, StringComparison.Ordinal);
-
-    private static void ValidateSchemaName(string schema)
-    {
-        if (schema.Length == 0 || !char.IsLetter(schema[0]) && schema[0] != '_')
-        {
-            throw new ArgumentException(
-                $"Schema name '{schema}' is not a valid PostgreSQL identifier.", nameof(schema));
-        }
-
-        for (int i = 1; i < schema.Length; i++)
-        {
-            if (!char.IsLetterOrDigit(schema[i]) && schema[i] != '_')
-            {
-                throw new ArgumentException(
-                    $"Schema name '{schema}' is not a valid PostgreSQL identifier.", nameof(schema));
-            }
-        }
-    }
 }

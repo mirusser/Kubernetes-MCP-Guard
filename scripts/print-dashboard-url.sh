@@ -41,4 +41,7 @@ token="${token:-${DEFAULT_TOKEN}}"
 bind_address="${ASPIRE_DASHBOARD_BIND_ADDRESS:-${DEFAULT_BIND_ADDRESS}}"
 ui_port="${ASPIRE_DASHBOARD_UI_PORT:-${DEFAULT_UI_PORT}}"
 
-echo "http://${bind_address}:${ui_port}/login?t=${token}"
+# Local dev convenience only — the Aspire Dashboard container serves plain HTTP on
+# loopback/compose-network addresses and is never exposed over the network, so there
+# is no clear-text-transport risk to mitigate here.
+echo "http://${bind_address}:${ui_port}/login?t=${token}" # NOSONAR(shell:S5332)
