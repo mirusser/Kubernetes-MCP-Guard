@@ -31,8 +31,25 @@ internal static class KubernetesDiffService
         {
             var liveJson = await ReadComparableLiveJsonAsync(client, operation, obj, cancellationToken).ConfigureAwait(false);
             var resourceVersion = KubernetesObjectMetadataExtractor.ExtractResourceVersion(liveJson);
+
+            string? stabilityVersion;
+            if (KubernetesConventions.KubernetesResources.IsDeployment(obj) &&
+                string.Equals(operation, KubernetesConventions.MutationOperations.Scale, StringComparison.Ordinal))
+            {
+                // Scale operation reads the Scale subresource (no metadata.generation).
+                // Fetch the full Deployment to get generation for stable version tracking.
+                stabilityVersion = await ReadDeploymentGenerationAsync(client, obj, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                stabilityVersion = KubernetesConventions.KubernetesResources.IsDeployment(obj)
+                    ? KubernetesObjectMetadataExtractor.ExtractGeneration(liveJson)
+                    : resourceVersion;
+            }
+
             var proposedJson = ProposedJson(operation, obj, dryRunByObject);
-            diffs.Add(BuildDiff(obj, liveJson, proposedJson, resourceVersion));
+            diffs.Add(BuildDiff(obj, liveJson, proposedJson, resourceVersion, stabilityVersion));
         }
 
         return diffs.ToArray();
@@ -65,13 +82,17 @@ internal static class KubernetesDiffService
         return null;
     }
 
-    public static KubernetesPlanDiff BuildDiff(KubernetesObjectRef obj, string? liveJson, string? proposedJson, string? resourceVersion = null)
+    public static KubernetesPlanDiff BuildDiff(KubernetesObjectRef obj, string? liveJson, string? proposedJson, string? resourceVersion = null, string? stabilityVersion = null)
     {
         var normalizedLiveJson = liveJson is null ? null : KubernetesObjectNormalizer.NormalizeJson(liveJson);
         var normalizedProposedJson = proposedJson is null ? null : KubernetesObjectNormalizer.NormalizeJson(proposedJson);
         var changes = ComparePaths(normalizedLiveJson, normalizedProposedJson);
         var changeType = ChangeType(normalizedLiveJson, normalizedProposedJson);
         var capturedResourceVersion = resourceVersion ?? KubernetesObjectMetadataExtractor.ExtractResourceVersion(liveJson);
+        var capturedStabilityVersion = stabilityVersion ??
+            (KubernetesConventions.KubernetesResources.IsDeployment(obj)
+                ? KubernetesObjectMetadataExtractor.ExtractGeneration(liveJson)
+                : capturedResourceVersion);
 
         return new KubernetesPlanDiff(
             obj,
@@ -83,7 +104,8 @@ internal static class KubernetesDiffService
             changes.AddedPaths,
             changes.RemovedPaths,
             changes.ChangedPaths,
-            capturedResourceVersion);
+            capturedResourceVersion,
+            capturedStabilityVersion);
     }
 
     private static string? ProposedJson(
@@ -155,6 +177,23 @@ internal static class KubernetesDiffService
             obj.Name,
             obj.Namespace,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+
+    private static async Task<string?> ReadDeploymentGenerationAsync(
+        IKubernetes client,
+        KubernetesObjectRef obj,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var deployment = await ReadDeploymentAsync(client, obj, cancellationToken).ConfigureAwait(false);
+            var json = JsonSerializer.Serialize(deployment, JsonOptions);
+            return KubernetesObjectMetadataExtractor.ExtractGeneration(json);
+        }
+        catch (Exception ex) when (IsNotFound(ex))
+        {
+            return null;
+        }
+    }
 
     private static async Task<object> ReadServiceAsync(
         IKubernetes client,

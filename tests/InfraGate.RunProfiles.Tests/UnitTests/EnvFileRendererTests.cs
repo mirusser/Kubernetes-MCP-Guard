@@ -67,6 +67,45 @@ public sealed class EnvFileRendererTests
     }
 
     [Fact]
+    public void Render_WithTelemetryProfile_EmitsTelemetrySection()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            Telemetry = new TelemetryProfile("http://aspire-dashboard:4317", null),
+        };
+
+        string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
+
+        Assert.Contains("# Telemetry", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.OtelExporterOtlpEndpoint}=http://aspire-dashboard:4317", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Render_WithDashboardToken_EmitsDashboardTokenLine()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            Telemetry = new TelemetryProfile("http://aspire-dashboard:4317", "dev-dashboard-token"),
+        };
+
+        string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
+
+        Assert.Contains($"{RunProfileConventions.Env.AspireDashboardToken}=dev-dashboard-token", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Render_NullTelemetryProfile_OmitsTelemetrySection()
+    {
+        var profile = CreateMinimalProfile() with { Telemetry = null };
+
+        string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
+
+        Assert.DoesNotContain("# Telemetry", result, StringComparison.Ordinal);
+        Assert.DoesNotContain(RunProfileConventions.Env.OtelExporterOtlpEndpoint, result, StringComparison.Ordinal);
+        Assert.DoesNotContain(RunProfileConventions.Env.AspireDashboardToken, result, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Render_WithExecutorProfile_EmitsExecutorSection()
     {
         var profile = CreateMinimalProfile() with
@@ -169,18 +208,30 @@ public sealed class EnvFileRendererTests
         var profile = CreateMinimalProfile() with
         {
             IdentityProvider = new IdentityProviderProfile(
-                "http://auth:8080/realms/master",
-                "http://auth:8080/realms/master/.well-known/openid-configuration",
-                "gateway-client",
-                "openid profile",
-                "false",
-                "true")
+                RealmImport: null,
+                Authority: "http://auth:8080/realms/master",
+                MetadataAddress: "http://auth:8080/realms/master/.well-known/openid-configuration",
+                Resource: "gateway-client",
+                Scope: "openid profile",
+                RequireHttpsMetadata: "false",
+                TokenIntrospectionEnabled: "true",
+                TokenIntrospectionEndpoint: "http://auth:8080/realms/master/protocol/openid-connect/token/introspect",
+                TokenIntrospectionClientId: "infra-gate-token-introspection",
+                TokenIntrospectionClientSecret: "secret-placeholder",
+                TokenIntrospectionCacheSeconds: "15",
+                MaxAcceptedAccessTokenLifetimeSeconds: "300")
         };
 
         string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
 
         Assert.Contains("# Identity Provider", result, StringComparison.Ordinal);
         Assert.Contains($"{RunProfileConventions.Env.OauthAuthority}=http://auth:8080/realms/master", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.TokenIntrospectionEnabled}=true", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.TokenIntrospectionEndpoint}=http://auth:8080/realms/master/protocol/openid-connect/token/introspect", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.TokenIntrospectionClientId}=infra-gate-token-introspection", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.TokenIntrospectionClientSecret}=secret-placeholder", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.TokenIntrospectionCacheSeconds}=15", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.MaxAcceptedAccessTokenLifetimeSeconds}=300", result, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -283,6 +334,24 @@ public sealed class EnvFileRendererTests
         Assert.Contains("# Observer", result, StringComparison.Ordinal);
         Assert.Contains($"{RunProfileConventions.Env.ObserverAllowedNamespaces}__0=default", result, StringComparison.Ordinal);
         Assert.Contains($"{RunProfileConventions.Env.ObserverAllowedNamespaces}__1=mcp-nginx-demo", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Render_WithGatewayDownstreamAssemblyHash_EmitsHash()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            Gateway = new GatewayProfile(
+                AspnetcoreUrls: "http://localhost:3001",
+                DownstreamAssembly: "/app/server/InfraGate.McpServer.dll",
+                GuardAuditRoot: null,
+                DownstreamAssemblyHash: "a3e5f8c9d2b1e4076f5a3c8e1d0b9a2c7f4e6d5b8c3a1f0e9d7b6c5a4f3e2d1b0")
+        };
+
+        string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
+
+        Assert.Contains("# Gateway", result, StringComparison.Ordinal);
+        Assert.Contains($"{RunProfileConventions.Env.DownstreamAssemblyHash}=a3e5f8c9d2b1e4076f5a3c8e1d0b9a2c7f4e6d5b8c3a1f0e9d7b6c5a4f3e2d1b0", result, StringComparison.Ordinal);
     }
 
     [Fact]

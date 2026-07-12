@@ -1,4 +1,0 @@
-interface:
-  display_name: "Repo Onboarding"
-  short_description: "Orient agents in this repository"
-  default_prompt: "Use $repo-onboarding to get oriented in this repository before broad investigation or unfamiliar work."

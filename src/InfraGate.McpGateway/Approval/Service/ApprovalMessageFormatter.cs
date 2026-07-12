@@ -11,7 +11,7 @@ internal static class ApprovalMessageFormatter
         string approvalUrl,
         DateTimeOffset expiresAtUtc)
     {
-        var targets = string.Join(
+        string targets = string.Join(
             Environment.NewLine,
             planReview.Targets.Select(t =>
                 $"  - {t.Attributes.GetValueOrDefault(KubernetesAdapterConventions.PlanAttributeKeys.ApiVersion, "?")} {t.Type} {t.Scope}/{t.Name}"));

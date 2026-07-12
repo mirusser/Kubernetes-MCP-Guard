@@ -6,13 +6,13 @@ internal sealed class ApprovalNotificationDispatcher(ISubscriptionRegistry regis
 {
     public async Task NotifyPlanApprovedAsync(string planId, CancellationToken ct)
     {
-        var sessions = registry.GetSessionsForPlan(planId);
+        IReadOnlyList<ISessionNotifier> sessions = registry.GetSessionsForPlan(planId);
         if (sessions.Count == 0)
         {
             return;
         }
 
-        var resourceUri = NotificationsConventions.Resources.PlanStatusUri(planId);
+        string resourceUri = NotificationsConventions.Resources.PlanStatusUri(planId);
         var @params = new ResourceUpdatedNotificationParams { Uri = resourceUri };
 
         await Task.WhenAll(sessions.Select(async session =>

@@ -4,6 +4,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+DEV_SECRETS_FILE="${REPO_ROOT}/dev-secrets.env"
+if [[ -f "${DEV_SECRETS_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${DEV_SECRETS_FILE}"
+  set +a
+fi
+
 SOURCE_COMPOSE_FILE="${REPO_ROOT}/deploy/local-oauth/compose.yaml"
 SOURCE_ENV_FILE="${REPO_ROOT}/deploy/generated/local-compose.env"
 RELEASE_COMPOSE_FILE="${REPO_ROOT}/deploy/local-oauth/compose.release.yaml"
@@ -22,7 +30,8 @@ Usage:
 Commands:
   published   Start the local OAuth stack from published images. Defaults to TAG=latest.
   source      Generate the local-compose env file and start the source-build stack.
-              Requires ${OPENROUTER_API_KEY_ENV} to be exported.
+              Requires ${OPENROUTER_API_KEY_ENV}, either exported or set in
+              dev-secrets.env (copy dev-secrets.env.example to get started).
   down        Stop the quickstart Compose stack without deleting volumes.
   logs        Show recent logs for the local quickstart stack.
 EOF
@@ -143,7 +152,8 @@ parse_published() {
   local tag="latest"
 
   while [[ $# -gt 0 ]]; do
-    case "$1" in
+    local opt="$1"
+    case "$opt" in
       --tag)
         [[ $# -ge 2 ]] || die "--tag requires a value."
         tag="$2"
@@ -154,7 +164,7 @@ parse_published() {
         exit 0
         ;;
       *)
-        die "Unknown published option: $1"
+        die "Unknown published option: $opt"
         ;;
     esac
   done

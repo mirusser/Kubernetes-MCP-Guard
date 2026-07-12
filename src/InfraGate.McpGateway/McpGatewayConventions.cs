@@ -1,3 +1,4 @@
+using InfraGate;
 using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpGateway;
@@ -21,6 +22,7 @@ internal static class McpGatewayConventions
         public const string MeterName = "InfraGate.McpGateway";
         public const string MeterVersion = "1.0";
         public const string GuardrailAuditWriteFailedCounterName = "infragate.gateway.guardrail.audit_write.failed";
+        public const string EmailFailedCounterName = "infragate.gateway.email.failed";
 
         public static class Tags
         {
@@ -28,6 +30,12 @@ internal static class McpGatewayConventions
             public const string GuardrailDirection = "guardrail.direction";
             public const string GuardrailAction = "guardrail.action";
         }
+    }
+
+    public static class Health
+    {
+        public const string LivenessPath = "/healthz";
+        public const string ReadinessPath = "/readyz";
     }
 
     public static class ConfigurationKeys
@@ -42,6 +50,7 @@ internal static class McpGatewayConventions
         public const string ApprovalRoot = "InfraGate:Approval:Root";
         public const string AspNetCoreUrls = "InfraGate:Gateway:AspNetCoreUrls";
         public const string DownstreamAssembly = "InfraGate:Gateway:DownstreamAssembly";
+        public const string DownstreamAssemblyHash = "InfraGate:Gateway:DownstreamAssemblyHash";
         public const string DownstreamProject = "InfraGate:Gateway:DownstreamProject";
         public const string GuardAuditRoot = "InfraGate:Gateway:GuardAuditRoot";
         public const string OperatorEmail = "InfraGate:Approval:OperatorEmail";
@@ -59,6 +68,7 @@ internal static class McpGatewayConventions
     {
         public const string AspNetCoreUrls = "InfraGate__Gateway__AspNetCoreUrls";
         public const string DownstreamAssembly = "InfraGate__Gateway__DownstreamAssembly";
+        public const string DownstreamAssemblyHash = "InfraGate__Gateway__DownstreamAssemblyHash";
         public const string DownstreamProject = "InfraGate__Gateway__DownstreamProject";
         public const string GuardAuditRoot = "InfraGate__Gateway__GuardAuditRoot";
         public const string ApprovalBaseUrl = "InfraGate__Approval__BaseUrl";
@@ -150,8 +160,10 @@ internal static class McpGatewayConventions
         public const string CancelRoute = "/approvals/{challengeId}/cancel";
         public const string LoginPath = "/approvals/login";
         public const string LogoutPath = "/approvals/logout";
+        public const string AuditTimelineRoute = "/audit/timeline/{planId}";
         public const string CodeFormField = "code";
         public const string RequestVerificationToken = "__RequestVerificationToken";
+        public const string ReturnUrlQueryKey = "ReturnUrl";
     }
 
     public static class ApprovalReasonCodes
@@ -198,6 +210,27 @@ internal static class McpGatewayConventions
         public const string TimedOut = "timedOut";
     }
 
+    public static class ModelVisibleToolResult
+    {
+        public const string SchemaVersion = ModelVisibleToolResultConventions.SchemaVersion;
+        public const string Kind = ModelVisibleToolResultConventions.Kind;
+        public const string ToolNameKey = ModelVisibleToolResultConventions.ToolName;
+        public const string Source = ModelVisibleToolResultConventions.Source;
+        public const string GeneratedAtUtc = ModelVisibleToolResultConventions.GeneratedAtUtc;
+        public const string Status = ModelVisibleToolResultConventions.Status;
+        public const string Guardrail = ModelVisibleToolResultConventions.Guardrail;
+        public const string GuardrailAction = ModelVisibleToolResultConventions.GuardrailAction;
+        public const string GuardrailCategoriesKey = ModelVisibleToolResultConventions.GuardrailCategories;
+        public const string Untrusted = ModelVisibleToolResultConventions.Untrusted;
+        public const string UntrustedPayload = ModelVisibleToolResultConventions.UntrustedPayload;
+
+        public const string KindValue = ModelVisibleToolResultConventions.KindValue;
+        public const string SourceReadOnlyToolValue = ModelVisibleToolResultConventions.SourceReadOnlyToolValue;
+        public const string StatusSuccess = ModelVisibleToolResultConventions.StatusSuccess;
+        public const string StatusError = ModelVisibleToolResultConventions.StatusError;
+        public const string GuardrailActionAllow = ModelVisibleToolResultConventions.GuardrailActionAllow;
+    }
+
     public static class GuardrailAudit
     {
         public const string OAuthAuthenticationType = "oauth-jwt";
@@ -206,7 +239,23 @@ internal static class McpGatewayConventions
         public const string WarnAction = "warn";
         public const string WarnRedactAction = "warn_redact";
         public const string RedactManifestAction = "redact_manifest";
+        public const string RedactSensitiveDataAction = "redact_sensitive_data";
         public const string DenyAction = "scope.denied";
+
+        public static class EntryFields
+        {
+            public const string Timestamp = "timestamp";
+            public const string ToolName = "toolName";
+            public const string Direction = "direction";
+            public const string Action = "action";
+            public const string Categories = "categories";
+            public const string PlanId = "planId";
+            public const string Subject = "subject";
+            public const string AuthenticationType = "authenticationType";
+            public const string IdentityKind = "identityKind";
+            public const string RedactionPatterns = "redactionPatterns";
+            public const string RedactionCount = "redactionCount";
+        }
     }
 
     public static class GuardrailCategories
@@ -218,11 +267,48 @@ internal static class McpGatewayConventions
         public const string AuthorityOverride = "authority-override";
         public const string ManifestEchoCategory = "manifest-echo";
         public const string ScopeDenied = "scope";
+        public const string SensitiveData = "sensitive-data";
+    }
+
+    public static class SensitiveDataRedaction
+    {
+        public static string Placeholder(string patternName) => $"[redacted: {patternName}]";
+
+        public static class Patterns
+        {
+            public const string PrivateKey = "-----BEGIN\\s+(?:RSA|EC|OPENSSH)?\\s*PRIVATE\\s+KEY-----";
+            public const string Jwt = "eyJ[a-zA-Z0-9_-]+\\.eyJ[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+";
+            public const string AwsKey = "(?:AKIA|ASIA)[0-9A-Z]{16}";
+            public const string BearerToken = "(?i)bearer\\s+[a-zA-Z0-9\\-._~+/]{20,}";
+            public const string BasicAuth = "(?i)basic\\s+[a-zA-Z0-9=+/]{20,}";
+            public const string ConnectionString = "(?i)(?:Server|Host|Data Source)\\s*=.*[Pp]assword\\s*=\\S*";
+            public const string PasswordParam = "(?i)password\\s*=\\s*\\S+";
+            public const string SecretParam = "(?i)secret\\s*=\\s*\\S+";
+            public const string TokenParam = "(?i)token\\s*=\\s*\\S+";
+            public const string ApiKeyParam = "(?i)api[_-]?key\\s*=\\s*\\S+";
+        }
+
+        public static readonly IReadOnlyList<RedactionPattern> Defaults =
+            new RedactionPattern[]
+            {
+                new("private-key", Patterns.PrivateKey),
+                new("jwt", Patterns.Jwt),
+                new("aws-key", Patterns.AwsKey),
+                new("bearer-token", Patterns.BearerToken),
+                new("basic-auth", Patterns.BasicAuth),
+                new("connection-string", Patterns.ConnectionString),
+                new("password-param", Patterns.PasswordParam),
+                new("secret-param", Patterns.SecretParam),
+                new("token-param", Patterns.TokenParam),
+                new("api-key-param", Patterns.ApiKeyParam)
+            }.AsReadOnly();
     }
 
     public static class GuardrailLocations
     {
+        public const string CombinedInput = "request.combined";
         public const string Response = "response";
+        public const string ResponseCombined = Response + ".combined";
         public const string ResponseManifest = Response + ".manifest";
         public const string ResponseLine = Response + ".line";
     }

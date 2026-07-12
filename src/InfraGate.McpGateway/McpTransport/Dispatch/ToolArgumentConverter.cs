@@ -16,7 +16,7 @@ internal static class ToolArgumentConverter
         }
 
         var result = new Dictionary<string, object?>(args.Count, StringComparer.Ordinal);
-        foreach (var (key, element) in args)
+        foreach ((string? key, JsonElement element) in args)
         {
             result[key] = JsonElementToObject(element);
         }
@@ -27,7 +27,7 @@ internal static class ToolArgumentConverter
     internal static IReadOnlyDictionary<string, object?> ConvertObjectArguments(JsonElement element)
     {
         var result = new Dictionary<string, object?>(StringComparer.Ordinal);
-        foreach (var property in element.EnumerateObject())
+        foreach (JsonProperty property in element.EnumerateObject())
         {
             result[property.Name] = JsonElementToObject(property.Value);
         }
@@ -55,7 +55,7 @@ internal static class ToolArgumentConverter
         timeoutSeconds = WaitForPlanApprovalDefaultTimeoutSeconds;
         timeoutError = string.Empty;
 
-        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.TimeoutSeconds, out var timeoutObj))
+        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.TimeoutSeconds, out object? timeoutObj))
         {
             return true;
         }

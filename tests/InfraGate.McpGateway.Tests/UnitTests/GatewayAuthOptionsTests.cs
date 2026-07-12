@@ -20,7 +20,13 @@ public sealed class GatewayAuthOptionsTests
                 [GatewayAuthConventions.ConfigurationKeys.ApprovalOAuthClientId] = "infra-gate-approval-ui",
                 [GatewayAuthConventions.ConfigurationKeys.ApprovalOAuthCallbackPath] = "/approvals/oauth/callback",
                 [GatewayAuthConventions.ConfigurationKeys.ApprovalOAuthAuthorizationEndpoint] = "http://issuer/auth",
-                [GatewayAuthConventions.ConfigurationKeys.ApprovalOAuthTokenEndpoint] = "http://issuer/token"
+                [GatewayAuthConventions.ConfigurationKeys.ApprovalOAuthTokenEndpoint] = "http://issuer/token",
+                [GatewayAuthConventions.ConfigurationKeys.TokenIntrospectionEnabled] = "true",
+                [GatewayAuthConventions.ConfigurationKeys.TokenIntrospectionEndpoint] = "http://issuer/introspect",
+                [GatewayAuthConventions.ConfigurationKeys.TokenIntrospectionClientId] = "gateway-resource-server",
+                [GatewayAuthConventions.ConfigurationKeys.TokenIntrospectionClientSecret] = "secret-placeholder",
+                [GatewayAuthConventions.ConfigurationKeys.TokenIntrospectionCacheSeconds] = "15",
+                [GatewayAuthConventions.ConfigurationKeys.MaxAcceptedAccessTokenLifetimeSeconds] = "300"
             })
             .Build();
 
@@ -35,6 +41,12 @@ public sealed class GatewayAuthOptionsTests
         Assert.Equal("/approvals/oauth/callback", options.ApprovalOAuthCallbackPath);
         Assert.Equal("http://issuer/auth", options.ApprovalOAuthAuthorizationEndpoint);
         Assert.Equal("http://issuer/token", options.ApprovalOAuthTokenEndpoint);
+        Assert.True(options.TokenIntrospectionEnabled);
+        Assert.Equal("http://issuer/introspect", options.TokenIntrospectionEndpoint);
+        Assert.Equal("gateway-resource-server", options.TokenIntrospectionClientId);
+        Assert.Equal("secret-placeholder", options.TokenIntrospectionClientSecret);
+        Assert.Equal(15, options.TokenIntrospectionCacheSeconds);
+        Assert.Equal(300, options.MaxAcceptedAccessTokenLifetimeSeconds);
     }
 
     [Fact]
@@ -54,5 +66,10 @@ public sealed class GatewayAuthOptionsTests
         Assert.Equal("http://json-issuer", options.OAuthAuthority);
         Assert.Equal("https://gateway.example.com/mcp", options.OAuthResource);
         Assert.Equal("custom-scope", options.OAuthScope);
+        Assert.False(options.TokenIntrospectionEnabled);
+        Assert.Equal(GatewayAuthConventions.DefaultTokenIntrospectionCacheSeconds, options.TokenIntrospectionCacheSeconds);
+        Assert.Equal(
+            GatewayAuthConventions.DefaultMaxAcceptedAccessTokenLifetimeSeconds,
+            options.MaxAcceptedAccessTokenLifetimeSeconds);
     }
 }

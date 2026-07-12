@@ -17,7 +17,7 @@ internal sealed class SubscriptionRegistry : ISubscriptionRegistry
     {
         sessions.TryRemove(sessionId, out _);
 
-        foreach (var (_, subscribers) in planSubscriptions)
+        foreach ((string _, ConcurrentDictionary<string, byte>? subscribers) in planSubscriptions)
         {
             subscribers.TryRemove(sessionId, out _);
         }
@@ -35,13 +35,13 @@ internal sealed class SubscriptionRegistry : ISubscriptionRegistry
             return;
         }
 
-        var subscribers = planSubscriptions.GetOrAdd(planId, _ => new ConcurrentDictionary<string, byte>(StringComparer.Ordinal));
+        ConcurrentDictionary<string, byte> subscribers = planSubscriptions.GetOrAdd(planId, _ => new ConcurrentDictionary<string, byte>(StringComparer.Ordinal));
         subscribers.TryAdd(sessionId, 0);
     }
 
     public void UnsubscribeFromPlan(string sessionId, string planId)
     {
-        if (planSubscriptions.TryGetValue(planId, out var subscribers))
+        if (planSubscriptions.TryGetValue(planId, out ConcurrentDictionary<string, byte>? subscribers))
         {
             subscribers.TryRemove(sessionId, out _);
         }
@@ -49,15 +49,15 @@ internal sealed class SubscriptionRegistry : ISubscriptionRegistry
 
     public IReadOnlyList<ISessionNotifier> GetSessionsForPlan(string planId)
     {
-        if (!planSubscriptions.TryGetValue(planId, out var subscribers))
+        if (!planSubscriptions.TryGetValue(planId, out ConcurrentDictionary<string, byte>? subscribers))
         {
             return [];
         }
 
         var result = new List<ISessionNotifier>();
-        foreach (var (sessionId, _) in subscribers)
+        foreach ((string? sessionId, byte _) in subscribers)
         {
-            if (sessions.TryGetValue(sessionId, out var notifier))
+            if (sessions.TryGetValue(sessionId, out ISessionNotifier? notifier))
             {
                 result.Add(notifier);
             }

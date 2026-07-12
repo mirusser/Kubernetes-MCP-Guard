@@ -8,6 +8,7 @@ using InfraGate.Approvals.Grant;
 using InfraGate.Approvals.AuditPayloads;
 using InfraGate.McpGateway.Notifications;
 using ModelContextProtocol.Protocol;
+using System.Security.Claims;
 
 namespace InfraGate.McpGateway;
 
@@ -39,17 +40,17 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
     {
         var tools = new List<Tool>();
 
-        var readOnly = await registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
-        foreach (var dt in readOnly)
+        IReadOnlyList<DownstreamTool> readOnly = await registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
+        foreach (DownstreamTool dt in readOnly)
         {
             tools.Add(ToolDefinitionFactory.CreateForwardedTool(dt));
         }
 
-        var destructive = await registry.GetDestructiveAsync(ct).ConfigureAwait(false);
-        foreach (var dt in destructive)
+        IReadOnlyList<DownstreamTool> destructive = await registry.GetDestructiveAsync(ct).ConfigureAwait(false);
+        foreach (DownstreamTool dt in destructive)
         {
-            var requestName = McpGatewayConventions.ToolNames.RequestToolPrefix + dt.Name;
-            var requestDescription = $"Creates a pending approval plan for '{dt.Name}'. {dt.Description}";
+            string requestName = McpGatewayConventions.ToolNames.RequestToolPrefix + dt.Name;
+            string requestDescription = $"Creates a pending approval plan for '{dt.Name}'. {dt.Description}";
 
             tools.Add(new Tool
             {
@@ -64,7 +65,7 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         tools.Add(ToolDefinitionFactory.CreateProposePlanTool());
         tools.Add(ToolDefinitionFactory.CreateWaitForPlanApprovalTool());
 
-        var user = httpContextAccessor.HttpContext?.User;
+        ClaimsPrincipal? user = httpContextAccessor.HttpContext?.User;
         if (user is not null)
         {
             tools = tools
@@ -79,7 +80,19 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        return await CallToolAsyncCore(request, ct).ConfigureAwait(false);
+        try
+        {
+            return await CallToolAsyncCore(request, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Unhandled exception dispatching tool '{ToolName}'", request.Name);
+            return new CallToolResult
+            {
+                Content = [new TextContentBlock { Text = $"Handler error ({ex.GetType().Name}): {ex.Message}" }],
+                IsError = true
+            };
+        }
     }
 
     private async Task<CallToolResult> CallToolAsyncCore(
@@ -90,10 +103,10 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
 
         string toolName = request.Name;
 
-        var synthesizedScopes = ToolScopeCatalog.GetSynthesizedScopes(toolName);
+        IReadOnlyList<string>? synthesizedScopes = ToolScopeCatalog.GetSynthesizedScopes(toolName);
         if (synthesizedScopes is not null)
         {
-            var scopeResult = await scopeGuard.RequireAnyScopeAsync(toolName, synthesizedScopes.ToArray())
+            CallToolResult? scopeResult = await scopeGuard.RequireAnyScopeAsync(toolName, synthesizedScopes.ToArray())
                 .ConfigureAwait(false);
             if (scopeResult is not null)
             {
@@ -148,13 +161,13 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
 
     private async Task<bool> IsReadOnlyToolAsync(string toolName, CancellationToken ct)
     {
-        var readOnlyTools = await registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
+        IReadOnlyList<DownstreamTool> readOnlyTools = await registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
         return readOnlyTools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal));
     }
 
     private async Task<bool> IsDestructiveToolAsync(string toolName, CancellationToken ct)
     {
-        var destructiveTools = await registry.GetDestructiveAsync(ct).ConfigureAwait(false);
+        IReadOnlyList<DownstreamTool> destructiveTools = await registry.GetDestructiveAsync(ct).ConfigureAwait(false);
         return destructiveTools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal));
     }
 
@@ -163,19 +176,21 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        var scopes = ToolScopeCatalog.GetRequiredScopes(toolName, hasReadOnlyHint: true);
-        var scopeResult = await scopeGuard.RequireAnyScopeAsync(toolName, scopes.ToArray()).ConfigureAwait(false);
+        IReadOnlyList<string> scopes = ToolScopeCatalog.GetRequiredScopes(toolName, hasReadOnlyHint: true);
+        CallToolResult? scopeResult = await scopeGuard.RequireAnyScopeAsync(toolName, scopes.ToArray()).ConfigureAwait(false);
         if (scopeResult is not null)
         {
             return scopeResult;
         }
 
-        var arguments = ToolArgumentConverter.ConvertArguments(request.Arguments);
-        var result = await guardedRunner.CallAsync(toolName, arguments, ct).ConfigureAwait(false);
+        IReadOnlyDictionary<string, object?> arguments = ToolArgumentConverter.ConvertArguments(request.Arguments);
+        GuardedToolCallResult result = await guardedRunner.CallForModelVisibleResponseAsync(toolName, arguments, ct)
+            .ConfigureAwait(false);
+        string envelope = ModelVisibleToolResultEnvelope.Serialize(toolName, result, TimeProvider.System.GetUtcNow());
 
         return new CallToolResult
         {
-            Content = [new TextContentBlock { Text = result }]
+            Content = [new TextContentBlock { Text = envelope }]
         };
     }
 
@@ -184,25 +199,34 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        var mutationToolName = toolName[McpGatewayConventions.ToolNames.RequestToolPrefix.Length..];
+        string mutationToolName = toolName[McpGatewayConventions.ToolNames.RequestToolPrefix.Length..];
 
-        var identity = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
+        GatewayApprovalIdentity? identity = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
         if (identity is null)
         {
             return ErrorResult(McpGatewayMessages.Authorization.MutationRequiresAuth);
         }
 
-        var sessionId = CurrentSessionId;
+        string? sessionId = CurrentSessionId;
 
-        var args = ToolArgumentConverter.ConvertArguments(request.Arguments);
+        IReadOnlyDictionary<string, object?> args = ToolArgumentConverter.ConvertArguments(request.Arguments);
         bool requestHasFindings = await guardedRunner.AuditRequestAsync(toolName, args, ct).ConfigureAwait(false);
 
-        var planResult = await domainAdapter.BuildAsync(
-            mutationToolName,
-            args,
-            new PlanRequester(identity.Subject, identity.AuthenticationType),
-            ApprovalPolicy.SameSubject(),
-            ct).ConfigureAwait(false);
+        PlanBuildResult planResult;
+        try
+        {
+            planResult = await domainAdapter.BuildAsync(
+                mutationToolName,
+                args,
+                new PlanRequester(identity.Subject, identity.AuthenticationType),
+                ApprovalPolicy.SameSubject(),
+                ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Plan building threw an unhandled exception for tool '{ToolName}'", mutationToolName);
+            return ErrorResult($"Plan building failed: {ex.GetType().Name}: {ex.Message}");
+        }
 
         if (!planResult.Succeeded || planResult.Envelope is null)
         {
@@ -222,7 +246,7 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
             subscriptionRegistry.SubscribeToPlan(sessionId, planResult.PlanId);
         }
 
-        var message = McpGatewayMessages.ToolRouting.PlanCreated(planResult.PlanId);
+        string message = McpGatewayMessages.ToolRouting.PlanCreated(planResult.PlanId);
         if (requestHasFindings || GuardrailContext.HasResponseFindings)
         {
             message = GuardedToolRunner.FormatWarningResponse(message);
@@ -254,9 +278,9 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
             await WriteAuditEntryAsync(audit, mutationToolName, ct).ConfigureAwait(false);
         }
 
-        var sanitized = await guardedRunner.SanitizeAndAuditResponseAsync(toolName, args, planResult.Message, ct)
+        ResponseSanitizationResult sanitized = await guardedRunner.SanitizeAndAuditResponseAsync(toolName, args, planResult.Message, ct)
             .ConfigureAwait(false);
-        var errorText = requestHasFindings || sanitized.HasFindings || GuardrailContext.HasResponseFindings
+        string errorText = requestHasFindings || sanitized.HasFindings || GuardrailContext.HasResponseFindings
             ? GuardedToolRunner.FormatWarningResponse(sanitized.Text)
             : sanitized.Text;
 
@@ -267,37 +291,37 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        var args = ToolArgumentConverter.ConvertArguments(request.Arguments);
-        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.PlanId, out var planIdObj) ||
+        IReadOnlyDictionary<string, object?> args = ToolArgumentConverter.ConvertArguments(request.Arguments);
+        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.PlanId, out object? planIdObj) ||
             planIdObj is not string planId ||
             string.IsNullOrWhiteSpace(planId))
         {
             return ErrorResult(McpGatewayMessages.ArgumentValidation.MissingPlanId);
         }
 
-        var gate = await approvals.EnsureApprovedOrCreateChallengeAsync(planId, ct).ConfigureAwait(false);
+        ApprovalGateResult gate = await approvals.EnsureApprovedOrCreateChallengeAsync(planId, ct).ConfigureAwait(false);
         if (!gate.IsApproved)
         {
             return HandleUnapprovedGate(gate);
         }
 
-        var granted = await approvalPlans.GetGrantedPlanAsync(planId, ct).ConfigureAwait(false);
+        GrantedPlanResult granted = await approvalPlans.GetGrantedPlanAsync(planId, ct).ConfigureAwait(false);
         if (!granted.IsGranted || granted.Grant is null)
         {
             return ErrorResult(granted.Message);
         }
 
-        var beginExecution = await approvalExecution.BeginExecutionAttemptAsync(planId, granted.Grant, ct)
+        BeginExecutionAttemptResult beginExecution = await approvalExecution.BeginExecutionAttemptAsync(planId, granted.Grant, ct)
             .ConfigureAwait(false);
         if (!beginExecution.IsStarted || beginExecution.Attempt is null)
         {
             return ErrorResult(beginExecution.Message);
         }
 
-        var preExecution = await preExecutionGate.EvaluateAsync(planId, domainAdapter, ct).ConfigureAwait(false);
+        PreExecutionGateResult preExecution = await preExecutionGate.EvaluateAsync(planId, domainAdapter, ct).ConfigureAwait(false);
         if (!preExecution.IsPassed || preExecution.Envelope is null || preExecution.Grant is null)
         {
-            var audit = preExecution.Audit ?? new ApprovalAuditEntry(
+            ApprovalAuditEntry audit = preExecution.Audit ?? new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ApplyDenied,
                 new ApplyDeniedPayload(planId, preExecution.Message),
                 PlanId: planId);
@@ -323,16 +347,16 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        var args = ToolArgumentConverter.ConvertArguments(request.Arguments);
-        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.PlanId, out var planIdObj) ||
+        IReadOnlyDictionary<string, object?> args = ToolArgumentConverter.ConvertArguments(request.Arguments);
+        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.PlanId, out object? planIdObj) ||
             planIdObj is not string planId ||
             string.IsNullOrWhiteSpace(planId))
         {
             return ErrorResult(McpGatewayMessages.ArgumentValidation.MissingPlanId);
         }
 
-        var result = await approvalPlans.GetPlanStatusAsync(planId, ct).ConfigureAwait(false);
-        var json = PlanStatusResponse.Serialize(planId, result.Status);
+        PlanStatusResult result = await approvalPlans.GetPlanStatusAsync(planId, ct).ConfigureAwait(false);
+        string json = PlanStatusResponse.Serialize(planId, result.Status);
 
         return new CallToolResult
         {
@@ -344,20 +368,20 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        var args = ToolArgumentConverter.ConvertArguments(request.Arguments);
-        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.PlanId, out var planIdObj) ||
+        IReadOnlyDictionary<string, object?> args = ToolArgumentConverter.ConvertArguments(request.Arguments);
+        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.PlanId, out object? planIdObj) ||
             planIdObj is not string planId ||
             string.IsNullOrWhiteSpace(planId))
         {
             return ErrorResult(McpGatewayMessages.ArgumentValidation.MissingPlanId);
         }
 
-        if (!ToolArgumentConverter.TryGetWaitTimeoutSeconds(args, out int timeoutSeconds, out var timeoutError))
+        if (!ToolArgumentConverter.TryGetWaitTimeoutSeconds(args, out int timeoutSeconds, out string? timeoutError))
         {
             return ErrorResult(timeoutError);
         }
 
-        var deadline = TimeProvider.System.GetUtcNow().AddSeconds(timeoutSeconds);
+        DateTimeOffset deadline = TimeProvider.System.GetUtcNow().AddSeconds(timeoutSeconds);
         bool timedOut = false;
         PlanStatusResult result;
         do
@@ -368,14 +392,14 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
                 break;
             }
 
-            var now = TimeProvider.System.GetUtcNow();
+            DateTimeOffset now = TimeProvider.System.GetUtcNow();
             if (now >= deadline)
             {
                 timedOut = true;
                 break;
             }
 
-            var delay = deadline - now;
+            TimeSpan delay = deadline - now;
             if (delay > WaitForPlanApprovalPollInterval)
             {
                 delay = WaitForPlanApprovalPollInterval;
@@ -384,7 +408,7 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
             await Task.Delay(delay, TimeProvider.System, ct).ConfigureAwait(false);
         } while (true);
 
-        var json = PlanStatusResponse.Serialize(planId, result.Status, timedOut);
+        string json = PlanStatusResponse.Serialize(planId, result.Status, timedOut);
 
         return new CallToolResult
         {
@@ -396,22 +420,22 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         CallToolRequestParams request,
         CancellationToken ct)
     {
-        var args = ToolArgumentConverter.ConvertArguments(request.Arguments);
-        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.OperationType, out var operationTypeObj) ||
+        IReadOnlyDictionary<string, object?> args = ToolArgumentConverter.ConvertArguments(request.Arguments);
+        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.OperationType, out object? operationTypeObj) ||
             operationTypeObj is not string operationType ||
             string.IsNullOrWhiteSpace(operationType))
         {
             return ErrorResult(McpGatewayMessages.ArgumentValidation.MissingOperationType);
         }
 
-        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.OperationArguments, out var argumentsObj) ||
+        if (!args.TryGetValue(McpGatewayConventions.ToolArguments.OperationArguments, out object? argumentsObj) ||
             argumentsObj is not JsonElement argumentsElement ||
             argumentsElement.ValueKind != JsonValueKind.Object)
         {
             return ErrorResult(McpGatewayMessages.ArgumentValidation.MissingArguments);
         }
 
-        var operationArguments = ToolArgumentConverter.ConvertObjectArguments(argumentsElement);
+        IReadOnlyDictionary<string, object?> operationArguments = ToolArgumentConverter.ConvertObjectArguments(argumentsElement);
         return await proposePlanHandler.ProposeAsync(operationType, operationArguments, ct).ConfigureAwait(false);
     }
 
@@ -442,7 +466,7 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            var message = McpGatewayMessages.Approval.PlanExecutionFailed(planId, ex.Message);
+            string message = McpGatewayMessages.Approval.PlanExecutionFailed(planId, ex.Message);
             var audit = new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ApplyFailed,
                 new ApplyFailedPayload(
@@ -464,7 +488,7 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
 
         if (!executeResult.IsSuccessful)
         {
-            var audit = executeResult.Audit ?? new ApprovalAuditEntry(
+            ApprovalAuditEntry audit = executeResult.Audit ?? new ApprovalAuditEntry(
                 ApprovalConventions.AuditEvents.ApplyFailed,
                 new ApplyFailedPayload(planId, envelope.Operation, executeResult.Message),
                 PlanId: planId);

@@ -36,8 +36,23 @@ internal sealed class DownstreamTokenValidator
             configurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
                 metadataAddress,
                 new OpenIdConnectConfigurationRetriever(),
-                new HttpDocumentRetriever { RequireHttps = options.RequireHttpsMetadata });
+                new HttpDocumentRetriever { RequireHttps = options.RequireHttpsMetadata })
+            {
+                AutomaticRefreshInterval = DownstreamAuthConventions.Defaults.JwksAutomaticRefreshInterval,
+                RefreshInterval = DownstreamAuthConventions.Defaults.JwksMinimumRefreshInterval
+            };
         }
+    }
+
+    /// <summary>Test constructor — accepts a pre-built configuration manager.</summary>
+    internal DownstreamTokenValidator(
+        DownstreamAuthOptions options,
+        ILogger<DownstreamTokenValidator> logger,
+        IConfigurationManager<OpenIdConnectConfiguration> configurationManager)
+    {
+        this.options = options;
+        this.logger = logger;
+        this.configurationManager = configurationManager;
     }
 
     /// <summary>Test constructor — accepts pre-built static signing keys (no OIDC discovery).</summary>
@@ -82,6 +97,7 @@ internal sealed class DownstreamTokenValidator
                 ValidateLifetime = true,
                 ClockSkew = DownstreamAuthConventions.Defaults.ServerClockSkew,
                 ValidateIssuerSigningKey = true,
+                TryAllIssuerSigningKeys = false,
                 IssuerSigningKeys = signingKeys,
             };
 
@@ -90,11 +106,12 @@ internal sealed class DownstreamTokenValidator
 
             if (!result.IsValid)
             {
+                string safeReason = SafeFailureReason(result);
                 logger.LogWarning(
                     "Downstream token validation failed: {Reason}",
-                    result.Exception?.Message ?? "unknown");
+                    safeReason);
 
-                return ValidationResult.Fail(SafeFailureReason(result));
+                return ValidationResult.Fail(safeReason);
             }
 
             if (!HasRequiredScope(result.ClaimsIdentity))

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -12,9 +13,10 @@ public static partial class PromptInjectionGuard
             return;
         }
 
-        foreach (var (category, pattern) in Patterns)
+        string normalizedText = NormalizeForPatternMatching(text);
+        foreach ((string? category, Regex? pattern) in Patterns)
         {
-            if (pattern.IsMatch(text))
+            if (pattern.IsMatch(normalizedText))
             {
                 findings.Add(new GuardrailFinding(location, category));
             }
@@ -33,7 +35,7 @@ public static partial class PromptInjectionGuard
             return false;
         }
 
-        var hasInvalidChar = false;
+        bool hasInvalidChar = false;
         foreach (char c in text)
         {
             if (c is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '+' or '/' or '=')
@@ -65,7 +67,7 @@ public static partial class PromptInjectionGuard
 
     private static void TryScanEmbeddedBase64Payloads(string text, string location, List<GuardrailFinding> findings)
     {
-        var matches = EmbeddedBase64Regex().Matches(text);
+        MatchCollection matches = EmbeddedBase64Regex().Matches(text);
         foreach (Match match in matches)
         {
             byte[] decoded;
@@ -99,16 +101,17 @@ public static partial class PromptInjectionGuard
         }
 
         // Justification: S3267 — .Count(predicate) is already the canonical LINQ form; there is no foreach+if loop to simplify with .Where().
-        var printable = decodedText.Count(c => !char.IsControl(c) || c == '\n' || c == '\r' || c == '\t');
+        int printable = decodedText.Count(c => !char.IsControl(c) || c == '\n' || c == '\r' || c == '\t');
 
         if (printable < decodedText.Length * 0.7)
         {
             return false;
         }
 
-        foreach (var (category, pattern) in Patterns)
+        string normalizedText = NormalizeForPatternMatching(decodedText);
+        foreach ((string? category, Regex? pattern) in Patterns)
         {
-            if (pattern.IsMatch(decodedText))
+            if (pattern.IsMatch(normalizedText))
             {
                 findings.Add(new GuardrailFinding(location, category));
             }
@@ -116,6 +119,46 @@ public static partial class PromptInjectionGuard
 
         return true;
     }
+
+    private static string NormalizeForPatternMatching(string text)
+    {
+        string normalized = text.Normalize(NormalizationForm.FormKC);
+        var builder = new StringBuilder(normalized.Length);
+        foreach (char c in normalized)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.Format)
+            {
+                continue;
+            }
+
+            builder.Append(MapConfusableToAscii(c));
+        }
+
+        return builder.ToString();
+    }
+
+    private static char MapConfusableToAscii(char c) => c switch
+    {
+        '\u0430' => 'a',
+        '\u0435' => 'e',
+        '\u0456' => 'i',
+        '\u043E' => 'o',
+        '\u0440' => 'p',
+        '\u0441' => 'c',
+        '\u0445' => 'x',
+        '\u0443' => 'y',
+        '\u0391' => 'A',
+        '\u0395' => 'E',
+        '\u039F' => 'O',
+        '\u03A1' => 'P',
+        '\u03A7' => 'X',
+        '\u03B1' => 'a',
+        '\u03B5' => 'e',
+        '\u03BF' => 'o',
+        '\u03C1' => 'p',
+        '\u03C7' => 'x',
+        _ => c,
+    };
 
     private static bool IsOperationalLine(string line) =>
         OperationalLineRegex().IsMatch(line);

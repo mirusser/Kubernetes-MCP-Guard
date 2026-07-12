@@ -19,4 +19,18 @@ public sealed class PostgresAuditOutboxServiceCollectionExtensionsTests
 
         Assert.NotNull(core);
     }
+
+    [Fact]
+    public void AddPostgresAuditOutbox_DataSource_RegistersAuditStreamReader()
+    {
+        using var dataSource = NpgsqlDataSource.Create("Host=localhost");
+        var services = new ServiceCollection();
+
+        services.AddPostgresAuditOutbox(dataSource);
+
+        using var provider = services.BuildServiceProvider();
+        var reader = provider.GetRequiredService<IAuditStreamReader>();
+
+        Assert.NotNull(reader);
+    }
 }

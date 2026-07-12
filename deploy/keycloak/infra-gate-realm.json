@@ -621,6 +621,22 @@
       "optionalClientScopes": []
     },
     {
+      "clientId": "infra-gate-token-introspection",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "token-introspection-secret",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "defaultClientScopes": [
+        "basic"
+      ],
+      "optionalClientScopes": []
+    },
+    {
       "clientId": "infra-gate-observer",
       "enabled": true,
       "publicClient": false,

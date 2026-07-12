@@ -45,6 +45,7 @@ internal static class RunProfileConventions
         public const string Defaults = "defaults";
         public const string DomainAdapters = "domainAdapters";
         public const string DownstreamAssembly = "downstreamAssembly";
+        public const string DownstreamAssemblyHash = "downstreamAssemblyHash";
         public const string DownstreamAuth = "downstreamAuth";
         public const string Gateway = "gateway";
         public const string AgentGuardrails = "agentGuardrails";
@@ -69,6 +70,8 @@ internal static class RunProfileConventions
         public const string OauthClientId = "oauthClientId";
         public const string OauthTokenEndpoint = "oauthTokenEndpoint";
         public const string OpenRouter = "openRouter";
+        public const string OtlpEndpoint = "otlpEndpoint";
+        public const string DashboardToken = "dashboardToken";
         public const string Observer = "observer";
         public const string Planner = "planner";
         public const string Executor = "executor";
@@ -88,6 +91,13 @@ internal static class RunProfileConventions
         public const string Resource = "resource";
         public const string RuntimeMode = "runtimeMode";
         public const string Scope = "scope";
+        public const string Telemetry = "telemetry";
+        public const string TokenIntrospectionCacheSeconds = "tokenIntrospectionCacheSeconds";
+        public const string TokenIntrospectionClientId = "tokenIntrospectionClientId";
+        public const string TokenIntrospectionClientSecret = "tokenIntrospectionClientSecret";
+        public const string TokenIntrospectionEnabled = "tokenIntrospectionEnabled";
+        public const string TokenIntrospectionEndpoint = "tokenIntrospectionEndpoint";
+        public const string MaxAcceptedAccessTokenLifetimeSeconds = "maxAcceptedAccessTokenLifetimeSeconds";
         public const string UseDPoP = "useDPoP";
         public const string Type = "type";
         public const string Version = "version";
@@ -128,6 +138,7 @@ internal static class RunProfileConventions
         public const string BindPort = "INFRA_GATE_BIND_PORT";
         public const string DataProtectionHostPath = "INFRA_GATE_DATA_PROTECTION_HOST_PATH";
         public const string DownstreamAssembly = "InfraGate__Gateway__DownstreamAssembly";
+        public const string DownstreamAssemblyHash = "InfraGate__Gateway__DownstreamAssemblyHash";
         public const string DownstreamAuthAudience = "InfraGate__DownstreamAuth__Audience";
         public const string DownstreamAuthAuthority = "InfraGate__DownstreamAuth__Authority";
         public const string DownstreamAuthGatewayClientId = "InfraGate__DownstreamAuth__GatewayClientId";
@@ -147,7 +158,15 @@ internal static class RunProfileConventions
         public const string OauthRequireHttpsMetadata = "InfraGate__Auth__OAuthRequireHttpsMetadata";
         public const string OauthResource = "InfraGate__Auth__OAuthResource";
         public const string OauthScope = "InfraGate__Auth__OAuthScope";
+        public const string TokenIntrospectionEnabled = "InfraGate__Auth__TokenIntrospectionEnabled";
+        public const string TokenIntrospectionEndpoint = "InfraGate__Auth__TokenIntrospectionEndpoint";
+        public const string TokenIntrospectionClientId = "InfraGate__Auth__TokenIntrospectionClientId";
+        public const string TokenIntrospectionClientSecret = "InfraGate__Auth__TokenIntrospectionClientSecret";
+        public const string TokenIntrospectionCacheSeconds = "InfraGate__Auth__TokenIntrospectionCacheSeconds";
+        public const string MaxAcceptedAccessTokenLifetimeSeconds = "InfraGate__Auth__MaxAcceptedAccessTokenLifetimeSeconds";
         public const string OpenRouterApiKey = "InfraGate__OpenRouter__ApiKey";
+        public const string OtelExporterOtlpEndpoint = "OTEL_EXPORTER_OTLP_ENDPOINT";
+        public const string AspireDashboardToken = "ASPIRE_DASHBOARD_TOKEN";
         public const string ObserverAspnetcoreUrls = "InfraGate__Observer__AspNetCoreUrls";
         public const string ObserverClientId = "InfraGate__Observer__ClientCredentials__ClientId";
         public const string ObserverClientSecret = "InfraGate__Observer__ClientCredentials__ClientSecret";

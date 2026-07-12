@@ -17,6 +17,8 @@ public static class DownstreamAuthConventions
         public const string Audience = "urn:infra-gate:mcp-server";
         public static readonly TimeSpan GatewayRefreshSkew = TimeSpan.FromSeconds(60);
         public static readonly TimeSpan ServerClockSkew = TimeSpan.FromSeconds(30);
+        public static readonly TimeSpan JwksAutomaticRefreshInterval = TimeSpan.FromSeconds(300);
+        public static readonly TimeSpan JwksMinimumRefreshInterval = TimeSpan.FromSeconds(60);
     }
 
     public static class EnvironmentVariables

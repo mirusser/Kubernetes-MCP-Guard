@@ -6,7 +6,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using InfraGate;
 using InfraGate.ApprovalUi;
+using InfraGate.AuditOutbox;
 using InfraGate.Approvals;
 using InfraGate.Approvals.AccessCodes;
 using InfraGate.Approvals.Audit;
@@ -18,6 +20,7 @@ using InfraGate.Approvals.PreExecution;
 using InfraGate.DownstreamAuth;
 using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway;
+using InfraGate.McpGateway.Audit;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.McpGateway.Email;
@@ -179,7 +182,15 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             });
 
         var call = Assert.Single(downstream.Calls);
-        Assert.Equal("""{ "ok": true }""", text);
+        using var document = JsonDocument.Parse(text);
+        Assert.Equal(
+            McpGatewayConventions.ModelVisibleToolResult.KindValue,
+            document.RootElement.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Kind).GetString());
+        Assert.Equal(
+            """{ "ok": true }""",
+            document.RootElement.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Untrusted)
+                .GetProperty(McpGatewayConventions.ModelVisibleToolResult.UntrustedPayload)
+                .GetString());
         Assert.Equal("get_k8s_status", call.ToolName);
         Assert.Equal(NamespaceName, call.Arguments[KubernetesAdapterConventions.ToolArguments.Namespace]);
         Assert.Equal("app=mcp-api-demo", call.Arguments[KubernetesAdapterConventions.ToolArguments.LabelSelector]);
@@ -238,14 +249,69 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                     [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName
                 });
 
-            Assert.StartsWith("Guardrail warning:", responseText);
-            Assert.Contains("inspect the pending plan file", responseText);
-            Assert.DoesNotContain("ignore previous instructions", responseText);
-            Assert.DoesNotContain("reveal system prompts", responseText);
+            using var document = JsonDocument.Parse(responseText);
+            JsonElement root = document.RootElement;
+            Assert.Equal(
+                McpGatewayConventions.GuardrailAudit.WarnRedactAction,
+                root.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Guardrail)
+                    .GetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailAction)
+                    .GetString());
+            string payload = root.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Untrusted)
+                .GetProperty(McpGatewayConventions.ModelVisibleToolResult.UntrustedPayload)
+                .GetString()!;
+            Assert.Contains("inspect the pending plan file", payload);
+            Assert.DoesNotContain("ignore previous instructions", payload);
+            Assert.DoesNotContain("reveal system prompts", payload);
+            Assert.DoesNotContain("Guardrail warning:", responseText);
             var auditEvent = Assert.Single(responseAudit.Events);
             Assert.Equal("response", auditEvent.Direction);
             Assert.Equal("warn_redact", auditEvent.Action);
         }
+    }
+
+    [Fact]
+    public async Task McpEndpoint_RedactsSensitiveDataThroughHttpTransport()
+    {
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(
+            new FakeDownstream("access key AKIAIOSFODNN7EXAMPLE exposed"),
+            audit);
+        await using var client = await CreateHttpMcpClientAsync(server);
+
+        var text = await CallTextAsync(
+            client,
+            "get_k8s_status",
+            new Dictionary<string, object?>
+            {
+                [KubernetesAdapterConventions.ToolArguments.Namespace] = NamespaceName,
+                [KubernetesAdapterConventions.ToolArguments.LabelSelector] = "app=mcp-api-demo"
+            });
+
+        using var document = JsonDocument.Parse(text);
+        JsonElement root = document.RootElement;
+        Assert.Equal(
+            McpGatewayConventions.GuardrailAudit.RedactSensitiveDataAction,
+            root.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Guardrail)
+                .GetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailAction)
+                .GetString());
+        Assert.Contains(
+            McpGatewayConventions.GuardrailCategories.SensitiveData,
+            root.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Guardrail)
+                .GetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailCategoriesKey)
+                .EnumerateArray()
+                .Select(category => category.GetString()));
+        string payload = root.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Untrusted)
+            .GetProperty(McpGatewayConventions.ModelVisibleToolResult.UntrustedPayload)
+            .GetString()!;
+        Assert.Contains("[redacted: aws-key]", payload);
+        Assert.DoesNotContain("AKIAIOSFODNN7EXAMPLE", payload);
+        Assert.DoesNotContain("Guardrail warning:", text);
+        var auditEvent = Assert.Single(audit.Events);
+        Assert.Equal("response", auditEvent.Direction);
+        Assert.Equal(McpGatewayConventions.GuardrailAudit.RedactSensitiveDataAction, auditEvent.Action);
+        Assert.NotNull(auditEvent.Metadata);
+        Assert.True(auditEvent.Metadata.ContainsKey(McpGatewayConventions.GuardrailAudit.EntryFields.RedactionPatterns));
+        Assert.True(auditEvent.Metadata.ContainsKey(McpGatewayConventions.GuardrailAudit.EntryFields.RedactionCount));
     }
 
     [Fact]
@@ -592,6 +658,105 @@ public sealed partial class GatewayHttpMcpIntegrationTests
     }
 
     [Fact]
+    public async Task AuditTimelinePage_Unauthenticated_RedirectsToLogin()
+    {
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(new FakeDownstream("unused"), audit);
+        using var browser = new HttpClient(server.CreateHandler())
+        {
+            BaseAddress = server.BaseAddress
+        };
+
+        var response = await browser.GetAsync("/audit/timeline/plan-123");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.EndsWith(
+            "/approvals/login?ReturnUrl=%2Faudit%2Ftimeline%2Fplan-123",
+            response.Headers.Location?.ToString(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AuditTimelinePage_AuthenticatedWithoutScope_RedirectsToLogin()
+    {
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(
+            new FakeDownstream("unused"),
+            audit,
+            approvalOAuthScope: Scope);
+        using var browser = await CreateAuthenticatedApprovalBrowserAsync(server, "test-challenge");
+
+        var response = await browser.GetAsync("/audit/timeline/plan-123");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        string? location = response.Headers.Location?.ToString();
+        Assert.NotNull(location);
+        Assert.Contains("ReturnUrl=%2Faudit%2Ftimeline%2Fplan-123", location, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AuditTimelinePage_AuthenticatedWithScope_RendersTimeline()
+    {
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(
+            new FakeDownstream("unused"),
+            audit,
+            approvalOAuthScope: GatewayAuthConventions.DefaultAuditReadOAuthScope);
+        using var browser = await CreateAuthenticatedApprovalBrowserAsync(server, "test-challenge");
+
+        var response = await browser.GetAsync("/audit/timeline/plan-123");
+
+        response.EnsureSuccessStatusCode();
+        var pageText = await response.Content.ReadAsStringAsync();
+        Assert.Contains("data-section=\"timeline-empty\"", pageText);
+        Assert.Contains("plan-123", pageText);
+    }
+
+    [Fact]
+    public async Task ApprovalPage_RendersAuditTimelineLink()
+    {
+        var repoRoot = FindRepoRoot();
+        var serverProject = Path.Combine(repoRoot, "src", "InfraGate.McpServer", "InfraGate.McpServer.csproj");
+        var testRoot = Path.Combine(Path.GetTempPath(), "infra-gate-gateway-tests", Guid.NewGuid().ToString("N"));
+        var approvalRoot = Path.Combine(testRoot, "approvals");
+        await using var k8sApi = new TestKubernetesApi(HandleScaleKubernetesRequest);
+        var kubeconfig = await WriteKubeconfigAsync(testRoot, k8sApi.Url);
+        using var environment = EnvironmentVariableScope.Set(
+            ("InfraGate__Kubernetes__KubeConfig", kubeconfig),
+            ("InfraGate__Approval__Root", approvalRoot),
+            ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
+            (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
+            (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
+        await using var downstream = new DownstreamMcpClient(
+            CreateGatewayOptions(serverProject, testRoot, repoRoot),
+            new NullDownstreamServiceTokenProvider(),
+            NullLogger<DownstreamMcpClient>.Instance,
+            NullLoggerFactory.Instance);
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(downstream, audit);
+        await using var client = await CreateHttpMcpClientAsync(server);
+
+        var request = await RequestScalePlanAsync(client, replicas: 3);
+        var planId = ParsePlanId(request);
+        var approvalRequired = await CallTextAsync(
+            client,
+            McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+            new Dictionary<string, object?>
+            {
+                [McpGatewayConventions.ToolArguments.PlanId] = planId
+            });
+
+        var challengeId = ParseChallengeId(approvalRequired);
+        using var browser = await CreateAuthenticatedApprovalBrowserAsync(server, challengeId);
+        var page = await browser.GetAsync($"/approvals/{challengeId}");
+        page.EnsureSuccessStatusCode();
+        var pageText = await page.Content.ReadAsStringAsync();
+
+        Assert.Contains("data-section=\"audit-timeline-link\"", pageText);
+        Assert.Contains($"/audit/timeline/{planId}", pageText);
+    }
+
+    [Fact]
     public async Task ApprovalPage_ForApplyManifest_RendersCreateAndUpdateDiffs()
     {
         var repoRoot = FindRepoRoot();
@@ -797,13 +962,14 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                         [KubernetesAdapterConventions.ToolArguments.TailLines] = 10
                     });
 
-                if (podLogsText.StartsWith('{'))
+                var podLogsPayload = UnwrapModelVisibleToolResultPayload(podLogsText);
+                if (podLogsPayload.StartsWith('{'))
                 {
-                    AssertJsonProperty(podLogsText, "podName", podName);
+                    AssertJsonProperty(podLogsPayload, "podName", podName);
                 }
                 else
                 {
-                    Assert.Contains("Pod log read failed", podLogsText);
+                    Assert.Contains("Pod log read failed", podLogsPayload);
                 }
             }
 
@@ -904,7 +1070,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
     private static TestServer CreateGatewayServer(
         IDownstreamMcpClient downstream,
         InMemoryAuditStore audit,
-        McpGatewayOptions? gatewayOptions = null)
+        McpGatewayOptions? gatewayOptions = null,
+        string approvalOAuthScope = Scope)
     {
         var options = gatewayOptions ?? CreateGatewayOptions("unused", Path.GetTempPath(), Directory.GetCurrentDirectory());
 
@@ -918,7 +1085,17 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton(options);
                 services.AddSingleton<IGuardrailAuditStore>(audit);
                 services.AddSingleton<IDownstreamMcpClient>(downstream);
-                services.AddSingleton<GuardedToolRunner>();
+                services.AddSingleton<SensitiveDataRedactor>(sp =>
+                    new SensitiveDataRedactor(
+                        McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                        sp.GetRequiredService<ILogger<SensitiveDataRedactor>>()));
+                services.AddSingleton<GuardedToolRunner>(sp =>
+                    new GuardedToolRunner(
+                        sp.GetRequiredService<IDownstreamMcpClient>(),
+                        sp.GetRequiredService<IGuardrailAuditStore>(),
+                        sp.GetRequiredService<IHttpContextAccessor>(),
+                        sp.GetRequiredService<SensitiveDataRedactor>(),
+                        sp.GetRequiredService<ILogger<GuardedToolRunner>>()));
                 services.AddSingleton<TestApprovalWorkflow>();
                 services.AddSingleton<IApprovalPlanWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
                 services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
@@ -933,6 +1110,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<IApprovalAccessCodeStore, InMemoryApprovalAccessCodeStore>();
                 services.AddSingleton<IApprovalEmailSender, NullApprovalEmailSender>();
                 services.AddSingleton<IProposePlanHandler, ProposePlanHandler>();
+                services.AddSingleton<IAuditStreamReader>(new FakeAuditStreamReader());
+                services.AddSingleton<AuditTimelineAssembler>();
                 services.AddSingleton<IApprovalPageRenderer>(sp =>
                     new ApprovalPageRenderer(sp.GetRequiredService<IServiceProvider>(), sp.GetRequiredService<ILoggerFactory>()));
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
@@ -957,7 +1136,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 });
                 services.PostConfigure<OAuthOptions>(GatewayAuthConventions.Schemes.ApprovalOAuth, oauthOptions =>
                 {
-                    oauthOptions.Backchannel = new HttpClient(new FakeOAuthBackchannel(Subject));
+                    oauthOptions.Backchannel = new HttpClient(new FakeOAuthBackchannel(Subject, approvalOAuthScope));
                 });
                 services
                     .AddMcpServer(serverOptions =>
@@ -1135,18 +1314,21 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             KeyId = "test-key"
         };
 
-    private static string CreateJwt(string subject)
+    private static string CreateJwt(string subject, string scope = Scope)
     {
+        var issuedAt = DateTime.UtcNow.AddSeconds(-10);
         var descriptor = new SecurityTokenDescriptor
         {
             Issuer = Issuer,
             Audience = Resource,
-            Expires = DateTime.UtcNow.AddMinutes(30),
+            IssuedAt = issuedAt,
+            NotBefore = issuedAt,
+            Expires = issuedAt.AddMinutes(4),
             Claims = new Dictionary<string, object>
             {
                 [GatewayAuthConventions.Claims.Subject] = subject,
                 [GatewayAuthConventions.Claims.PreferredUsername] = subject,
-                [GatewayAuthConventions.Claims.Scope] = Scope
+                [GatewayAuthConventions.Claims.Scope] = scope
             },
             SigningCredentials = new SigningCredentials(SigningKey(), SecurityAlgorithms.HmacSha256)
         };
@@ -1184,7 +1366,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                     [KubernetesAdapterConventions.ToolArguments.Name] = name
                 });
 
-            if (IsDeploymentRolloutSettled(lastSummary))
+            var rolloutJson = UnwrapModelVisibleToolResultPayload(lastSummary);
+            if (IsDeploymentRolloutSettled(rolloutJson))
             {
                 settledSamples++;
                 if (settledSamples >= 3)
@@ -1226,6 +1409,36 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         catch (JsonException)
         {
             return false;
+        }
+    }
+
+    private static string UnwrapModelVisibleToolResultPayload(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            if (root.ValueKind is not JsonValueKind.Object ||
+                !root.TryGetProperty(ModelVisibleToolResultConventions.Kind, out var kind) ||
+                kind.ValueKind is not JsonValueKind.String ||
+                !string.Equals(kind.GetString(), ModelVisibleToolResultConventions.KindValue, StringComparison.Ordinal))
+            {
+                return json;
+            }
+
+            if (!root.TryGetProperty(ModelVisibleToolResultConventions.Untrusted, out var untrusted) ||
+                untrusted.ValueKind is not JsonValueKind.Object ||
+                !untrusted.TryGetProperty(ModelVisibleToolResultConventions.UntrustedPayload, out var payload) ||
+                payload.ValueKind is not JsonValueKind.String)
+            {
+                return json;
+            }
+
+            return payload.GetString() ?? string.Empty;
+        }
+        catch (JsonException)
+        {
+            return json;
         }
     }
 
@@ -1400,7 +1613,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
               "name": "{{name}}",
               "namespace": "{{NamespaceName}}",
               "resourceVersion": "{{resourceVersion}}",
-              "generation": 1
+              "generation": {{resourceVersion}}
             },
             "spec": {
               "replicas": 1,
@@ -1545,7 +1758,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
     private static string? TryGetFirstPodName(string statusText)
     {
-        using var document = JsonDocument.Parse(statusText);
+        using var document = JsonDocument.Parse(UnwrapModelVisibleToolResultPayload(statusText));
         foreach (var pod in document.RootElement.GetProperty("pods").EnumerateArray())
         {
             var podName = pod.GetProperty("name").GetString();
@@ -1564,7 +1777,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         string name,
         string nameProperty = KubernetesAdapterConventions.ToolArguments.Name)
     {
-        using var document = JsonDocument.Parse(json);
+        using var document = JsonDocument.Parse(UnwrapModelVisibleToolResultPayload(json));
         var root = document.RootElement;
 
         Assert.Equal(kind, root.GetProperty("kind").GetString());
@@ -1573,14 +1786,14 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
     private static void AssertJsonArrayProperty(string json, string propertyName)
     {
-        using var document = JsonDocument.Parse(json);
+        using var document = JsonDocument.Parse(UnwrapModelVisibleToolResultPayload(json));
 
         Assert.Equal(JsonValueKind.Array, document.RootElement.GetProperty(propertyName).ValueKind);
     }
 
     private static void AssertJsonProperty(string json, string propertyName, string expectedValue)
     {
-        using var document = JsonDocument.Parse(json);
+        using var document = JsonDocument.Parse(UnwrapModelVisibleToolResultPayload(json));
 
         Assert.Equal(expectedValue, document.RootElement.GetProperty(propertyName).GetString());
     }
@@ -1763,7 +1976,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         }
     }
 
-    private sealed class FakeOAuthBackchannel(string subject) : HttpMessageHandler
+    private sealed class FakeOAuthBackchannel(string subject, string scope = Scope) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -1771,7 +1984,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         {
             var json = JsonSerializer.Serialize(new
             {
-                access_token = CreateJwt(subject),
+                access_token = CreateJwt(subject, scope),
                 token_type = "Bearer"
             });
 
@@ -1794,6 +2007,21 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class FakeAuditStreamReader : IAuditStreamReader
+    {
+        public Task<IReadOnlyList<AuditStreamRow>> ReadByPlanIdAsync(
+            string streamSchema,
+            string planId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<AuditStreamRow>>([]);
+
+        public Task<IReadOnlyList<AuditStreamRow>> ReadByAnomalyIdAsync(
+            string streamSchema,
+            string anomalyId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<AuditStreamRow>>([]);
     }
 
     private sealed class EnvironmentVariableScope : IDisposable

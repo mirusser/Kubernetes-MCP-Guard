@@ -3,7 +3,7 @@ namespace InfraGate.RuntimeSafety;
 public static class ProductionSafetyValidator
 {
     private const string FreeModelSuffix = ":free";
-    private const string OpenRouterFreeRoute = "openrouter/free";
+    internal const string OpenRouterFreeRoute = "openrouter/free";
 
     private static readonly UnixFileMode GroupOrOtherWrite =
         UnixFileMode.GroupWrite | UnixFileMode.OtherWrite;

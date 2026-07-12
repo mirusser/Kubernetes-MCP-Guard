@@ -7,13 +7,13 @@ public sealed class DownstreamToolRegistry(IDownstreamMcpClient downstream)
 
     public async Task<IReadOnlyList<DownstreamTool>> GetReadOnlyAsync(CancellationToken ct)
     {
-        var all = await GetAllAsync(ct).ConfigureAwait(false);
+        IReadOnlyList<DownstreamTool> all = await GetAllAsync(ct).ConfigureAwait(false);
         return all.Where(t => t.IsReadOnly).ToList();
     }
 
     public async Task<IReadOnlyList<DownstreamTool>> GetDestructiveAsync(CancellationToken ct)
     {
-        var all = await GetAllAsync(ct).ConfigureAwait(false);
+        IReadOnlyList<DownstreamTool> all = await GetAllAsync(ct).ConfigureAwait(false);
         return all.Where(t => t.IsDestructive).ToList();
     }
 

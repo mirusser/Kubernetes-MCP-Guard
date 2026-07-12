@@ -25,5 +25,7 @@ CREATE TABLE test_stream.audit_outbox
     published_at_utc   timestamptz,
     publish_attempts   int         not null default 0,
     last_publish_error text,
-    test_entity_id     text
+    test_entity_id     text,
+    plan_id            text,
+    anomaly_id         text
 );

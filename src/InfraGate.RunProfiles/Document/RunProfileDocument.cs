@@ -42,6 +42,7 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
         {
             AspnetcoreUrls = profile.AspnetcoreUrls ?? defaults.AspnetcoreUrls,
             DownstreamAssembly = profile.DownstreamAssembly ?? defaults.DownstreamAssembly,
+            DownstreamAssemblyHash = profile.DownstreamAssemblyHash ?? defaults.DownstreamAssemblyHash,
             GuardAuditRoot = profile.GuardAuditRoot ?? defaults.GuardAuditRoot
         };
     }
@@ -59,7 +60,13 @@ internal sealed class RunProfileDocument(IReadOnlyList<RunProfile> profiles)
             MetadataAddress = profile.MetadataAddress ?? defaults.MetadataAddress,
             Resource = profile.Resource ?? defaults.Resource,
             Scope = profile.Scope ?? defaults.Scope,
-            RequireHttpsMetadata = profile.RequireHttpsMetadata ?? defaults.RequireHttpsMetadata
+            RequireHttpsMetadata = profile.RequireHttpsMetadata ?? defaults.RequireHttpsMetadata,
+            TokenIntrospectionEnabled = profile.TokenIntrospectionEnabled ?? defaults.TokenIntrospectionEnabled,
+            TokenIntrospectionEndpoint = profile.TokenIntrospectionEndpoint ?? defaults.TokenIntrospectionEndpoint,
+            TokenIntrospectionClientId = profile.TokenIntrospectionClientId ?? defaults.TokenIntrospectionClientId,
+            TokenIntrospectionClientSecret = profile.TokenIntrospectionClientSecret ?? defaults.TokenIntrospectionClientSecret,
+            TokenIntrospectionCacheSeconds = profile.TokenIntrospectionCacheSeconds ?? defaults.TokenIntrospectionCacheSeconds,
+            MaxAcceptedAccessTokenLifetimeSeconds = profile.MaxAcceptedAccessTokenLifetimeSeconds ?? defaults.MaxAcceptedAccessTokenLifetimeSeconds
         };
     }
 

@@ -8,7 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- Contributor and maintenance documentation for Epic 9: contributor guide, pull request checklist, issue templates, public roadmap, and changelog.
+- RFC RAG MCP tools: `get_rfc_toc` (section→heading TOC map), `get_rfc_section` now supports `depth` (child-section expansion) and `expand` (type-reference resolution) parameters.
+- RFC RAG grammar-style detection during indexing: `grammarStyle` field on `get_rfc_metadata` classifies RFCs as `abnf`, `tls-presentation-lang`, `cddl`, `asn.1`, or `none`.
+
+### Changed
+
+- **Breaking:** RFC RAG `get_rfc` no longer returns a top-level `text` field. Response is now metadata + TOC + preview of the first 20 sections. Full section text is available via `get_rfc_section`.
+- RFC RAG search tools (`search_rfc`, `search_normative`, `search_abnf`) now propagate exceptions instead of silently returning `[]` on failure.
+
+### Added
 - Server-side Kubernetes `dryRun=All` validation before approval plan creation and again at apply time. Mutation plans record dry-run results in the hash-bound pending plan; the gateway approval page renders dry-run status; legacy plans without dry-run data are refused.
 - Diff-before-approval: every mutation plan records a server-generated diff between normalized live Kubernetes state and proposed dry-run state. The browser approval page renders the diff, policy findings, and JSON-path changes before approval. Apply-time drift enforcement re-reads live objects and refuses mutation if live state has changed since approval.
 - Opt-in file logging for the MCP server via `K8S_MCP_LOG_PATH` environment variable. When set, all log output is written to the specified file (structured JSON via Serilog) in addition to the stderr transport. No file is created when the variable is unset.

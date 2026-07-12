@@ -35,10 +35,10 @@ internal static class KubernetesBuilderInfrastructure
         IReadOnlyList<KubernetesPlanDiff> diffs)
     {
         var resourceVersions = diffs
-            .Where(d => d.ResourceVersion is not null)
+            .Where(d => d.StabilityVersion is not null || d.ResourceVersion is not null)
             .ToDictionary(
                 d => FormatObjectKey(d.Object),
-                d => d.ResourceVersion!,
+                d => d.StabilityVersion ?? d.ResourceVersion!,
                 StringComparer.Ordinal);
 
         if (resourceVersions.Count == 0)

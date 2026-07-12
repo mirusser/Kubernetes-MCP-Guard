@@ -22,6 +22,12 @@ builder.AddInfraGateObservability(opt =>
     opt.ConsoleToStandardError = false;
 });
 
+builder.AddInfraGateTelemetry(opt =>
+{
+    opt.ServiceName = "infragate-executor";
+    opt.MeterNames = [ExecutorMetrics.MeterName];
+});
+
 ConfigureUrls(builder);
 
 var executorOptions = builder.Configuration

@@ -1,10 +1,11 @@
 using InfraGate.Approvals.Postgres;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.Endpoints;
 using InfraGate.McpGateway.Notifications;
 using ModelContextProtocol.Protocol;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddInfraGateConfiguration(args);
 builder.AddInfraGateServices();
 
@@ -24,12 +25,12 @@ builder.Services
 #pragma warning disable MCPEXP002
         transportOptions.RunSessionHandler = async (httpContext, server, ct) =>
         {
-            var handlerLogger = httpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+            ILogger handlerLogger = httpContext.RequestServices.GetRequiredService<ILoggerFactory>()
                 .CreateLogger("InfraGate.McpGateway.SessionHandler");
             handlerLogger.LogInformation("RunSessionHandler: started (session={SessionId})", server.SessionId);
 
             var registry = httpContext.RequestServices.GetRequiredService<ISubscriptionRegistry>();
-            var id = server.SessionId;
+            string? id = server.SessionId;
             if (id is not null)
             {
                 registry.RegisterSession(id, new McpServerSessionNotifier(server));
@@ -87,7 +88,7 @@ builder.Services
     .WithUnsubscribeFromResourcesHandler((request, ct) =>
         new ValueTask<EmptyResult>(request.Services!.GetRequiredService<PlanStatusResourceHandler>()
             .Unsubscribe(request.Server.SessionId, request.Params)));
-var app = builder.Build();
+WebApplication app = builder.Build();
 
 await builder.Configuration.RunPostgresMigrationsAsync(app).ConfigureAwait(false);
 
@@ -96,6 +97,7 @@ await app.Services.GetRequiredService<PostgresApprovalSchemaValidator>()
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.MapGatewayHealthEndpoints();
 app.MapGatewayApprovalEndpoints();
 app.MapMcp(McpGatewayConventions.McpPath)
     .RequireAuthorization(GatewayAuthConventions.Schemes.PolicyName);

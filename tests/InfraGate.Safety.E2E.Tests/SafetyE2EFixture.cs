@@ -14,7 +14,9 @@ using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.McpGateway.Email;
 using InfraGate.McpGateway.Notifications;
+using InfraGate.McpServer;
 using InfraGate.RuntimeSafety;
+using k8s;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -532,6 +534,10 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
             ApprovalChallengeTtl: McpGatewayOptions.DefaultApprovalChallengeTtl,
             DownstreamAssembly: null,
             RuntimeMode: RuntimeMode.Development);
+        var kubernetesOptions = new KubernetesMcpOptions(
+            new HashSet<string>(StringComparer.Ordinal) { namespaceName },
+            RuntimeMode: RuntimeMode.Development,
+            KubeConfig: kubeconfigPath);
 
         return new TestServer(new WebHostBuilder()
             .ConfigureServices(services =>
@@ -541,7 +547,17 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                 services.AddSingleton<IGuardrailAuditStore, GuardrailAuditStore>();
                 services.AddSingleton<IDownstreamServiceTokenProvider, NullDownstreamServiceTokenProvider>();
                 services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
-                services.AddSingleton<GuardedToolRunner>();
+                services.AddSingleton<SensitiveDataRedactor>(sp =>
+                    new SensitiveDataRedactor(
+                        McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                        sp.GetRequiredService<ILogger<SensitiveDataRedactor>>()));
+                services.AddSingleton<GuardedToolRunner>(sp =>
+                    new GuardedToolRunner(
+                        sp.GetRequiredService<IDownstreamMcpClient>(),
+                        sp.GetRequiredService<IGuardrailAuditStore>(),
+                        sp.GetService<IHttpContextAccessor>(),
+                        sp.GetRequiredService<SensitiveDataRedactor>(),
+                        sp.GetRequiredService<ILogger<GuardedToolRunner>>()));
                 services.AddSingleton(new ApprovalStoreOptions(options.ApprovalRoot));
                 services.AddSingleton<ApprovalStore>();
                 services.AddSingleton<IApprovalAuditOutbox>(sp => sp.GetRequiredService<ApprovalStore>());
@@ -566,6 +582,9 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                 services.AddSingleton<IApprovalAccessCodeStore, InMemoryApprovalAccessCodeStore>();
                 services.AddSingleton<IApprovalEmailSender>(_ => new NullApprovalEmailSender());
                 services.AddSingleton<IProposePlanHandler, ProposePlanHandler>();
+                services.AddSingleton(kubernetesOptions);
+                services.AddSingleton<IKubernetes>(_ =>
+                    new Kubernetes(KubernetesClientConfiguration.BuildConfigFromConfigFile(kubeconfigPath)));
                 services.AddAntiforgery();
                 services.AddGatewayAuthentication(options.Auth);
                 services.PostConfigure<OAuthOptions>(GatewayAuthConventions.Schemes.ApprovalOAuth, oauthOptions =>

@@ -13,12 +13,28 @@ Defaults below come from the current source code and workflows. Paths shown as `
 | `ASPNETCORE_ENVIRONMENT` | ASP.NET components, fallback for server mode parsing | No | Used only when the two variables above are unset | `Production` | ASP.NET Core environment fallback. `Development` means development; all other values are treated as production-like. | Prefer `InfraGate__Runtime__Environment` for explicit InfraGate behavior. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | All runtime components | No | Unset | `http://localhost:4317` | Enables OTLP export for traces and metrics. If unset, only the Serilog bridge is active. | Use an authenticated OTLP collector. |
 | `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` | `InfraGate.Observer`, `InfraGate.Planner` | No | `false` | `true` | Set to `true` to include prompt/response content in spans. | **Off by default** — do not enable in production without a data-handling review. |
+| `ASPIRE_DASHBOARD_TOKEN` | `aspire-dashboard` dev compose container | No | `dev-token-change-me` (compose fallback) | `infra-gate-dev-dashboard-token` | Browser-token auth for the dev-only Aspire Dashboard UI. Sourced from `run-profiles.yaml`'s `telemetry.dashboardToken`, emitted by `InfraGate.RunProfiles` into the generated env file. | Dev/demo only — the dashboard is never deployed in production; regenerate the token before sharing a dev stack. |
+
+## InfraGate.RfcRag
+
+The RFC RAG MCP server is a standalone tool with no internal InfraGate project dependencies.
+
+| Variable | Component | Required | Default | Example | Description | Production guidance |
+| --- | --- | :---: | --- | --- | --- | --- |
+| `InfraGate__RfcRag__RfcMirrorPath` | `InfraGate.RfcRag` | Yes | `~/OtherRepos/rfc-mirror/` | `/rfc-mirror` | Path to the local RFC mirror directory containing `.txt` files. | Use an absolute path in Docker deployments to avoid tilde-expansion issues. |
+| `InfraGate__RfcRag__PostgresConnectionString` | `InfraGate.RfcRag` | Yes | None | `Host=localhost;Database=rfc_rag;Username=postgres;Password=postgres` | PostgreSQL connection string for the RfcRag database (`pgvector` required). | Use a least-privilege role with write access to the `rfc_rag` schema. |
+| `InfraGate__RfcRag__EmbeddingModel` | `InfraGate.RfcRag` | No | `openai/text-embedding-3-small` | `openai/text-embedding-3-large` | OpenRouter embedding model identifier. | Choose based on quality/cost trade-off; dimensions must match `EmbeddingDimensions`. |
+| `InfraGate__RfcRag__EmbeddingDimensions` | `InfraGate.RfcRag` | No | `1536` | `3072` | Embedding vector dimensions matching the selected model. | Must match the model's output dimensions; mismatches fail startup. |
+| `InfraGate__RfcRag__EmbeddingBatchSize` | `InfraGate.RfcRag` | No | `20` | `10` | Batch size for embedding API calls. | Smaller batches reduce memory but increase API call count. |
+| `InfraGate__RfcRag__OpenRouterEmbeddingEndpoint` | `InfraGate.RfcRag` | No | `https://openrouter.ai/api/v1` | `https://openrouter.ai/api/v1` | OpenRouter API base URL for embedding requests. | Override only when using a compatible proxy or alternative provider. |
+| `InfraGate__RfcRag__RunMigrationsOnStartup` | `InfraGate.RfcRag` | No | `true` | `false` | Auto-apply SQL schema migrations on startup. | Disable only when managing migrations externally. |
+| `InfraGate__OpenRouter__ApiKey` | `InfraGate.RfcRag` | Yes | None | (secret) | OpenRouter API key used for embedding generation. | Use a secret manager in production; env vars are development-only. |
 
 ## McpServer
 
 ## InfraGate.AgentGuardrails.ModelVisibleContent
 
-Model-visible content guard configuration. Controls whether text is inspected before LLM ingestion.
+Model-visible content guard configuration. Controls whether text is inspected before LLM ingestion. Gateway read-only tool responses use the `model_visible_tool_result` envelope; Observer and Planner must treat `untrusted.payload` in that envelope as Kubernetes observation data, not instructions or tool-calling guidance.
 
 | Variable | Component | Required | Default | Example | Description | Production guidance |
 | --- | --- | :---: | --- | --- | --- | --- |
@@ -126,7 +142,8 @@ The Remediation Executor listens on port `3005` by default, accepts synchronous 
 | --- | --- | :---: | --- | --- | --- | --- |
 | `InfraGate__Gateway__AspNetCoreUrls` | `InfraGate.McpGateway` | No | `http://127.0.0.1:3001`; Docker/Compose profiles set `http://0.0.0.0:3001` | `http://0.0.0.0:3001` | ASP.NET Core bind URL for the HTTP MCP gateway and browser approval endpoints. `ASPNETCORE_URLS` still wins if set directly. | Bind intentionally and put the gateway behind TLS in production. |
 | `InfraGate__Gateway__DownstreamProject` | `InfraGate.McpGateway` | No | `<working directory>/src/InfraGate.McpServer/InfraGate.McpServer.csproj` | `/repo/src/InfraGate.McpServer/InfraGate.McpServer.csproj` | Downstream stdio MCP server project used when no published assembly is configured. | Prefer `InfraGate__Gateway__DownstreamAssembly` for immutable container/runtime deployments. |
-| `InfraGate__Gateway__DownstreamAssembly` | `InfraGate.McpGateway` | No | Unset | `/app/server/InfraGate.McpServer.dll` | Published downstream server assembly. When set, the gateway starts `dotnet <assembly>`. | Use a known published assembly from the same release as the gateway image. |
+| `InfraGate__Gateway__DownstreamAssembly` | `InfraGate.McpGateway` | No | Unset | `/app/server/InfraGate.McpServer.dll` | Published downstream server assembly. When set, the gateway starts `dotnet <assembly>`. | Required in Production. Use a known published assembly from the same release as the gateway image. |
+| `InfraGate__Gateway__DownstreamAssemblyHash` | `InfraGate.McpGateway` | Required in Production | Unset | `a3e5f8c9d2b1e4076f5a3c8e1d0b9a2c7f4e6d5b8c3a1f0e9d7b6c5a4f3e2d1b0` | Expected SHA-256 hex digest of the downstream server assembly. | Required in Production when `InfraGate__Gateway__DownstreamAssembly` is set. Compute the hash from the file inside the runtime image, not a host bind-mount. Update on every server upgrade. |
 | `InfraGate__Gateway__GuardAuditRoot` | `InfraGate.McpGateway` | Required in Production | `<working directory>/.mcp-guardrails` | `/data/guardrails` | Guardrail JSONL audit output root. | Store on protected durable absolute storage and monitor retention. Production refuses temp paths, default dev paths, and group/other-writable existing directories. |
 | `InfraGate__Approval__Root` | `InfraGate.McpGateway` | Required in Production | `<working directory>/.mcp-approvals` | `/data/approvals` | Retained for ASP.NET Core Data Protection key storage only. Approval state and audit are PostgreSQL-backed. | Use a durable, protected absolute path for Data Protection keys. Production requires an explicit durable path. |
 | `InfraGate__Approval__BaseUrl` | `InfraGate.McpGateway` | Required in Production | Request-derived URL, or `http://127.0.0.1:3001` when no request is available | `https://gateway.example.com` | Public base URL used when returning approval links to the MCP client. | Set explicitly to the external HTTPS URL users open in a browser. Production refuses missing, HTTP, or loopback values. |
@@ -140,6 +157,21 @@ The Remediation Executor listens on port `3005` by default, accepts synchronous 
 | `InfraGate__Approval__Smtp__Password` | `InfraGate.McpGateway` | No | Unset | (secret) | Optional SMTP password. | Use secret storage; never commit generated env files containing this value. |
 | `InfraGate__Approval__Smtp__EnableSsl` | `InfraGate.McpGateway` | No | `true` when SMTP is configured; local Compose default `false` for Mailpit | `true` | Enables SMTP TLS/STARTTLS on the approval email client. | Keep enabled for production SMTP relays; disable only for local Mailpit or trusted development-only relays. |
 
+Compute the expected assembly hash from the file that will exist inside the runtime image:
+
+```bash
+# Linux (run inside the built image or against the published file)
+sha256sum /app/server/InfraGate.McpServer.dll
+
+# PowerShell
+Get-FileHash -Algorithm SHA256 -Path C:\app\server\InfraGate.McpServer.dll
+```
+
+> [!NOTE]
+> `InfraGate__Gateway__DownstreamAssemblyHash` is verified using a constant-time comparison. The gateway computes the SHA-256 hash once at startup; it does not verify the binary on every subprocess respawn. In Production, missing or mismatched hashes fail fast with a clear error.
+>
+> OS-level hardening (dedicated service user, file-system permissions, and binary signing) is deployment-dependent and is not enforced by the gateway process itself.
+
 ## McpGateway.Auth
 
 | Variable | Component | Required | Default | Example | Description | Production guidance |
@@ -149,10 +181,25 @@ The Remediation Executor listens on port `3005` by default, accepts synchronous 
 | `InfraGate__Auth__OAuthResource` | `InfraGate.McpGateway.Auth` | No | `http://127.0.0.1:3001/mcp` | `https://gateway.example.com/mcp` | Expected JWT audience/resource and MCP protected resource value. | Set to the externally stable HTTPS MCP resource URI and configure the IdP to issue it as an audience. Production refuses the localhost default. |
 | `InfraGate__Auth__OAuthScope` | `InfraGate.McpGateway.Auth` | No | `mcp:tools` | `mcp:tools` | Required scope checked on MCP requests and requested by the approval UI OAuth flow. | Keep scopes aligned with the IdP and client configuration. |
 | `InfraGate__Auth__OAuthRequireHttpsMetadata` | `InfraGate.McpGateway.Auth` | No | `true` | `false` | Controls the HTTPS requirement for OIDC discovery metadata. | `false` is acceptable only for local HTTP development issuers such as the Keycloak demo. Production refuses `false`. |
+| `InfraGate__Auth__TokenIntrospectionEnabled` | `InfraGate.McpGateway.Auth` | No | `false` | `true` | Enables OAuth token introspection after local JWT validation. When enabled, only issuer responses with `active: true` are accepted. | Required in Production mode. Introspection is the source-of-truth revocation path; IdP outage or inactive responses fail closed. |
+| `InfraGate__Auth__TokenIntrospectionEndpoint` | `InfraGate.McpGateway.Auth` | No | Discovered from OIDC metadata when omitted | `https://issuer.example.com/realms/demo/protocol/openid-connect/token/introspect` | Optional OAuth token introspection endpoint override. | Prefer OIDC discovery when available; if set in Production it must be HTTPS and non-loopback. |
+| `InfraGate__Auth__TokenIntrospectionClientId` | `InfraGate.McpGateway.Auth` | Required when introspection is enabled in Production | None | `infra-gate-token-introspection` | Confidential client id used by the gateway to call the issuer introspection endpoint. | Use a dedicated least-privilege resource-server/introspection client, not the approval UI or MCP client. |
+| `InfraGate__Auth__TokenIntrospectionClientSecret` | `InfraGate.McpGateway.Auth` | Required when introspection is enabled in Production | None | `(secret)` | Secret for the introspection client. | Store in a secret manager; never log it or commit generated env files containing it. |
+| `InfraGate__Auth__TokenIntrospectionCacheSeconds` | `InfraGate.McpGateway.Auth` | No | `30` | `30` | Positive `active: true` introspection cache TTL in seconds. Cache entries are also capped by the JWT `exp` claim and any introspection `exp` response. Inactive and failed responses are not cached as successful authorizations. | Keep short; this is the maximum revocation propagation delay per gateway instance. |
+| `InfraGate__Auth__MaxAcceptedAccessTokenLifetimeSeconds` | `InfraGate.McpGateway.Auth` | No | `300` | `300` | Maximum accepted access-token lifetime, computed from `exp - iat` or `exp - nbf`. Tokens missing both `iat` and `nbf` are rejected when this setting is positive. Set `0` only to disable the check in development. | Production requires a value from 1 to 300 seconds. This is defense-in-depth, not a substitute for introspection. |
 | `InfraGate__Auth__ApprovalOAuthClientId` | `InfraGate.McpGateway.Auth` | No | `infra-gate-approval-ui` | `infra-gate-approval-ui` | Public OAuth client id used by the browser approval UI. | Register this as a public PKCE client with the production IdP. |
 | `InfraGate__Auth__ApprovalOAuthAuthorizationEndpoint` | `InfraGate.McpGateway.Auth` | No | `${InfraGate__Auth__OAuthAuthority}/authorize` | `https://issuer.example.com/realms/demo/protocol/openid-connect/auth` | Browser-visible authorization endpoint override for approval login. | Set when the provider does not expose `/authorize` under the authority root. Production requires the effective endpoint to be HTTPS and non-loopback. |
 | `InfraGate__Auth__ApprovalOAuthTokenEndpoint` | `InfraGate.McpGateway.Auth` | No | `${InfraGate__Auth__OAuthAuthority}/token` | `https://issuer.example.com/realms/demo/protocol/openid-connect/token` | Gateway-visible token endpoint override for approval login. | Use an endpoint reachable by the gateway; do not point browser-only hosts here. Production requires the effective endpoint to be HTTPS and non-loopback. |
 | `InfraGate__Auth__ApprovalOAuthCallbackPath` | `InfraGate.McpGateway.Auth` | No | `/approvals/oauth/callback` | `/approvals/oauth/callback` | Local callback path used by the gateway approval UI OAuth flow. | Register the full external redirect URI with the IdP. |
+
+Approval UI logout signs out only the gateway browser cookie. It does not revoke bearer access tokens at the IdP; use issuer session/token revocation or Keycloak admin session invalidation for incident response. DPoP reduces replay risk for bound tokens but is not a revocation mechanism and does not cover ordinary bearer tokens.
+
+**JWKS validation hardening (F-11):**
+
+- Inbound JWTs must carry a `kid` header that matches a key currently present in the issuer JWKS. Tokens with a missing or unknown `kid` are rejected; the validator does not fall back to trying every key in the set.
+- The gateway and downstream validator both use an explicit `ConfigurationManager<OpenIdConnectConfiguration>` with a 5-minute automatic refresh interval and a 1-minute minimum refresh interval. Rotated-out keys stop being trusted within that window.
+- Transient JWKS/metadata fetch failures after a successful fetch are served from the cached last-known-good configuration. First-fetch failure remains fail-closed.
+- These intervals are constants, not operator-tunable settings, to keep the security-critical default small and consistent.
 
 > [!WARNING]
 > **DPoP Replay Store Limitation:** The Gateway currently uses an in-memory DPoP proof replay store (`InMemoryDpopProofReplayStore`) to mitigate token replay attacks. Because this store is in-memory and not backed by shared storage (e.g., Redis or PostgreSQL), DPoP replay detection is local to the instance. In multi-replica gateway deployments, replayed DPoP tokens might be accepted if they hit a different replica than the original request. Single-replica deployments are unaffected.
@@ -167,6 +214,7 @@ The local OAuth Compose path (`deploy/local-oauth`) and the development compose 
 | `mcp-smoke-client` | Public direct-grant client used by CI/smoke tests to acquire non-browser tokens. |
 | `mcp-client-limited` | Public direct-grant client with valid audience but no `mcp:tools`, used for 403 insufficient-scope coverage. |
 | `infra-gate-approval-ui` | Public authorization-code + PKCE S256 client for browser approvals. |
+| `infra-gate-token-introspection` | Confidential client used by the gateway when local/demo introspection is enabled. |
 | `infra-gate-observer` | Confidential client_credentials client for the Anomaly Observer. |
 | `infra-gate-planner` | Confidential client_credentials client for the Remediation Planner. |
 | `infra-gate-executor` | Confidential client_credentials client for the Remediation Executor. |
@@ -178,7 +226,7 @@ The local OAuth Compose path (`deploy/local-oauth`) and the development compose 
 
 Anonymous OIDC Dynamic Client Registration is enabled only in the local/demo realm. Registration policies restrict redirect URIs to trusted loopback hosts, limit allowed client scopes, cap anonymous client count, and disable full-scope registration. Production deployments should use pre-registered or admin-managed clients instead.
 
-Keycloak does not currently process RFC 8707 `resource` indicators for MCP as the gateway ultimately needs, so the local realm binds `aud` through the `mcp:tools` audience mapper. The gateway still validates issuer, signature, lifetime, audience, and scope. InfraGate should revisit issuer-side RFC 8707 resource-indicator coverage when Keycloak supports the needed MCP flow cleanly.
+Keycloak does not currently process RFC 8707 `resource` indicators for MCP as the gateway ultimately needs, so the local realm binds `aud` through the `mcp:tools` audience mapper. The gateway still validates issuer, signature, lifetime, audience, scope, and the configured maximum access-token lifetime. The local realm sets `accessTokenLifespan` to 300 seconds and exposes introspection at `/protocol/openid-connect/token/introspect`; enable gateway introspection with the dedicated confidential introspection client when testing revocation behavior. InfraGate should revisit issuer-side RFC 8707 resource-indicator coverage when Keycloak supports the needed MCP flow cleanly.
 
 ## Run Profiles
 

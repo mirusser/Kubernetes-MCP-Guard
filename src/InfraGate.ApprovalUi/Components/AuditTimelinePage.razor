@@ -1,0 +1,279 @@
+@namespace InfraGate.ApprovalUi.Components
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Audit Timeline - InfraGate</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            font-family: system-ui, -apple-system, sans-serif;
+            --color-bg: #0f1117;
+            --color-card-bg: #1a1d28;
+            --color-text: #e1e4ea;
+            --color-text-muted: #8b8fa3;
+            --color-border: #2a2d3a;
+            --color-code-bg: #0d0f16;
+            --color-success: #34d399;
+            --color-error: #f87171;
+            --color-warning: #fbbf24;
+            --color-info: #60a5fa;
+            --color-badge-approvals-bg: #1e3a5f;
+            --color-badge-approvals-text: #93c5fd;
+            --color-badge-planner-bg: #3f1e5f;
+            --color-badge-planner-text: #d8b4fe;
+            --color-badge-observer-bg: #1e3f2d;
+            --color-badge-observer-text: #86efac;
+        }
+        @@media (prefers-color-scheme: light) {
+            :root {
+                color-scheme: light;
+                --color-bg: #f8f9fb;
+                --color-card-bg: #ffffff;
+                --color-text: #1f2937;
+                --color-text-muted: #6b7280;
+                --color-border: #e2e4e9;
+                --color-code-bg: #f3f4f6;
+                --color-success: #166534;
+                --color-error: #991b1b;
+                --color-warning: #92400e;
+                --color-info: #1e40af;
+                --color-badge-approvals-bg: #dbeafe;
+                --color-badge-approvals-text: #1e40af;
+                --color-badge-planner-bg: #f3e8ff;
+                --color-badge-planner-text: #6b21a8;
+                --color-badge-observer-bg: #dcfce7;
+                --color-badge-observer-text: #166534;
+            }
+        }
+        body {
+            margin: 0;
+            background: var(--color-bg);
+            color: var(--color-text);
+            line-height: 1.6;
+        }
+        main {
+            max-width: 920px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+        h1 {
+            font-size: 26px;
+            font-weight: 700;
+            margin: 0 0 8px;
+            color: var(--color-text);
+        }
+        .subtitle {
+            color: var(--color-text-muted);
+            font-size: 14px;
+            margin: 0 0 32px;
+        }
+        .empty-state {
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-border);
+            border-radius: 10px;
+            padding: 32px 24px;
+            text-align: center;
+        }
+        .empty-state h2 {
+            font-size: 17px;
+            font-weight: 650;
+            margin: 0 0 8px;
+        }
+        .empty-state p {
+            color: var(--color-text-muted);
+            font-size: 14px;
+            margin: 0;
+        }
+        .timeline {
+            position: relative;
+            padding-left: 24px;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            top: 8px;
+            bottom: 8px;
+            left: 6px;
+            width: 2px;
+            background: var(--color-border);
+        }
+        .entry {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        .entry::before {
+            content: '';
+            position: absolute;
+            top: 8px;
+            left: -22px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--color-border);
+            border: 2px solid var(--color-card-bg);
+        }
+        .entry-card {
+            background: var(--color-card-bg);
+            border: 1px solid var(--color-border);
+            border-radius: 10px;
+            padding: 16px 20px;
+        }
+        .entry-header {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 650;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .badge-approvals { background: var(--color-badge-approvals-bg); color: var(--color-badge-approvals-text); }
+        .badge-planner { background: var(--color-badge-planner-bg); color: var(--color-badge-planner-text); }
+        .badge-observer { background: var(--color-badge-observer-bg); color: var(--color-badge-observer-text); }
+        .event-name {
+            font-weight: 650;
+            font-size: 15px;
+        }
+        .timestamp {
+            color: var(--color-text-muted);
+            font-size: 13px;
+            margin-left: auto;
+        }
+        .actor {
+            color: var(--color-text-muted);
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+        .outcome {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 650;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin-bottom: 8px;
+        }
+        .outcome-success { color: var(--color-success); }
+        .outcome-blocked { color: var(--color-error); }
+        .outcome-failed { color: var(--color-error); }
+        .outcome-denied { color: var(--color-error); }
+        .outcome-warning { color: var(--color-warning); }
+        .reason {
+            color: var(--color-text-muted);
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+        .fields {
+            display: grid;
+            grid-template-columns: minmax(120px, 160px) 1fr;
+            gap: 6px 16px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid var(--color-border);
+        }
+        .field-label {
+            color: var(--color-text-muted);
+            font-size: 13px;
+        }
+        .field-value {
+            font-size: 13px;
+            overflow-wrap: anywhere;
+        }
+        code {
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            font-size: 12px;
+            background: var(--color-code-bg);
+            padding: 2px 5px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Audit Timeline</h1>
+        <p class="subtitle" data-field="plan-id">Plan: <code>@PageData.PlanId</code></p>
+
+        @if (PageData.Entries.Count == 0)
+        {
+            <div class="empty-state" data-section="timeline-empty">
+                <h2>No events found</h2>
+                <p>No audit events were found for this plan.</p>
+            </div>
+        }
+        else
+        {
+            <div class="timeline" data-section="timeline-entries">
+                @foreach (var entry in PageData.Entries)
+                {
+                    <article class="entry" data-stream="@entry.Stream" data-event="@entry.EventName">
+                        <div class="entry-card">
+                            <div class="entry-header">
+                                <span class="badge @GetStreamBadgeClass(entry.Stream)">@entry.Stream</span>
+                                <span class="event-name" data-field="event-name">@entry.EventName</span>
+                                <span class="timestamp" data-field="timestamp">@entry.OccurredAtUtc.ToString("O")</span>
+                            </div>
+
+                            @if (!string.IsNullOrWhiteSpace(entry.ActorSubject))
+                            {
+                                <div class="actor" data-field="actor">@entry.ActorSubject</div>
+                            }
+
+                            @if (!string.IsNullOrWhiteSpace(entry.Outcome))
+                            {
+                                <div class="outcome @GetOutcomeClass(entry.Outcome)" data-field="outcome">@entry.Outcome</div>
+                            }
+
+                            @if (!string.IsNullOrWhiteSpace(entry.Reason))
+                            {
+                                <div class="reason" data-field="reason">@entry.Reason</div>
+                            }
+
+                            @if (entry.DisplayFields.Count > 0)
+                            {
+                                <div class="fields">
+                                    @foreach (var field in entry.DisplayFields)
+                                    {
+                                        <div class="field-label" data-field-label="@field.Key">@field.Key</div>
+                                        <div class="field-value" data-field-value="@field.Key">@field.Value</div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+    </main>
+</body>
+</html>
+
+@code {
+    [Parameter] public AuditTimelinePageData PageData { get; set; } = default!;
+
+    private static string GetStreamBadgeClass(string stream) =>
+        stream.ToLowerInvariant() switch
+        {
+            "approvals" => "badge-approvals",
+            "planner" => "badge-planner",
+            "observer" => "badge-observer",
+            _ => string.Empty,
+        };
+
+    private static string GetOutcomeClass(string outcome) =>
+        outcome.ToLowerInvariant() switch
+        {
+            "success" or "succeeded" or "approved" or "detected" => "outcome-success",
+            "blocked" or "denied" => "outcome-blocked",
+            "failed" or "failure" => "outcome-failed",
+            _ => "outcome-warning",
+        };
+}

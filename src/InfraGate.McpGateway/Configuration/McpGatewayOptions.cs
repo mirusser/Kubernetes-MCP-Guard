@@ -2,6 +2,7 @@ using System.Globalization;
 using InfraGate.Approvals;
 using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.BinaryIntegrity;
 using InfraGate.McpGateway.Email;
 using InfraGate.RuntimeSafety;
 
@@ -16,6 +17,7 @@ public sealed record class McpGatewayOptions(
     string? ApprovalBaseUrl,
     TimeSpan ApprovalChallengeTtl,
     string? DownstreamAssembly = null,
+    string? DownstreamAssemblyHash = null,
     RuntimeMode RuntimeMode = RuntimeMode.Development,
     bool IsGuardAuditRootExplicit = true,
     bool IsApprovalRootExplicit = true,
@@ -56,6 +58,7 @@ public sealed record class McpGatewayOptions(
                 McpGatewayConventions.Paths.DefaultDownstreamProjectDirectory,
                 McpGatewayConventions.Paths.DefaultDownstreamProjectFileName);
         string? downstreamAssembly = gatewaySettings?.DownstreamAssembly;
+        string? downstreamAssemblyHash = gatewaySettings?.DownstreamAssemblyHash;
         string? auditRootValue = gatewaySettings?.GuardAuditRoot;
         bool isGuardAuditRootExplicit = !string.IsNullOrWhiteSpace(auditRootValue);
         string auditRoot = auditRootValue ??
@@ -70,7 +73,7 @@ public sealed record class McpGatewayOptions(
             DefaultApprovalChallengeTtl);
         string operatorGroup = approvalSettings?.OperatorGroup ?? McpGatewayConventions.DefaultOperatorGroup;
         string? operatorEmail = approvalSettings?.OperatorEmail;
-        var smtp = CreateSmtpOptions(
+        SmtpApprovalEmailOptions? smtp = CreateSmtpOptions(
             approvalSettings?.Smtp?.Host,
             approvalSettings?.Smtp?.Port,
             approvalSettings?.Smtp?.From,
@@ -87,6 +90,7 @@ public sealed record class McpGatewayOptions(
             approvalBaseUrl,
             approvalChallengeTtl,
             downstreamAssembly,
+            downstreamAssemblyHash,
             runtimeMode,
             isGuardAuditRootExplicit,
             isApprovalRootExplicit,
@@ -96,14 +100,35 @@ public sealed record class McpGatewayOptions(
             smtp);
     }
 
-    public void ValidateProductionSafety()
+    internal void ValidateProductionSafety(IDownstreamBinaryIntegrityVerifier? binaryIntegrityVerifier = null)
     {
+        binaryIntegrityVerifier ??= new Sha256DownstreamBinaryIntegrityVerifier();
+
+        if (ShouldVerifyBinaryIntegrity())
+        {
+            binaryIntegrityVerifier.Verify(DownstreamAssembly!, DownstreamAssemblyHash!);
+        }
+
         if (RuntimeMode != RuntimeMode.Production)
         {
             return;
         }
 
-        var downstreamAuth = DownstreamAuth;
+        if (string.IsNullOrWhiteSpace(DownstreamAssembly))
+        {
+            throw new InvalidOperationException(
+                $"{McpGatewayConventions.EnvironmentVariables.DownstreamAssembly} is required in Production mode. " +
+                $"Use a published downstream assembly, not dotnet run --project.");
+        }
+
+        if (string.IsNullOrWhiteSpace(DownstreamAssemblyHash))
+        {
+            throw new InvalidOperationException(
+                $"{McpGatewayConventions.EnvironmentVariables.DownstreamAssemblyHash} is required in Production mode " +
+                $"when {McpGatewayConventions.EnvironmentVariables.DownstreamAssembly} is configured.");
+        }
+
+        DownstreamAuthOptions? downstreamAuth = DownstreamAuth;
         if (downstreamAuth is null || !downstreamAuth.Required)
         {
             throw new InvalidOperationException(
@@ -113,11 +138,29 @@ public sealed record class McpGatewayOptions(
 
         downstreamAuth.Validate();
 
+        if (!downstreamAuth.RequireHttpsMetadata)
+        {
+            throw new InvalidOperationException(
+                $"{DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata} must be true in Production mode.");
+        }
+
+        ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
+            downstreamAuth.Authority,
+            DownstreamAuthConventions.EnvironmentVariables.Authority);
+        if (!string.IsNullOrWhiteSpace(downstreamAuth.MetadataAddress))
+        {
+            ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
+                downstreamAuth.MetadataAddress,
+                DownstreamAuthConventions.EnvironmentVariables.MetadataAddress);
+        }
+
         if (!Auth.OAuthRequireHttpsMetadata)
         {
             throw new InvalidOperationException(
                 $"{GatewayAuthConventions.EnvironmentVariables.OAuthRequireHttpsMetadata} must be true in Production mode.");
         }
+
+        ValidateProductionTokenIntrospection();
 
         ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
             Auth.OAuthAuthority,
@@ -152,6 +195,57 @@ public sealed record class McpGatewayOptions(
             McpGatewayConventions.EnvironmentVariables.GuardAuditRoot,
             IsGuardAuditRootExplicit,
             DeniedGuardAuditRootNames);
+    }
+
+    private bool ShouldVerifyBinaryIntegrity()
+    {
+        if (string.IsNullOrWhiteSpace(DownstreamAssembly))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(DownstreamAssemblyHash))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private void ValidateProductionTokenIntrospection()
+    {
+        if (!Auth.TokenIntrospectionEnabled)
+        {
+            throw new InvalidOperationException(
+                $"{GatewayAuthConventions.EnvironmentVariables.TokenIntrospectionEnabled} must be true in Production mode.");
+        }
+
+        if (string.IsNullOrWhiteSpace(Auth.TokenIntrospectionClientId))
+        {
+            throw new InvalidOperationException(
+                $"{GatewayAuthConventions.EnvironmentVariables.TokenIntrospectionClientId} is required in Production mode.");
+        }
+
+        if (string.IsNullOrWhiteSpace(Auth.TokenIntrospectionClientSecret))
+        {
+            throw new InvalidOperationException(
+                $"{GatewayAuthConventions.EnvironmentVariables.TokenIntrospectionClientSecret} is required in Production mode.");
+        }
+
+        if (Auth.MaxAcceptedAccessTokenLifetimeSeconds <= 0 ||
+            Auth.MaxAcceptedAccessTokenLifetimeSeconds > GatewayAuthConventions.DefaultMaxAcceptedAccessTokenLifetimeSeconds)
+        {
+            throw new InvalidOperationException(
+                $"{GatewayAuthConventions.EnvironmentVariables.MaxAcceptedAccessTokenLifetimeSeconds} must be between 1 and " +
+                $"{GatewayAuthConventions.DefaultMaxAcceptedAccessTokenLifetimeSeconds} seconds in Production mode.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(Auth.TokenIntrospectionEndpoint))
+        {
+            ProductionSafetyValidator.RequireHttpsNonLoopbackUri(
+                Auth.TokenIntrospectionEndpoint,
+                GatewayAuthConventions.EnvironmentVariables.TokenIntrospectionEndpoint);
+        }
     }
 
     private static TimeSpan ParseTimeSpanSeconds(string? value, TimeSpan defaultValue)

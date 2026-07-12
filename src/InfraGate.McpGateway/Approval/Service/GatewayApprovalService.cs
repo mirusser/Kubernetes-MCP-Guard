@@ -7,6 +7,7 @@ using InfraGate.Approvals.Audit;
 using InfraGate.Approvals.AuditPayloads;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Notifications;
+using System.Security.Claims;
 
 namespace InfraGate.McpGateway;
 
@@ -25,7 +26,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
         string planId,
         CancellationToken cancellationToken)
     {
-        var requester = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
+        GatewayApprovalIdentity? requester = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
         if (requester is null)
         {
             return ApprovalGateResult.Refused(
@@ -33,7 +34,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
                 McpGatewayConventions.ApprovalReasonCodes.AuthenticatedSubjectRequired);
         }
 
-        var granted = await approvalPlans.GetGrantedPlanAsync(planId, cancellationToken).ConfigureAwait(false);
+        GrantedPlanResult granted = await approvalPlans.GetGrantedPlanAsync(planId, cancellationToken).ConfigureAwait(false);
         if (granted.IsGranted && granted.Envelope is not null && granted.Grant is not null)
         {
             return await GetGrantedApprovalResultAsync(planId, granted.Envelope, requester, cancellationToken)
@@ -56,10 +57,10 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
         GatewayApprovalIdentity requester,
         CancellationToken cancellationToken)
     {
-        var decoded = planReviewAdapter.TryDecodeForReview(envelope, out var decodeError);
+        IPlanReview? decoded = planReviewAdapter.TryDecodeForReview(envelope, out string? decodeError);
         if (decoded is null)
         {
-            var message = decodeError ?? McpGatewayMessages.Approval.AdapterDecodeFailedWithId(planId);
+            string message = decodeError ?? McpGatewayMessages.Approval.AdapterDecodeFailedWithId(planId);
             await WriteApplyDeniedAuditAsync(planId, message, cancellationToken).ConfigureAwait(false);
 
             return ApprovalGateResult.Refused(
@@ -67,7 +68,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
                 McpGatewayConventions.ApprovalReasonCodes.AdapterDecodeFailed);
         }
 
-        var grantedAuthz = await authorizationCheck.EvaluateAsync(
+        AuthorizationResult grantedAuthz = await authorizationCheck.EvaluateAsync(
             new PlanAuthorizationContext(
                 decoded.Envelope.Requester.Subject,
                 requester.Subject,
@@ -81,7 +82,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
                 McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired);
         }
 
-        var approvedRefusal = GetPlanReadinessRefusal(decoded, planId);
+        ResultFailure? approvedRefusal = GetPlanReadinessRefusal(decoded, planId);
         if (approvedRefusal is not null)
         {
             return ApprovalGateResult.Refused($"Refused: {approvedRefusal.Message}", approvedRefusal.ReasonCode);
@@ -95,22 +96,22 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
         GatewayApprovalIdentity requester,
         CancellationToken cancellationToken)
     {
-        var pending = await approvalPlans.GetPendingPlanAsync(planId, cancellationToken).ConfigureAwait(false);
+        PendingPlanResult pending = await approvalPlans.GetPendingPlanAsync(planId, cancellationToken).ConfigureAwait(false);
         if (!pending.IsPending || pending.Envelope is null || pending.Hash is null)
         {
             return ApprovalGateResult.Refused($"Refused: {pending.Message}", pending.ReasonCode);
         }
 
-        var pendingPlan = planReviewAdapter.TryDecodeForReview(pending.Envelope, out var pendingError);
+        IPlanReview? pendingPlan = planReviewAdapter.TryDecodeForReview(pending.Envelope, out string? pendingError);
         if (pendingPlan is null)
         {
-            var adapterError = pendingError ?? McpGatewayMessages.Approval.AdapterDecodeFailedWithId(planId);
+            string adapterError = pendingError ?? McpGatewayMessages.Approval.AdapterDecodeFailedWithId(planId);
             return ApprovalGateResult.Refused(
                 $"Refused: {adapterError}",
                 McpGatewayConventions.ApprovalReasonCodes.AdapterDecodeFailed);
         }
 
-        var pendingAuthz = await authorizationCheck.EvaluateAsync(
+        AuthorizationResult pendingAuthz = await authorizationCheck.EvaluateAsync(
             new PlanAuthorizationContext(
                 pendingPlan.Envelope.Requester.Subject,
                 requester.Subject,
@@ -124,7 +125,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
                 McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired);
         }
 
-        var pendingRefusal = GetPlanReadinessRefusal(pendingPlan, planId);
+        ResultFailure? pendingRefusal = GetPlanReadinessRefusal(pendingPlan, planId);
         if (pendingRefusal is not null)
         {
             return ApprovalGateResult.Refused($"Refused: {pendingRefusal.Message}", pendingRefusal.ReasonCode);
@@ -134,9 +135,9 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
         // challenge's RequesterSubject always matches decoded.Envelope.Requester.Subject at approval time.
         // GatewayAuditIdentityResolver (used when writing the plan) and GatewayApprovalIdentityResolver
         // (used for the current HTTP context) format service-account subjects differently.
-        var planRequesterSubject = pendingPlan.Envelope.Requester.Subject;
+        string planRequesterSubject = pendingPlan.Envelope.Requester.Subject;
 
-        var existingChallenge = await approvalChallenges.FindPendingChallengeAsync(
+        ApprovalChallenge? existingChallenge = await approvalChallenges.FindPendingChallengeAsync(
             planId,
             pending.Hash,
             planRequesterSubject,
@@ -145,7 +146,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
             cancellationToken).ConfigureAwait(false);
         if (existingChallenge is not null)
         {
-            var approvalUrl = CreateApprovalUrl(existingChallenge.Id);
+            string approvalUrl = CreateApprovalUrl(existingChallenge.Id);
             return ApprovalGateResult.RequiresApproval(
                 ApprovalMessageFormatter.RenderApprovalRequiredMessage(
                     pendingPlan,
@@ -157,7 +158,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
                 existingChallenge.ExpiresAtUtc);
         }
 
-        var now = DateTimeOffset.UtcNow;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
         if (now < pending.Envelope.ValidFromUtc)
         {
             return ApprovalGateResult.Refused(
@@ -172,12 +173,12 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
                 McpGatewayConventions.ApprovalReasonCodes.PlanExpired);
         }
 
-        var remainingWindow = pending.Envelope.ValidUntilUtc - now;
-        var effectiveTtl = remainingWindow < options.ApprovalChallengeTtl
+        TimeSpan remainingWindow = pending.Envelope.ValidUntilUtc - now;
+        TimeSpan effectiveTtl = remainingWindow < options.ApprovalChallengeTtl
             ? remainingWindow
             : options.ApprovalChallengeTtl;
 
-        var challenge = await approvalChallenges.CreateChallengeAsync(
+        ApprovalChallenge challenge = await approvalChallenges.CreateChallengeAsync(
             planId,
             pending.Hash,
             planRequesterSubject,
@@ -187,7 +188,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
             pending.Envelope.ReviewDigest,
             cancellationToken).ConfigureAwait(false);
 
-        var challengeApprovalUrl = CreateApprovalUrl(challenge.Id);
+        string challengeApprovalUrl = CreateApprovalUrl(challenge.Id);
         return ApprovalGateResult.RequiresApproval(
             ApprovalMessageFormatter.RenderApprovalRequiredMessage(
                 pendingPlan,
@@ -215,7 +216,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
         string challengeId,
         CancellationToken cancellationToken)
     {
-        var validation = await ValidatePendingChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
+        ChallengeValidation validation = await ValidatePendingChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
 
         return validation.Error is not null
             ? new ApprovalPageModel(false, validation.Error, validation.Challenge, validation.PlanReview)
@@ -226,7 +227,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
         string challengeId,
         CancellationToken cancellationToken)
     {
-        var validation = await ValidatePendingChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
+        ChallengeValidation validation = await ValidatePendingChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
         if (validation.Error is not null ||
             validation.Challenge is null ||
             validation.PlanReview is null)
@@ -237,14 +238,14 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
                 validation.ReasonCode ?? ApprovalConventions.ResultReasonCodes.ChallengeInvalid);
         }
 
-        var approver = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User)!;
-        var decidedAt = DateTimeOffset.UtcNow;
-        var grant = await approvalChallenges.ApproveChallengeAsync(
+        GatewayApprovalIdentity approver = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User)!;
+        DateTimeOffset decidedAt = DateTimeOffset.UtcNow;
+        ApprovalGrant grant = await approvalChallenges.ApproveChallengeAsync(
             validation.Challenge,
             validation.PlanReview.Envelope,
             approver.Subject,
             cancellationToken).ConfigureAwait(false);
-        var updated = validation.Challenge with
+        ApprovalChallenge updated = validation.Challenge with
         {
             Status = ApprovalConventions.ChallengeStatuses.Approved,
             ApproverSubject = approver.Subject,
@@ -269,7 +270,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
         string challengeId,
         CancellationToken cancellationToken)
     {
-        var challenge = await approvalChallenges.GetChallengeAsync(challengeId, cancellationToken)
+        ApprovalChallenge? challenge = await approvalChallenges.GetChallengeAsync(challengeId, cancellationToken)
             .ConfigureAwait(false);
         if (challenge is null)
         {
@@ -279,7 +280,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
                 ApprovalConventions.ResultReasonCodes.ChallengeNotFound);
         }
 
-        var approver = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
+        GatewayApprovalIdentity? approver = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
         if (approver is null)
         {
             return new ApprovalDecisionResult(
@@ -296,7 +297,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
                 ApprovalConventions.ResultReasonCodes.ChallengeAlreadyTerminal);
         }
 
-        var policyFailure = await ValidateChallengeDecisionPolicyAsync(
+        ApprovalDecisionResult? policyFailure = await ValidateChallengeDecisionPolicyAsync(
             challenge,
             approver,
             cancellationToken).ConfigureAwait(false);
@@ -305,8 +306,8 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
             return policyFailure;
         }
 
-        var decidedAt = DateTimeOffset.UtcNow;
-        var denied = await approvalChallenges.RecordChallengeOutcomeAsync(
+        DateTimeOffset decidedAt = DateTimeOffset.UtcNow;
+        ApprovalChallenge denied = await approvalChallenges.RecordChallengeOutcomeAsync(
             challenge,
             new ChallengeOutcome(
                 ApprovalIds.NewChallengeOutcomeId(),
@@ -338,7 +339,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
         string challengeId,
         CancellationToken cancellationToken)
     {
-        var challenge = await approvalChallenges.GetChallengeAsync(challengeId, cancellationToken)
+        ApprovalChallenge? challenge = await approvalChallenges.GetChallengeAsync(challengeId, cancellationToken)
             .ConfigureAwait(false);
         if (challenge is null)
         {
@@ -348,7 +349,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
                 ApprovalConventions.ResultReasonCodes.ChallengeNotFound);
         }
 
-        var actor = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
+        GatewayApprovalIdentity? actor = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
         if (actor is null)
         {
             return new ApprovalDecisionResult(
@@ -367,7 +368,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
 
         if (challenge.ExpiresAtUtc <= DateTimeOffset.UtcNow)
         {
-            var expired = await ExpireChallengeAsync(challenge, cancellationToken).ConfigureAwait(false);
+            ApprovalChallenge expired = await ExpireChallengeAsync(challenge, cancellationToken).ConfigureAwait(false);
 
             return new ApprovalDecisionResult(
                 false,
@@ -389,8 +390,8 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
                 McpGatewayConventions.ApprovalReasonCodes.SameSubjectRequired);
         }
 
-        var decidedAt = DateTimeOffset.UtcNow;
-        var canceled = await approvalChallenges.RecordChallengeOutcomeAsync(
+        DateTimeOffset decidedAt = DateTimeOffset.UtcNow;
+        ApprovalChallenge canceled = await approvalChallenges.RecordChallengeOutcomeAsync(
             challenge,
             new ChallengeOutcome(
                 ApprovalIds.NewChallengeOutcomeId(),
@@ -422,7 +423,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
         string challengeId,
         CancellationToken cancellationToken)
     {
-        var challenge = await RetrieveChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
+        ApprovalChallenge? challenge = await RetrieveChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
         if (challenge is null)
         {
             return ChallengeValidation.Invalid(
@@ -430,29 +431,29 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
                 ApprovalConventions.ResultReasonCodes.ChallengeNotFound);
         }
 
-        var stateError = await ValidateChallengeStateAsync(challenge, cancellationToken).ConfigureAwait(false);
+        ChallengeValidation? stateError = await ValidateChallengeStateAsync(challenge, cancellationToken).ConfigureAwait(false);
         if (stateError is not null)
         {
             return stateError;
         }
 
-        var approver = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
-        var approverError = ValidateApprover(challenge, approver);
+        GatewayApprovalIdentity? approver = GatewayApprovalIdentityResolver.Resolve(httpContextAccessor.HttpContext?.User);
+        ChallengeValidation? approverError = ValidateApprover(challenge, approver);
         if (approverError is not null)
         {
             return approverError;
         }
 
-        var pending = await approvalPlans.GetPendingPlanAsync(challenge.PlanId, cancellationToken)
+        PendingPlanResult pending = await approvalPlans.GetPendingPlanAsync(challenge.PlanId, cancellationToken)
             .ConfigureAwait(false);
-        var pendingError = await ValidatePendingPlanStateAsync(challenge, pending, approver!.Subject, cancellationToken)
+        ChallengeValidation? pendingError = await ValidatePendingPlanStateAsync(challenge, pending, approver!.Subject, cancellationToken)
             .ConfigureAwait(false);
         if (pendingError is not null)
         {
             return pendingError;
         }
 
-        var policyError = await ValidateApprovalPolicyAsync(challenge, pending.Envelope!, approver, cancellationToken)
+        ChallengeValidation? policyError = await ValidateApprovalPolicyAsync(challenge, pending.Envelope!, approver, cancellationToken)
             .ConfigureAwait(false);
         if (policyError is not null)
         {
@@ -481,7 +482,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
 
         if (challenge.ExpiresAtUtc <= DateTimeOffset.UtcNow)
         {
-            var expired = await ExpireChallengeAsync(challenge, ct).ConfigureAwait(false);
+            ApprovalChallenge expired = await ExpireChallengeAsync(challenge, ct).ConfigureAwait(false);
             return ChallengeValidation.Invalid(
                 McpGatewayMessages.Approval.ChallengeExpired,
                 ApprovalConventions.ResultReasonCodes.ChallengeExpired,
@@ -545,7 +546,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
         GatewayApprovalIdentity actor,
         CancellationToken ct)
     {
-        var pending = await approvalPlans.GetPendingPlanAsync(challenge.PlanId, ct).ConfigureAwait(false);
+        PendingPlanResult pending = await approvalPlans.GetPendingPlanAsync(challenge.PlanId, ct).ConfigureAwait(false);
         if (!pending.IsPending || pending.Envelope is null)
         {
             return new ApprovalDecisionResult(
@@ -625,10 +626,10 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
     private async Task<ChallengeValidation> ValidateDecodedReviewAsync(
         ApprovalChallenge challenge, PendingPlanResult pending, string? approverSubject, CancellationToken ct)
     {
-        var decoded = planReviewAdapter.TryDecodeForReview(pending.Envelope!, out var decodeError);
+        IPlanReview? decoded = planReviewAdapter.TryDecodeForReview(pending.Envelope!, out string? decodeError);
         if (decoded is null)
         {
-            var errorMessage = decodeError ?? McpGatewayMessages.Approval.AdapterDecodeFailed;
+            string errorMessage = decodeError ?? McpGatewayMessages.Approval.AdapterDecodeFailed;
             await WriteChallengeRejectedAuditAsync(challenge, approverSubject, errorMessage, ct).ConfigureAwait(false);
 
             return ChallengeValidation.Invalid(
@@ -663,8 +664,8 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
         string reason,
         CancellationToken cancellationToken)
     {
-        var decidedAt = DateTimeOffset.UtcNow;
-        var rejected = challenge with
+        DateTimeOffset decidedAt = DateTimeOffset.UtcNow;
+        ApprovalChallenge rejected = challenge with
         {
             Status = ApprovalConventions.ChallengeStatuses.Rejected,
             ApproverSubject = approverSubject,
@@ -701,8 +702,8 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
         ApprovalChallenge challenge,
         CancellationToken cancellationToken)
     {
-        var decidedAt = DateTimeOffset.UtcNow;
-        var expired = challenge with
+        DateTimeOffset decidedAt = DateTimeOffset.UtcNow;
+        ApprovalChallenge expired = challenge with
         {
             Status = ApprovalConventions.ChallengeStatuses.Expired,
             DecidedAtUtc = decidedAt,
@@ -757,7 +758,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
 
     private string CreateApprovalUrl(string challengeId)
     {
-        var baseUrl = !string.IsNullOrWhiteSpace(options.ApprovalBaseUrl)
+        string baseUrl = !string.IsNullOrWhiteSpace(options.ApprovalBaseUrl)
             ? options.ApprovalBaseUrl
             : RequestBaseUrl();
 
@@ -766,7 +767,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
 
     private string RequestBaseUrl()
     {
-        var request = httpContextAccessor.HttpContext?.Request;
+        HttpRequest? request = httpContextAccessor.HttpContext?.Request;
         if (request is null)
         {
             return McpGatewayOptions.DefaultUrl;
@@ -791,7 +792,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
             ApprovalConventions.ApprovalPolicyTypes.SameSubject =>
                 actorSubject is not null && SameSubject(requesterSubject, actorSubject),
             ApprovalConventions.ApprovalPolicyTypes.OperatorApproval =>
-                TryGetOperatorGroup(policy, out var operatorGroup) &&
+                TryGetOperatorGroup(policy, out string? operatorGroup) &&
                 GetActorGroups().Contains(operatorGroup),
             _ => false
         };
@@ -800,7 +801,7 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
     private static bool TryGetOperatorGroup(ApprovalPolicy policy, out string operatorGroup)
     {
         if (policy.Parameters is not null &&
-            policy.Parameters.TryGetValue(ApprovalConventions.ApprovalPolicyParameters.OperatorGroup, out var value) &&
+            policy.Parameters.TryGetValue(ApprovalConventions.ApprovalPolicyParameters.OperatorGroup, out string? value) &&
             !string.IsNullOrWhiteSpace(value))
         {
             operatorGroup = value;
@@ -814,13 +815,13 @@ internal sealed class GatewayApprovalService( // NOSONAR:S107 — DI constructor
     private IReadOnlySet<string> GetActorGroups()
     {
         var groups = new HashSet<string>(StringComparer.Ordinal);
-        var user = httpContextAccessor.HttpContext?.User;
+        ClaimsPrincipal? user = httpContextAccessor.HttpContext?.User;
         if (user is null)
         {
             return groups;
         }
 
-        foreach (var claim in user.FindAll(GatewayAuthConventions.Claims.Groups))
+        foreach (Claim claim in user.FindAll(GatewayAuthConventions.Claims.Groups))
         {
             foreach (string group in claim.Value.Split(' ',
                          StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))

@@ -106,6 +106,75 @@ public sealed class GuardrailAuditStoreTests
         Assert.Equal("plan-42", document.RootElement.GetProperty("planId").GetString());
     }
 
+    [Fact]
+    public async Task WriteAsync_RedactionMetadata_WritesRedactionPatternsAndCount()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "infra-gate-guard-tests", Guid.NewGuid().ToString("N"));
+        var store = CreateStore(root);
+        var metadata = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [McpGatewayConventions.GuardrailAudit.EntryFields.RedactionPatterns] = new[] { "aws-key", "password-param" },
+            [McpGatewayConventions.GuardrailAudit.EntryFields.RedactionCount] = new Dictionary<string, int>(StringComparer.Ordinal)
+            {
+                ["aws-key"] = 1,
+                ["password-param"] = 2
+            }
+        };
+
+        await store.WriteAsync(
+            new GuardrailAuditEvent(
+                "get_pod_logs",
+                McpGatewayConventions.GuardrailAudit.ResponseDirection,
+                McpGatewayConventions.GuardrailAudit.RedactSensitiveDataAction,
+                [McpGatewayConventions.GuardrailCategories.SensitiveData],
+                null,
+                "alice",
+                null,
+                Metadata: metadata),
+            CancellationToken.None);
+
+        var json = await File.ReadAllTextAsync(Path.Combine(root, "audit.jsonl"));
+        using var document = JsonDocument.Parse(json);
+        var rootElement = document.RootElement;
+        var patterns = rootElement.GetProperty(McpGatewayConventions.GuardrailAudit.EntryFields.RedactionPatterns);
+        var count = rootElement.GetProperty(McpGatewayConventions.GuardrailAudit.EntryFields.RedactionCount);
+
+        Assert.Equal(2, patterns.GetArrayLength());
+        Assert.Equal("aws-key", patterns[0].GetString());
+        Assert.Equal("password-param", patterns[1].GetString());
+        Assert.Equal(1, count.GetProperty("aws-key").GetInt32());
+        Assert.Equal(2, count.GetProperty("password-param").GetInt32());
+    }
+
+    [Fact]
+    public async Task WriteAsync_RedactionMetadata_DoesNotContainMatchedValue()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "infra-gate-guard-tests", Guid.NewGuid().ToString("N"));
+        var store = CreateStore(root);
+        const string secret = "AKIAIOSFODNN7EXAMPLE";
+        var metadata = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            [McpGatewayConventions.GuardrailAudit.EntryFields.RedactionPatterns] = new[] { "aws-key" },
+            [McpGatewayConventions.GuardrailAudit.EntryFields.RedactionCount] = new Dictionary<string, int>(StringComparer.Ordinal) { ["aws-key"] = 1 }
+        };
+
+        await store.WriteAsync(
+            new GuardrailAuditEvent(
+                "get_pod_logs",
+                McpGatewayConventions.GuardrailAudit.ResponseDirection,
+                McpGatewayConventions.GuardrailAudit.RedactSensitiveDataAction,
+                [McpGatewayConventions.GuardrailCategories.SensitiveData],
+                null,
+                null,
+                null,
+                Metadata: metadata),
+            CancellationToken.None);
+
+        var json = await File.ReadAllTextAsync(Path.Combine(root, "audit.jsonl"));
+
+        Assert.DoesNotContain(secret, json);
+    }
+
     private static GuardrailAuditStore CreateStore(string root) =>
         new(new McpGatewayOptions(
             new GatewayAuthOptions("https://issuer.example.com"),

@@ -1,14 +1,10 @@
 name: Integration Tests
 
+# Automatic pull_request/push triggers are disabled for now: this job runs on a
+# self-hosted runner and no runner is currently available, so it would just sit
+# queued on every PR/push. Trigger manually via workflow_dispatch once a runner
+# is back online, then restore the pull_request/push triggers below.
 on:
-  pull_request:
-    branches:
-      - main
-      - dev
-  push:
-    branches:
-      - main
-      - dev
   workflow_dispatch:
 
 permissions:

@@ -304,6 +304,7 @@ Use specific release tags for stable demos. The `:dev` tag tracks the developmen
 - Developer runbook, local runs, MCP tool contracts, and verification: [docs/devs-readme.md](docs/devs-readme.md).
 - Setup paths, run profiles, environment variables, and production guidance: [docs/setup-guide.md](docs/setup-guide.md) and [docs/configuration.md](docs/configuration.md).
 - [docs/architecture.md](docs/architecture.md), [docs/security-model.md](docs/security-model.md), [docs/tool-permissions.md](docs/tool-permissions.md): request flows, safety boundaries, and per-tool permissions.
+- [docs/observability-model.md](docs/observability-model.md): telemetry signals, the audit-event correlation path, the dev-only Aspire Dashboard, and the Audit Timeline navigator (`/audit/timeline/{planId}`).
 - Runtime services: [McpGateway](src/InfraGate.McpGateway/README.md), [McpServer](src/InfraGate.McpServer/README.md), [Observer](src/InfraGate.Observer/README.md), [Planner](src/InfraGate.Planner/README.md), and [Executor](src/InfraGate.Executor/README.md).
 - Approval and Kubernetes domain: [Approvals](src/InfraGate.Approvals/README.md), [Approvals.Postgres](src/InfraGate.Approvals.Postgres/README.md), and [KubernetesAdapter](src/InfraGate.KubernetesAdapter/README.md).
 - Validation and demos: [tests](tests), [failing-deployment example](examples/failing-deployment/README.md), and [local SonarQube](tools/sonarqube/README.md).

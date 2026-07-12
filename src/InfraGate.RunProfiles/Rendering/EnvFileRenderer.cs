@@ -24,6 +24,7 @@ internal static class EnvFileRenderer
         AppendOpenRouter(builder, profile);
         AppendKubernetesAdapter(builder, profile);
         AppendHost(builder, profile);
+        AppendTelemetry(builder, profile);
         AppendObserver(builder, profile);
         AppendPlanner(builder, profile);
         AppendExecutor(builder, profile);
@@ -55,6 +56,7 @@ internal static class EnvFileRenderer
         builder.AppendLine("# Gateway");
         AppendIfSet(builder, RunProfileConventions.Env.AspnetcoreUrls, profile.Gateway.AspnetcoreUrls);
         AppendIfSet(builder, RunProfileConventions.Env.DownstreamAssembly, profile.Gateway.DownstreamAssembly);
+        AppendIfSet(builder, RunProfileConventions.Env.DownstreamAssemblyHash, profile.Gateway.DownstreamAssemblyHash);
         AppendIfSet(builder, RunProfileConventions.Env.GuardAuditRoot, profile.Gateway.GuardAuditRoot);
     }
 
@@ -71,7 +73,13 @@ internal static class EnvFileRenderer
             !string.IsNullOrEmpty(idp.MetadataAddress) ||
             !string.IsNullOrEmpty(idp.Resource) ||
             !string.IsNullOrEmpty(idp.Scope) ||
-            !string.IsNullOrEmpty(idp.RequireHttpsMetadata);
+            !string.IsNullOrEmpty(idp.RequireHttpsMetadata) ||
+            !string.IsNullOrEmpty(idp.TokenIntrospectionEnabled) ||
+            !string.IsNullOrEmpty(idp.TokenIntrospectionEndpoint) ||
+            !string.IsNullOrEmpty(idp.TokenIntrospectionClientId) ||
+            !string.IsNullOrEmpty(idp.TokenIntrospectionClientSecret) ||
+            !string.IsNullOrEmpty(idp.TokenIntrospectionCacheSeconds) ||
+            !string.IsNullOrEmpty(idp.MaxAcceptedAccessTokenLifetimeSeconds);
 
         if (!hasAnyValue)
         {
@@ -85,6 +93,12 @@ internal static class EnvFileRenderer
         AppendIfSet(builder, RunProfileConventions.Env.OauthResource, idp.Resource);
         AppendIfSet(builder, RunProfileConventions.Env.OauthScope, idp.Scope);
         AppendIfSet(builder, RunProfileConventions.Env.OauthRequireHttpsMetadata, idp.RequireHttpsMetadata);
+        AppendIfSet(builder, RunProfileConventions.Env.TokenIntrospectionEnabled, idp.TokenIntrospectionEnabled);
+        AppendIfSet(builder, RunProfileConventions.Env.TokenIntrospectionEndpoint, idp.TokenIntrospectionEndpoint);
+        AppendIfSet(builder, RunProfileConventions.Env.TokenIntrospectionClientId, idp.TokenIntrospectionClientId);
+        AppendIfSet(builder, RunProfileConventions.Env.TokenIntrospectionClientSecret, idp.TokenIntrospectionClientSecret);
+        AppendIfSet(builder, RunProfileConventions.Env.TokenIntrospectionCacheSeconds, idp.TokenIntrospectionCacheSeconds);
+        AppendIfSet(builder, RunProfileConventions.Env.MaxAcceptedAccessTokenLifetimeSeconds, idp.MaxAcceptedAccessTokenLifetimeSeconds);
     }
 
     private static void AppendApprovalAuthority(StringBuilder builder, RunProfile profile)
@@ -238,6 +252,21 @@ internal static class EnvFileRenderer
         {
             builder.AppendLine($"{key}={value}");
         }
+    }
+
+    private static void AppendTelemetry(StringBuilder builder, RunProfile profile)
+    {
+        if (profile.Telemetry is null
+            || (string.IsNullOrEmpty(profile.Telemetry.OtlpEndpoint)
+                && string.IsNullOrEmpty(profile.Telemetry.DashboardToken)))
+        {
+            return;
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("# Telemetry");
+        AppendIfSet(builder, RunProfileConventions.Env.OtelExporterOtlpEndpoint, profile.Telemetry.OtlpEndpoint);
+        AppendIfSet(builder, RunProfileConventions.Env.AspireDashboardToken, profile.Telemetry.DashboardToken);
     }
 
     private static void AppendList(StringBuilder builder, string key, IReadOnlyList<string> values)

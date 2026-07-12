@@ -4,6 +4,7 @@ internal sealed record class InfraGateGatewaySettings
 {
     public string? AspNetCoreUrls { get; init; }
     public string? DownstreamAssembly { get; init; }
+    public string? DownstreamAssemblyHash { get; init; }
     public string? DownstreamProject { get; init; }
     public string? GuardAuditRoot { get; init; }
 }

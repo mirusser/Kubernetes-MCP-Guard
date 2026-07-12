@@ -99,6 +99,6 @@ public sealed class ObserverChannelTests
         protected override IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(IEnumerable<ChatMessage> messages, AgentSession? session = null, AgentRunOptions? options = null, CancellationToken cancellationToken = default)
             => throw new NotSupportedException("Streaming not used by channel");
 
-        private sealed class FakeSession : AgentSession { }
+        private sealed class FakeSession : AgentSession;
     }
 }

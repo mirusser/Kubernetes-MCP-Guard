@@ -34,11 +34,14 @@ internal sealed class DpopProofTestFactory : IDisposable
         string subject = "subject-1",
         DateTime? expires = null)
     {
+        var issuedAt = DateTime.UtcNow.AddSeconds(-10);
         var descriptor = new SecurityTokenDescriptor
         {
             Issuer = issuer,
             Audience = audience,
-            Expires = expires ?? DateTime.UtcNow.AddMinutes(30),
+            IssuedAt = issuedAt,
+            NotBefore = issuedAt,
+            Expires = expires ?? issuedAt.AddMinutes(4),
             Claims = new Dictionary<string, object>
             {
                 [GatewayAuthConventions.Claims.Subject] = subject,

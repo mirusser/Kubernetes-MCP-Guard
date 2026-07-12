@@ -19,7 +19,13 @@ public sealed class InfraGateAuthSettingsTests
                 ["InfraGate:Auth:ApprovalOAuthClientId"] = "approval-client",
                 ["InfraGate:Auth:ApprovalOAuthCallbackPath"] = "/approvals/oauth/callback",
                 ["InfraGate:Auth:ApprovalOAuthAuthorizationEndpoint"] = "https://issuer.example.com/authorize",
-                ["InfraGate:Auth:ApprovalOAuthTokenEndpoint"] = "https://issuer.example.com/token"
+                ["InfraGate:Auth:ApprovalOAuthTokenEndpoint"] = "https://issuer.example.com/token",
+                ["InfraGate:Auth:TokenIntrospectionEnabled"] = "true",
+                ["InfraGate:Auth:TokenIntrospectionEndpoint"] = "https://issuer.example.com/introspect",
+                ["InfraGate:Auth:TokenIntrospectionClientId"] = "gateway-resource-server",
+                ["InfraGate:Auth:TokenIntrospectionClientSecret"] = "secret-placeholder",
+                ["InfraGate:Auth:TokenIntrospectionCacheSeconds"] = "15",
+                ["InfraGate:Auth:MaxAcceptedAccessTokenLifetimeSeconds"] = "300"
             })
             .Build();
 
@@ -33,6 +39,12 @@ public sealed class InfraGateAuthSettingsTests
         Assert.True(settings.OAuthRequireHttpsMetadata);
         Assert.Equal("mcp:tools", settings.OAuthScope);
         Assert.Equal("approval-client", settings.ApprovalOAuthClientId);
+        Assert.True(settings.TokenIntrospectionEnabled);
+        Assert.Equal("https://issuer.example.com/introspect", settings.TokenIntrospectionEndpoint);
+        Assert.Equal("gateway-resource-server", settings.TokenIntrospectionClientId);
+        Assert.Equal("secret-placeholder", settings.TokenIntrospectionClientSecret);
+        Assert.Equal(15, settings.TokenIntrospectionCacheSeconds);
+        Assert.Equal(300, settings.MaxAcceptedAccessTokenLifetimeSeconds);
     }
 
     [Fact]

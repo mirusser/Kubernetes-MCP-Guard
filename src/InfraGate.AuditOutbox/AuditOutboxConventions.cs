@@ -69,4 +69,16 @@ public static class AuditOutboxConventions
         public const string PublishAttempts = "publish_attempts";
         public const string LastPublishError = "last_publish_error";
     }
+
+    public static class CorrelationColumnNames
+    {
+        public const string PlanId = "plan_id";
+        public const string AnomalyId = "anomaly_id";
+        public const string ChallengeId = "challenge_id";
+        public const string GrantId = "grant_id";
+        public const string ExecutionAttemptId = "execution_attempt_id";
+        public const string ProposalId = "proposal_id";
+        public const string CycleId = "cycle_id";
+        public const string DedupeKey = "dedupe_key";
+    }
 }

@@ -401,6 +401,7 @@ internal static class RunProfileCli
         {
             RunProfileConventions.YamlKeys.AspnetcoreUrls => profile with { AspnetcoreUrls = value },
             RunProfileConventions.YamlKeys.DownstreamAssembly => profile with { DownstreamAssembly = value },
+            RunProfileConventions.YamlKeys.DownstreamAssemblyHash => profile with { DownstreamAssemblyHash = value },
             RunProfileConventions.YamlKeys.GuardAuditRoot => profile with { GuardAuditRoot = value },
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };
@@ -415,6 +416,12 @@ internal static class RunProfileCli
             RunProfileConventions.YamlKeys.Resource => profile with { Resource = value },
             RunProfileConventions.YamlKeys.Scope => profile with { Scope = value },
             RunProfileConventions.YamlKeys.RequireHttpsMetadata => profile with { RequireHttpsMetadata = value },
+            RunProfileConventions.YamlKeys.TokenIntrospectionEnabled => profile with { TokenIntrospectionEnabled = value },
+            RunProfileConventions.YamlKeys.TokenIntrospectionEndpoint => profile with { TokenIntrospectionEndpoint = value },
+            RunProfileConventions.YamlKeys.TokenIntrospectionClientId => profile with { TokenIntrospectionClientId = value },
+            RunProfileConventions.YamlKeys.TokenIntrospectionClientSecret => profile with { TokenIntrospectionClientSecret = value },
+            RunProfileConventions.YamlKeys.TokenIntrospectionCacheSeconds => profile with { TokenIntrospectionCacheSeconds = value },
+            RunProfileConventions.YamlKeys.MaxAcceptedAccessTokenLifetimeSeconds => profile with { MaxAcceptedAccessTokenLifetimeSeconds = value },
             _ => throw new InvalidOperationException($"Unknown --set path: {path}")
         };
 

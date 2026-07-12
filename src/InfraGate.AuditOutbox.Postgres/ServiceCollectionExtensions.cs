@@ -14,6 +14,7 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(dataSource);
 
         services.AddSingleton<IPostgresAuditOutboxCore, PostgresAuditOutboxCore>();
+        services.AddSingleton<IAuditStreamReader>(_ => new PostgresAuditStreamReader(dataSource));
 
         return services;
     }

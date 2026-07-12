@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json;
 
 namespace InfraGate.McpGateway;
@@ -10,20 +11,29 @@ public sealed class GuardrailAuditStore(McpGatewayOptions options) : IGuardrailA
     public async Task WriteAsync(GuardrailAuditEvent auditEvent, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(options.GuardAuditRoot);
-        var path = Path.Combine(options.GuardAuditRoot, McpGatewayConventions.Paths.AuditFileName);
-        var entry = new
+        string path = Path.Combine(options.GuardAuditRoot, McpGatewayConventions.Paths.AuditFileName);
+        var entry = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            timestamp = DateTimeOffset.UtcNow,
-            toolName = auditEvent.ToolName,
-            direction = auditEvent.Direction,
-            action = auditEvent.Action,
-            categories = auditEvent.Categories,
-            planId = auditEvent.PlanId,
-            subject = auditEvent.Subject,
-            authenticationType = auditEvent.AuthenticationType,
-            identityKind = auditEvent.IdentityKind
+            [McpGatewayConventions.GuardrailAudit.EntryFields.Timestamp] = DateTimeOffset.UtcNow,
+            [McpGatewayConventions.GuardrailAudit.EntryFields.ToolName] = auditEvent.ToolName,
+            [McpGatewayConventions.GuardrailAudit.EntryFields.Direction] = auditEvent.Direction,
+            [McpGatewayConventions.GuardrailAudit.EntryFields.Action] = auditEvent.Action,
+            [McpGatewayConventions.GuardrailAudit.EntryFields.Categories] = auditEvent.Categories,
+            [McpGatewayConventions.GuardrailAudit.EntryFields.PlanId] = auditEvent.PlanId,
+            [McpGatewayConventions.GuardrailAudit.EntryFields.Subject] = auditEvent.Subject,
+            [McpGatewayConventions.GuardrailAudit.EntryFields.AuthenticationType] = auditEvent.AuthenticationType,
+            [McpGatewayConventions.GuardrailAudit.EntryFields.IdentityKind] = auditEvent.IdentityKind
         };
-        var line = JsonSerializer.Serialize(entry, JsonOptions) + Environment.NewLine;
+
+        if (auditEvent.Metadata is not null)
+        {
+            foreach (KeyValuePair<string, object?> pair in auditEvent.Metadata)
+            {
+                entry[pair.Key] = pair.Value;
+            }
+        }
+
+        string line = JsonSerializer.Serialize(entry, JsonOptions) + Environment.NewLine;
 
         await writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try

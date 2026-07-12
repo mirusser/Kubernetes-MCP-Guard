@@ -12,4 +12,5 @@ public sealed record class KubernetesPlanDiff(
     string[] AddedPaths,
     string[] RemovedPaths,
     string[] ChangedPaths,
-    string? ResourceVersion = null);
+    string? ResourceVersion = null,
+    string? StabilityVersion = null);

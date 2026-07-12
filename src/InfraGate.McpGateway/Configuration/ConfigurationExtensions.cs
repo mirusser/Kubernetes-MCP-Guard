@@ -6,6 +6,7 @@ using InfraGate.ApprovalUi;
 using InfraGate.ClientCredentials;
 using InfraGate.DownstreamAuth;
 using InfraGate.KubernetesAdapter;
+using InfraGate.McpGateway.Audit;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.McpGateway.Email;
@@ -56,6 +57,12 @@ internal static class ConfigurationExtensions
                 opt.ConsoleToStandardError = false;
             });
 
+            builder.AddInfraGateTelemetry(opt =>
+            {
+                opt.ServiceName = "infragate-gateway";
+                opt.MeterNames = [McpGatewayConventions.Telemetry.MeterName];
+            });
+
             ConfigureUrls(builder);
 
             builder.Services.AddDataProtection()
@@ -67,9 +74,16 @@ internal static class ConfigurationExtensions
             builder.Services.AddSingleton(options);
             builder.Services.AddSingleton<IGuardrailAuditStore, GuardrailAuditStore>();
             builder.Services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
-            builder.Services.AddSingleton<GuardedToolRunner>();
+            builder.Services.AddSingleton<GuardedToolRunner>(sp =>
+                new GuardedToolRunner(
+                    sp.GetRequiredService<IDownstreamMcpClient>(),
+                    sp.GetRequiredService<IGuardrailAuditStore>(),
+                    sp.GetRequiredService<IHttpContextAccessor>(),
+                    sp.GetRequiredService<SensitiveDataRedactor>(),
+                    sp.GetRequiredService<ILogger<GuardedToolRunner>>()));
             builder.Services.AddPostgresApprovalPersistence(
                 builder.Configuration[McpGatewayConventions.ConfigurationKeys.ApprovalPostgresConnectionString]);
+            builder.Services.AddSingleton<AuditTimelineAssembler>();
             builder.Services.AddSingleton<IAuthorizationCheck, ApprovalPolicyAuthorizationCheck>();
             builder.Services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
             builder.Services.AddSingleton<IApprovalPageRenderer>(sp =>
@@ -83,11 +97,16 @@ internal static class ConfigurationExtensions
             builder.Services.AddSingleton<ISmtpClientFactory, SmtpClientFactory>();
             builder.Services.AddSingleton<IApprovalEmailSender, SmtpApprovalEmailSender>();
             builder.Services.AddSingleton<IProposePlanHandler, ProposePlanHandler>();
+            builder.Services.AddSingleton<SensitiveDataRedactor>(sp =>
+                new SensitiveDataRedactor(
+                    McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                    sp.GetRequiredService<ILogger<SensitiveDataRedactor>>()));
             builder.Services.AddSingleton<IToolCaller>(sp =>
                 new SanitizingToolCaller(
                     sp.GetRequiredService<IDownstreamMcpClient>(),
                     sp.GetRequiredService<IGuardrailAuditStore>(),
                     sp.GetRequiredService<IHttpContextAccessor>(),
+                    sp.GetRequiredService<SensitiveDataRedactor>(),
                     sp.GetRequiredService<ILogger<SanitizingToolCaller>>()));
             builder.Services.AddKubernetesAdapter();
             builder.Services.AddSingleton<DownstreamToolRegistry>();
@@ -135,7 +154,7 @@ internal static class ConfigurationExtensions
     {
         private void RegisterDownstreamAuth(McpGatewayOptions options)
         {
-            var downstreamAuth = options.DownstreamAuth;
+            DownstreamAuthOptions? downstreamAuth = options.DownstreamAuth;
             if (downstreamAuth is null || !downstreamAuth.Required)
             {
                 services.AddSingleton<IDownstreamServiceTokenProvider, NullDownstreamServiceTokenProvider>();

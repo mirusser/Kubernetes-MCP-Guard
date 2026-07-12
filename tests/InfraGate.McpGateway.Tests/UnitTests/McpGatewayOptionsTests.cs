@@ -3,7 +3,9 @@ using InfraGate.Approvals;
 using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.BinaryIntegrity;
 using InfraGate.McpGateway.DownstreamAuth;
+using InfraGate.McpGateway.Tests.Fakes;
 using InfraGate.RuntimeSafety;
 using Microsoft.Extensions.Configuration;
 
@@ -13,6 +15,7 @@ public sealed class McpGatewayOptionsTests
 {
     private const string OAuthAuthority = "https://issuer.example.com";
     private const string DownstreamAssembly = "/app/server/InfraGate.McpServer.dll";
+    private const string DownstreamAssemblyHash = "a3e5f8c9d2b1e4076f5a3c8e1d0b9a2c7f4e6d5b8c3a1f0e9d7b6c5a4f3e2d1b0";
     private const string DownstreamProject = "server.csproj";
     private const string GuardAuditRoot = "guardrails";
     private const string WorkingDirectory = "/repo";
@@ -242,7 +245,7 @@ public sealed class McpGatewayOptionsTests
     {
         var options = CreateOptions();
 
-        Exception? exception = Record.Exception(options.ValidateProductionSafety);
+        Exception? exception = Record.Exception(() => options.ValidateProductionSafety());
 
         Assert.Null(exception);
     }
@@ -252,8 +255,9 @@ public sealed class McpGatewayOptionsTests
     {
         var configuration = BuildProductionConfig();
         var options = McpGatewayOptions.FromConfiguration(configuration);
+        var verifier = CreateMatchingVerifier(options);
 
-        var exception = Record.Exception(options.ValidateProductionSafety);
+        var exception = Record.Exception(() => options.ValidateProductionSafety(verifier));
 
         Assert.Null(exception);
     }
@@ -265,7 +269,8 @@ public sealed class McpGatewayOptionsTests
             (GatewayAuthConventions.ConfigurationKeys.OAuthRequireHttpsMetadata, "false"));
 
         var options = McpGatewayOptions.FromConfiguration(configuration);
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+        var verifier = CreateMatchingVerifier(options);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => options.ValidateProductionSafety(verifier));
 
         Assert.Contains(GatewayAuthConventions.EnvironmentVariables.OAuthRequireHttpsMetadata, exception.Message);
     }
@@ -277,7 +282,8 @@ public sealed class McpGatewayOptionsTests
             (GatewayAuthConventions.ConfigurationKeys.OAuthMetadataAddress, "http://issuer.example.com/.well-known/openid-configuration"));
 
         var options = McpGatewayOptions.FromConfiguration(configuration);
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+        var verifier = CreateMatchingVerifier(options);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => options.ValidateProductionSafety(verifier));
 
         Assert.Contains(GatewayAuthConventions.EnvironmentVariables.OAuthMetadataAddress, exception.Message);
     }
@@ -289,7 +295,8 @@ public sealed class McpGatewayOptionsTests
             (GatewayAuthConventions.ConfigurationKeys.OAuthResource, "https://127.0.0.1:3001/mcp"));
 
         var options = McpGatewayOptions.FromConfiguration(configuration);
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+        var verifier = CreateMatchingVerifier(options);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => options.ValidateProductionSafety(verifier));
 
         Assert.Contains(GatewayAuthConventions.EnvironmentVariables.OAuthResource, exception.Message);
     }
@@ -301,7 +308,8 @@ public sealed class McpGatewayOptionsTests
             (McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl, null));
 
         var options = McpGatewayOptions.FromConfiguration(configuration);
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+        var verifier = CreateMatchingVerifier(options);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => options.ValidateProductionSafety(verifier));
 
         Assert.Contains(McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl, exception.Message);
     }
@@ -313,7 +321,8 @@ public sealed class McpGatewayOptionsTests
             (McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl, "http://gateway.example.com"));
 
         var options = McpGatewayOptions.FromConfiguration(configuration);
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+        var verifier = CreateMatchingVerifier(options);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => options.ValidateProductionSafety(verifier));
 
         Assert.Contains(McpGatewayConventions.EnvironmentVariables.ApprovalBaseUrl, exception.Message);
     }
@@ -325,7 +334,8 @@ public sealed class McpGatewayOptionsTests
             (McpGatewayConventions.ConfigurationKeys.ApprovalRoot, Path.Combine(Path.GetTempPath(), "infra-gate-approvals")));
 
         var options = McpGatewayOptions.FromConfiguration(configuration);
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+        var verifier = CreateMatchingVerifier(options);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => options.ValidateProductionSafety(verifier));
 
         Assert.Contains(ApprovalConventions.EnvironmentVariables.ApprovalRoot, exception.Message);
     }
@@ -337,7 +347,8 @@ public sealed class McpGatewayOptionsTests
             (McpGatewayConventions.ConfigurationKeys.GuardAuditRoot, null));
 
         var options = McpGatewayOptions.FromConfiguration(configuration);
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+        var verifier = CreateMatchingVerifier(options);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => options.ValidateProductionSafety(verifier));
 
         Assert.Contains(McpGatewayConventions.EnvironmentVariables.GuardAuditRoot, exception.Message);
     }
@@ -349,9 +360,36 @@ public sealed class McpGatewayOptionsTests
             (DownstreamAuthConventions.ConfigurationKeys.Required, "false"));
 
         var options = McpGatewayOptions.FromConfiguration(configuration);
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(options.ValidateProductionSafety);
+        var verifier = CreateMatchingVerifier(options);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => options.ValidateProductionSafety(verifier));
 
         Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.Required, exception.Message);
+    }
+
+    [Fact]
+    public void ProductionMode_WithTokenIntrospectionDisabled_RefusesStartup()
+    {
+        var configuration = BuildProductionConfig(
+            (GatewayAuthConventions.ConfigurationKeys.TokenIntrospectionEnabled, "false"));
+
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        var verifier = CreateMatchingVerifier(options);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => options.ValidateProductionSafety(verifier));
+
+        Assert.Contains(GatewayAuthConventions.EnvironmentVariables.TokenIntrospectionEnabled, exception.Message);
+    }
+
+    [Fact]
+    public void ProductionMode_WithLongMaxAcceptedTokenLifetime_RefusesStartup()
+    {
+        var configuration = BuildProductionConfig(
+            (GatewayAuthConventions.ConfigurationKeys.MaxAcceptedAccessTokenLifetimeSeconds, "301"));
+
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        var verifier = CreateMatchingVerifier(options);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => options.ValidateProductionSafety(verifier));
+
+        Assert.Contains(GatewayAuthConventions.EnvironmentVariables.MaxAcceptedAccessTokenLifetimeSeconds, exception.Message);
     }
 
     [Fact]
@@ -359,10 +397,63 @@ public sealed class McpGatewayOptionsTests
     {
         var configuration = BuildProductionConfig();
         var options = McpGatewayOptions.FromConfiguration(configuration);
+        var verifier = CreateMatchingVerifier(options);
 
-        Exception? exception = Record.Exception(options.ValidateProductionSafety);
+        Exception? exception = Record.Exception(() => options.ValidateProductionSafety(verifier));
 
         Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithHttpDownstreamAuthority_RefusesStartup()
+    {
+        var configuration = BuildProductionConfig(
+            (DownstreamAuthConventions.ConfigurationKeys.Authority, "http://idp.example.com"));
+
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        var verifier = CreateMatchingVerifier(options);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => options.ValidateProductionSafety(verifier));
+
+        Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.Authority, exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithLoopbackDownstreamAuthority_RefusesStartup()
+    {
+        var configuration = BuildProductionConfig(
+            (DownstreamAuthConventions.ConfigurationKeys.Authority, "https://127.0.0.1:8443/realms/test"));
+
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        var verifier = CreateMatchingVerifier(options);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => options.ValidateProductionSafety(verifier));
+
+        Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.Authority, exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithHttpDownstreamMetadataAddress_RefusesStartup()
+    {
+        var configuration = BuildProductionConfig(
+            (DownstreamAuthConventions.ConfigurationKeys.MetadataAddress, "http://idp.example.com/.well-known/openid-configuration"));
+
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        var verifier = CreateMatchingVerifier(options);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => options.ValidateProductionSafety(verifier));
+
+        Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.MetadataAddress, exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_WithDownstreamRequireHttpsMetadataFalse_RefusesStartup()
+    {
+        var configuration = BuildProductionConfig(
+            (DownstreamAuthConventions.ConfigurationKeys.RequireHttpsMetadata, "false"));
+
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        var verifier = CreateMatchingVerifier(options);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => options.ValidateProductionSafety(verifier));
+
+        Assert.Contains(DownstreamAuthConventions.EnvironmentVariables.RequireHttpsMetadata, exception.Message);
     }
 
     [Fact]
@@ -374,9 +465,94 @@ public sealed class McpGatewayOptionsTests
             (DownstreamAuthConventions.ConfigurationKeys.Required, "false"));
 
         var options = McpGatewayOptions.FromConfiguration(configuration);
-        Exception? exception = Record.Exception(options.ValidateProductionSafety);
+        Exception? exception = Record.Exception(() => options.ValidateProductionSafety());
 
         Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_ProductionWithAssemblyAndMatchingHash_AllowsStartup()
+    {
+        var configuration = BuildProductionConfig();
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        var verifier = CreateMatchingVerifier(options);
+
+        Exception? exception = Record.Exception(() => options.ValidateProductionSafety(verifier));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_ProductionWithAssemblyButNoHash_ThrowsInvalidOperationException()
+    {
+        var configuration = BuildProductionConfig(
+            (McpGatewayConventions.ConfigurationKeys.DownstreamAssemblyHash, null));
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        var verifier = CreateNoOpVerifier();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => options.ValidateProductionSafety(verifier));
+
+        Assert.Contains(McpGatewayConventions.EnvironmentVariables.DownstreamAssemblyHash, exception.Message);
+        Assert.Empty(verifier.Calls);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_ProductionWithAssemblyAndMismatchedHash_ThrowsDownstreamBinaryIntegrityException()
+    {
+        const string mismatchedHash = "b3e5f8c9d2b1e4076f5a3c8e1d0b9a2c7f4e6d5b8c3a1f0e9d7b6c5a4f3e2d1b0";
+        var configuration = BuildProductionConfig(
+            (McpGatewayConventions.ConfigurationKeys.DownstreamAssemblyHash, mismatchedHash));
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        var verifier = CreateVerifier(options, mismatchedHash, false);
+
+        Assert.Throws<DownstreamBinaryIntegrityException>(() => options.ValidateProductionSafety(verifier));
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_ProductionWithoutAssembly_ThrowsInvalidOperationException()
+    {
+        var configuration = BuildProductionConfig(
+            (McpGatewayConventions.ConfigurationKeys.DownstreamAssembly, null),
+            (McpGatewayConventions.ConfigurationKeys.DownstreamAssemblyHash, null));
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        var verifier = CreateNoOpVerifier();
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => options.ValidateProductionSafety(verifier));
+
+        Assert.Contains(McpGatewayConventions.EnvironmentVariables.DownstreamAssembly, exception.Message);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_DevelopmentWithAssemblyAndNoHash_AllowsStartup()
+    {
+        var configuration = BuildConfig(
+            (RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority),
+            (McpGatewayConventions.ConfigurationKeys.DownstreamAssembly, DownstreamAssembly));
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        var verifier = CreateNoOpVerifier();
+
+        Exception? exception = Record.Exception(() => options.ValidateProductionSafety(verifier));
+
+        Assert.Null(exception);
+        Assert.Empty(verifier.Calls);
+    }
+
+    [Fact]
+    public void ValidateProductionSafety_DevelopmentWithAssemblyAndHash_MismatchedHash_ThrowsDownstreamBinaryIntegrityException()
+    {
+        const string mismatchedHash = "b3e5f8c9d2b1e4076f5a3c8e1d0b9a2c7f4e6d5b8c3a1f0e9d7b6c5a4f3e2d1b0";
+        var configuration = BuildConfig(
+            (RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment, RuntimeSafetyConventions.EnvironmentValues.Development),
+            (GatewayAuthConventions.ConfigurationKeys.OAuthAuthority, OAuthAuthority),
+            (McpGatewayConventions.ConfigurationKeys.DownstreamAssembly, DownstreamAssembly),
+            (McpGatewayConventions.ConfigurationKeys.DownstreamAssemblyHash, mismatchedHash));
+        var options = McpGatewayOptions.FromConfiguration(configuration);
+        var verifier = CreateVerifier(options, mismatchedHash, false);
+
+        Assert.Throws<DownstreamBinaryIntegrityException>(() => options.ValidateProductionSafety(verifier));
     }
 
     [Fact]
@@ -451,9 +627,15 @@ public sealed class McpGatewayOptionsTests
             [GatewayAuthConventions.ConfigurationKeys.OAuthRequireHttpsMetadata] = "true",
             [GatewayAuthConventions.ConfigurationKeys.ApprovalOAuthAuthorizationEndpoint] = OAuthAuthority + "/authorize",
             [GatewayAuthConventions.ConfigurationKeys.ApprovalOAuthTokenEndpoint] = OAuthAuthority + "/token",
+            [GatewayAuthConventions.ConfigurationKeys.TokenIntrospectionEnabled] = "true",
+            [GatewayAuthConventions.ConfigurationKeys.TokenIntrospectionClientId] = "gateway-resource-server",
+            [GatewayAuthConventions.ConfigurationKeys.TokenIntrospectionClientSecret] = "secret-placeholder",
+            [GatewayAuthConventions.ConfigurationKeys.MaxAcceptedAccessTokenLifetimeSeconds] = "300",
             [McpGatewayConventions.ConfigurationKeys.ApprovalBaseUrl] = ApprovalBaseUrl,
             [McpGatewayConventions.ConfigurationKeys.GuardAuditRoot] = ProductionPath("guardrails"),
             [McpGatewayConventions.ConfigurationKeys.ApprovalRoot] = ProductionPath("approvals"),
+            [McpGatewayConventions.ConfigurationKeys.DownstreamAssembly] = DownstreamAssembly,
+            [McpGatewayConventions.ConfigurationKeys.DownstreamAssemblyHash] = DownstreamAssemblyHash,
             [DownstreamAuthConventions.ConfigurationKeys.Required] = "true",
             [DownstreamAuthConventions.ConfigurationKeys.Authority] = DownstreamAuthority,
             [DownstreamAuthConventions.ConfigurationKeys.GatewayClientId] = DownstreamClientId,
@@ -475,4 +657,24 @@ public sealed class McpGatewayOptionsTests
 
         return Path.Combine(root, "var", "lib", "infra-gate-tests", directoryName);
     }
+
+    private static FakeDownstreamBinaryIntegrityVerifier CreateMatchingVerifier(McpGatewayOptions options) =>
+        new(
+            new Dictionary<(string Path, string ExpectedHash), bool>
+            {
+                [(options.DownstreamAssembly!, DownstreamAssemblyHash)] = true
+            });
+
+    private static FakeDownstreamBinaryIntegrityVerifier CreateVerifier(
+        McpGatewayOptions options,
+        string expectedHash,
+        bool matches) =>
+        new(
+            new Dictionary<(string Path, string ExpectedHash), bool>
+            {
+                [(options.DownstreamAssembly!, expectedHash)] = matches
+            });
+
+    private static FakeDownstreamBinaryIntegrityVerifier CreateNoOpVerifier() =>
+        new(new Dictionary<(string Path, string ExpectedHash), bool>());
 }

@@ -7,6 +7,7 @@ using InfraGate.KubernetesAdapter;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Email;
 using ModelContextProtocol.Protocol;
+using System.Security.Claims;
 
 namespace InfraGate.McpGateway;
 
@@ -20,9 +21,11 @@ internal sealed class ProposePlanHandler( // NOSONAR:S107 - Handler composes exp
     IHttpContextAccessor httpContextAccessor,
     ILogger<ProposePlanHandler> logger) : IProposePlanHandler
 {
-    private static readonly Meter Meter = new("InfraGate.McpGateway", "1.0");
+    private static readonly Meter Meter = new(
+        McpGatewayConventions.Telemetry.MeterName,
+        McpGatewayConventions.Telemetry.MeterVersion);
     private static readonly Counter<long> EmailFailedCounter =
-        Meter.CreateCounter<long>("infragate.gateway.email.failed");
+        Meter.CreateCounter<long>(McpGatewayConventions.Telemetry.EmailFailedCounterName);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly IReadOnlySet<string> AllowedOperations =
         new HashSet<string>(StringComparer.Ordinal)
@@ -43,14 +46,14 @@ internal sealed class ProposePlanHandler( // NOSONAR:S107 - Handler composes exp
                 McpGatewayMessages.Authorization.InvalidOperationType(string.Join(", ", AllowedOperations.OrderBy(static op => op, StringComparer.Ordinal))));
         }
 
-        var user = httpContextAccessor.HttpContext?.User;
-        var identity = GatewayAuditIdentityResolver.Resolve(user);
+        ClaimsPrincipal? user = httpContextAccessor.HttpContext?.User;
+        GatewayAuditIdentity identity = GatewayAuditIdentityResolver.Resolve(user);
         if (string.IsNullOrWhiteSpace(identity.Subject))
         {
             return ErrorResult(McpGatewayMessages.Authorization.ProposeRequiresAuth);
         }
 
-        var planResult = await domainAdapter.BuildAsync(
+        PlanBuildResult planResult = await domainAdapter.BuildAsync(
             operationType,
             arguments,
             new PlanRequester(identity.Subject, GatewayAuthConventions.Audit.OAuthAuthenticationType),
@@ -67,7 +70,7 @@ internal sealed class ProposePlanHandler( // NOSONAR:S107 - Handler composes exp
             planResult.TargetNamespace,
             cancellationToken).ConfigureAwait(false);
 
-        var gate = await approvals.EnsureApprovedOrCreateChallengeAsync(
+        ApprovalGateResult gate = await approvals.EnsureApprovedOrCreateChallengeAsync(
             planResult.PlanId,
             cancellationToken).ConfigureAwait(false);
         if (gate.Status is not ApprovalGateStatus.ApprovalRequired ||
@@ -77,13 +80,13 @@ internal sealed class ProposePlanHandler( // NOSONAR:S107 - Handler composes exp
             return ErrorResult(gate.Message);
         }
 
-        var ttl = gate.ExpiresAtUtc.Value - DateTimeOffset.UtcNow;
+        TimeSpan ttl = gate.ExpiresAtUtc.Value - DateTimeOffset.UtcNow;
         if (ttl <= TimeSpan.Zero)
         {
             ttl = TimeSpan.FromSeconds(1);
         }
 
-        var code = await accessCodes.GenerateAsync(gate.ChallengeId, ttl, cancellationToken).ConfigureAwait(false);
+        ApprovalAccessCode code = await accessCodes.GenerateAsync(gate.ChallengeId, ttl, cancellationToken).ConfigureAwait(false);
         string approvalUrl = CreateCodeUrl();
         bool emailSent = await TrySendEmailAsync(
             planResult.PlanId,
@@ -120,7 +123,7 @@ internal sealed class ProposePlanHandler( // NOSONAR:S107 - Handler composes exp
             return false;
         }
 
-        var body = ApprovalEmailRenderer.RenderPlaintext(new ApprovalEmailTemplateData(
+        string body = ApprovalEmailRenderer.RenderPlaintext(new ApprovalEmailTemplateData(
             planId,
             planSummary,
             accessCode.Code,
@@ -147,7 +150,7 @@ internal sealed class ProposePlanHandler( // NOSONAR:S107 - Handler composes exp
 
     private string CreateCodeUrl()
     {
-        var baseUrl = !string.IsNullOrWhiteSpace(options.ApprovalBaseUrl)
+        string baseUrl = !string.IsNullOrWhiteSpace(options.ApprovalBaseUrl)
             ? options.ApprovalBaseUrl
             : RequestBaseUrl();
 
@@ -156,7 +159,7 @@ internal sealed class ProposePlanHandler( // NOSONAR:S107 - Handler composes exp
 
     private string RequestBaseUrl()
     {
-        var request = httpContextAccessor.HttpContext?.Request;
+        HttpRequest? request = httpContextAccessor.HttpContext?.Request;
         return request is null
             ? McpGatewayOptions.DefaultUrl
             : $"{request.Scheme}://{request.Host}{request.PathBase}";

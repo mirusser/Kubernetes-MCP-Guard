@@ -63,7 +63,9 @@ Echoed manifest blocks are redacted to `[redacted: inspect the pending plan file
 
 ### 2.3 Guardrail Audit Logging
 
-Guardrail audit entries are written to `.mcp-guardrails/audit.jsonl` by default, configurable through `InfraGate__Gateway__GuardAuditRoot`. Entries include `toolName`, `direction`, `action` (`warn`, `warn_redact`, or `redact_manifest`), `categories`, `planId`, `subject`, and `authenticationType`.
+Guardrail audit entries are written to `.mcp-guardrails/audit.jsonl` by default, configurable through `InfraGate__Gateway__GuardAuditRoot`. Entries include `toolName`, `direction`, `action` (`warn`, `warn_redact`, `redact_manifest`, or `redact_sensitive_data`), `categories`, `planId`, `subject`, and `authenticationType`.
+
+Sensitive-data redaction adds the `sensitive-data` category and, when redaction fires, writes `redactionPatterns` (the distinct pattern names that matched) and `redactionCount` (pattern name to match count). The matched secret values themselves are never stored in the audit entry.
 
 Approval audit is separate and is persisted in PostgreSQL `approvals.audit_outbox`.
 

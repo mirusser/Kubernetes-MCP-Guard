@@ -15,6 +15,18 @@ public sealed class PlannerConventionsTests
     }
 
     [Fact]
+    public void Health_LivenessPath_IsSlashHealthz()
+    {
+        Assert.Equal("/healthz", PlannerConventions.Health.LivenessPath);
+    }
+
+    [Fact]
+    public void Health_ReadinessPath_IsSlashReadyz()
+    {
+        Assert.Equal("/readyz", PlannerConventions.Health.ReadinessPath);
+    }
+
+    [Fact]
     public void A2AHandoffEndpointPath_IsSlashA2APlanner()
     {
         Assert.Equal("/a2a/planner", PlannerConventions.A2AHandoffEndpointPath);

@@ -89,13 +89,13 @@ fi
 KUBECONFIG_FILE="${KUBECONFIG:-${PROFILE_KUBECONFIG:-${REPO_ROOT}/.kube/mcp-nginx-demo.config}}"
 
 DETECT_KUBECONFIG=""
-if [ -f "$KUBECONFIG_FILE" ] && kubectl --kubeconfig "$KUBECONFIG_FILE" -n mcp-nginx-demo get deployment &>/dev/null; then
+if [[ -f "$KUBECONFIG_FILE" ]] && kubectl --kubeconfig "$KUBECONFIG_FILE" -n mcp-nginx-demo get deployment &>/dev/null; then
     DETECT_KUBECONFIG="$KUBECONFIG_FILE"
-elif [ -n "${KUBECONFIG:-}" ] && kubectl -n mcp-nginx-demo get deployment &>/dev/null; then
+elif [[ -n "${KUBECONFIG:-}" ]] && kubectl -n mcp-nginx-demo get deployment &>/dev/null; then
     DETECT_KUBECONFIG="$KUBECONFIG"
 fi
 
-if [ -n "$DETECT_KUBECONFIG" ]; then
+if [[ -n "$DETECT_KUBECONFIG" ]]; then
     echo -e "  ${GREEN}✓${NC} K8s cluster reachable via $DETECT_KUBECONFIG"
     KUBECONFIG_FILE="$DETECT_KUBECONFIG"
     K8S_OK=true
@@ -126,6 +126,7 @@ run_tier() {
         FAILED=1
     fi
     echo ""
+    return 0
 }
 
 prepare_safety_e2e_workload() {
@@ -202,21 +203,21 @@ fi
 
 echo -e "${CYAN}=== Summary ===${NC}"
 
-if [ ${#PASSED_TIERS[@]} -gt 0 ]; then
+if [[ ${#PASSED_TIERS[@]} -gt 0 ]]; then
     echo -e "${GREEN}Passed:${NC}"
     for tier in "${PASSED_TIERS[@]}"; do
         echo -e "  ${GREEN}✓${NC} $tier"
     done
 fi
 
-if [ ${#FAILED_TIERS[@]} -gt 0 ]; then
+if [[ ${#FAILED_TIERS[@]} -gt 0 ]]; then
     echo -e "${RED}Failed:${NC}"
     for tier in "${FAILED_TIERS[@]}"; do
         echo -e "  ${RED}✗${NC} $tier"
     done
 fi
 
-if [ ${#SKIPPED_TIERS[@]} -gt 0 ]; then
+if [[ ${#SKIPPED_TIERS[@]} -gt 0 ]]; then
     echo -e "${YELLOW}Skipped:${NC}"
     for tier in "${SKIPPED_TIERS[@]}"; do
         echo -e "  ${YELLOW}−${NC} $tier"
@@ -224,7 +225,7 @@ if [ ${#SKIPPED_TIERS[@]} -gt 0 ]; then
 fi
 
 echo ""
-if [ "$FAILED" -eq 0 ]; then
+if [[ "$FAILED" -eq 0 ]]; then
     echo -e "${GREEN}All executed tests passed.${NC}"
 else
     echo -e "${RED}Some tests failed. See output above.${NC}"

@@ -16,6 +16,15 @@ static class InfraGate.AuditOutbox.AuditOutboxConventions+ColumnNames
   const String PublishAttempts
   const String PublishedAtUtc
   const String Reason
+static class InfraGate.AuditOutbox.AuditOutboxConventions+CorrelationColumnNames
+  const String AnomalyId
+  const String ChallengeId
+  const String CycleId
+  const String DedupeKey
+  const String ExecutionAttemptId
+  const String GrantId
+  const String PlanId
+  const String ProposalId
 static class InfraGate.AuditOutbox.AuditOutboxConventions+Streams
   const String Approvals
   const String Observer
@@ -29,3 +38,9 @@ record class InfraGate.AuditOutbox.AuditOutboxRow
   String Outcome { get; set; }
   String PayloadJsonText { get; set; }
   String Reason { get; set; }
+record class InfraGate.AuditOutbox.AuditStreamRow
+  Int64 AuditSequence { get; set; }
+  AuditOutboxRow Row { get; set; }
+interface InfraGate.AuditOutbox.IAuditStreamReader
+  Task<IReadOnlyList<AuditStreamRow>> ReadByAnomalyIdAsync(String streamSchema, String anomalyId, CancellationToken cancellationToken)
+  Task<IReadOnlyList<AuditStreamRow>> ReadByPlanIdAsync(String streamSchema, String planId, CancellationToken cancellationToken)

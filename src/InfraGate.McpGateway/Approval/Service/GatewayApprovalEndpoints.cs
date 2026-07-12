@@ -3,6 +3,7 @@ using InfraGate.Approvals;
 using InfraGate.Approvals.AccessCodes;
 using InfraGate.Approvals.Plan;
 using InfraGate.ApprovalUi;
+using InfraGate.McpGateway.Audit;
 using InfraGate.McpGateway.Auth;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -24,8 +25,8 @@ internal static class GatewayApprovalEndpoints
                 HttpContext context,
                 IAntiforgery antiforgery) =>
             {
-                var tokens = antiforgery.GetAndStoreTokens(context);
-                var html = await renderer.RenderCodePageAsync(BuildCodePageData(tokens.RequestToken, null, null))
+                AntiforgeryTokenSet tokens = antiforgery.GetAndStoreTokens(context);
+                string html = await renderer.RenderCodePageAsync(BuildCodePageData(tokens.RequestToken, null, null))
                     .ConfigureAwait(false);
 
                 return Results.Content(html, TextHtmlContentType, Encoding.UTF8);
@@ -39,22 +40,22 @@ internal static class GatewayApprovalEndpoints
                 IAntiforgery antiforgery,
                 CancellationToken cancellationToken) =>
             {
-                var validation = await ValidateAntiforgeryAsync(context, antiforgery).ConfigureAwait(false);
+                IResult? validation = await ValidateAntiforgeryAsync(context, antiforgery).ConfigureAwait(false);
                 if (validation is not null)
                 {
                     return validation;
                 }
 
-                var form = await context.Request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
+                IFormCollection form = await context.Request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
                 string submittedCode = form[McpGatewayConventions.Approvals.CodeFormField].ToString();
-                var result = await accessCodes.ConsumeAsync(submittedCode, cancellationToken).ConfigureAwait(false);
+                ApprovalAccessCodeConsumeResult result = await accessCodes.ConsumeAsync(submittedCode, cancellationToken).ConfigureAwait(false);
                 if (result.Succeeded && result.ChallengeId is not null)
                 {
                     return Results.Redirect($"{McpGatewayConventions.Approvals.PathPrefix}/{result.ChallengeId}");
                 }
 
-                var tokens = antiforgery.GetAndStoreTokens(context);
-                var html = await renderer.RenderCodePageAsync(
+                AntiforgeryTokenSet tokens = antiforgery.GetAndStoreTokens(context);
+                string html = await renderer.RenderCodePageAsync(
                         BuildCodePageData(tokens.RequestToken, submittedCode, result.Message))
                     .ConfigureAwait(false);
 
@@ -70,11 +71,11 @@ internal static class GatewayApprovalEndpoints
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
                 {
-                    var page = await approvals.GetApprovalPageAsync(challengeId, cancellationToken).ConfigureAwait(false);
-                    var tokens = antiforgery.GetAndStoreTokens(context);
+                    ApprovalPageModel page = await approvals.GetApprovalPageAsync(challengeId, cancellationToken).ConfigureAwait(false);
+                    AntiforgeryTokenSet tokens = antiforgery.GetAndStoreTokens(context);
 
-                    var approvalData = BuildApprovalPageData(page, tokens.RequestToken);
-                    var html = await renderer.RenderApprovalPageAsync(approvalData).ConfigureAwait(false);
+                    ApprovalPageData approvalData = BuildApprovalPageData(page, tokens.RequestToken);
+                    string html = await renderer.RenderApprovalPageAsync(approvalData).ConfigureAwait(false);
 
                     return Results.Content(html, TextHtmlContentType, Encoding.UTF8);
                 })
@@ -89,15 +90,15 @@ internal static class GatewayApprovalEndpoints
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
                 {
-                    var validation = await ValidateAntiforgeryAsync(context, antiforgery).ConfigureAwait(false);
+                    IResult? validation = await ValidateAntiforgeryAsync(context, antiforgery).ConfigureAwait(false);
                     if (validation is not null)
                     {
                         return validation;
                     }
 
-                    var result = await approvals.ApproveChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
-                    var decisionData = BuildDecisionPageData(result);
-                    var html = await renderer.RenderDecisionPageAsync(decisionData).ConfigureAwait(false);
+                    ApprovalDecisionResult result = await approvals.ApproveChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
+                    DecisionPageData decisionData = BuildDecisionPageData(result);
+                    string html = await renderer.RenderDecisionPageAsync(decisionData).ConfigureAwait(false);
 
                     return Results.Content(html, TextHtmlContentType, Encoding.UTF8);
                 })
@@ -112,15 +113,15 @@ internal static class GatewayApprovalEndpoints
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
                 {
-                    var validation = await ValidateAntiforgeryAsync(context, antiforgery).ConfigureAwait(false);
+                    IResult? validation = await ValidateAntiforgeryAsync(context, antiforgery).ConfigureAwait(false);
                     if (validation is not null)
                     {
                         return validation;
                     }
 
-                    var result = await approvals.DenyChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
-                    var decisionData = BuildDecisionPageData(result);
-                    var html = await renderer.RenderDecisionPageAsync(decisionData).ConfigureAwait(false);
+                    ApprovalDecisionResult result = await approvals.DenyChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
+                    DecisionPageData decisionData = BuildDecisionPageData(result);
+                    string html = await renderer.RenderDecisionPageAsync(decisionData).ConfigureAwait(false);
 
                     return Results.Content(html, TextHtmlContentType, Encoding.UTF8);
                 })
@@ -135,26 +136,41 @@ internal static class GatewayApprovalEndpoints
                     IAntiforgery antiforgery,
                     CancellationToken cancellationToken) =>
                 {
-                    var validation = await ValidateAntiforgeryAsync(context, antiforgery).ConfigureAwait(false);
+                    IResult? validation = await ValidateAntiforgeryAsync(context, antiforgery).ConfigureAwait(false);
                     if (validation is not null)
                     {
                         return validation;
                     }
 
-                    var result = await approvals.CancelChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
-                    var decisionData = BuildDecisionPageData(result);
-                    var html = await renderer.RenderDecisionPageAsync(decisionData).ConfigureAwait(false);
+                    ApprovalDecisionResult result = await approvals.CancelChallengeAsync(challengeId, cancellationToken).ConfigureAwait(false);
+                    DecisionPageData decisionData = BuildDecisionPageData(result);
+                    string html = await renderer.RenderDecisionPageAsync(decisionData).ConfigureAwait(false);
 
                     return Results.Content(html, TextHtmlContentType, Encoding.UTF8);
                 })
             .RequireAuthorization(GatewayAuthConventions.Schemes.ApprovalPolicyName);
+        endpoints.MapGet(
+                McpGatewayConventions.Approvals.AuditTimelineRoute,
+                async (
+                    string planId,
+                    [FromServices] AuditTimelineAssembler assembler,
+                    [FromServices] IApprovalPageRenderer renderer,
+                    CancellationToken cancellationToken) =>
+                {
+                    AuditTimelinePageData pageData = await assembler.BuildTimelineAsync(planId, cancellationToken)
+                        .ConfigureAwait(false);
+                    string html = await renderer.RenderAuditTimelinePageAsync(pageData).ConfigureAwait(false);
+
+                    return Results.Content(html, TextHtmlContentType, Encoding.UTF8);
+                })
+            .RequireAuthorization(GatewayAuthConventions.Schemes.AuditPolicyName);
 
         return endpoints;
     }
 
     private static IResult Login(HttpContext context)
     {
-        var returnUrl = context.Request.Query["ReturnUrl"].ToString();
+        string returnUrl = context.Request.Query[McpGatewayConventions.Approvals.ReturnUrlQueryKey].ToString();
         if (!IsApprovalReturnUrl(returnUrl))
         {
             returnUrl = McpGatewayConventions.Approvals.PathPrefix;
@@ -188,7 +204,7 @@ internal static class GatewayApprovalEndpoints
 
     internal static ApprovalPageData BuildApprovalPageData(ApprovalPageModel model, string? requestToken)
     {
-        var challengeInfo = model.Challenge is not null
+        ApprovalChallengeInfo? challengeInfo = model.Challenge is not null
             ? new ApprovalChallengeInfo(
                 model.Challenge.Id,
                 model.Challenge.PlanId,

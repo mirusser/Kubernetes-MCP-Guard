@@ -21,7 +21,7 @@
 
 The controls below are ordered by importance. The downstream service token (in-progress) is intentionally last; a stolen bearer token must not bypass the controls above it.
 
-1. **Trusted launch** — production starts the downstream server from a configured built artifact (`InfraGate__Gateway__DownstreamAssembly=/app/server/InfraGate.McpServer.dll`), not `dotnet run --project`. The `dotnet run --project` fallback is development-only and must not be used in production images.
+1. **Trusted launch** — production starts the downstream server from a configured built artifact (`InfraGate__Gateway__DownstreamAssembly=/app/server/InfraGate.McpServer.dll`), not `dotnet run --project`. The `dotnet run --project` fallback is development-only and must not be used in production images. In production the gateway also verifies the SHA-256 hash of that assembly against `InfraGate__Gateway__DownstreamAssemblyHash` at startup and refuses to start if the binary has been tampered with. See [docs/configuration.md](../../docs/configuration.md) for the environment variable reference and hash-computation examples.
 2. **Containment** — the downstream subprocess receives only an explicit allowlist of environment variables (`McpGatewayConventions.DownstreamProcess.AllowedEnvironmentVariables`), not the full gateway environment. Gateway-only secrets such as `InfraGate__DownstreamAuth__GatewayClientSecret` are intentionally excluded.
 3. **Human approval** — destructive downstream tools are reachable only through the gateway's approval-bound execution path; the MCP client cannot trigger them directly.
 4. **Per-action authorization** — request and execution checks use trusted requester identity from the gateway JWT; downstream service-token validation is not a substitute for these checks.
@@ -32,8 +32,9 @@ The controls below are ordered by importance. The downstream service token (in-p
 - Gateway public read-only tool names and generated `request_*` wrappers must stay stable for clients. Raw downstream Destructive tools are not exposed through the gateway and must only be reached by the domain executor after approval gates pass.
 - `propose_plan` is the autonomous Planner entry point. It accepts only the v1 operation allowlist, stamps Operator Approval Policy, and does not change the existing human-driven `request_*` contracts.
 - Logs and Events are untrusted Kubernetes output; keep observability reads routed through `GuardedToolRunner` so response sanitization still applies.
+- Read-only downstream tool responses are returned as a `model_visible_tool_result` JSON envelope. The top-level fields are Gateway-owned metadata; Kubernetes-derived content is isolated under `untrusted.payload` and must be treated as observation data, not instructions.
 - Suspicious input is warned and audited, but still forwarded to the downstream server.
-- Suspicious response text and echoed manifest blocks are redacted before returning to the MCP client.
+- Suspicious response text, echoed manifest blocks, and common secret patterns (bearer tokens, API keys, passwords, private keys, etc.) are redacted before returning under the envelope's `untrusted.payload` field.
 - Authentication behavior is provided by `InfraGate.McpGateway.Auth`; this project should not duplicate auth rules.
 - OAuth access tokens are terminated at the gateway. The downstream stdio server receives tool calls, not bearer tokens.
 - The gateway binds Same-Subject Approval challenges to the requester stored in the generic plan envelope. Operator Approval Policy challenges are decided by authenticated users in the configured operator group.

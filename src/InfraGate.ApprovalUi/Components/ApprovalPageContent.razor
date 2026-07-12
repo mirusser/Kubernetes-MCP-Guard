@@ -234,6 +234,17 @@
         button:disabled:hover {
             opacity: 0.45;
         }
+        .timeline-link {
+            margin-top: 12px;
+            font-size: 14px;
+        }
+        .timeline-link a {
+            color: var(--color-info);
+            text-decoration: none;
+        }
+        .timeline-link a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -259,6 +270,10 @@
             <ApprovalActions
                 Actions="@PageData.Actions"
                 CanBeApproved="@PageData.PlanReview.CanBeApproved" />
+
+            <p class="timeline-link" data-section="audit-timeline-link">
+                <a href="/audit/timeline/@PageData.Challenge.PlanId">View audit timeline</a>
+            </p>
         }
     </main>
 </body>

@@ -346,6 +346,33 @@ public sealed class RunProfileDocumentReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task ReadAsync_WithGatewayDownstreamAssemblyHash_ParsesHash()
+    {
+        string yaml = """
+            version: 1
+            profiles:
+              p:
+                kind: compose
+                gateway:
+                  downstreamAssembly: /app/server/InfraGate.McpServer.dll
+                  downstreamAssemblyHash: a3e5f8c9d2b1e4076f5a3c8e1d0b9a2c7f4e6d5b8c3a1f0e9d7b6c5a4f3e2d1b0
+                domainAdapters:
+                  - name: a
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /k
+                      allowedNamespaces:
+                        - default
+            """;
+        string path = WriteYaml(yaml);
+
+        var doc = await RunProfileDocumentReader.ReadAsync(path, CancellationToken.None);
+
+        Assert.Equal("/app/server/InfraGate.McpServer.dll", doc.Profiles[0].Gateway?.DownstreamAssembly);
+        Assert.Equal("a3e5f8c9d2b1e4076f5a3c8e1d0b9a2c7f4e6d5b8c3a1f0e9d7b6c5a4f3e2d1b0", doc.Profiles[0].Gateway?.DownstreamAssemblyHash);
+    }
+
+    [Fact]
     public async Task ReadAsync_WithRuntimeMode_RuntimeModeIsPopulated()
     {
         string yaml = """
@@ -367,6 +394,44 @@ public sealed class RunProfileDocumentReaderTests : IDisposable
         var doc = await RunProfileDocumentReader.ReadAsync(path, CancellationToken.None);
 
         Assert.Equal("Development", doc.Profiles[0].RuntimeMode);
+    }
+
+    [Fact]
+    public async Task ReadAsync_WithIdentityProviderIntrospection_ParsesSettings()
+    {
+        string yaml = """
+            version: 1
+            profiles:
+              p:
+                kind: compose
+                identityProvider:
+                  authority: https://issuer.example.com/realms/infra-gate
+                  tokenIntrospectionEnabled: "true"
+                  tokenIntrospectionEndpoint: https://issuer.example.com/realms/infra-gate/protocol/openid-connect/token/introspect
+                  tokenIntrospectionClientId: infra-gate-token-introspection
+                  tokenIntrospectionClientSecret: secret-placeholder
+                  tokenIntrospectionCacheSeconds: "15"
+                  maxAcceptedAccessTokenLifetimeSeconds: "300"
+                domainAdapters:
+                  - name: a
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /k
+                      allowedNamespaces:
+                        - default
+            """;
+        string path = WriteYaml(yaml);
+
+        var doc = await RunProfileDocumentReader.ReadAsync(path, CancellationToken.None);
+
+        var identityProvider = doc.Profiles[0].IdentityProvider;
+        Assert.NotNull(identityProvider);
+        Assert.Equal("true", identityProvider.TokenIntrospectionEnabled);
+        Assert.Equal("https://issuer.example.com/realms/infra-gate/protocol/openid-connect/token/introspect", identityProvider.TokenIntrospectionEndpoint);
+        Assert.Equal("infra-gate-token-introspection", identityProvider.TokenIntrospectionClientId);
+        Assert.Equal("secret-placeholder", identityProvider.TokenIntrospectionClientSecret);
+        Assert.Equal("15", identityProvider.TokenIntrospectionCacheSeconds);
+        Assert.Equal("300", identityProvider.MaxAcceptedAccessTokenLifetimeSeconds);
     }
 
     [Fact]

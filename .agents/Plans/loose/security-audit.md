@@ -5,7 +5,7 @@
 **Re-assessed:** 2026-06-05 (against current codebase; see Implementation Notes per finding)  
 **Scope:** Architecture & request-flow diagrams covering OAuth Login & Authorization, Read-Only Tool Calls, and Approval-Gated Mutations.  
 **Method:** Static architectural analysis of Mermaid sequence diagrams and system description.  
-**Status:** 13 findings identified — 6 from initial audit (verified & extended), 7 new. **Re-assessment: 6 mitigated, 2 partial, 5 unaddressed.**
+**Status:** 13 findings identified — 6 from initial audit (verified & extended), 7 new. **Re-assessment: 6 mitigated, 4 partial, 3 unaddressed.**
 
 ---
 
@@ -168,7 +168,7 @@ The SHA-256 hash mitigates the case where the *pending plan file itself* is tamp
 **Severity:** High
 **Diagram:** Read-Only Tool Call (Diagram 2)
 **Status:** Original finding — confirmed
-**Resolution:** ❌ **NOT MITIGATED** (re-assessed 2026-06-05)
+**Resolution:** ✅ **MITIGATED WITH RESIDUAL RISK** (re-assessed 2026-06-20)
 
 #### Description
 
@@ -190,13 +190,17 @@ If any such payload reaches the LLM, it can override the system prompt and hijac
 - Consider a secondary LLM pass specifically tasked with classifying tool output as benign or suspicious before it reaches the primary model context.
 - Use the audit log (`GuardrailAuditStore`) as a detection signal, not a prevention mechanism — assume some injections will pass.
 
-#### Implementation Notes (2026-06-05)
+#### Implementation Notes (2026-06-20)
 
-Still regex/rule-based only. The five-category scanner lives in `PromptInjectionGuard.Regex.cs:153-180` with redaction in `PromptInjectionGuard.Sanitization.cs`. One improvement: **base64 decode-and-scan** was added (`PromptInjectionGuard.Regex.cs:29-117`) to catch encoded payloads. But all major gaps remain:
-- No schema-enforced tool output envelope — tool results returned as plain text blocks (`GatewayToolDispatcher.cs`).
-- No secondary LLM classification pass — `ModelVisibleContentOptions.cs:37-41` explicitly throws `InvalidOperationException` for `SemanticClassifierEnabled`.
-- No Unicode homoglyph or zero-width character detection.
-- `GuardrailAuditStore` is JSONL append-only on disk (`GuardrailAuditStore.cs:10-37`), local only.
+Mitigated by changing the prevention boundary from text sanitization to structural output isolation:
+
+- Read-only downstream tool calls now return a `model_visible_tool_result` JSON envelope from `GatewayToolDispatcher.HandleReadOnlyAsync` via `ModelVisibleToolResultEnvelope`. Gateway-owned metadata (`schemaVersion`, `kind`, `toolName`, `source`, `status`, `guardrail`) is separated from Kubernetes-derived content under `untrusted.payload`.
+- `GuardedToolRunner.CallForModelVisibleResponseAsync` preserves scanner/audit behavior while reporting guardrail action and categories as structured envelope metadata instead of prepending `Guardrail warning:` prose to model-visible read-only responses.
+- The deterministic scanner now normalizes zero-width format characters and a small set of common Greek/Cyrillic homoglyphs before matching, and it evaluates combined text across fields to catch split-field payloads.
+- Observer and Planner system prompts explicitly state that `untrusted.payload` is observation data only, not instructions, policy, secrets to reveal, or tool-calling guidance.
+- Agent-layer tool results pass through `IModelVisibleContentGuard` in `ToolCallingAgentFactory`; enveloped tool results preserve trusted metadata while replacing only `untrusted.payload` when a guard redacts, quarantines, or blocks content. Gateway and agent tests cover the envelope contract, error envelope, payload isolation, and F-03 corpus cases.
+
+Residual risk remains for sophisticated semantic prompt injections that evade deterministic classification. ADR-0030 still defers a local semantic classifier sidecar; `.agents/Plans/loose/2026-06-03-local-semantic-classifier-research-plan.md` must pass candidate, license, provenance, and corpus-bakeoff review before any classifier becomes a runtime dependency.
 
 ---
 
@@ -351,7 +355,7 @@ Grant validation (`ApprovalGrantValidation.Validate`) cross-checks requester sub
 **Severity:** Medium
 **Diagram:** OAuth Login & Authorization (Diagram 1) & Read-Only Tool Call (Diagram 2)
 **Status:** New finding
-**Resolution:** ❌ **NOT MITIGATED** (re-assessed 2026-06-05)
+**Resolution:** ✅ **MITIGATED** (re-assessed 2026-06-21)
 
 #### Description
 
@@ -365,9 +369,21 @@ This means a compromised token remains fully operational for its entire lifetime
 - Alternatively, enforce very short JWT lifetimes (2–5 minutes) combined with refresh token rotation and a refresh token revocation list. Revoking the refresh token effectively invalidates the session.
 - Expose a `POST /revoke` endpoint on the Gateway that an SRE can call to immediately blacklist a token by `jti` claim.
 
-#### Implementation Notes (2026-06-05)
+#### Implementation Notes (2026-06-21)
 
-No token introspection endpoint. No revocation list or blacklist. The only logout path (`GatewayApprovalEndpoints.cs:168-171`) clears the approval cookie via `Results.SignOut(...)`, not JWT revocation. No `POST /revoke` endpoint. Token lifetime validation uses standard `ValidateLifetime = true` with no short-lifetime enforcement.
+Mitigated with standards-based issuer introspection and short access-token lifetime enforcement. The gateway does not own a `/revoke` endpoint; the IdP remains the revocation source of truth.
+
+- `GatewayAuthentication.cs` rejects tokens whose `exp - iat` or `exp - nbf` exceeds `InfraGate__Auth__MaxAcceptedAccessTokenLifetimeSeconds` (default 300 seconds) and rejects tokens missing both baseline claims when the check is enabled.
+- `HttpTokenIntrospectionClient` posts validated JWTs to the configured/discovered OAuth introspection endpoint. Only `active: true` succeeds; inactive, malformed, HTTP failure, or unavailable endpoint responses fail closed.
+- `TokenIntrospectionActivityValidator` caches only successful active introspection results, keyed by a SHA-256 hash of the token and capped by `TokenIntrospectionCacheSeconds`, JWT `exp`, and introspection `exp`. Expired entries are pruned when the cache exceeds an internal threshold so high-cardinality token streams do not grow memory unbounded.
+- `TokenClaimDates.TryGetUnixTimeClaim` returns `false` for out-of-range Unix-time claims instead of throwing, so malformed tokens fail the lifetime checks cleanly.
+- Production safety validation now requires `InfraGate__Auth__TokenIntrospectionEnabled=true`, a dedicated introspection client id/secret, and a maximum accepted token lifetime of 300 seconds or less.
+- The local/test Keycloak realm includes a dedicated `infra-gate-token-introspection` confidential client and keeps `accessTokenLifespan` at 300 seconds.
+- Run profiles can express the production introspection settings; the production profile emits the required enabled flag, client id/secret placeholder, endpoint, cache TTL, and max accepted token lifetime.
+- Documentation in `src/InfraGate.McpGateway.Auth/README.md`, `docs/configuration.md`, and `docs/production-oidc.md` describes introspection, cache behavior, max token lifetime, Keycloak endpoint path, and the fact that approval UI logout clears only the gateway cookie.
+- The Keycloak integration test README documents that the Testcontainers setup proves active-token introspection but does not reliably prove session-based revocation, because Keycloak's default self-contained access tokens remain introspectable as `active` until expiry unless the realm is configured to check session state at introspection time.
+
+Tests: `GatewayAuthenticationTests`, `HttpTokenIntrospectionClientTests`, `TokenIntrospectionActivityValidatorTests`, `TokenClaimDatesTests`, `GatewayAuthOptionsTests`, `InfraGateAuthSettingsTests`, `McpGatewayOptionsTests`, `RunProfileCliTests`, `RunProfileDocumentReaderTests`, `EnvFileRendererTests`, and `KeycloakIntegrationTests` cover active, inactive/revoked, introspection failure, malformed responses, caching, cache pruning, out-of-range claim handling, max lifetime rejection, missing baseline claims, real Keycloak active-token introspection, production run-profile generation, and existing valid JWT behavior.
 
 ---
 
@@ -401,10 +417,10 @@ No startup binary hash verification found in `src/InfraGate.McpGateway` or `src/
 
 ### F-11
 ### JWKS Cache Poisoning / Key Rollover Race
-**Severity:** Medium
-**Diagram:** OAuth Login & Authorization (Diagram 1)
-**Status:** New finding
-**Resolution:** ❌ **NOT MITIGATED** (re-assessed 2026-06-05)
+**Severity:** Medium  
+**Diagram:** OAuth Login & Authorization (Diagram 1)  
+**Status:** New finding  
+**Resolution:** ✅ **MITIGATED** (re-assessed 2026-06-21)
 
 #### Description
 
@@ -423,9 +439,25 @@ The Gateway validates inbound JWTs against the issuer's JWKS (JSON Web Key Set).
 - On JWKS fetch failure, use the last-known-good cached key set rather than failing open or fetching synchronously per request.
 - Pin the JWKS endpoint URI in configuration and validate the TLS certificate against a pinned CA, even in local/dev deployments.
 
-#### Implementation Notes (2026-06-05)
+#### Implementation Notes (2026-06-21)
 
-Gateway auth uses standard `AddJwtBearer` with IdentityModel's default `ConfigurationManager<OpenIdConnectConfiguration>` for OIDC discovery (`GatewayAuthentication.cs:104-127`). No custom cache TTL, no background refresh configuration, no explicit `kid` matching code found in gateway auth path. Downstream server auth (`DownstreamTokenValidator.cs:22-40`) uses similar defaults. No last-known-good cache fallback on fetch failure.
+**Strict `kid` matching** is enforced unconditionally on both validation paths. `TokenValidationParameters.TryAllIssuerSigningKeys` is set to `false` in `GatewayAuthentication.cs` (gateway JWT bearer) and `DownstreamTokenValidator.cs` (gateway-to-server stdio token). Tokens with a missing or unknown `kid` are rejected.
+
+**Bounded JWKS cache/refresh** is configured explicitly. Both paths construct a `ConfigurationManager<OpenIdConnectConfiguration>` with `AutomaticRefreshInterval = 5 minutes` and `RefreshInterval = 1 minute`, using constants in `GatewayAuthConventions` and `DownstreamAuthConventions.Defaults`. This shrinks the stale-trust window from the 12-hour framework default to the bounded interval.
+
+**Fetch-failure resilience** relies on the `ConfigurationManager` returning its cached configuration when a background refresh fails, after at least one successful fetch. First-fetch failure remains fail-closed. Blanket `ValidateWithLKG` is intentionally **not** enabled, because it would widen the stale-trust window by accepting tokens signed by rotated-out keys.
+
+**Production HTTPS enforcement** for the downstream path is closed: `McpGatewayOptions.ValidateProductionSafety` now requires `InfraGate__DownstreamAuth__RequireHttpsMetadata=true` and asserts HTTPS/non-loopback for `InfraGate__DownstreamAuth__Authority` and `InfraGate__DownstreamAuth__MetadataAddress` in Production mode. The gateway's own endpoints were already enforced.
+
+**CA pinning in local dev** is recorded as an accepted risk (see ADR-0031). Local development continues to use Keycloak over HTTP on loopback; TLS is enforced in Production.
+
+**Tests added or extended:**
+- `JwksConfigurationManagerTests` — proves `TryAllIssuerSigningKeys` defaults to `true` and that setting it `false` rejects unknown/missing `kid`, plus `ConfigurationManager` fetch-failure fallback and key-rollover behavior.
+- `GatewayAuthenticationJwksTests` — gateway-level 401/200 cases for unknown/missing/valid `kid`.
+- `DownstreamTokenValidatorTests` — unknown/missing/valid `kid` for the downstream validator.
+- `DownstreamTokenValidatorJwksTests` — downstream fetch-failure resilience and rotated-key pickup.
+- `McpGatewayOptionsTests` — Production rejects HTTP/loopback downstream authority/metadata and `RequireHttpsMetadata=false`.
+- `KeycloakIntegrationTests` — real Keycloak-backed unknown/missing `kid` rejection.
 
 ---
 
@@ -510,15 +542,15 @@ The naming follows `mcp:tools.{role}` (e.g., `mcp:tools.read`) rather than the s
 |---|---|---|---|---|---|
 | F-01 | Auto-approval loophole — human presence not provable | **Critical** | Original (extended) | Diagram 3 | ✅ Mitigated |
 | F-02 | TOCTOU via stale dry-run / force-conflicts | **High** | Original | Diagram 3 | ✅ Mitigated |
-| F-03 | Prompt injection sanitization fallacy | **High** | Original | Diagram 2 | ❌ Not mitigated |
+| F-03 | Prompt injection sanitization fallacy | **High** | Original | Diagram 2 | ✅ Mitigated with residual risk |
 | F-04 | Disk exhaustion & path traversal in ApprovalStore | **High** | Original | Diagram 3 | ✅ Mitigated |
 | F-05 | Loopback port hijacking in DCR | **Medium** | Original | Diagram 1 | ⚠️ Partial |
 | F-06 | Subprocess blast radius under shared Service Account | **High** | Original | Diagram 2 | ⚠️ Partial |
 | F-07 | JWT Bearer replay — no proof-of-possession | **High** | New | Diagrams 1 & 2 | ⚠️ Partial |
 | F-08 | No user-to-plan binding — cross-user plan approval | **High** | New | Diagram 3 | ✅ Mitigated |
-| F-09 | No JWT revocation mechanism | **Medium** | New | Diagrams 1 & 2 | ❌ Not mitigated |
+| F-09 | No JWT revocation mechanism | **Medium** | New | Diagrams 1 & 2 | ✅ Mitigated |
 | F-10 | Subprocess binary integrity not verified | **High** | New | Diagrams 2 & 3 | ❌ Not mitigated |
-| F-11 | JWKS cache poisoning / key rollover race | **Medium** | New | Diagram 1 | ❌ Not mitigated |
+| F-11 | JWKS cache poisoning / key rollover race | **Medium** | New | Diagram 1 | ✅ Mitigated |
 | F-12 | Audit log tamper by compromised process | **Medium** | New | Diagrams 2 & 3 | ⚠️ Partial |
 | F-13 | Single scope for read and write operations | **High** | New | All | ✅ Mitigated |
 
@@ -540,7 +572,7 @@ The naming follows `mcp:tools.{role}` (e.g., `mcp:tools.read`) rather than the s
 | Priority | Finding | Reason | Status |
 |---|---|---|---|
 | 5 | **F-07** — DPoP or short-lived tokens + log scrubbing | Significantly reduces replay window | ⚠️ Partial — DPoP for internal clients, in-memory replay store |
-| 6 | **F-09** — Token revocation / introspection | Enables incident response to stolen tokens | ❌ Open |
+| 6 | ✅ **F-09** — Token revocation / introspection | Enables incident response to stolen tokens | ✅ Done — issuer introspection + short max access-token lifetime enforced |
 | 7 | **F-10** — Binary hash pinning at startup | Low-cost, high-value supply-chain control | ❌ Open |
 | 8 | **F-06** — Split Service Accounts by read/write | Reduces blast radius of subprocess compromise | ⚠️ Partial — RBAC split exists, single subprocess instance |
 
@@ -550,8 +582,8 @@ The naming follows `mcp:tools.{role}` (e.g., `mcp:tools.read`) rather than the s
 |---|---|---|---|
 | 9 | **F-01** — OOB approval channel | Full fix requires external infrastructure | ✅ Done — browser-based approval with OAuth PKCE |
 | 10 | **F-12** — Remote audit log shipping | Requires out-of-process log sink | ⚠️ Partial — PG audit has hash chaining, no SIEM shipping |
-| 11 | **F-03** — Schema-enforced tool output isolation | Requires LLM prompt engineering + testing | ❌ Open |
-| 12 | **F-11** — JWKS `kid` pinning + bounded cache TTL | Configuration-level fix once token plumbing is stable | ❌ Open |
+| 11 | ✅ **F-03** — Schema-enforced tool output isolation | Requires LLM prompt engineering + testing | ✅ Done — read-only tool-result envelope + model-visible guard path; semantic classifier remains deferred by ADR-0030 |
+| 12 | ✅ **F-11** — JWKS `kid` pinning + bounded cache TTL | Strict `kid` matching, bounded refresh, LKG fallback | ✅ Done |
 | 13 | **F-05** — Subprocess / container isolation | Deployment environment dependent | ⚠️ Partial — container isolation added, no OS-level checks |
 
 ---

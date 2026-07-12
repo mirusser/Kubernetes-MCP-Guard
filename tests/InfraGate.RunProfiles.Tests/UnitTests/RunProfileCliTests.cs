@@ -219,6 +219,37 @@ public sealed class RunProfileCliTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_GenerateProductionProfile_EmitsRequiredTokenIntrospectionSettings()
+    {
+        string outputPath = Path.Combine(Path.GetTempPath(), $"infragate-production-{Guid.NewGuid():N}.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        try
+        {
+            int exitCode = await RunProfileCli.ExecuteAsync(
+                ["generate", "production", "--output", outputPath],
+                output,
+                error,
+                CancellationToken.None);
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(error.ToString());
+            string envFile = await File.ReadAllTextAsync(outputPath);
+            Assert.Contains($"{RunProfileConventions.Env.TokenIntrospectionEnabled}=true", envFile, StringComparison.Ordinal);
+            Assert.Contains($"{RunProfileConventions.Env.TokenIntrospectionClientId}=infra-gate-token-introspection", envFile, StringComparison.Ordinal);
+            Assert.Contains(RunProfileConventions.Env.TokenIntrospectionClientSecret, envFile, StringComparison.Ordinal);
+            Assert.Contains($"{RunProfileConventions.Env.MaxAcceptedAccessTokenLifetimeSeconds}=300", envFile, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+        }
+    }
+
+    [Fact]
     public async Task ExecuteAsync_GenerateWithExistingForeignFile_ReturnsErrorWithoutForce()
     {
         string configPath = await WriteConfigAsync(
@@ -631,12 +662,19 @@ public sealed class RunProfileCliTests
             "InfraGate__Runtime__Environment",
             "InfraGate__Gateway__AspNetCoreUrls",
             "InfraGate__Gateway__DownstreamAssembly",
+            "InfraGate__Gateway__DownstreamAssemblyHash",
             "InfraGate__Gateway__GuardAuditRoot",
             "InfraGate__Auth__OAuthAuthority",
             "InfraGate__Auth__OAuthMetadataAddress",
             "InfraGate__Auth__OAuthResource",
             "InfraGate__Auth__OAuthScope",
             "InfraGate__Auth__OAuthRequireHttpsMetadata",
+            "InfraGate__Auth__TokenIntrospectionEnabled",
+            "InfraGate__Auth__TokenIntrospectionEndpoint",
+            "InfraGate__Auth__TokenIntrospectionClientId",
+            "InfraGate__Auth__TokenIntrospectionClientSecret",
+            "InfraGate__Auth__TokenIntrospectionCacheSeconds",
+            "InfraGate__Auth__MaxAcceptedAccessTokenLifetimeSeconds",
             "InfraGate__Approval__BaseUrl",
             "InfraGate__Auth__ApprovalOAuthClientId",
             "InfraGate__Auth__ApprovalOAuthCallbackPath",
@@ -691,6 +729,8 @@ public sealed class RunProfileCliTests
             "INFRA_GATE_APPROVAL_HOST_PATH",
             "INFRA_GATE_GUARD_AUDIT_HOST_PATH",
             "INFRA_GATE_DATA_PROTECTION_HOST_PATH",
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            "ASPIRE_DASHBOARD_TOKEN",
             "InfraGate__Observer__AspNetCoreUrls",
             "InfraGate__Observer__GatewayBaseUrl",
             "InfraGate__Observer__ClientCredentials__Authority",
@@ -990,6 +1030,44 @@ public sealed class RunProfileCliTests
         string content = await File.ReadAllTextAsync(outputPath);
         Assert.Contains("INFRA_GATE_BIND_ADDRESS=10.0.0.1", content, StringComparison.Ordinal);
         Assert.DoesNotContain("INFRA_GATE_BIND_ADDRESS=127.0.0.1", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GenerateWithSetDownstreamAssemblyHash_OverridesValue()
+    {
+        string configPath = await WriteConfigAsync(
+            """
+            version: 1
+            profiles:
+              local-compose:
+                kind: compose
+                gateway:
+                  downstreamAssembly: /app/server/InfraGate.McpServer.dll
+                  downstreamAssemblyHash: original-hash00000000000000000000000000000000000000000000000000000000
+                domainAdapters:
+                  - name: kubernetesAdapter
+                    type: kubernetes
+                    kubernetes:
+                      kubeconfig: /run/kube/config
+                      allowedNamespaces:
+                        - default
+            """);
+        string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "out.env");
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = await RunProfileCli.ExecuteAsync(
+            ["generate", "local-compose", "--config", configPath, "--output", outputPath,
+             "--set", "gateway.downstreamAssemblyHash=override-hash0000000000000000000000000000000000000000000000000000000"],
+            output,
+            error,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        string content = await File.ReadAllTextAsync(outputPath);
+        Assert.Contains($"{RunProfileConventions.Env.DownstreamAssemblyHash}=override-hash0000000000000000000000000000000000000000000000000000000", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("original-hash", content, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
@@ -12,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 
@@ -88,6 +90,83 @@ public sealed class GatewayAuthenticationTests
 
         response.EnsureSuccessStatusCode();
         Assert.Equal("ok", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task McpEndpoint_WithIntrospectionEnabled_AllowsActiveJwt()
+    {
+        var activityValidator = new FakeTokenActivityValidator(isActive: true);
+        var options = new GatewayAuthOptions(
+            Issuer,
+            Resource,
+            Scope,
+            TokenIntrospectionEnabled: true,
+            TokenIntrospectionClientId: "introspection-client",
+            TokenIntrospectionClientSecret: "secret-placeholder");
+        using var server = CreateOAuthServer(out var signingKey, options, services =>
+        {
+            services.AddSingleton<ITokenActivityValidator>(activityValidator);
+        });
+        using var client = server.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            CreateJwt(signingKey));
+
+        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal(1, activityValidator.CallCount);
+    }
+
+    [Fact]
+    public async Task McpEndpoint_WithIntrospectionEnabled_RejectsInactiveJwt()
+    {
+        var activityValidator = new FakeTokenActivityValidator(isActive: false);
+        var options = new GatewayAuthOptions(
+            Issuer,
+            Resource,
+            Scope,
+            TokenIntrospectionEnabled: true,
+            TokenIntrospectionClientId: "introspection-client",
+            TokenIntrospectionClientSecret: "secret-placeholder");
+        using var server = CreateOAuthServer(out var signingKey, options, services =>
+        {
+            services.AddSingleton<ITokenActivityValidator>(activityValidator);
+        });
+        using var client = server.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            CreateJwt(signingKey));
+
+        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(1, activityValidator.CallCount);
+    }
+
+    [Fact]
+    public async Task McpEndpoint_TokenLifetimeExceedsConfiguredMaximum_ReturnsUnauthorized()
+    {
+        using var server = CreateOAuthServer(out var signingKey);
+        using var client = server.CreateClient();
+        var issuedAt = DateTime.UtcNow.AddMinutes(-10);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            CreateJwt(signingKey, issuedAt: issuedAt, notBefore: issuedAt, expires: issuedAt.AddMinutes(10)));
+
+        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public void HasAcceptedAccessTokenLifetime_MissingIssuedAtAndNotBefore_ReturnsFalse()
+    {
+        var token = new JsonWebToken(CreateUnsignedJwtWithoutBaseline());
+
+        bool accepted = GatewayAuthentication.HasAcceptedAccessTokenLifetime(token, maxAcceptedLifetimeSeconds: 300);
+
+        Assert.False(accepted);
     }
 
     [Theory]
@@ -180,6 +259,27 @@ public sealed class GatewayAuthenticationTests
         Assert.Equal(metadataAddress, jwtOptions.MetadataAddress);
         Assert.Contains(Issuer, jwtOptions.TokenValidationParameters.ValidIssuers);
         Assert.Contains(Issuer.TrimEnd('/'), jwtOptions.TokenValidationParameters.ValidIssuers);
+    }
+
+    [Fact]
+    public void AddGatewayAuthentication_SetsBoundedJwksRefreshIntervals()
+    {
+        var options = new GatewayAuthOptions(
+            Issuer,
+            Resource,
+            Scope,
+            OAuthRequireHttpsMetadata: false);
+        var services = new ServiceCollection();
+
+        services.AddGatewayAuthentication(options);
+        using var provider = services.BuildServiceProvider();
+        var jwtOptions = provider
+            .GetRequiredService<IOptionsMonitor<JwtBearerOptions>>()
+            .Get(JwtBearerDefaults.AuthenticationScheme);
+
+        var manager = Assert.IsType<ConfigurationManager<OpenIdConnectConfiguration>>(jwtOptions.ConfigurationManager);
+        Assert.Equal(GatewayAuthConventions.DefaultJwksAutomaticRefreshInterval, manager.AutomaticRefreshInterval);
+        Assert.Equal(GatewayAuthConventions.DefaultJwksMinimumRefreshInterval, manager.RefreshInterval);
     }
 
     // ── FromConfiguration binding ──────────────────────────────────────────
@@ -334,14 +434,20 @@ public sealed class GatewayAuthenticationTests
     private static TestServer CreateOAuthServer() =>
         CreateOAuthServer(out _);
 
-    private static TestServer CreateOAuthServer(out SecurityKey signingKey)
+    private static TestServer CreateOAuthServer(out SecurityKey signingKey) =>
+        CreateOAuthServer(out signingKey, options: null, configureServices: null);
+
+    private static TestServer CreateOAuthServer(
+        out SecurityKey signingKey,
+        GatewayAuthOptions? options,
+        Action<IServiceCollection>? configureServices)
     {
         var key = new SymmetricSecurityKey("0123456789abcdef0123456789abcdef"u8.ToArray())
         {
             KeyId = "test-key"
         };
         signingKey = key;
-        var options = new GatewayAuthOptions(
+        options ??= new GatewayAuthOptions(
             Issuer,
             Resource,
             Scope,
@@ -353,6 +459,7 @@ public sealed class GatewayAuthenticationTests
                 services.AddRouting();
                 services.AddSingleton(options);
                 services.AddGatewayAuthentication(options);
+                configureServices?.Invoke(services);
                 services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, jwtOptions =>
                 {
                     jwtOptions.Configuration = new OpenIdConnectConfiguration
@@ -430,13 +537,18 @@ public sealed class GatewayAuthenticationTests
         string issuer = Issuer,
         string audience = Resource,
         string scope = Scope,
-        DateTime? expires = null)
+        DateTime? expires = null,
+        DateTime? issuedAt = null,
+        DateTime? notBefore = null)
     {
+        var issued = issuedAt ?? DateTime.UtcNow.AddSeconds(-10);
         var descriptor = new SecurityTokenDescriptor
         {
             Issuer = issuer,
             Audience = audience,
-            Expires = expires ?? DateTime.UtcNow.AddMinutes(30),
+            IssuedAt = issued,
+            NotBefore = notBefore ?? issued,
+            Expires = expires ?? issued.AddMinutes(4),
             Claims = new Dictionary<string, object>
             {
                 [GatewayAuthConventions.Claims.Subject] = "subject-1",
@@ -446,5 +558,26 @@ public sealed class GatewayAuthenticationTests
         };
 
         return new JsonWebTokenHandler().CreateToken(descriptor);
+    }
+
+    private static string CreateUnsignedJwtWithoutBaseline()
+    {
+        string header = Base64UrlEncoder.Encode(Encoding.UTF8.GetBytes("{\"alg\":\"none\"}"));
+        long expiresAt = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds();
+        string payload = Base64UrlEncoder.Encode(Encoding.UTF8.GetBytes(
+            $"{{\"{GatewayAuthConventions.Claims.Expiration}\":{expiresAt}}}"));
+        return $"{header}.{payload}.";
+    }
+
+    private sealed class FakeTokenActivityValidator(bool isActive) : ITokenActivityValidator
+    {
+        public int CallCount { get; private set; }
+
+        public Task<bool> IsActiveAsync(JsonWebToken accessToken, CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(accessToken);
+            CallCount++;
+            return Task.FromResult(isActive);
+        }
     }
 }

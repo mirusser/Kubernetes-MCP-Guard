@@ -15,6 +15,12 @@ internal static class PlannerConventions
     public const string HealthEndpointPath = "/health";
     public const string AspNetCoreUrlsKey = "InfraGate:Planner:AspNetCoreUrls";
 
+    public static class Health
+    {
+        public const string LivenessPath = "/healthz";
+        public const string ReadinessPath = "/readyz";
+    }
+
     // A2A endpoint replacing the legacy /handoff/anomalies HTTP POST
     public const string A2AHandoffEndpointPath = "/a2a/planner";
     public const string A2AHandoffAgentName = "planner-agent";

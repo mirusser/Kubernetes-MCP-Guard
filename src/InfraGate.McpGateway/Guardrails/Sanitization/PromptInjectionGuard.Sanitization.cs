@@ -8,8 +8,8 @@ public static partial class PromptInjectionGuard
     public static ResponseSanitizationResult SanitizeResponse(string responseText)
     {
         var findings = new List<GuardrailFinding>();
-        var manifestRedacted = false;
-        var withoutManifest = ManifestBlockRegex().Replace(
+        bool manifestRedacted = false;
+        string withoutManifest = ManifestBlockRegex().Replace(
             responseText,
             match =>
             {
@@ -23,9 +23,9 @@ public static partial class PromptInjectionGuard
             });
         string withoutSensitiveMetadata = RedactSensitivePlanMetadataLines(withoutManifest, out bool metadataRedacted);
 
-        if (TryRedactJson(withoutSensitiveMetadata, findings, out var jsonText))
+        if (TryRedactJson(withoutSensitiveMetadata, findings, out string? jsonText))
         {
-            var changed = manifestRedacted ||
+            bool changed = manifestRedacted ||
                 metadataRedacted ||
                 !string.Equals(withoutSensitiveMetadata, jsonText, StringComparison.Ordinal);
 
@@ -35,8 +35,8 @@ public static partial class PromptInjectionGuard
                 manifestRedacted);
         }
 
-        var text = RedactSuspiciousLines(withoutSensitiveMetadata, findings, out var lineRedacted);
-        var response = manifestRedacted || metadataRedacted || lineRedacted ? text : responseText;
+        string text = RedactSuspiciousLines(withoutSensitiveMetadata, findings, out bool lineRedacted);
+        string response = manifestRedacted || metadataRedacted || lineRedacted ? text : responseText;
 
         return new ResponseSanitizationResult(response, findings, manifestRedacted);
     }
@@ -47,7 +47,7 @@ public static partial class PromptInjectionGuard
         out string redactedText)
     {
         redactedText = text;
-        var trimmed = text.TrimStart();
+        string trimmed = text.TrimStart();
         if (!trimmed.StartsWith('{') && !trimmed.StartsWith('['))
         {
             return false;
@@ -63,8 +63,12 @@ public static partial class PromptInjectionGuard
             return false;
         }
 
-        var initialCount = findings.Count;
+        var textValues = new List<string>();
+        CollectJsonTextValues(root, textValues);
+
+        int initialCount = findings.Count;
         root = RedactJsonNode(root, McpGatewayConventions.GuardrailLocations.Response, findings);
+        AddCombinedTextFindings(textValues, McpGatewayConventions.GuardrailLocations.ResponseCombined, findings);
         if (findings.Count == initialCount)
         {
             return true;
@@ -72,6 +76,32 @@ public static partial class PromptInjectionGuard
 
         redactedText = root?.ToJsonString(JsonOptions) ?? text;
         return true;
+    }
+
+    private static void CollectJsonTextValues(JsonNode? node, List<string> textValues)
+    {
+        switch (node)
+        {
+            case null:
+                return;
+            case JsonValue value when value.TryGetValue<string>(out var text):
+                textValues.Add(text);
+                return;
+            case JsonObject jsonObject:
+                foreach ((string? _, JsonNode? child) in jsonObject)
+                {
+                    CollectJsonTextValues(child, textValues);
+                }
+
+                return;
+            case JsonArray jsonArray:
+                foreach (JsonNode? child in jsonArray)
+                {
+                    CollectJsonTextValues(child, textValues);
+                }
+
+                return;
+        }
     }
 
     private static JsonNode? RedactJsonNode(JsonNode? node, string location, List<GuardrailFinding> findings)
@@ -99,7 +129,7 @@ public static partial class PromptInjectionGuard
         string location,
         List<GuardrailFinding> findings)
     {
-        var before = findings.Count;
+        int before = findings.Count;
         AddTextFindings(text, location, findings);
 
         return findings.Count == before ? node : JsonValue.Create(RedactedValue);
@@ -107,9 +137,9 @@ public static partial class PromptInjectionGuard
 
     private static void RedactJsonObject(JsonObject jsonObject, string location, List<GuardrailFinding> findings)
     {
-        foreach (var (name, child) in jsonObject.ToArray())
+        foreach ((string? name, JsonNode? child) in jsonObject.ToArray())
         {
-            var redacted = RedactJsonNode(child, $"{location}.{name}", findings);
+            JsonNode? redacted = RedactJsonNode(child, $"{location}.{name}", findings);
             if (!ReferenceEquals(redacted, child))
             {
                 jsonObject[name] = redacted;
@@ -119,10 +149,10 @@ public static partial class PromptInjectionGuard
 
     private static void RedactJsonArray(JsonArray jsonArray, string location, List<GuardrailFinding> findings)
     {
-        for (var i = 0; i < jsonArray.Count; i++)
+        for (int i = 0; i < jsonArray.Count; i++)
         {
-            var child = jsonArray[i];
-            var redacted = RedactJsonNode(child, $"{location}[{i}]", findings);
+            JsonNode? child = jsonArray[i];
+            JsonNode? redacted = RedactJsonNode(child, $"{location}[{i}]", findings);
             if (!ReferenceEquals(redacted, child))
             {
                 jsonArray[i] = redacted;
@@ -136,7 +166,7 @@ public static partial class PromptInjectionGuard
         out bool lineRedacted)
     {
         lineRedacted = false;
-        var lines = LineSplitRegex().Split(text);
+        string[] lines = LineSplitRegex().Split(text);
 
         for (int i = 0; i < lines.Length; i++)
         {
@@ -146,7 +176,7 @@ public static partial class PromptInjectionGuard
                 continue;
             }
 
-            var before = findings.Count;
+            int before = findings.Count;
             AddTextFindings(line, $"{McpGatewayConventions.GuardrailLocations.ResponseLine}[{i}]", findings);
             if (findings.Count > before)
             {

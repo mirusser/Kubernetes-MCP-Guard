@@ -14,6 +14,7 @@ using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Email;
 using InfraGate.McpGateway.Notifications;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -51,13 +52,70 @@ public sealed class GatewayDiWiringTests
         var services = new ServiceCollection();
         services.AddSingleton<IDownstreamMcpClient, NullDownstreamClient>();
         services.AddSingleton<IGuardrailAuditStore, NullAuditStore>();
+        services.AddSingleton(CreateOptions());
+        services.AddSingleton<SensitiveDataRedactor>(sp =>
+            new SensitiveDataRedactor(
+                McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                sp.GetRequiredService<ILogger<SensitiveDataRedactor>>()));
+        services.AddHttpContextAccessor();
         services.AddLogging();
-        services.AddSingleton<GuardedToolRunner>();
+        services.AddSingleton<GuardedToolRunner>(sp =>
+            new GuardedToolRunner(
+                sp.GetRequiredService<IDownstreamMcpClient>(),
+                sp.GetRequiredService<IGuardrailAuditStore>(),
+                sp.GetRequiredService<IHttpContextAccessor>(),
+                sp.GetRequiredService<SensitiveDataRedactor>(),
+                sp.GetRequiredService<ILogger<GuardedToolRunner>>()));
 
         using var provider = services.BuildServiceProvider();
         var resolved = provider.GetRequiredService<GuardedToolRunner>();
 
         Assert.NotNull(resolved);
+    }
+
+    [Fact]
+    public void Resolve_SensitiveDataRedactor_Succeeds()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(CreateOptions());
+        services.AddLogging();
+        services.AddSingleton<SensitiveDataRedactor>(sp =>
+            new SensitiveDataRedactor(
+                McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                sp.GetRequiredService<ILogger<SensitiveDataRedactor>>()));
+
+        using var provider = services.BuildServiceProvider();
+        var resolved = provider.GetRequiredService<SensitiveDataRedactor>();
+
+        Assert.NotNull(resolved);
+    }
+
+    [Fact]
+    public void Resolve_SanitizingToolCaller_Succeeds()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IDownstreamMcpClient, NullDownstreamClient>();
+        services.AddSingleton<IGuardrailAuditStore, NullAuditStore>();
+        services.AddSingleton(CreateOptions());
+        services.AddSingleton<SensitiveDataRedactor>(sp =>
+            new SensitiveDataRedactor(
+                McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                sp.GetRequiredService<ILogger<SensitiveDataRedactor>>()));
+        services.AddHttpContextAccessor();
+        services.AddLogging();
+        services.AddSingleton<IToolCaller>(sp =>
+            new SanitizingToolCaller(
+                sp.GetRequiredService<IDownstreamMcpClient>(),
+                sp.GetRequiredService<IGuardrailAuditStore>(),
+                sp.GetRequiredService<IHttpContextAccessor>(),
+                sp.GetRequiredService<SensitiveDataRedactor>(),
+                sp.GetRequiredService<ILogger<SanitizingToolCaller>>()));
+
+        using var provider = services.BuildServiceProvider();
+        var resolved = provider.GetRequiredService<IToolCaller>();
+
+        Assert.NotNull(resolved);
+        Assert.IsType<SanitizingToolCaller>(resolved);
     }
 
     [Fact]
@@ -67,7 +125,17 @@ public sealed class GatewayDiWiringTests
         services.AddSingleton(CreateOptions());
         services.AddSingleton<IDownstreamMcpClient, NullDownstreamClient>();
         services.AddSingleton<IGuardrailAuditStore, NullAuditStore>();
-        services.AddSingleton<GuardedToolRunner>();
+        services.AddSingleton<SensitiveDataRedactor>(sp =>
+            new SensitiveDataRedactor(
+                McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                sp.GetRequiredService<ILogger<SensitiveDataRedactor>>()));
+        services.AddSingleton<GuardedToolRunner>(sp =>
+            new GuardedToolRunner(
+                sp.GetRequiredService<IDownstreamMcpClient>(),
+                sp.GetRequiredService<IGuardrailAuditStore>(),
+                sp.GetRequiredService<IHttpContextAccessor>(),
+                sp.GetRequiredService<SensitiveDataRedactor>(),
+                sp.GetRequiredService<ILogger<GuardedToolRunner>>()));
         services.AddSingleton<TestApprovalWorkflow>();
         services.AddSingleton<IApprovalPlanWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());
         services.AddSingleton<IApprovalChallengeWorkflow>(sp => sp.GetRequiredService<TestApprovalWorkflow>());

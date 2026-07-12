@@ -11,7 +11,7 @@ public sealed class InfraGateRuntimeSettingsTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["InfraGate:Runtime:Environment"] = "Production"
+                [RuntimeSafetyConventions.ConfigurationKeys.InfraGateRuntimeEnvironment] = RuntimeSafetyConventions.EnvironmentValues.Production
             })
             .Build();
 
@@ -20,7 +20,7 @@ public sealed class InfraGateRuntimeSettingsTests
             .Get<InfraGateRuntimeSettings>();
 
         Assert.NotNull(settings);
-        Assert.Equal("Production", settings!.Environment);
+        Assert.Equal(RuntimeSafetyConventions.EnvironmentValues.Production, settings!.Environment);
     }
 
     [Fact]

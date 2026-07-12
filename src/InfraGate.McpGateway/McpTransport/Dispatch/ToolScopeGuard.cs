@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using InfraGate.McpGateway.Auth;
 using ModelContextProtocol.Protocol;
 
@@ -10,7 +11,7 @@ internal sealed class ToolScopeGuard(
 {
     public async Task<CallToolResult?> RequireAnyScopeAsync(string toolName, params string[] requiredScopes)
     {
-        var user = httpContextAccessor.HttpContext?.User;
+        ClaimsPrincipal? user = httpContextAccessor.HttpContext?.User;
         if (user is null)
         {
             return ErrorResult(
@@ -27,14 +28,14 @@ internal sealed class ToolScopeGuard(
 
     private async Task<CallToolResult?> DenyAndAuditAsync(string toolName, string requiredScope)
     {
-        var user = httpContextAccessor.HttpContext?.User;
+        ClaimsPrincipal? user = httpContextAccessor.HttpContext?.User;
         if (user is null)
         {
             return ErrorResult(
                 McpGatewayMessages.Authorization.RequiresAuthenticatedSession(toolName, requiredScope));
         }
 
-        var identity = GatewayAuditIdentityResolver.Resolve(user);
+        GatewayAuditIdentity identity = GatewayAuditIdentityResolver.Resolve(user);
 
         logger.LogWarning(
             "Tool '{ToolName}' denied: caller lacks required scope '{RequiredScope}'.",

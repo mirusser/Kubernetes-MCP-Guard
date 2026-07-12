@@ -21,6 +21,18 @@ public sealed class ObserverConventionsTests
     }
 
     [Fact]
+    public void Health_LivenessPath_IsSlashHealthz()
+    {
+        Assert.Equal("/healthz", ObserverConventions.Health.LivenessPath);
+    }
+
+    [Fact]
+    public void Health_ReadinessPath_IsSlashReadyz()
+    {
+        Assert.Equal("/readyz", ObserverConventions.Health.ReadinessPath);
+    }
+
+    [Fact]
     public void ObserveNowEndpointPath_IsPinned()
     {
         Assert.Equal("/observe-now", ObserverConventions.ObserveNowEndpointPath);
