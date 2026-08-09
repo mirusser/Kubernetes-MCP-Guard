@@ -25,9 +25,17 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
     ISubscriptionRegistry subscriptionRegistry,
     IToolScopeGuard scopeGuard,
     IHttpContextAccessor httpContextAccessor,
+    IReadOnlyList<GatewayToolDispatcher.ReadOnlySource> readOnlySources,
     ILogger<GatewayToolDispatcher> logger) : IGatewayToolDispatcher
 {
     private static readonly TimeSpan WaitForPlanApprovalPollInterval = TimeSpan.FromMilliseconds(250);
+
+    // Primary + optional secondary (e.g. kubernetes-mcp-server) read-only downstream sources,
+    // composed once in the composition root (see ConfigurationExtensions.RegisterReadOnlySources)
+    // rather than resolved here via IServiceProvider — this class takes plain constructor
+    // injection only. Only the primary ever participates in destructive/request_* routing —
+    // see IsDestructiveToolAsync and ListToolsAsync, which read `registry` directly, never this list.
+    internal sealed record class ReadOnlySource(DownstreamToolRegistry Registry, GuardedToolRunner Runner);
 
 #pragma warning disable MA0041
     private string? CurrentSessionId =>
@@ -40,10 +48,13 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
     {
         var tools = new List<Tool>();
 
-        IReadOnlyList<DownstreamTool> readOnly = await registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
-        foreach (DownstreamTool dt in readOnly)
+        foreach (ReadOnlySource source in readOnlySources)
         {
-            tools.Add(ToolDefinitionFactory.CreateForwardedTool(dt));
+            IReadOnlyList<DownstreamTool> readOnly = await source.Registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
+            foreach (DownstreamTool dt in readOnly)
+            {
+                tools.Add(ToolDefinitionFactory.CreateForwardedTool(dt));
+            }
         }
 
         IReadOnlyList<DownstreamTool> destructive = await registry.GetDestructiveAsync(ct).ConfigureAwait(false);
@@ -161,8 +172,16 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
 
     private async Task<bool> IsReadOnlyToolAsync(string toolName, CancellationToken ct)
     {
-        IReadOnlyList<DownstreamTool> readOnlyTools = await registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
-        return readOnlyTools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal));
+        foreach (ReadOnlySource source in readOnlySources)
+        {
+            IReadOnlyList<DownstreamTool> readOnlyTools = await source.Registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
+            if (readOnlyTools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private async Task<bool> IsDestructiveToolAsync(string toolName, CancellationToken ct)
@@ -183,8 +202,24 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
             return scopeResult;
         }
 
+        GuardedToolRunner? runner = null;
+        foreach (ReadOnlySource source in readOnlySources)
+        {
+            IReadOnlyList<DownstreamTool> readOnlyTools = await source.Registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
+            if (readOnlyTools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal)))
+            {
+                runner = source.Runner;
+                break;
+            }
+        }
+
+        if (runner is null)
+        {
+            return ErrorResult(McpGatewayMessages.ToolRouting.UnknownTool(toolName));
+        }
+
         IReadOnlyDictionary<string, object?> arguments = ToolArgumentConverter.ConvertArguments(request.Arguments);
-        GuardedToolCallResult result = await guardedRunner.CallForModelVisibleResponseAsync(toolName, arguments, ct)
+        GuardedToolCallResult result = await runner.CallForModelVisibleResponseAsync(toolName, arguments, ct)
             .ConfigureAwait(false);
         string envelope = ModelVisibleToolResultEnvelope.Serialize(toolName, result, TimeProvider.System.GetUtcNow());
 

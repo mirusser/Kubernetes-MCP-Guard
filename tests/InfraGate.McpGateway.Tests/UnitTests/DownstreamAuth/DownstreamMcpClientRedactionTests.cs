@@ -97,6 +97,6 @@ public sealed class DownstreamMcpClientRedactionTests
             ApprovalChallengeTtl: McpGatewayOptions.DefaultApprovalChallengeTtl,
             DownstreamAssembly: null);
 
-        return new DownstreamMcpClient(options, tokenProvider, logger, NullLoggerFactory.Instance);
+        return new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(options), tokenProvider, logger, NullLoggerFactory.Instance);
     }
 }

@@ -157,6 +157,26 @@ For an external OAuth/OIDC issuer, use its issuer URL for `InfraGate__Auth__OAut
 
 For the supported Keycloak container path, the Compose file sets the internal metadata/token endpoints and approval redirect values for you.
 
+### Optional secondary read-only Kubernetes MCP downstream
+
+The Gateway can also start the pinned upstream `kubernetes-mcp-server` as an off-by-default secondary source for broader read-only Kubernetes inspection. This source never contributes destructive tools or `request_*` wrappers.
+
+For a source run, install the binary, generate its fixed read-only TOML, and set the optional process configuration before starting the Gateway:
+
+```bash
+./scripts/install-kubernetes-mcp-server.sh
+dotnet run --project src/InfraGate.RunProfiles -- generate-toml local-source-gateway \
+  --output deploy/generated/local-source-gateway.kubernetes-mcp-server.toml
+
+export REPO_ROOT="$(pwd)"
+export InfraGate__Gateway__KubernetesMcpServer__Command="${REPO_ROOT}/.tools/bin/kubernetes-mcp-server"
+export InfraGate__Gateway__KubernetesMcpServer__Arguments__0="--config"
+export InfraGate__Gateway__KubernetesMcpServer__Arguments__1="${REPO_ROOT}/deploy/generated/local-source-gateway.kubernetes-mcp-server.toml"
+export InfraGate__Gateway__KubernetesMcpServer__WorkingDirectory="${REPO_ROOT}"
+```
+
+The local installer requires Go 1.26.3 or newer. Docker builds compile the pinned binary in the Gateway image's Go builder stage instead. See the [configuration reference](configuration.md#mcpgateway) for the process settings and [ADR-0033](adr/0033-kubernetes-mcp-server-readonly-secondary-downstream.md) for the trust boundary and architectural decision.
+
 ### Downstream stdio service token auth
 
 The gateway proves its identity to the downstream stdio server using a short-lived OAuth client-credentials token. This is a defense-in-depth measure — not the primary security boundary. The primary boundary is the trusted-launch model (containment, human approval, and per-action authorization described in the security controls section of `src/InfraGate.McpGateway/README.md`).

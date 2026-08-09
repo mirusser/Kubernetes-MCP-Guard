@@ -73,6 +73,83 @@ public sealed class GatewayToolDispatcherTests
     }
 
     [Fact]
+    public async Task ListToolsAsync_WithSecondarySource_MergesReadOnlyTools()
+    {
+        var secondaryDownstream = new FakeSecondaryDownstream("secondary result");
+        var secondaryRegistry = new DownstreamToolRegistry(secondaryDownstream);
+        var secondaryRunner = new GuardedToolRunner(
+            secondaryDownstream,
+            new InMemoryAuditStore(),
+            null,
+            new SensitiveDataRedactor(McpGatewayConventions.SensitiveDataRedaction.Defaults, NullLogger<SensitiveDataRedactor>.Instance),
+            NullLogger<GuardedToolRunner>.Instance);
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            secondaryRegistry: secondaryRegistry,
+            secondaryRunner: secondaryRunner);
+
+        var result = await context.Dispatcher.ListToolsAsync(new ListToolsRequestParams(), CancellationToken.None);
+
+        Assert.Contains(result.Tools, t => t.Name == "get_allowed_namespaces");
+        Assert.Contains(result.Tools, t => t.Name == "pods_list");
+    }
+
+    [Fact]
+    public async Task ListToolsAsync_WithSecondarySource_NeverGeneratesRequestWrapperForSecondaryTool()
+    {
+        // The fake tool below is deliberately destructive-hinted (see FakeSecondaryDownstream),
+        // matching the plan's threat model: "even if the upstream binary's annotations claim a
+        // tool is destructive". A non-destructive-hinted fake would make this test pass trivially,
+        // since GetDestructiveAsync would never surface it regardless of routing correctness.
+        var secondaryDownstream = new FakeSecondaryDownstream("secondary result");
+        var secondaryRegistry = new DownstreamToolRegistry(secondaryDownstream);
+        var secondaryRunner = new GuardedToolRunner(
+            secondaryDownstream,
+            new InMemoryAuditStore(),
+            null,
+            new SensitiveDataRedactor(McpGatewayConventions.SensitiveDataRedaction.Defaults, NullLogger<SensitiveDataRedactor>.Instance),
+            NullLogger<GuardedToolRunner>.Instance);
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            secondaryRegistry: secondaryRegistry,
+            secondaryRunner: secondaryRunner);
+
+        IReadOnlyList<DownstreamTool> secondaryDestructiveTools =
+            await secondaryRegistry.GetDestructiveAsync(CancellationToken.None);
+        Assert.Contains(secondaryDestructiveTools, t => t.Name == "pods_list");
+
+        var result = await context.Dispatcher.ListToolsAsync(new ListToolsRequestParams(), CancellationToken.None);
+
+        Assert.DoesNotContain(result.Tools, t => t.Name == "request_pods_list");
+    }
+
+    [Fact]
+    public async Task CallToolAsync_SecondaryReadOnlyTool_RoutesToSecondaryRunner()
+    {
+        var secondaryDownstream = new FakeSecondaryDownstream("secondary result");
+        var secondaryRegistry = new DownstreamToolRegistry(secondaryDownstream);
+        var secondaryRunner = new GuardedToolRunner(
+            secondaryDownstream,
+            new InMemoryAuditStore(),
+            null,
+            new SensitiveDataRedactor(McpGatewayConventions.SensitiveDataRedaction.Defaults, NullLogger<SensitiveDataRedactor>.Instance),
+            NullLogger<GuardedToolRunner>.Instance);
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            secondaryRegistry: secondaryRegistry,
+            secondaryRunner: secondaryRunner);
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams { Name = "pods_list" },
+            CancellationToken.None);
+
+        Assert.True(result.IsError is not true);
+        Assert.Contains("secondary result", ((TextContentBlock)result.Content[0]).Text, StringComparison.Ordinal);
+        Assert.Single(secondaryDownstream.Calls, call => call == "pods_list");
+        Assert.Empty(context.Downstream.Calls);
+    }
+
+    [Fact]
     public async Task ListToolsAsync_ScopeFiltering_FiltersToolsVisibleToUser()
     {
         var context = CreateContext(
@@ -822,7 +899,9 @@ public sealed class GatewayToolDispatcherTests
         string subject = Subject,
         string? operatorEmail = null,
         string downstreamResponse = "downstream result",
-        Exception? downstreamException = null)
+        Exception? downstreamException = null,
+        DownstreamToolRegistry? secondaryRegistry = null,
+        GuardedToolRunner? secondaryRunner = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-dispatcher-tests", Guid.NewGuid().ToString("N"));
         var workflow = new TestApprovalWorkflow();
@@ -886,6 +965,15 @@ public sealed class GatewayToolDispatcherTests
             httpContextAccessor,
             NullLogger<ProposePlanHandler>.Instance);
 
+        var readOnlySources = new List<GatewayToolDispatcher.ReadOnlySource>
+        {
+            new(new DownstreamToolRegistry(downstream), guardedRunner)
+        };
+        if (secondaryRegistry is not null && secondaryRunner is not null)
+        {
+            readOnlySources.Add(new GatewayToolDispatcher.ReadOnlySource(secondaryRegistry, secondaryRunner));
+        }
+
         return new TestContext(
             new GatewayToolDispatcher(
                 new DownstreamToolRegistry(downstream),
@@ -900,6 +988,7 @@ public sealed class GatewayToolDispatcherTests
                 subscriptions,
                 new ToolScopeGuard(httpContextAccessor, guardrailAudit, NullLogger<ToolScopeGuard>.Instance),
                 httpContextAccessor,
+                readOnlySources,
                 NullLogger<GatewayToolDispatcher>.Instance),
             workflow,
             downstream,
@@ -1044,6 +1133,34 @@ public sealed class GatewayToolDispatcherTests
             [
                 new DownstreamTool("get_allowed_namespaces", "Returns allowed namespaces.", true, false, DefaultSchema),
                 new DownstreamTool("apply_manifest", "Applies manifests.", false, true, DefaultSchema)
+            ]);
+    }
+
+    // Stands in for the secondary (e.g. kubernetes-mcp-server) downstream: read-only-only,
+    // with a distinct tool name from FakeDownstream so merged-listing/routing tests can tell
+    // primary and secondary responses apart.
+    private sealed class FakeSecondaryDownstream(string responseText) : IDownstreamMcpClient
+    {
+        private static readonly JsonElement DefaultSchema = JsonSerializer.SerializeToElement(new { type = "object" });
+
+        public List<string> Calls { get; } = [];
+
+        public Task<string> CallToolAsync(
+            string toolName,
+            IReadOnlyDictionary<string, object?> arguments,
+            CancellationToken cancellationToken)
+        {
+            Calls.Add(toolName);
+            return Task.FromResult(responseText);
+        }
+
+        public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DownstreamTool>>(
+            [
+                // IsDestructive: true deliberately — models an upstream binary whose own
+                // annotations claim a "read-only" tool is also destructive, so tests can prove
+                // the Gateway never builds a request_* wrapper for it regardless.
+                new DownstreamTool("pods_list", "Lists pods.", true, true, DefaultSchema)
             ]);
     }
 

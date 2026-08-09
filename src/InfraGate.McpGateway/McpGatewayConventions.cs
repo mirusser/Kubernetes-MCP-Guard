@@ -53,6 +53,10 @@ internal static class McpGatewayConventions
         public const string DownstreamAssemblyHash = "InfraGate:Gateway:DownstreamAssemblyHash";
         public const string DownstreamProject = "InfraGate:Gateway:DownstreamProject";
         public const string GuardAuditRoot = "InfraGate:Gateway:GuardAuditRoot";
+        public const string KubernetesMcpServerSection = "InfraGate:Gateway:KubernetesMcpServer";
+        public const string KubernetesMcpServerCommandKey = "Command";
+        public const string KubernetesMcpServerArgumentsKey = "Arguments";
+        public const string KubernetesMcpServerWorkingDirectoryKey = "WorkingDirectory";
         public const string OperatorEmail = "InfraGate:Approval:OperatorEmail";
         public const string OperatorGroup = "InfraGate:Approval:OperatorGroup";
         public const string SmtpHost = "InfraGate:Approval:Smtp:Host";
@@ -90,6 +94,22 @@ internal static class McpGatewayConventions
         public const string DefaultDownstreamProjectFileName = "InfraGate.McpServer.csproj";
         public const string DefaultGuardAuditRootDirectory = ".mcp-guardrails";
         public const string AuditFileName = "audit.jsonl";
+    }
+
+    public static class SecondaryDownstream
+    {
+        // Keyed-DI service key for the kubernetes-mcp-server downstream client/registry/runner
+        // triple. Never use a raw string literal at registration or resolution call sites.
+        public const string ServiceKey = "k8sMcpServer";
+        public const string Name = "kubernetes-mcp-server";
+
+        /// <summary>
+        /// The Go binary receives its entire configuration via --config (a generated TOML
+        /// file), so it needs no InfraGate-specific env vars — only the OS-generic subset
+        /// required for any subprocess to start.
+        /// </summary>
+        public static readonly IReadOnlySet<string> AllowedEnvironmentVariables =
+            new HashSet<string>(StringComparer.Ordinal) { "PATH", "HOME", "TMPDIR", "TMP", "TEMP" };
     }
 
     public static class DownstreamProcess

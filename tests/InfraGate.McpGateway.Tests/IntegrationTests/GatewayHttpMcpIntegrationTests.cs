@@ -328,7 +328,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
-        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
+        await using var downstream = new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(CreateGatewayOptions(serverProject, testRoot, repoRoot)), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
 
         var result = await downstream.CallToolAsync(
@@ -367,7 +367,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
         await using var downstream = new DownstreamMcpClient(
-            CreateGatewayOptions(serverProject, testRoot, repoRoot),
+            DownstreamProcessDescriptor.ForPrimary(CreateGatewayOptions(serverProject, testRoot, repoRoot)),
             new NullDownstreamServiceTokenProvider(),
             NullLogger<DownstreamMcpClient>.Instance,
             NullLoggerFactory.Instance);
@@ -440,7 +440,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ApprovalBaseUrl: null,
             McpGatewayOptions.DefaultApprovalChallengeTtl,
             DownstreamAuth: authOptions);
-        await using var downstream = new DownstreamMcpClient(options, tokenProvider, NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
+        await using var downstream = new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(options), tokenProvider, NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
 
         var tools = await downstream.ListToolsAsync(timeout.Token);
@@ -499,7 +499,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ApprovalBaseUrl: null,
             McpGatewayOptions.DefaultApprovalChallengeTtl,
             DownstreamAuth: authOptions);
-        await using var downstream = new DownstreamMcpClient(options, tokenProvider, NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
+        await using var downstream = new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(options), tokenProvider, NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(downstream, audit, options);
         await using var client = await CreateHttpMcpClientAsync(server);
@@ -558,7 +558,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ApprovalBaseUrl: null,
             McpGatewayOptions.DefaultApprovalChallengeTtl,
             DownstreamAuth: authOptions);
-        await using var downstream = new DownstreamMcpClient(options, tokenProvider, NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
+        await using var downstream = new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(options), tokenProvider, NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
 
         var ex = await Assert.ThrowsAsync<McpException>(() => downstream.CallToolAsync(
@@ -588,7 +588,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
-        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
+        await using var downstream = new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(CreateGatewayOptions(serverProject, testRoot, repoRoot)), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(downstream, audit, CreateGatewayOptions(serverProject, testRoot, repoRoot));
         await using var client = await CreateHttpMcpClientAsync(server);
@@ -728,7 +728,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
         await using var downstream = new DownstreamMcpClient(
-            CreateGatewayOptions(serverProject, testRoot, repoRoot),
+            DownstreamProcessDescriptor.ForPrimary(CreateGatewayOptions(serverProject, testRoot, repoRoot)),
             new NullDownstreamServiceTokenProvider(),
             NullLogger<DownstreamMcpClient>.Instance,
             NullLoggerFactory.Instance);
@@ -771,7 +771,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
-        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
+        await using var downstream = new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(CreateGatewayOptions(serverProject, testRoot, repoRoot)), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(downstream, audit, CreateGatewayOptions(serverProject, testRoot, repoRoot));
         await using var client = await CreateHttpMcpClientAsync(server);
@@ -810,7 +810,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
-        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
+        await using var downstream = new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(CreateGatewayOptions(serverProject, testRoot, repoRoot)), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(downstream, audit, CreateGatewayOptions(serverProject, testRoot, repoRoot));
         await using var client = await CreateHttpMcpClientAsync(server);
@@ -1071,7 +1071,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         IDownstreamMcpClient downstream,
         InMemoryAuditStore audit,
         McpGatewayOptions? gatewayOptions = null,
-        string approvalOAuthScope = Scope)
+        string approvalOAuthScope = Scope,
+        Action<IServiceCollection>? configureAdditionalServices = null)
     {
         var options = gatewayOptions ?? CreateGatewayOptions("unused", Path.GetTempPath(), Directory.GetCurrentDirectory());
 
@@ -1117,10 +1118,29 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
                 services.AddKubernetesAdapter();
                 services.AddSingleton<DownstreamToolRegistry>();
+                services.AddSingleton<IReadOnlyList<GatewayToolDispatcher.ReadOnlySource>>(sp =>
+                {
+                    var sources = new List<GatewayToolDispatcher.ReadOnlySource>
+                    {
+                        new(sp.GetRequiredService<DownstreamToolRegistry>(), sp.GetRequiredService<GuardedToolRunner>())
+                    };
+
+                    DownstreamToolRegistry? secondaryRegistry = sp.GetKeyedService<DownstreamToolRegistry>(
+                        McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                    GuardedToolRunner? secondaryRunner = sp.GetKeyedService<GuardedToolRunner>(
+                        McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                    if (secondaryRegistry is not null && secondaryRunner is not null)
+                    {
+                        sources.Add(new GatewayToolDispatcher.ReadOnlySource(secondaryRegistry, secondaryRunner));
+                    }
+
+                    return sources;
+                });
                 services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
                 services.AddSingleton<IToolScopeGuard, ToolScopeGuard>();
                 services.AddHttpContextAccessor();
                 services.AddLogging();
+                configureAdditionalServices?.Invoke(services);
                 services.AddAntiforgery();
                 services.AddGatewayAuthentication(options.Auth);
                 services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, jwtOptions =>

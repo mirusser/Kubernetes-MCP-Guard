@@ -7,6 +7,7 @@ internal static class RunProfileConventions
     public static class Commands
     {
         public const string Generate = "generate";
+        public const string GenerateToml = "generate-toml";
         public const string List = "list";
         public const string Validate = "validate";
     }
@@ -25,6 +26,7 @@ internal static class RunProfileConventions
         public const string HeaderLinePrefix = "# Generated from ";
         public const string ProfileMarker = " profile: ";
         public const string DoNotEditLinePrefix = "# Do not edit. Run: dotnet run --project src/InfraGate.RunProfiles -- generate ";
+        public const string TomlDoNotEditLinePrefix = "# Do not edit. Run: dotnet run --project src/InfraGate.RunProfiles -- generate-toml ";
     }
 
     public static class YamlKeys
@@ -220,5 +222,12 @@ internal static class RunProfileConventions
     public static class DomainAdapterTypes
     {
         public const string Kubernetes = "kubernetes";
+    }
+
+    public static class Toml
+    {
+        public const string KubeConfig = "kubeconfig";
+        public const string ReadOnly = "read_only";
+        public const string EnabledTools = "enabled_tools";
     }
 }

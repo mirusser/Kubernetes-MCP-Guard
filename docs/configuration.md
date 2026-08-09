@@ -145,6 +145,9 @@ The Remediation Executor listens on port `3005` by default, accepts synchronous 
 | `InfraGate__Gateway__DownstreamAssembly` | `InfraGate.McpGateway` | No | Unset | `/app/server/InfraGate.McpServer.dll` | Published downstream server assembly. When set, the gateway starts `dotnet <assembly>`. | Required in Production. Use a known published assembly from the same release as the gateway image. |
 | `InfraGate__Gateway__DownstreamAssemblyHash` | `InfraGate.McpGateway` | Required in Production | Unset | `a3e5f8c9d2b1e4076f5a3c8e1d0b9a2c7f4e6d5b8c3a1f0e9d7b6c5a4f3e2d1b0` | Expected SHA-256 hex digest of the downstream server assembly. | Required in Production when `InfraGate__Gateway__DownstreamAssembly` is set. Compute the hash from the file inside the runtime image, not a host bind-mount. Update on every server upgrade. |
 | `InfraGate__Gateway__GuardAuditRoot` | `InfraGate.McpGateway` | Required in Production | `<working directory>/.mcp-guardrails` | `/data/guardrails` | Guardrail JSONL audit output root. | Store on protected durable absolute storage and monitor retention. Production refuses temp paths, default dev paths, and group/other-writable existing directories. |
+| `InfraGate__Gateway__KubernetesMcpServer__Command` | `InfraGate.McpGateway` | Required only to enable the optional secondary downstream | Unset; secondary disabled | `/app/k8s-mcp-server/kubernetes-mcp-server` | Executable for the secondary, read-only-only `kubernetes-mcp-server` process. When unset or blank, the secondary is not registered. | Use the pinned binary shipped in the Gateway image or installed by `scripts/install-kubernetes-mcp-server.sh`; do not point this at an untrusted executable. |
+| `InfraGate__Gateway__KubernetesMcpServer__Arguments__<index>` | `InfraGate.McpGateway` | No | Empty | `__0=--config`; `__1=/etc/infra-gate/kubernetes-mcp-server.toml` | Ordered process arguments. Normal operation passes `--config` followed by the generated TOML path. | Mount or generate the TOML as a read-only deployment artifact. The generator fixes `read_only=true` and the curated tool allowlist. |
+| `InfraGate__Gateway__KubernetesMcpServer__WorkingDirectory` | `InfraGate.McpGateway` | No | Current working directory | `/app` | Working directory for the secondary process. | Use a directory readable by the Gateway service account. |
 | `InfraGate__Approval__Root` | `InfraGate.McpGateway` | Required in Production | `<working directory>/.mcp-approvals` | `/data/approvals` | Retained for ASP.NET Core Data Protection key storage only. Approval state and audit are PostgreSQL-backed. | Use a durable, protected absolute path for Data Protection keys. Production requires an explicit durable path. |
 | `InfraGate__Approval__BaseUrl` | `InfraGate.McpGateway` | Required in Production | Request-derived URL, or `http://127.0.0.1:3001` when no request is available | `https://gateway.example.com` | Public base URL used when returning approval links to the MCP client. | Set explicitly to the external HTTPS URL users open in a browser. Production refuses missing, HTTP, or loopback values. |
 | `InfraGate__Approval__ChallengeTtlSeconds` | `InfraGate.McpGateway` | No | `900` | `900` | Approval URL lifetime in seconds. | Keep short enough to limit stale approvals while allowing human review. |
@@ -244,8 +247,12 @@ dotnet run --project src/InfraGate.RunProfiles -- validate
 # Generate an env file from a profile
 dotnet run --project src/InfraGate.RunProfiles -- generate <profile-name> \
   [--set section.field=value ...] \
-  [--output path/to/output.env] \
+  --output path/to/output.env \
   [--force]
+
+# Generate the optional read-only kubernetes-mcp-server TOML
+dotnet run --project src/InfraGate.RunProfiles -- generate-toml local-source-gateway \
+  --output deploy/generated/local-source-gateway.kubernetes-mcp-server.toml
 
 # Example: generate for a local Compose run with absolute host paths
 REPO_ROOT="$(pwd)"
@@ -257,13 +264,13 @@ dotnet run --project src/InfraGate.RunProfiles -- generate local-compose \
   --output deploy/generated/local-compose.env
 ```
 
-**Generated file transport**: `deploy/generated/*.env` files are gitignored. The committed no-SDK example is `deploy/local-oauth/release.env.example`, regenerated from the `smoke-release` profile.
+**Generated file transport**: `deploy/generated/*.env` and `deploy/generated/*.toml` files are gitignored. The committed no-SDK example is `deploy/local-oauth/release.env.example`, regenerated from the `smoke-release` profile. The TOML generator derives `kubeconfig` from the selected profile's Kubernetes Domain Adapter and fixes `read_only=true` plus the curated `enabled_tools` list.
 
 **Section inheritance**: profiles only inherit `defaults:` values for sections they explicitly declare. A profile must include `gateway: {}` to receive gateway defaults; omitting the key produces no gateway vars. This keeps test profiles free of Compose-only configuration.
 
 **`--set` overrides**: use `section.field=value` syntax. Section names match the YAML keys (`gateway`, `identityProvider`, `approvalAuthority`, `genericApprovalCore`, `host`, `observer`, `planner`, `executor`). Overrides are applied after merging defaults. Use them for host-path fields when a run needs paths different from the profile defaults; `scripts/generate-env.sh` uses them to emit absolute repository-root paths for local Compose runs.
 
-**`--force`**: by default, `generate` refuses to overwrite an existing file. Pass `--force` when the generator must write to a system path (e.g., `/etc/infra-gate/development.env` from `scripts/setup-development-deploy.sh`).
+**`--force`**: by default, `generate` and `generate-toml` refuse to overwrite an existing file not generated for the selected profile. Pass `--force` when the generator must replace such a path (e.g., `/etc/infra-gate/development.env` from `scripts/setup-development-deploy.sh`).
 
 See `src/InfraGate.RunProfiles/README.md` for the full schema reference and profile catalogue.
 

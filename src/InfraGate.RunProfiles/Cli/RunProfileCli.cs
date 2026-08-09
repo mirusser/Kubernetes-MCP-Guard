@@ -72,7 +72,15 @@ internal static class RunProfileCli
 
         if (string.Equals(command, RunProfileConventions.Commands.Generate, StringComparison.Ordinal))
         {
-            return await HandleGenerateCommandAsync(args, document, configPath, output, error, cancellationToken)
+            return await HandleGenerateCommandAsync(
+                args, document, configPath, EnvFileRenderer.Render, output, error, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (string.Equals(command, RunProfileConventions.Commands.GenerateToml, StringComparison.Ordinal))
+        {
+            return await HandleGenerateCommandAsync(
+                args, document, configPath, TomlFileRenderer.Render, output, error, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -88,6 +96,7 @@ internal static class RunProfileCli
         IReadOnlyList<string> args,
         RunProfileDocument document,
         string configPath,
+        Func<string, RunProfile, string> render,
         TextWriter output,
         TextWriter error,
         CancellationToken cancellationToken)
@@ -109,7 +118,7 @@ internal static class RunProfileCli
         string generatedText;
         try
         {
-            generatedText = EnvFileRenderer.Render(Path.GetFileName(configPath), parsed.Profile);
+            generatedText = render(Path.GetFileName(configPath), parsed.Profile);
         }
         catch (InvalidOperationException ex)
         {
@@ -199,6 +208,7 @@ internal static class RunProfileCli
 
     private static bool IsKnownCommand(string command) =>
         string.Equals(command, RunProfileConventions.Commands.Generate, StringComparison.Ordinal) ||
+        string.Equals(command, RunProfileConventions.Commands.GenerateToml, StringComparison.Ordinal) ||
         string.Equals(command, RunProfileConventions.Commands.List, StringComparison.Ordinal) ||
         string.Equals(command, RunProfileConventions.Commands.Validate, StringComparison.Ordinal);
 

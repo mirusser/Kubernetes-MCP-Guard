@@ -11,6 +11,7 @@ using InfraGate.KubernetesAdapter;
 using InfraGate.KubernetesAdapter.Approval;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.McpGateway.Email;
 using InfraGate.McpGateway.Notifications;
 using Microsoft.AspNetCore.DataProtection;
@@ -155,6 +156,11 @@ public sealed class GatewayDiWiringTests
             new ApprovalPageRenderer(sp, sp.GetRequiredService<ILoggerFactory>()));
         services.AddKubernetesAdapter();
         services.AddSingleton<DownstreamToolRegistry>();
+        services.AddSingleton<IReadOnlyList<GatewayToolDispatcher.ReadOnlySource>>(sp =>
+            new List<GatewayToolDispatcher.ReadOnlySource>
+            {
+                new(sp.GetRequiredService<DownstreamToolRegistry>(), sp.GetRequiredService<GuardedToolRunner>())
+            });
         services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
         services.AddSingleton<IToolScopeGuard, ToolScopeGuard>();
         services.AddHttpContextAccessor();
@@ -171,6 +177,59 @@ public sealed class GatewayDiWiringTests
         Assert.NotNull(provider.GetRequiredService<IApprovalPreExecutionGate>());
         Assert.NotNull(provider.GetRequiredService<PlanStatusResourceHandler>());
         Assert.NotNull(provider.GetRequiredService<IGatewayToolDispatcher>());
+    }
+
+    [Fact]
+    public async Task Resolve_KeyedKubernetesMcpServerDownstream_Succeeds()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IGuardrailAuditStore, NullAuditStore>();
+        services.AddSingleton<SensitiveDataRedactor>(sp =>
+            new SensitiveDataRedactor(
+                McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                sp.GetRequiredService<ILogger<SensitiveDataRedactor>>()));
+        services.AddHttpContextAccessor();
+        services.AddLogging();
+
+        var descriptor = DownstreamProcessDescriptor.ForKubernetesMcpServer(
+            new KubernetesMcpServerProcessOptions(
+                "kubernetes-mcp-server",
+                ["--config", "deploy/generated/k8s-mcp.toml"],
+                Directory.GetCurrentDirectory()));
+
+        services.AddKeyedSingleton<IDownstreamMcpClient>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey,
+            (sp, _) => new DownstreamMcpClient(
+                descriptor,
+                new NullDownstreamServiceTokenProvider(),
+                sp.GetRequiredService<ILogger<DownstreamMcpClient>>(),
+                sp.GetRequiredService<ILoggerFactory>()));
+        services.AddKeyedSingleton<DownstreamToolRegistry>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey,
+            (sp, key) => new DownstreamToolRegistry(sp.GetRequiredKeyedService<IDownstreamMcpClient>(key)));
+        services.AddKeyedSingleton<GuardedToolRunner>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey,
+            (sp, key) => new GuardedToolRunner(
+                sp.GetRequiredKeyedService<IDownstreamMcpClient>(key),
+                sp.GetRequiredService<IGuardrailAuditStore>(),
+                sp.GetRequiredService<IHttpContextAccessor>(),
+                sp.GetRequiredService<SensitiveDataRedactor>(),
+                sp.GetRequiredService<ILogger<GuardedToolRunner>>()));
+
+        // Primary (unkeyed, real McpGatewayOptions-derived) resolves alongside the keyed secondary.
+        services.AddSingleton(DownstreamProcessDescriptor.ForPrimary(CreateOptions()));
+        services.AddSingleton<IDownstreamServiceTokenProvider, NullDownstreamServiceTokenProvider>();
+        services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
+
+        await using var provider = services.BuildServiceProvider();
+
+        Assert.NotNull(provider.GetRequiredService<IDownstreamMcpClient>());
+        Assert.NotNull(provider.GetRequiredKeyedService<IDownstreamMcpClient>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey));
+        Assert.NotNull(provider.GetRequiredKeyedService<DownstreamToolRegistry>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey));
+        Assert.NotNull(provider.GetRequiredKeyedService<GuardedToolRunner>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey));
     }
 
     private static McpGatewayOptions CreateOptions()

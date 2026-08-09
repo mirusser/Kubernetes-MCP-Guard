@@ -228,7 +228,7 @@ make quickstart
 
 ### 🛠️ From Source
 
-Use source mode when you want the gateway, Observer, Planner, and Executor built from local code. This path also requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) and an OpenRouter API key for the LLM-backed agents.
+Use source mode when you want the gateway, Observer, Planner, and Executor built from local code. This path requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) and an OpenRouter API key for the LLM-backed agents. The Docker build compiles the optional secondary, read-only `kubernetes-mcp-server` downstream in its own Go builder stage; install the [Go 1.26.3+ toolchain](https://go.dev/dl/) on the host only when running that downstream or its live integration test directly via `./scripts/install-kubernetes-mcp-server.sh`.
 
 ```bash
 export InfraGate__OpenRouter__ApiKey="<openrouter-api-key>"

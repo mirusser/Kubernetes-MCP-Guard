@@ -4,6 +4,14 @@ COPY src/ src/
 RUN mkdir /out && \
     find src -name '*.csproj' | tar -cf - -T - | tar -xf - -C /out
 
+# Secondary, read-only-only downstream MCP process (see docs/adr for the
+# decision record). CGO_ENABLED=0 produces a static binary — the chiseled
+# runtime image below has no shell/libc for a dynamically-linked binary to link against.
+FROM golang:1.26.5 AS k8s-mcp-build
+ARG KUBERNETES_MCP_SERVER_VERSION=v0.0.64
+RUN CGO_ENABLED=0 GOBIN=/go/bin go install \
+    github.com/containers/kubernetes-mcp-server/cmd/kubernetes-mcp-server@${KUBERNETES_MCP_SERVER_VERSION}
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
@@ -57,6 +65,7 @@ COPY --from=build /app/gateway .
 COPY --from=build /app/server /app/server
 COPY --from=build /app/healthcheck /app/healthcheck
 COPY --from=build /data /data
+COPY --from=k8s-mcp-build /go/bin/kubernetes-mcp-server /app/k8s-mcp-server/kubernetes-mcp-server
 ENV InfraGate__Runtime__Environment=Production
 USER $APP_UID
 HEALTHCHECK --interval=5s --timeout=5s --retries=10 --start-period=15s \

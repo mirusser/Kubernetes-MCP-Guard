@@ -1,7 +1,5 @@
 using System.Text.Json.Nodes;
-using InfraGate.Approvals;
 using InfraGate.Approvals.Execution;
-using InfraGate.Approvals.Plan;
 using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway.DownstreamAuth;
 using ModelContextProtocol;
@@ -11,7 +9,7 @@ using ModelContextProtocol.Protocol;
 namespace InfraGate.McpGateway;
 
 internal sealed class DownstreamMcpClient(
-    McpGatewayOptions options,
+    DownstreamProcessDescriptor descriptor,
     IDownstreamServiceTokenProvider tokenProvider,
     ILogger<DownstreamMcpClient> logger,
     ILoggerFactory loggerFactory) : IDownstreamMcpClient, IToolCaller, IAsyncDisposable
@@ -212,20 +210,12 @@ internal sealed class DownstreamMcpClient(
         return bootstrapLine;
     }
 
-    private bool IsDownstreamAuthRequired() => options.DownstreamAuth?.Required ?? false;
+    private bool IsDownstreamAuthRequired() => descriptor.AuthRequired;
 
     internal StdioClientTransportOptions CreateTransportOptions()
     {
-        string[] arguments = string.IsNullOrWhiteSpace(options.DownstreamAssembly)
-            ? [
-                McpGatewayConventions.DownstreamProcess.RunArgument,
-                McpGatewayConventions.DownstreamProcess.ProjectArgument,
-                options.DownstreamProject
-            ]
-            : [options.DownstreamAssembly];
-
         var environmentVariables = new Dictionary<string, string?>(StringComparer.Ordinal);
-        foreach (string name in McpGatewayConventions.DownstreamProcess.AllowedEnvironmentVariables)
+        foreach (string name in descriptor.AllowedEnvironmentVariables)
         {
             string? value = Environment.GetEnvironmentVariable(name);
             if (value is not null)
@@ -236,10 +226,10 @@ internal sealed class DownstreamMcpClient(
 
         return new StdioClientTransportOptions
         {
-            Name = McpGatewayConventions.DownstreamProcess.Name,
-            Command = McpGatewayConventions.DownstreamProcess.Command,
-            Arguments = arguments,
-            WorkingDirectory = options.WorkingDirectory,
+            Name = descriptor.Name,
+            Command = descriptor.Command,
+            Arguments = [.. descriptor.Arguments],
+            WorkingDirectory = descriptor.WorkingDirectory,
             EnvironmentVariables = environmentVariables,
             ShutdownTimeout = TimeSpan.FromSeconds(10),
             StandardErrorLines = line => logger.LogWarning("[downstream-server stderr] {Line}", line)

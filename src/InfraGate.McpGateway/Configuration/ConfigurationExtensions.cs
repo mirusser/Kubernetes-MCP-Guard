@@ -72,6 +72,7 @@ internal static class ConfigurationExtensions
                 .SetApplicationName(ApprovalConventions.Application.Name);
 
             builder.Services.AddSingleton(options);
+            builder.Services.AddSingleton(DownstreamProcessDescriptor.ForPrimary(options));
             builder.Services.AddSingleton<IGuardrailAuditStore, GuardrailAuditStore>();
             builder.Services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
             builder.Services.AddSingleton<GuardedToolRunner>(sp =>
@@ -81,6 +82,7 @@ internal static class ConfigurationExtensions
                     sp.GetRequiredService<IHttpContextAccessor>(),
                     sp.GetRequiredService<SensitiveDataRedactor>(),
                     sp.GetRequiredService<ILogger<GuardedToolRunner>>()));
+
             builder.Services.AddPostgresApprovalPersistence(
                 builder.Configuration[McpGatewayConventions.ConfigurationKeys.ApprovalPostgresConnectionString]);
             builder.Services.AddSingleton<AuditTimelineAssembler>();
@@ -117,6 +119,8 @@ internal static class ConfigurationExtensions
             builder.Services.AddGatewayAuthentication(options.Auth);
 
             RegisterDownstreamAuth(builder.Services, options);
+            RegisterKubernetesMcpServerDownstream(builder.Services, builder.Configuration);
+            RegisterReadOnlySources(builder.Services);
 
             builder.Services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
             builder.Services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
@@ -166,6 +170,67 @@ internal static class ConfigurationExtensions
             services.AddSingleton<IDownstreamServiceTokenProvider>(sp =>
                 new ClientCredentialsDownstreamServiceTokenProvider(
                     sp.GetRequiredService<IClientCredentialsTokenProvider>()));
+        }
+
+        // Optional/off-by-default second downstream: only wired when the operator has
+        // configured InfraGate:Gateway:KubernetesMcpServer:Command. Duplicates the primary's
+        // client/registry/runner triple under a keyed registration rather than generalizing
+        // those types to an N-way source — see docs/adr for the decision record.
+        private void RegisterKubernetesMcpServerDownstream(IConfiguration configuration)
+        {
+            var kubernetesMcpServerOptions = KubernetesMcpServerProcessOptions.FromConfiguration(configuration);
+            if (kubernetesMcpServerOptions is null)
+            {
+                return;
+            }
+
+            var descriptor = DownstreamProcessDescriptor.ForKubernetesMcpServer(kubernetesMcpServerOptions);
+
+            services.AddKeyedSingleton<IDownstreamMcpClient>(
+                McpGatewayConventions.SecondaryDownstream.ServiceKey,
+                (sp, _) => new DownstreamMcpClient(
+                    descriptor,
+                    new NullDownstreamServiceTokenProvider(),
+                    sp.GetRequiredService<ILogger<DownstreamMcpClient>>(),
+                    sp.GetRequiredService<ILoggerFactory>()));
+
+            services.AddKeyedSingleton<DownstreamToolRegistry>(
+                McpGatewayConventions.SecondaryDownstream.ServiceKey,
+                (sp, key) => new DownstreamToolRegistry(sp.GetRequiredKeyedService<IDownstreamMcpClient>(key)));
+
+            services.AddKeyedSingleton<GuardedToolRunner>(
+                McpGatewayConventions.SecondaryDownstream.ServiceKey,
+                (sp, key) => new GuardedToolRunner(
+                    sp.GetRequiredKeyedService<IDownstreamMcpClient>(key),
+                    sp.GetRequiredService<IGuardrailAuditStore>(),
+                    sp.GetRequiredService<IHttpContextAccessor>(),
+                    sp.GetRequiredService<SensitiveDataRedactor>(),
+                    sp.GetRequiredService<ILogger<GuardedToolRunner>>()));
+        }
+
+        // Composes the primary + optional secondary read-only downstream sources once, here in
+        // the composition root, so GatewayToolDispatcher can take the result via ordinary
+        // constructor injection instead of resolving IServiceProvider itself at runtime.
+        private void RegisterReadOnlySources()
+        {
+            services.AddSingleton<IReadOnlyList<GatewayToolDispatcher.ReadOnlySource>>(sp =>
+            {
+                var sources = new List<GatewayToolDispatcher.ReadOnlySource>
+                {
+                    new(sp.GetRequiredService<DownstreamToolRegistry>(), sp.GetRequiredService<GuardedToolRunner>())
+                };
+
+                DownstreamToolRegistry? secondaryRegistry = sp.GetKeyedService<DownstreamToolRegistry>(
+                    McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                GuardedToolRunner? secondaryRunner = sp.GetKeyedService<GuardedToolRunner>(
+                    McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                if (secondaryRegistry is not null && secondaryRunner is not null)
+                {
+                    sources.Add(new GatewayToolDispatcher.ReadOnlySource(secondaryRegistry, secondaryRunner));
+                }
+
+                return sources;
+            });
         }
     }
 

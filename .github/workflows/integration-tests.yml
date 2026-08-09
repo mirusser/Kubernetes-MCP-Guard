@@ -32,6 +32,14 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6.5.0
+        with:
+          go-version: '1.26'
+
+      - name: Install kubernetes-mcp-server
+        run: ./scripts/install-kubernetes-mcp-server.sh
+
       - name: Restore
         run: dotnet restore InfraGate.slnx
 
