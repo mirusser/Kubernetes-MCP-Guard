@@ -21,29 +21,37 @@ public sealed class TomlFileRendererTests
     }
 
     [Fact]
-    public void Render_NoKubernetesAdapter_ThrowsInvalidOperationException()
+    public void Render_NoKubernetesMcpServerProfile_ThrowsInvalidOperationException()
     {
         var profile = CreateMinimalProfile();
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
             TomlFileRenderer.Render("run-profiles.yaml", profile));
 
-        Assert.Contains("Kubernetes Domain Adapter", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("Kubernetes MCP Server", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Render_WithKubernetesAdapter_EmitsKubeconfigReadOnlyAndEnabledTools()
+    public void Render_WithKubernetesMcpServerProfile_EmitsFixedSingleClusterPolicy()
     {
         var profile = CreateProfileWithKubernetesAdapter();
 
         string result = TomlFileRenderer.Render("run-profiles.yaml", profile);
 
-        Assert.Contains("kubeconfig = \".kube/mcp-nginx-demo.config\"", result, StringComparison.Ordinal);
+        Assert.Contains("kubeconfig = \".kube/mcp-nginx-demo-viewer.config\"", result, StringComparison.Ordinal);
+        Assert.Contains("cluster_provider_strategy = \"disabled\"", result, StringComparison.Ordinal);
+        Assert.Contains("cluster_auth_mode = \"kubeconfig\"", result, StringComparison.Ordinal);
+        Assert.Contains("toolsets = [\"core\"]", result, StringComparison.Ordinal);
+        Assert.Contains("stateless = true", result, StringComparison.Ordinal);
         Assert.Contains("read_only = true", result, StringComparison.Ordinal);
+        Assert.Contains("disable_destructive = true", result, StringComparison.Ordinal);
         Assert.Contains(
-            "enabled_tools = [\"pods_list\", \"pods_get\", \"pods_log\", \"events_list\", \"resources_list\", \"resources_get\"]",
+            "enabled_tools = [\"pods_list_in_namespace\", \"pods_get\", \"pods_log\"]",
             result,
             StringComparison.Ordinal);
+        Assert.DoesNotContain("\"pods_list\"", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("events_list", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("resources_get", result, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -104,7 +112,7 @@ public sealed class TomlFileRendererTests
         new("test-profile", "mcp-stdio", null, null, null, null, null, [], null, null, null, null, null, null);
 
     private static RunProfile CreateProfileWithKubernetesAdapter(
-        string kubeconfig = ".kube/mcp-nginx-demo.config") =>
+        string kubeconfig = ".kube/mcp-nginx-demo-viewer.config") =>
         CreateMinimalProfile() with
         {
             DomainAdapters =
@@ -114,5 +122,9 @@ public sealed class TomlFileRendererTests
                     RunProfileConventions.DomainAdapterTypes.Kubernetes,
                     new KubernetesAdapterProfile(kubeconfig, [ "mcp-nginx-demo" ])),
             ],
+            KubernetesMcpServer = new KubernetesMcpServerProfile(
+                kubeconfig,
+                "minikube-mcp",
+                ["mcp-nginx-demo"]),
         };
 }

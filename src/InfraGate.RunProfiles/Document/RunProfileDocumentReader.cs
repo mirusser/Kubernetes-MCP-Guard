@@ -45,6 +45,7 @@ internal static class RunProfileDocumentReader
                 RunProfileConventions.YamlKeys.Host,
                 RunProfileConventions.YamlKeys.IdentityProvider,
                 RunProfileConventions.YamlKeys.Kind,
+                RunProfileConventions.YamlKeys.KubernetesMcpServer,
                 RunProfileConventions.YamlKeys.OpenRouter,
                 RunProfileConventions.YamlKeys.Observer,
                 RunProfileConventions.YamlKeys.Planner,
@@ -148,6 +149,15 @@ internal static class RunProfileDocumentReader
         new HashSet<string>(
             [
                 RunProfileConventions.YamlKeys.AllowedNamespaces,
+                RunProfileConventions.YamlKeys.KubeConfig
+            ],
+            StringComparer.Ordinal);
+
+    private static readonly IReadOnlySet<string> KnownKubernetesMcpServerKeys =
+        new HashSet<string>(
+            [
+                RunProfileConventions.YamlKeys.AllowedNamespaces,
+                RunProfileConventions.YamlKeys.Context,
                 RunProfileConventions.YamlKeys.KubeConfig
             ],
             StringComparer.Ordinal);
@@ -298,6 +308,7 @@ internal static class RunProfileDocumentReader
             ExecutorProfile? executor = ReadExecutor(profileNode);
             AgentGuardrailsProfile? agentGuardrails = ReadAgentGuardrails(profileNode);
             TelemetryProfile? telemetry = ReadTelemetry(profileNode);
+            KubernetesMcpServerProfile? kubernetesMcpServer = ReadKubernetesMcpServer(profileNode);
 
             profiles.Add(new RunProfile(
                 profileName,
@@ -315,7 +326,8 @@ internal static class RunProfileDocumentReader
                 planner,
                 executor,
                 agentGuardrails,
-                telemetry));
+                telemetry,
+                kubernetesMcpServer));
         }
 
         return new RunProfileDocument(profiles) { Defaults = defaults };
@@ -754,6 +766,42 @@ internal static class RunProfileDocumentReader
             RunProfileConventions.YamlKeys.AllowedNamespaces);
 
         return new KubernetesAdapterProfile(kubeConfig, allowedNamespaces);
+    }
+
+    private static KubernetesMcpServerProfile? ReadKubernetesMcpServer(YamlMappingNode profileNode)
+    {
+        if (!profileNode.Children.TryGetValue(
+                new YamlScalarNode(RunProfileConventions.YamlKeys.KubernetesMcpServer),
+                out YamlNode? value))
+        {
+            return null;
+        }
+
+        if (value is not YamlMappingNode mapping)
+        {
+            throw new InvalidOperationException(
+                $"YAML key '{RunProfileConventions.YamlKeys.KubernetesMcpServer}' must be a mapping.");
+        }
+
+        ValidateKnownKeys(mapping, KnownKubernetesMcpServerKeys);
+        string kubeconfig = GetRequiredScalar(mapping, RunProfileConventions.YamlKeys.KubeConfig);
+        string context = GetRequiredScalar(mapping, RunProfileConventions.YamlKeys.Context);
+        IReadOnlyList<string> allowedNamespaces = GetRequiredScalarSequence(
+            mapping,
+            RunProfileConventions.YamlKeys.AllowedNamespaces);
+        if (allowedNamespaces.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"YAML key '{RunProfileConventions.YamlKeys.AllowedNamespaces}' must contain at least one namespace.");
+        }
+
+        if (allowedNamespaces.Contains("*", StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"YAML key '{RunProfileConventions.YamlKeys.AllowedNamespaces}' must not contain a wildcard namespace.");
+        }
+
+        return new KubernetesMcpServerProfile(kubeconfig, context, allowedNamespaces);
     }
 
     private static void ValidateKnownKeys(YamlMappingNode node, IReadOnlySet<string> knownKeys)

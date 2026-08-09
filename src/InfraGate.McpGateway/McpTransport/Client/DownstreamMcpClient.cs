@@ -206,12 +206,17 @@ internal sealed class DownstreamMcpClient(
     internal StdioClientTransportOptions CreateTransportOptions()
     {
         var environmentVariables = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach ((string name, string? value) in descriptor.EnvironmentVariables)
+        {
+            environmentVariables[name] = value;
+        }
+
         foreach (string name in descriptor.AllowedEnvironmentVariables)
         {
             string? value = Environment.GetEnvironmentVariable(name);
             if (value is not null)
             {
-                environmentVariables[name] = value;
+                environmentVariables.TryAdd(name, value);
             }
         }
 
@@ -222,6 +227,7 @@ internal sealed class DownstreamMcpClient(
             Arguments = [.. descriptor.Arguments],
             WorkingDirectory = descriptor.WorkingDirectory,
             EnvironmentVariables = environmentVariables,
+            InheritEnvironmentVariables = false,
             ShutdownTimeout = TimeSpan.FromSeconds(10),
             StandardErrorLines = line => logger.LogWarning("[downstream-server stderr] {Line}", line)
         };

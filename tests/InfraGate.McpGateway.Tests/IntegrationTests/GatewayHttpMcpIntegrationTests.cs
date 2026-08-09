@@ -1201,9 +1201,22 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                         McpGatewayConventions.SecondaryDownstream.ServiceKey);
                     GuardedToolRunner? secondaryRunner = sp.GetKeyedService<GuardedToolRunner>(
                         McpGatewayConventions.SecondaryDownstream.ServiceKey);
-                    if (secondaryRegistry is not null && secondaryRunner is not null)
+                    KubernetesMcpServerRequestPolicy? secondaryRequestPolicy =
+                        sp.GetKeyedService<KubernetesMcpServerRequestPolicy>(
+                            McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                    KubernetesMcpServerResponsePolicy? secondaryResponsePolicy =
+                        sp.GetKeyedService<KubernetesMcpServerResponsePolicy>(
+                            McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                    if (secondaryRegistry is not null
+                        && secondaryRunner is not null
+                        && secondaryRequestPolicy is not null
+                        && secondaryResponsePolicy is not null)
                     {
-                        sources.Add(new GatewayToolDispatcher.ReadOnlySource(secondaryRegistry, secondaryRunner));
+                        sources.Add(new GatewayToolDispatcher.ReadOnlySource(
+                            secondaryRegistry,
+                            secondaryRunner,
+                            secondaryRequestPolicy,
+                            secondaryResponsePolicy));
                     }
 
                     return sources;

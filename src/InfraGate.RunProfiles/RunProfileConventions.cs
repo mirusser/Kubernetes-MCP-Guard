@@ -65,6 +65,8 @@ internal static class RunProfileConventions
         public const string Kind = "kind";
         public const string KubeConfig = "kubeconfig";
         public const string Kubernetes = "kubernetes";
+        public const string KubernetesMcpServer = "kubernetesMcpServer";
+        public const string Context = "context";
         public const string MetadataAddress = "metadataAddress";
         public const string Name = "name";
         public const string OauthAuthorizationEndpoint = "oauthAuthorizationEndpoint";
@@ -155,6 +157,9 @@ internal static class RunProfileConventions
         public const string InfraGateEnvironment = "InfraGate__Runtime__Environment";
         public const string KubeconfigHostPath = "INFRA_GATE_KUBECONFIG_HOST_PATH";
         public const string KubeConfig = "InfraGate__Kubernetes__KubeConfig";
+        public const string KubernetesMcpServerKubeconfig = "InfraGate__Gateway__KubernetesMcpServer__Kubeconfig";
+        public const string KubernetesMcpServerContext = "InfraGate__Gateway__KubernetesMcpServer__Context";
+        public const string KubernetesMcpServerAllowedNamespaces = "InfraGate__Gateway__KubernetesMcpServer__AllowedNamespaces";
         public const string OauthAuthority = "InfraGate__Auth__OAuthAuthority";
         public const string OauthMetadataAddress = "InfraGate__Auth__OAuthMetadataAddress";
         public const string OauthRequireHttpsMetadata = "InfraGate__Auth__OAuthRequireHttpsMetadata";
@@ -227,6 +232,11 @@ internal static class RunProfileConventions
     public static class Toml
     {
         public const string KubeConfig = "kubeconfig";
+        public const string ClusterAuthMode = "cluster_auth_mode";
+        public const string ClusterProviderStrategy = "cluster_provider_strategy";
+        public const string DisableDestructive = "disable_destructive";
+        public const string Stateless = "stateless";
+        public const string Toolsets = "toolsets";
         public const string ReadOnly = "read_only";
         public const string EnabledTools = "enabled_tools";
     }

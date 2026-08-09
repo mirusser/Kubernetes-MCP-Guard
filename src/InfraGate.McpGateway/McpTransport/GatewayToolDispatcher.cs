@@ -34,7 +34,11 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
     // rather than resolved here via IServiceProvider — this class takes plain constructor
     // injection only. Only the primary ever participates in destructive/request_* routing —
     // see IsDestructiveToolAsync and ListToolsAsync, which read `registry` directly, never this list.
-    internal sealed record class ReadOnlySource(DownstreamToolRegistry Registry, GuardedToolRunner Runner);
+    internal sealed record class ReadOnlySource(
+        DownstreamToolRegistry Registry,
+        GuardedToolRunner Runner,
+        KubernetesMcpServerRequestPolicy? RequestPolicy = null,
+        KubernetesMcpServerResponsePolicy? ResponsePolicy = null);
 
     public async Task<ListToolsResult> ListToolsAsync(
         ListToolsRequestParams request,
@@ -47,6 +51,11 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
             IReadOnlyList<DownstreamTool> readOnly = await source.Registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
             foreach (DownstreamTool dt in readOnly)
             {
+                if (source.RequestPolicy is not null && !source.RequestPolicy.IsToolAllowed(dt.Name))
+                {
+                    continue;
+                }
+
                 tools.Add(ToolDefinitionFactory.CreateForwardedTool(dt));
             }
         }
@@ -150,9 +159,10 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
     private async Task<CallToolResult> DispatchDownstreamToolAsync(
         string toolName, CallToolRequestParams request, CancellationToken ct)
     {
-        if (await IsReadOnlyToolAsync(toolName, ct).ConfigureAwait(false))
+        ReadOnlySource? readOnlySource = await FindReadOnlySourceAsync(toolName, ct).ConfigureAwait(false);
+        if (readOnlySource is not null)
         {
-            return await HandleReadOnlyAsync(toolName, request, ct).ConfigureAwait(false);
+            return await HandleReadOnlyAsync(readOnlySource, toolName, request, ct).ConfigureAwait(false);
         }
 
         if (await IsDestructiveToolAsync(toolName, ct).ConfigureAwait(false))
@@ -164,18 +174,18 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         return ErrorResult(McpGatewayMessages.ToolRouting.UnknownTool(toolName));
     }
 
-    private async Task<bool> IsReadOnlyToolAsync(string toolName, CancellationToken ct)
+    private async Task<ReadOnlySource?> FindReadOnlySourceAsync(string toolName, CancellationToken ct)
     {
         foreach (ReadOnlySource source in readOnlySources)
         {
             IReadOnlyList<DownstreamTool> readOnlyTools = await source.Registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
             if (readOnlyTools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal)))
             {
-                return true;
+                return source;
             }
         }
 
-        return false;
+        return null;
     }
 
     private async Task<bool> IsDestructiveToolAsync(string toolName, CancellationToken ct)
@@ -185,6 +195,7 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
     }
 
     private async Task<CallToolResult> HandleReadOnlyAsync(
+        ReadOnlySource source,
         string toolName,
         CallToolRequestParams request,
         CancellationToken ct)
@@ -196,26 +207,46 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
             return scopeResult;
         }
 
-        GuardedToolRunner? runner = null;
-        foreach (ReadOnlySource source in readOnlySources)
-        {
-            IReadOnlyList<DownstreamTool> readOnlyTools = await source.Registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
-            if (readOnlyTools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal)))
-            {
-                runner = source.Runner;
-                break;
-            }
-        }
-
-        if (runner is null)
-        {
-            return ErrorResult(McpGatewayMessages.ToolRouting.UnknownTool(toolName));
-        }
-
         IReadOnlyDictionary<string, object?> arguments = ToolArgumentConverter.ConvertArguments(request.Arguments);
-        GuardedToolCallResult result = await runner.CallForModelVisibleResponseAsync(toolName, arguments, ct)
+        if (source.RequestPolicy is not null
+            && !source.RequestPolicy.TryValidate(toolName, arguments, out string policyError))
+        {
+            await source.Runner.AuditPolicyDenialAsync(
+                toolName,
+                arguments,
+                McpGatewayConventions.GuardrailAudit.RequestDirection,
+                McpGatewayConventions.GuardrailCategories.KubernetesRequestPolicy,
+                metadata: null,
+                ct).ConfigureAwait(false);
+            return ErrorResult(policyError);
+        }
+
+        GuardedToolCallResult result = await source.Runner.CallForModelVisibleResponseAsync(toolName, arguments, ct)
             .ConfigureAwait(false);
         string envelope = ModelVisibleToolResultEnvelope.Serialize(toolName, result, TimeProvider.System.GetUtcNow());
+        if (source.ResponsePolicy is not null)
+        {
+            KubernetesMcpServerResponsePolicyResult policyResult = source.ResponsePolicy.Apply(toolName, envelope);
+            if (!policyResult.IsAllowed)
+            {
+                var metadata = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    [McpGatewayConventions.GuardrailAudit.EntryFields.ActualBytes] = policyResult.Utf8ByteCount,
+                    [McpGatewayConventions.GuardrailAudit.EntryFields.MaximumBytes] =
+                        KubernetesMcpServerResponsePolicy.MaximumResponseBytes
+                };
+                await source.Runner.AuditPolicyDenialAsync(
+                    toolName,
+                    arguments,
+                    McpGatewayConventions.GuardrailAudit.ResponseDirection,
+                    McpGatewayConventions.GuardrailCategories.ResponseSize,
+                    metadata,
+                    ct).ConfigureAwait(false);
+                return ErrorResult(policyResult.Error);
+            }
+
+            envelope = policyResult.Text;
+        }
 
         return new CallToolResult
         {

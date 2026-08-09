@@ -46,7 +46,10 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         var secondaryOptions = new KubernetesMcpServerProcessOptions(
             binaryPath,
             ["--config", tomlPath],
-            repoRoot);
+            repoRoot,
+            Path.Combine(repoRoot, ".kube", "mcp-nginx-demo-viewer.config"),
+            "minikube-mcp",
+            new HashSet<string>([NamespaceName], StringComparer.Ordinal));
         DownstreamProcessDescriptor secondaryDescriptor =
             DownstreamProcessDescriptor.ForKubernetesMcpServer(secondaryOptions);
         await using var secondaryDownstream = new DownstreamMcpClient(
@@ -71,6 +74,12 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             {
                 services.AddKeyedSingleton(McpGatewayConventions.SecondaryDownstream.ServiceKey, secondaryRegistry);
                 services.AddKeyedSingleton(McpGatewayConventions.SecondaryDownstream.ServiceKey, secondaryRunner);
+                services.AddKeyedSingleton(
+                    McpGatewayConventions.SecondaryDownstream.ServiceKey,
+                    new KubernetesMcpServerRequestPolicy(secondaryOptions.AllowedNamespaces));
+                services.AddKeyedSingleton(
+                    McpGatewayConventions.SecondaryDownstream.ServiceKey,
+                    new KubernetesMcpServerResponsePolicy());
             });
         await using var client = await CreateHttpMcpClientAsync(server);
 
@@ -95,7 +104,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
         string podsListText = await CallTextAsync(
             client,
-            "pods_list",
+            "pods_list_in_namespace",
             new Dictionary<string, object?> { ["namespace"] = NamespaceName });
 
         Assert.False(string.IsNullOrWhiteSpace(podsListText));

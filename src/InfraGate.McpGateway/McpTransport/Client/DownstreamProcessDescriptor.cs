@@ -10,7 +10,8 @@ internal sealed record class DownstreamProcessDescriptor(
     IReadOnlyList<string> Arguments,
     string WorkingDirectory,
     bool AuthRequired,
-    IReadOnlySet<string> AllowedEnvironmentVariables)
+    IReadOnlySet<string> AllowedEnvironmentVariables,
+    IReadOnlyDictionary<string, string?> EnvironmentVariables)
 {
     public static DownstreamProcessDescriptor ForPrimary(McpGatewayOptions options)
     {
@@ -30,19 +31,29 @@ internal sealed record class DownstreamProcessDescriptor(
             arguments,
             options.WorkingDirectory,
             options.DownstreamAuth?.Required ?? false,
-            McpGatewayConventions.DownstreamProcess.AllowedEnvironmentVariables);
+            McpGatewayConventions.DownstreamProcess.AllowedEnvironmentVariables,
+            new Dictionary<string, string?>(StringComparer.Ordinal));
     }
 
     public static DownstreamProcessDescriptor ForKubernetesMcpServer(KubernetesMcpServerProcessOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        KubernetesMcpServerProcessOptions.ValidateArguments(options.Arguments, options.WorkingDirectory);
 
         return new DownstreamProcessDescriptor(
             McpGatewayConventions.SecondaryDownstream.Name,
             options.Command,
-            options.Arguments,
+            [
+                .. options.Arguments,
+                McpGatewayConventions.SecondaryDownstream.KubeconfigArgument,
+                options.Kubeconfig,
+            ],
             options.WorkingDirectory,
             KubernetesMcpServerProcessOptions.AuthRequired,
-            McpGatewayConventions.SecondaryDownstream.AllowedEnvironmentVariables);
+            McpGatewayConventions.SecondaryDownstream.AllowedEnvironmentVariables,
+            new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                [McpGatewayConventions.SecondaryDownstream.KubeconfigEnvironmentVariable] = options.Kubeconfig,
+            });
     }
 }

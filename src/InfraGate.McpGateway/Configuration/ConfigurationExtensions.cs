@@ -207,6 +207,13 @@ internal static class ConfigurationExtensions
                     sp.GetRequiredService<IHttpContextAccessor>(),
                     sp.GetRequiredService<SensitiveDataRedactor>(),
                     sp.GetRequiredService<ILogger<GuardedToolRunner>>()));
+
+            services.AddKeyedSingleton<KubernetesMcpServerRequestPolicy>(
+                McpGatewayConventions.SecondaryDownstream.ServiceKey,
+                (_, _) => new KubernetesMcpServerRequestPolicy(kubernetesMcpServerOptions.AllowedNamespaces));
+            services.AddKeyedSingleton<KubernetesMcpServerResponsePolicy>(
+                McpGatewayConventions.SecondaryDownstream.ServiceKey,
+                (_, _) => new KubernetesMcpServerResponsePolicy());
         }
 
         // Composes the primary + optional secondary read-only downstream sources once, here in
@@ -225,9 +232,22 @@ internal static class ConfigurationExtensions
                     McpGatewayConventions.SecondaryDownstream.ServiceKey);
                 GuardedToolRunner? secondaryRunner = sp.GetKeyedService<GuardedToolRunner>(
                     McpGatewayConventions.SecondaryDownstream.ServiceKey);
-                if (secondaryRegistry is not null && secondaryRunner is not null)
+                KubernetesMcpServerRequestPolicy? secondaryRequestPolicy =
+                    sp.GetKeyedService<KubernetesMcpServerRequestPolicy>(
+                        McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                KubernetesMcpServerResponsePolicy? secondaryResponsePolicy =
+                    sp.GetKeyedService<KubernetesMcpServerResponsePolicy>(
+                        McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                if (secondaryRegistry is not null
+                    && secondaryRunner is not null
+                    && secondaryRequestPolicy is not null
+                    && secondaryResponsePolicy is not null)
                 {
-                    sources.Add(new GatewayToolDispatcher.ReadOnlySource(secondaryRegistry, secondaryRunner));
+                    sources.Add(new GatewayToolDispatcher.ReadOnlySource(
+                        secondaryRegistry,
+                        secondaryRunner,
+                        secondaryRequestPolicy,
+                        secondaryResponsePolicy));
                 }
 
                 return sources;

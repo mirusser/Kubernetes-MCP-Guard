@@ -164,6 +164,7 @@ The Gateway can also start the pinned upstream `kubernetes-mcp-server` as an off
 For a source run, install the binary, generate its fixed read-only TOML, and set the optional process configuration before starting the Gateway:
 
 ```bash
+./scripts/create-demo-kubeconfig.sh
 ./scripts/install-kubernetes-mcp-server.sh
 dotnet run --project src/InfraGate.RunProfiles -- generate-toml local-source-gateway \
   --output deploy/generated/local-source-gateway.kubernetes-mcp-server.toml
@@ -173,7 +174,12 @@ export InfraGate__Gateway__KubernetesMcpServer__Command="${REPO_ROOT}/.tools/bin
 export InfraGate__Gateway__KubernetesMcpServer__Arguments__0="--config"
 export InfraGate__Gateway__KubernetesMcpServer__Arguments__1="${REPO_ROOT}/deploy/generated/local-source-gateway.kubernetes-mcp-server.toml"
 export InfraGate__Gateway__KubernetesMcpServer__WorkingDirectory="${REPO_ROOT}"
+export InfraGate__Gateway__KubernetesMcpServer__Kubeconfig="${REPO_ROOT}/.kube/mcp-nginx-demo-viewer.config"
+export InfraGate__Gateway__KubernetesMcpServer__Context="minikube-mcp"
+export InfraGate__Gateway__KubernetesMcpServer__AllowedNamespaces__0="mcp-nginx-demo"
 ```
+
+The viewer kubeconfig is distinct from `.kube/mcp-nginx-demo.config`, which remains the primary mutation-capable credential. Missing, wildcard, or shared secondary credentials fail configuration validation.
 
 The local installer requires Go 1.26.3 or newer. Docker builds compile the pinned binary in the Gateway image's Go builder stage instead. See the [configuration reference](configuration.md#mcpgateway) for the process settings and [ADR-0033](adr/0033-kubernetes-mcp-server-readonly-secondary-downstream.md) for the trust boundary and architectural decision.
 

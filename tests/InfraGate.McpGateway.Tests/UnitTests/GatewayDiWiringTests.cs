@@ -195,7 +195,10 @@ public sealed class GatewayDiWiringTests
             new KubernetesMcpServerProcessOptions(
                 "kubernetes-mcp-server",
                 ["--config", "deploy/generated/k8s-mcp.toml"],
-                Directory.GetCurrentDirectory()));
+                Directory.GetCurrentDirectory(),
+                ".kube/mcp-nginx-demo-viewer.config",
+                "minikube-mcp",
+                new HashSet<string>(["mcp-nginx-demo"], StringComparer.Ordinal)));
 
         services.AddKeyedSingleton<IDownstreamMcpClient>(
             McpGatewayConventions.SecondaryDownstream.ServiceKey,
@@ -215,6 +218,13 @@ public sealed class GatewayDiWiringTests
                 sp.GetRequiredService<IHttpContextAccessor>(),
                 sp.GetRequiredService<SensitiveDataRedactor>(),
                 sp.GetRequiredService<ILogger<GuardedToolRunner>>()));
+        services.AddKeyedSingleton<KubernetesMcpServerRequestPolicy>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey,
+            (_, _) => new KubernetesMcpServerRequestPolicy(
+                new HashSet<string>(["mcp-nginx-demo"], StringComparer.Ordinal)));
+        services.AddKeyedSingleton<KubernetesMcpServerResponsePolicy>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey,
+            (_, _) => new KubernetesMcpServerResponsePolicy());
 
         // Primary (unkeyed, real McpGatewayOptions-derived) resolves alongside the keyed secondary.
         services.AddSingleton(DownstreamProcessDescriptor.ForPrimary(CreateOptions()));
@@ -229,6 +239,10 @@ public sealed class GatewayDiWiringTests
         Assert.NotNull(provider.GetRequiredKeyedService<DownstreamToolRegistry>(
             McpGatewayConventions.SecondaryDownstream.ServiceKey));
         Assert.NotNull(provider.GetRequiredKeyedService<GuardedToolRunner>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey));
+        Assert.NotNull(provider.GetRequiredKeyedService<KubernetesMcpServerRequestPolicy>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey));
+        Assert.NotNull(provider.GetRequiredKeyedService<KubernetesMcpServerResponsePolicy>(
             McpGatewayConventions.SecondaryDownstream.ServiceKey));
     }
 

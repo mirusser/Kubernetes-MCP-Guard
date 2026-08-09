@@ -254,18 +254,25 @@ INFRA_GATE_BIND_ADDRESS=...
 
 Sections are omitted when the profile produces no values for them.
 
-`generate-toml` requires a profile with a Kubernetes Domain Adapter. It derives `kubeconfig` from that adapter and always writes the fixed read-only policy and curated tool allowlist:
+`generate-toml` requires a dedicated `kubernetesMcpServer` profile with a viewer kubeconfig, context, and non-wildcard namespace allowlist. It always writes the supported fixed single-cluster policy and curated tool allowlist:
 
 ```toml
 # Generated from run-profiles.yaml profile: <name>
 # Do not edit. Run: dotnet run --project src/InfraGate.RunProfiles -- generate-toml <name>
 
 kubeconfig = "<path>"
+cluster_provider_strategy = "disabled"
+cluster_auth_mode = "kubeconfig"
+toolsets = ["core"]
+stateless = true
 read_only = true
-enabled_tools = ["pods_list", "pods_get", "pods_log", "events_list", "resources_list", "resources_get"]
+disable_destructive = true
+enabled_tools = ["pods_list_in_namespace", "pods_get", "pods_log"]
 ```
 
-`read_only` and `enabled_tools` are intentionally not YAML-configurable because the secondary downstream is not connected to the mutation/approval path.
+The single-cluster, toolset, stateless, read-only, destructive-tool, and enabled-tool settings are intentionally not YAML-configurable because the secondary downstream is not connected to the mutation/approval path. The generated env projection includes viewer kubeconfig, context, and namespace values but does not emit `Command`, so the secondary remains disabled unless explicitly enabled.
+
+`events_list` is intentionally excluded because v0.0.66 has no server-side result limit; the Gateway's post-response byte limit cannot prevent the upstream process from materializing an unbounded event list.
 
 ## Output paths and gitignore
 

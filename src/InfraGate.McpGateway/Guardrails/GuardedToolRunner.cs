@@ -105,6 +105,29 @@ internal sealed partial class GuardedToolRunner
         return requestScan.HasFindings;
     }
 
+    internal Task AuditPolicyDenialAsync(
+        string toolName,
+        IReadOnlyDictionary<string, object?> arguments,
+        string direction,
+        string category,
+        IReadOnlyDictionary<string, object?>? metadata,
+        CancellationToken cancellationToken)
+    {
+        AuditIdentity auditIdentity = GetAuditIdentity();
+        return TryWriteAuditAsync(
+            new GuardrailAuditEvent(
+                toolName,
+                direction,
+                McpGatewayConventions.GuardrailAudit.PolicyDenyAction,
+                [category],
+                ExtractPlanId(arguments, null),
+                auditIdentity.Subject,
+                auditIdentity.AuthenticationType,
+                auditIdentity.IdentityKind,
+                metadata),
+            cancellationToken);
+    }
+
     private async Task<GuardScanResult> ScanAndAuditRequestAsync(
         string toolName,
         IReadOnlyDictionary<string, object?> arguments,

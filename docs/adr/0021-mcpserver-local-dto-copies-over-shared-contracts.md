@@ -23,9 +23,11 @@ Three options were considered:
 
 ## Rationale
 
-### McpServer is a temporary component
+### McpServer is independently replaceable
 
-The active roadmap plans to swap `InfraGate.McpServer` with the external [`containers/kubernetes-mcp-server`](https://github.com/containers/kubernetes-mcp-server) Go binary. When that swap happens:
+`InfraGate.McpServer` may eventually be replaced by the external [`containers/kubernetes-mcp-server`](https://github.com/containers/kubernetes-mcp-server) Go binary, but replacement is not authorized by the upstream roadmap alone. The external server must first demonstrate evidence parity for every existing mutation through a separately reviewed, real-cluster conformance assessment. That assessment must cover dry-run validation, diff and freshness evidence, approval-grant binding, audit behavior, failure semantics, and rollback. Until it passes and an explicit follow-up ADR records a `go` decision, `InfraGate.McpServer` remains the only mutation downstream.
+
+If that evidence gate is satisfied and a separately approved implementation performs the swap:
 
 - `InfraGate.McpServer` and every file in it is deleted.
 - A shared contracts project would have to be deleted (or orphaned) at the same time — it would have existed purely to serve a component that no longer exists.
@@ -48,5 +50,7 @@ With the local copy, `KubernetesObjectRef` in `InfraGate.McpServer.Models` and `
 ## Consequences
 
 - `InfraGate.McpServer` has zero project references to `InfraGate.KubernetesAdapter` or `InfraGate.Approvals`. It is a pure execution substrate.
-- When `containers/kubernetes-mcp-server` is adopted, `InfraGate.McpServer` is deleted in its entirety. The `InfraGate.KubernetesAdapter` DTOs are then updated to match the external server's JSON schema independently.
+- Replacing `InfraGate.McpServer` remains future work gated by mutation evidence parity and explicit human approval. The current read-only secondary integration does not authorize deletion or mutation routing changes. If a future approved swap occurs, `InfraGate.McpServer` can be deleted in its entirety and the `InfraGate.KubernetesAdapter` DTOs can then be updated to match the external server's proven JSON schema independently.
 - If the swap never happens and the shared DTO surface grows substantially, revisit whether a contracts project is warranted at that point.
+
+See [ADR-0033](0033-kubernetes-mcp-server-readonly-secondary-downstream.md) for the constrained secondary-read decision and its fail-closed boundary.

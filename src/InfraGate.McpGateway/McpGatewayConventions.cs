@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using InfraGate;
 using InfraGate.RuntimeSafety;
 
@@ -56,7 +57,11 @@ internal static class McpGatewayConventions
         public const string KubernetesMcpServerSection = "InfraGate:Gateway:KubernetesMcpServer";
         public const string KubernetesMcpServerCommandKey = "Command";
         public const string KubernetesMcpServerArgumentsKey = "Arguments";
+        public const string KubernetesMcpServerAllowedNamespacesKey = "AllowedNamespaces";
+        public const string KubernetesMcpServerContextKey = "Context";
+        public const string KubernetesMcpServerKubeconfigKey = "Kubeconfig";
         public const string KubernetesMcpServerWorkingDirectoryKey = "WorkingDirectory";
+        public const string PrimaryKubeconfig = "InfraGate:Kubernetes:KubeConfig";
         public const string OperatorEmail = "InfraGate:Approval:OperatorEmail";
         public const string OperatorGroup = "InfraGate:Approval:OperatorGroup";
         public const string SmtpHost = "InfraGate:Approval:Smtp:Host";
@@ -102,6 +107,21 @@ internal static class McpGatewayConventions
         // triple. Never use a raw string literal at registration or resolution call sites.
         public const string ServiceKey = "k8sMcpServer";
         public const string Name = "kubernetes-mcp-server";
+        public const string KubeconfigArgument = "--kubeconfig";
+        public const string ConfigArgument = "--config";
+        public const string DropInConfigurationDirectoryName = "conf.d";
+        public const string TomlSearchPattern = "*.toml";
+        public const string KubeconfigEnvironmentVariable = "KUBECONFIG";
+        public const string PodsListInNamespaceTool = "pods_list_in_namespace";
+        public const string PodsGetTool = "pods_get";
+        public const string PodsLogTool = "pods_log";
+
+        public static readonly IReadOnlySet<string> ApprovedTools = new[]
+        {
+            PodsListInNamespaceTool,
+            PodsGetTool,
+            PodsLogTool
+        }.ToFrozenSet(StringComparer.Ordinal);
 
         /// <summary>
         /// The Go binary receives its entire configuration via --config (a generated TOML
@@ -261,6 +281,7 @@ internal static class McpGatewayConventions
         public const string RedactManifestAction = "redact_manifest";
         public const string RedactSensitiveDataAction = "redact_sensitive_data";
         public const string DenyAction = "scope.denied";
+        public const string PolicyDenyAction = "policy.denied";
 
         public static class EntryFields
         {
@@ -275,6 +296,8 @@ internal static class McpGatewayConventions
             public const string IdentityKind = "identityKind";
             public const string RedactionPatterns = "redactionPatterns";
             public const string RedactionCount = "redactionCount";
+            public const string ActualBytes = "actualBytes";
+            public const string MaximumBytes = "maximumBytes";
         }
     }
 
@@ -288,6 +311,8 @@ internal static class McpGatewayConventions
         public const string ManifestEchoCategory = "manifest-echo";
         public const string ScopeDenied = "scope";
         public const string SensitiveData = "sensitive-data";
+        public const string KubernetesRequestPolicy = "kubernetes-request-policy";
+        public const string ResponseSize = "response-size";
     }
 
     public static class SensitiveDataRedaction

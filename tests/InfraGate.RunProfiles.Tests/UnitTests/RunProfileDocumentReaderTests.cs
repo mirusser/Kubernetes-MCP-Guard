@@ -82,6 +82,83 @@ public sealed class RunProfileDocumentReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task ReadAsync_KubernetesMcpServerProfile_PopulatesViewerBoundary()
+    {
+        string yaml = MinimalValidYaml + """
+
+                kubernetesMcpServer:
+                  kubeconfig: /path/to/viewer.config
+                  context: minikube-mcp
+                  allowedNamespaces:
+                    - mcp-nginx-demo
+            """;
+        string path = WriteYaml(yaml);
+
+        var doc = await RunProfileDocumentReader.ReadAsync(path, CancellationToken.None);
+
+        KubernetesMcpServerProfile? profile = doc.Profiles[0].KubernetesMcpServer;
+        Assert.NotNull(profile);
+        Assert.Equal("/path/to/viewer.config", profile.Kubeconfig);
+        Assert.Equal("minikube-mcp", profile.Context);
+        Assert.Equal(["mcp-nginx-demo"], profile.AllowedNamespaces);
+    }
+
+    [Fact]
+    public async Task ReadAsync_KubernetesMcpServerProfileWithEmptyNamespaces_ThrowsInvalidOperationException()
+    {
+        string yaml = MinimalValidYaml + """
+
+                kubernetesMcpServer:
+                  kubeconfig: /path/to/viewer.config
+                  context: minikube-mcp
+                  allowedNamespaces: []
+            """;
+        string path = WriteYaml(yaml);
+
+        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            RunProfileDocumentReader.ReadAsync(path, CancellationToken.None));
+
+        Assert.Contains("allowedNamespaces", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReadAsync_KubernetesMcpServerProfileWithWildcardNamespace_ThrowsInvalidOperationException()
+    {
+        string yaml = MinimalValidYaml + """
+
+                kubernetesMcpServer:
+                  kubeconfig: /path/to/viewer.config
+                  context: minikube-mcp
+                  allowedNamespaces:
+                    - "*"
+            """;
+        string path = WriteYaml(yaml);
+
+        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            RunProfileDocumentReader.ReadAsync(path, CancellationToken.None));
+
+        Assert.Contains("wildcard", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ReadAsync_KubernetesMcpServerProfileWithoutContext_ThrowsInvalidOperationException()
+    {
+        string yaml = MinimalValidYaml + """
+
+                kubernetesMcpServer:
+                  kubeconfig: /path/to/viewer.config
+                  allowedNamespaces:
+                    - mcp-nginx-demo
+            """;
+        string path = WriteYaml(yaml);
+
+        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            RunProfileDocumentReader.ReadAsync(path, CancellationToken.None));
+
+        Assert.Contains("context", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ReadAsync_NullPath_ThrowsArgumentNullException()
     {
         await Assert.ThrowsAsync<ArgumentNullException>(() =>

@@ -13,7 +13,7 @@
 - `GatewayToolDispatcherTests.cs`: raw destructive tool refusal, domain-target audit storage, plan-status and wait-tool contracts, generic pre-execution gating, and blocked domain execution without applied markers.
 - `Notifications/PlanStatusResourceHandlerTests.cs`: plan-status MCP resource template/read behavior, URI validation, and explicit subscribe/unsubscribe routing.
 - `GatewayHttpMcpIntegrationTests.cs`: real HTTP MCP transport wiring with OAuth auth, fake-downstream forwarding, guardrail audit capture, response redaction, plan-status resource reads, downstream stdio startup smoke coverage, semantic dry-run/diff rendering, out-of-band approval forwarding, and an opt-in live gateway-to-Kubernetes flow.
-- `GatewayKubernetesMcpServerIntegrationTests.cs`: opt-in real-binary coverage that generates the read-only TOML, merges primary and secondary tools through the HTTP Gateway, enforces the curated allowlist, and calls `pods_list` against the demo namespace.
+- `GatewayKubernetesMcpServerIntegrationTests.cs`: opt-in real-binary coverage that generates the read-only TOML, merges primary and secondary tools through the HTTP Gateway, enforces the curated allowlist, and calls `pods_list_in_namespace` against the demo namespace with the dedicated viewer kubeconfig.
 - `McpGatewayOptionsTests.cs`: downstream assembly defaults and subprocess arguments.
 
 ## Running Tests

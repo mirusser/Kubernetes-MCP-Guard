@@ -3,7 +3,7 @@ using System.Text;
 namespace InfraGate.RunProfiles;
 
 // Hand-rolled writer: the generated config only needs flat scalar/array-of-string
-// keys (kubeconfig, read_only, enabled_tools), so a TOML library is not warranted.
+// keys, so a TOML library is not warranted.
 internal static class TomlFileRenderer
 {
     public static string Render(string configFileName, RunProfile profile)
@@ -11,12 +11,10 @@ internal static class TomlFileRenderer
         ArgumentException.ThrowIfNullOrEmpty(configFileName);
         ArgumentNullException.ThrowIfNull(profile);
 
-        DomainAdapterProfile? adapter = profile.DomainAdapters.SingleOrDefault(adapter =>
-            string.Equals(adapter.Type, RunProfileConventions.DomainAdapterTypes.Kubernetes, StringComparison.Ordinal));
-        if (adapter?.Kubernetes is null)
+        if (profile.KubernetesMcpServer is not { } kubernetesMcpServer)
         {
             throw new InvalidOperationException(
-                $"Run Profile '{profile.Name}' has no Kubernetes Domain Adapter to derive a kubeconfig path from.");
+                $"Run Profile '{profile.Name}' has no Kubernetes MCP Server profile.");
         }
 
         var builder = new StringBuilder();
@@ -25,9 +23,19 @@ internal static class TomlFileRenderer
         builder.AppendLine(
             $"{RunProfileConventions.GeneratedFile.TomlDoNotEditLinePrefix}{profile.Name}");
         builder.AppendLine();
-        builder.AppendLine($"{RunProfileConventions.Toml.KubeConfig} = {ToTomlString(adapter.Kubernetes.KubeConfig)}");
+        builder.AppendLine($"{RunProfileConventions.Toml.KubeConfig} = {ToTomlString(kubernetesMcpServer.Kubeconfig)}");
         builder.AppendLine(
-            $"{RunProfileConventions.Toml.ReadOnly} = {(KubernetesMcpServerProfile.ReadOnly ? "true" : "false")}");
+            $"{RunProfileConventions.Toml.ClusterProviderStrategy} = {ToTomlString(KubernetesMcpServerProfile.ClusterProviderStrategy)}");
+        builder.AppendLine(
+            $"{RunProfileConventions.Toml.ClusterAuthMode} = {ToTomlString(KubernetesMcpServerProfile.ClusterAuthMode)}");
+        builder.AppendLine(
+            $"{RunProfileConventions.Toml.Toolsets} = {ToTomlStringArray(KubernetesMcpServerProfile.Toolsets)}");
+        builder.AppendLine(
+            $"{RunProfileConventions.Toml.Stateless} = {(KubernetesMcpServerProfile.IsStateless ? "true" : "false")}");
+        builder.AppendLine(
+            $"{RunProfileConventions.Toml.ReadOnly} = {(KubernetesMcpServerProfile.IsReadOnly ? "true" : "false")}");
+        builder.AppendLine(
+            $"{RunProfileConventions.Toml.DisableDestructive} = {(KubernetesMcpServerProfile.AreDestructiveToolsDisabled ? "true" : "false")}");
         builder.AppendLine(
             $"{RunProfileConventions.Toml.EnabledTools} = {ToTomlStringArray(KubernetesMcpServerProfile.EnabledTools)}");
 

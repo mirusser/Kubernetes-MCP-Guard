@@ -17,6 +17,7 @@ internal static class EnvFileRenderer
 
         AppendRuntime(builder, profile);
         AppendGateway(builder, profile);
+        AppendKubernetesMcpServer(builder, profile);
         AppendIdentityProvider(builder, profile);
         AppendApprovalAuthority(builder, profile);
         AppendGenericApprovalCore(builder, profile);
@@ -58,6 +59,25 @@ internal static class EnvFileRenderer
         AppendIfSet(builder, RunProfileConventions.Env.DownstreamAssembly, profile.Gateway.DownstreamAssembly);
         AppendIfSet(builder, RunProfileConventions.Env.DownstreamAssemblyHash, profile.Gateway.DownstreamAssemblyHash);
         AppendIfSet(builder, RunProfileConventions.Env.GuardAuditRoot, profile.Gateway.GuardAuditRoot);
+    }
+
+    private static void AppendKubernetesMcpServer(StringBuilder builder, RunProfile profile)
+    {
+        if (profile.KubernetesMcpServer is not { } kubernetesMcpServer)
+        {
+            return;
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("# Kubernetes MCP Server");
+        builder.AppendLine(
+            $"{RunProfileConventions.Env.KubernetesMcpServerKubeconfig}={kubernetesMcpServer.Kubeconfig}");
+        builder.AppendLine(
+            $"{RunProfileConventions.Env.KubernetesMcpServerContext}={kubernetesMcpServer.Context}");
+        AppendList(
+            builder,
+            RunProfileConventions.Env.KubernetesMcpServerAllowedNamespaces,
+            kubernetesMcpServer.AllowedNamespaces);
     }
 
     private static void AppendIdentityProvider(StringBuilder builder, RunProfile profile)

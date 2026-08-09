@@ -9,6 +9,9 @@ public sealed class DownstreamProcessDescriptorTests
 {
     private const string KubernetesMcpServerCommand = ".tools/bin/kubernetes-mcp-server";
     private const string TomlConfigPath = "deploy/generated/local-source-gateway.kubernetes-mcp-server.toml";
+    private const string ViewerKubeconfig = ".kube/mcp-nginx-demo-viewer.config";
+    private static readonly IReadOnlySet<string> AllowedNamespaces =
+        new HashSet<string>(["mcp-nginx-demo"], StringComparer.Ordinal);
 
     [Fact]
     public void ForKubernetesMcpServer_NullOptions_ThrowsArgumentNullException()
@@ -22,7 +25,10 @@ public sealed class DownstreamProcessDescriptorTests
         var options = new KubernetesMcpServerProcessOptions(
             KubernetesMcpServerCommand,
             ["--config", TomlConfigPath],
-            "/repo");
+            "/repo",
+            ViewerKubeconfig,
+            "minikube-mcp",
+            AllowedNamespaces);
 
         DownstreamProcessDescriptor descriptor = DownstreamProcessDescriptor.ForKubernetesMcpServer(options);
 
@@ -36,17 +42,45 @@ public sealed class DownstreamProcessDescriptorTests
         var options = new KubernetesMcpServerProcessOptions(
             KubernetesMcpServerCommand,
             ["--config", TomlConfigPath],
-            "/repo");
+            "/repo",
+            ViewerKubeconfig,
+            "minikube-mcp",
+            AllowedNamespaces);
 
         DownstreamProcessDescriptor descriptor = DownstreamProcessDescriptor.ForKubernetesMcpServer(options);
 
-        Assert.Equal(["--config", TomlConfigPath], descriptor.Arguments);
+        Assert.Equal(
+            ["--config", TomlConfigPath, "--kubeconfig", ViewerKubeconfig],
+            descriptor.Arguments);
+    }
+
+    [Fact]
+    public void ForKubernetesMcpServer_WithoutFixedConfigArgument_ThrowsInvalidOperationException()
+    {
+        var options = new KubernetesMcpServerProcessOptions(
+            KubernetesMcpServerCommand,
+            [],
+            "/repo",
+            ViewerKubeconfig,
+            "minikube-mcp",
+            AllowedNamespaces);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            DownstreamProcessDescriptor.ForKubernetesMcpServer(options));
+
+        Assert.Contains("--config", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void ForKubernetesMcpServer_UsesConfiguredWorkingDirectory()
     {
-        var options = new KubernetesMcpServerProcessOptions(KubernetesMcpServerCommand, [], "/repo");
+        var options = new KubernetesMcpServerProcessOptions(
+            KubernetesMcpServerCommand,
+            ["--config", TomlConfigPath],
+            "/repo",
+            ViewerKubeconfig,
+            "minikube-mcp",
+            AllowedNamespaces);
 
         DownstreamProcessDescriptor descriptor = DownstreamProcessDescriptor.ForKubernetesMcpServer(options);
 
@@ -56,7 +90,13 @@ public sealed class DownstreamProcessDescriptorTests
     [Fact]
     public void ForKubernetesMcpServer_AuthNeverRequired_NoBootstrapLineIsEverSent()
     {
-        var options = new KubernetesMcpServerProcessOptions(KubernetesMcpServerCommand, [], "/repo");
+        var options = new KubernetesMcpServerProcessOptions(
+            KubernetesMcpServerCommand,
+            ["--config", TomlConfigPath],
+            "/repo",
+            ViewerKubeconfig,
+            "minikube-mcp",
+            AllowedNamespaces);
 
         DownstreamProcessDescriptor descriptor = DownstreamProcessDescriptor.ForKubernetesMcpServer(options);
 
@@ -70,7 +110,13 @@ public sealed class DownstreamProcessDescriptorTests
     [Fact]
     public void ForKubernetesMcpServer_UsesSecondaryDownstreamName()
     {
-        var options = new KubernetesMcpServerProcessOptions(KubernetesMcpServerCommand, [], "/repo");
+        var options = new KubernetesMcpServerProcessOptions(
+            KubernetesMcpServerCommand,
+            ["--config", TomlConfigPath],
+            "/repo",
+            ViewerKubeconfig,
+            "minikube-mcp",
+            AllowedNamespaces);
 
         DownstreamProcessDescriptor descriptor = DownstreamProcessDescriptor.ForKubernetesMcpServer(options);
 
@@ -83,7 +129,10 @@ public sealed class DownstreamProcessDescriptorTests
         var options = new KubernetesMcpServerProcessOptions(
             KubernetesMcpServerCommand,
             ["--config", TomlConfigPath],
-            "/repo");
+            "/repo",
+            ViewerKubeconfig,
+            "minikube-mcp",
+            AllowedNamespaces);
         DownstreamProcessDescriptor descriptor = DownstreamProcessDescriptor.ForKubernetesMcpServer(options);
         var client = new DownstreamMcpClient(
             descriptor,
@@ -94,15 +143,26 @@ public sealed class DownstreamProcessDescriptorTests
         var transportOptions = client.CreateTransportOptions();
 
         Assert.Equal(KubernetesMcpServerCommand, transportOptions.Command);
-        Assert.Equal(["--config", TomlConfigPath], transportOptions.Arguments);
+        Assert.Equal(
+            ["--config", TomlConfigPath, "--kubeconfig", ViewerKubeconfig],
+            transportOptions.Arguments);
         Assert.Equal("/repo", transportOptions.WorkingDirectory);
         Assert.Equal(McpGatewayConventions.SecondaryDownstream.Name, transportOptions.Name);
+        Assert.Equal(
+            ViewerKubeconfig,
+            transportOptions.EnvironmentVariables![McpGatewayConventions.SecondaryDownstream.KubeconfigEnvironmentVariable]);
     }
 
     [Fact]
     public void CreateTransportOptions_ForKubernetesMcpServer_NeverForwardsInfraGateEnvironmentVariables()
     {
-        var options = new KubernetesMcpServerProcessOptions(KubernetesMcpServerCommand, [], "/repo");
+        var options = new KubernetesMcpServerProcessOptions(
+            KubernetesMcpServerCommand,
+            ["--config", TomlConfigPath],
+            "/repo",
+            ViewerKubeconfig,
+            "minikube-mcp",
+            AllowedNamespaces);
         DownstreamProcessDescriptor descriptor = DownstreamProcessDescriptor.ForKubernetesMcpServer(options);
         var client = new DownstreamMcpClient(
             descriptor,
@@ -116,6 +176,7 @@ public sealed class DownstreamProcessDescriptorTests
         {
             var transportOptions = client.CreateTransportOptions();
 
+            Assert.False(transportOptions.InheritEnvironmentVariables);
             Assert.DoesNotContain(key, transportOptions.EnvironmentVariables!.Keys);
             Assert.All(
                 transportOptions.EnvironmentVariables!.Keys,

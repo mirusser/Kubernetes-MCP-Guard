@@ -305,6 +305,35 @@ public sealed class EnvFileRendererTests
     }
 
     [Fact]
+    public void Render_WithKubernetesMcpServerProfile_EmitsViewerPolicyWithoutEnablingCommand()
+    {
+        var profile = CreateMinimalProfile() with
+        {
+            KubernetesMcpServer = new KubernetesMcpServerProfile(
+                "/run/kube/mcp-nginx-demo-viewer.config",
+                "minikube-mcp",
+                ["mcp-nginx-demo"]),
+        };
+
+        string result = EnvFileRenderer.Render("run-profiles.yaml", profile);
+
+        Assert.Contains("# Kubernetes MCP Server", result, StringComparison.Ordinal);
+        Assert.Contains(
+            $"{RunProfileConventions.Env.KubernetesMcpServerKubeconfig}=/run/kube/mcp-nginx-demo-viewer.config",
+            result,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"{RunProfileConventions.Env.KubernetesMcpServerContext}=minikube-mcp",
+            result,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"{RunProfileConventions.Env.KubernetesMcpServerAllowedNamespaces}__0=mcp-nginx-demo",
+            result,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("KubernetesMcpServer__Command", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Render_WithHostProfile_EmitsHostSection()
     {
         var profile = CreateMinimalProfile() with
