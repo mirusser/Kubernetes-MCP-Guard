@@ -303,23 +303,23 @@ public sealed class DownstreamMcpClientTests
     }
 
     [Fact]
-    public void BuildBootstrapLine_WithBearerToken_ReturnsAuthorizationLine()
+    public void CreateClientOptions_WithBearerToken_SetsInitializeMeta()
     {
         string token = "Bearer eyJhbGciOiJSUzI1NiJ9.test.sig";
 
-        string? line = DownstreamMcpClient.BuildBootstrapLine(token);
+        var options = DownstreamMcpClient.CreateClientOptions(token);
 
-        Assert.Equal($"{DownstreamAuthConventions.BootstrapLineKey}: {token}", line);
+        Assert.Equal(token, options.InitializeMeta?[DownstreamAuthConventions.MetaKey]?.GetValue<string>());
     }
 
     [Theory]
     [InlineData("")]
     [InlineData(null)]
-    public void BuildBootstrapLine_WithEmptyOrNullToken_ReturnsNull(string? token)
+    public void CreateClientOptions_WithEmptyOrNullToken_OmitsInitializeMeta(string? token)
     {
-        string? line = DownstreamMcpClient.BuildBootstrapLine(token!);
+        var options = DownstreamMcpClient.CreateClientOptions(token!);
 
-        Assert.Null(line);
+        Assert.Null(options.InitializeMeta);
     }
 
     [Fact]

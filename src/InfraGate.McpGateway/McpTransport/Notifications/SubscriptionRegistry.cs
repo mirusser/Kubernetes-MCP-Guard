@@ -4,60 +4,57 @@ namespace InfraGate.McpGateway.Notifications;
 
 internal sealed class SubscriptionRegistry : ISubscriptionRegistry
 {
-    // sessionId → notifier
-    private readonly ConcurrentDictionary<string, ISessionNotifier> sessions = new(StringComparer.Ordinal);
+    // subscriptions/listen registration id → notifier
+    private readonly ConcurrentDictionary<string, ISubscriptionNotifier> subscribers = new(StringComparer.Ordinal);
 
-    // planId → set of sessionIds
+    // planId → set of subscriptions/listen registration ids
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> planSubscriptions = new(StringComparer.Ordinal);
 
-    public void RegisterSession(string sessionId, ISessionNotifier notifier) =>
-        sessions[sessionId] = notifier;
+    public void RegisterSubscriber(string registrationId, ISubscriptionNotifier notifier) =>
+        subscribers[registrationId] = notifier;
 
-    public void RemoveSession(string sessionId)
+    public void RemoveSubscriber(string registrationId)
     {
-        sessions.TryRemove(sessionId, out _);
+        subscribers.TryRemove(registrationId, out _);
 
-        foreach ((string _, ConcurrentDictionary<string, byte>? subscribers) in planSubscriptions)
+        foreach ((string _, ConcurrentDictionary<string, byte>? planSubscribers) in planSubscriptions)
         {
-            subscribers.TryRemove(sessionId, out _);
+            planSubscribers.TryRemove(registrationId, out _);
         }
     }
 
-    public void BindSubject(string sessionId, string requesterSubject)
+    public void SubscribeToPlan(string registrationId, string planId)
     {
-        // Subject binding is stored implicitly via the session; reserved for future routing.
-    }
-
-    public void SubscribeToPlan(string sessionId, string planId)
-    {
-        if (!sessions.ContainsKey(sessionId))
+        if (!subscribers.ContainsKey(registrationId))
         {
             return;
         }
 
-        ConcurrentDictionary<string, byte> subscribers = planSubscriptions.GetOrAdd(planId, _ => new ConcurrentDictionary<string, byte>(StringComparer.Ordinal));
-        subscribers.TryAdd(sessionId, 0);
+        ConcurrentDictionary<string, byte> planSubscribers = planSubscriptions.GetOrAdd(
+            planId,
+            _ => new ConcurrentDictionary<string, byte>(StringComparer.Ordinal));
+        planSubscribers.TryAdd(registrationId, 0);
     }
 
-    public void UnsubscribeFromPlan(string sessionId, string planId)
+    public void UnsubscribeFromPlan(string registrationId, string planId)
     {
-        if (planSubscriptions.TryGetValue(planId, out ConcurrentDictionary<string, byte>? subscribers))
+        if (planSubscriptions.TryGetValue(planId, out ConcurrentDictionary<string, byte>? planSubscribers))
         {
-            subscribers.TryRemove(sessionId, out _);
+            planSubscribers.TryRemove(registrationId, out _);
         }
     }
 
-    public IReadOnlyList<ISessionNotifier> GetSessionsForPlan(string planId)
+    public IReadOnlyList<ISubscriptionNotifier> GetSubscribersForPlan(string planId)
     {
-        if (!planSubscriptions.TryGetValue(planId, out ConcurrentDictionary<string, byte>? subscribers))
+        if (!planSubscriptions.TryGetValue(planId, out ConcurrentDictionary<string, byte>? planSubscribers))
         {
             return [];
         }
 
-        var result = new List<ISessionNotifier>();
-        foreach ((string? sessionId, byte _) in subscribers)
+        var result = new List<ISubscriptionNotifier>();
+        foreach ((string? registrationId, byte _) in planSubscribers)
         {
-            if (sessions.TryGetValue(sessionId, out ISessionNotifier? notifier))
+            if (subscribers.TryGetValue(registrationId, out ISubscriptionNotifier? notifier))
             {
                 result.Add(notifier);
             }

@@ -1,8 +1,8 @@
 namespace InfraGate.McpGateway.Notifications;
 
-internal interface ISessionNotifier
+internal interface ISubscriptionNotifier
 {
-    string? SessionId { get; }
+    string RegistrationId { get; }
     Task SendNotificationAsync<TParams>(string method, TParams @params, CancellationToken ct)
         where TParams : notnull;
 }

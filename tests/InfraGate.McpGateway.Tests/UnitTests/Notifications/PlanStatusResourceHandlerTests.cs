@@ -55,51 +55,11 @@ public sealed class PlanStatusResourceHandlerTests
             handler.ReadAsync(new ReadResourceRequestParams { Uri = uri }, CancellationToken.None));
     }
 
-    [Fact]
-    public void Subscribe_RegisteredSession_AddsPlanSubscription()
-    {
-        var registry = new SubscriptionRegistry();
-        var notifier = new FakeSessionNotifier("session-1");
-        registry.RegisterSession("session-1", notifier);
-        var handler = CreateHandler(registry);
-
-        handler.Subscribe(
-            "session-1",
-            new SubscribeRequestParams { Uri = NotificationsConventions.Resources.PlanStatusUri("plan-1") });
-
-        Assert.Single(registry.GetSessionsForPlan("plan-1"));
-    }
-
-    [Fact]
-    public void Unsubscribe_RegisteredSession_RemovesPlanSubscription()
-    {
-        var registry = new SubscriptionRegistry();
-        var notifier = new FakeSessionNotifier("session-1");
-        registry.RegisterSession("session-1", notifier);
-        registry.SubscribeToPlan("session-1", "plan-1");
-        var handler = CreateHandler(registry);
-
-        handler.Unsubscribe(
-            "session-1",
-            new UnsubscribeRequestParams { Uri = NotificationsConventions.Resources.PlanStatusUri("plan-1") });
-
-        Assert.Empty(registry.GetSessionsForPlan("plan-1"));
-    }
-
-    private static PlanStatusResourceHandler CreateHandler(ISubscriptionRegistry? registry = null)
+    private static PlanStatusResourceHandler CreateHandler()
     {
         var root = Path.Combine(Path.GetTempPath(), "infra-gate-plan-resource-tests", Guid.NewGuid().ToString("N"));
         var store = new ApprovalStore(new ApprovalStoreOptions(root));
 
-        return new PlanStatusResourceHandler(store, registry ?? new SubscriptionRegistry());
-    }
-
-    private sealed class FakeSessionNotifier(string sessionId) : ISessionNotifier
-    {
-        public string? SessionId => sessionId;
-
-        public Task SendNotificationAsync<TParams>(string method, TParams @params, CancellationToken ct)
-            where TParams : notnull =>
-            Task.CompletedTask;
+        return new PlanStatusResourceHandler(store);
     }
 }

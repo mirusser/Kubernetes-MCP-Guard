@@ -451,32 +451,6 @@ public sealed class GatewayToolDispatcherTests
     }
 
     [Fact]
-    public async Task CallToolAsync_ApprovalRequired_DoesNotSubscribeCurrentSession()
-    {
-        const string planId = "plan-1";
-        var context = CreateContext(
-            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
-            approvals: new FakeGatewayApprovalService(
-                ApprovalGateResult.RequiresApproval("Approval required.")));
-        context.Subscriptions.RegisterSession("session-1", new FakeSessionNotifier("session-1"));
-        context.HttpContext.Items[NotificationsConventions.McpSessionIdItemKey] = "session-1";
-
-        var result = await context.Dispatcher.CallToolAsync(
-            new CallToolRequestParams
-            {
-                Name = McpGatewayConventions.ToolNames.ApplyApprovedPlan,
-                Arguments = new Dictionary<string, JsonElement>
-                {
-                    [McpGatewayConventions.ToolArguments.PlanId] = JsonSerializer.SerializeToElement(planId)
-                }
-            },
-            CancellationToken.None);
-
-        Assert.True(result.IsError is not true);
-        Assert.Empty(context.Subscriptions.GetSessionsForPlan(planId));
-    }
-
-    [Fact]
     public async Task CallToolAsync_ApprovedPlanPassingPreExecutionGate_ExecutesPlan()
     {
         var executor = new FakeDomainPlanExecutor(
@@ -951,8 +925,6 @@ public sealed class GatewayToolDispatcherTests
         var domainAdapter = new FakeDomainAdapter(
             planBuilder ?? new FakeDomainPlanBuilder(PlanBuildResult.Failed("not implemented")),
             planExecutor);
-        var subscriptions = new SubscriptionRegistry();
-
         var guardrailAudit = new InMemoryAuditStore();
         var emailSender = new FakeApprovalEmailSender();
         var proposePlanHandler = new ProposePlanHandler(
@@ -985,14 +957,12 @@ public sealed class GatewayToolDispatcherTests
                 workflow,
                 new ApprovalPreExecutionGate(workflow, workflow),
                 proposePlanHandler,
-                subscriptions,
                 new ToolScopeGuard(httpContextAccessor, guardrailAudit, NullLogger<ToolScopeGuard>.Instance),
                 httpContextAccessor,
                 readOnlySources,
                 NullLogger<GatewayToolDispatcher>.Instance),
             workflow,
             downstream,
-            subscriptions,
             httpContext,
             guardrailAudit,
             emailSender);
@@ -1281,15 +1251,6 @@ public sealed class GatewayToolDispatcherTests
         }
     }
 
-    private sealed class FakeSessionNotifier(string sessionId) : ISessionNotifier
-    {
-        public string? SessionId => sessionId;
-
-        public Task SendNotificationAsync<TParams>(string method, TParams @params, CancellationToken ct)
-            where TParams : notnull =>
-            Task.CompletedTask;
-    }
-
     private sealed class FakeGatewayApprovalService(ApprovalGateResult gateResult) : IGatewayApprovalService
     {
         public Task<ApprovalGateResult> EnsureApprovedOrCreateChallengeAsync(
@@ -1322,7 +1283,6 @@ public sealed class GatewayToolDispatcherTests
         IGatewayToolDispatcher Dispatcher,
         TestApprovalWorkflow Workflow,
         FakeDownstream Downstream,
-        SubscriptionRegistry Subscriptions,
         DefaultHttpContext HttpContext,
         InMemoryAuditStore GuardrailAudit,
         FakeApprovalEmailSender EmailSender);

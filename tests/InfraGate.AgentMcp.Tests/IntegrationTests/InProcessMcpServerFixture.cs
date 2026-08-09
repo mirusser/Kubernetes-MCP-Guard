@@ -34,7 +34,7 @@ internal sealed class InProcessMcpServerFixture : IAsyncDisposable
                 services.AddRouting();
                 services
                     .AddMcpServer()
-                    .WithHttpTransport(o => { o.Stateless = false; })
+                    .WithHttpTransport(o => { o.Stateless = true; })
                     .WithListToolsHandler((_, _) =>
                         new ValueTask<ListToolsResult>(new ListToolsResult { Tools = CreateTools() }))
                     .WithCallToolHandler((request, _) =>

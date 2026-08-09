@@ -22,7 +22,6 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
     IApprovalAuditOutbox auditOutbox,
     IApprovalPreExecutionGate preExecutionGate,
     IProposePlanHandler proposePlanHandler,
-    ISubscriptionRegistry subscriptionRegistry,
     IToolScopeGuard scopeGuard,
     IHttpContextAccessor httpContextAccessor,
     IReadOnlyList<GatewayToolDispatcher.ReadOnlySource> readOnlySources,
@@ -36,11 +35,6 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
     // injection only. Only the primary ever participates in destructive/request_* routing —
     // see IsDestructiveToolAsync and ListToolsAsync, which read `registry` directly, never this list.
     internal sealed record class ReadOnlySource(DownstreamToolRegistry Registry, GuardedToolRunner Runner);
-
-#pragma warning disable MA0041
-    private string? CurrentSessionId =>
-        httpContextAccessor.HttpContext?.Items[NotificationsConventions.McpSessionIdItemKey] as string;
-#pragma warning restore MA0041
 
     public async Task<ListToolsResult> ListToolsAsync(
         ListToolsRequestParams request,
@@ -242,8 +236,6 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
             return ErrorResult(McpGatewayMessages.Authorization.MutationRequiresAuth);
         }
 
-        string? sessionId = CurrentSessionId;
-
         IReadOnlyDictionary<string, object?> args = ToolArgumentConverter.ConvertArguments(request.Arguments);
         bool requestHasFindings = await guardedRunner.AuditRequestAsync(toolName, args, ct).ConfigureAwait(false);
 
@@ -274,12 +266,6 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
             planResult.Envelope,
             planResult.TargetNamespace,
             ct).ConfigureAwait(false);
-
-        if (sessionId is not null)
-        {
-            subscriptionRegistry.BindSubject(sessionId, identity.Subject);
-            subscriptionRegistry.SubscribeToPlan(sessionId, planResult.PlanId);
-        }
 
         string message = McpGatewayMessages.ToolRouting.PlanCreated(planResult.PlanId);
         if (requestHasFindings || GuardrailContext.HasResponseFindings)

@@ -299,7 +299,7 @@ Approval flow:
 4. Open the URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan and dry-run status, and approve or deny it.
 5. Call `execute_approved_plan` again. The Gateway forwards only after an Approval Grant exists and still matches the pending plan's Intent Digest and Review Digest; the Kubernetes adapter repeats declared freshness checks immediately before the raw write.
 
-Clients that support MCP resources can subscribe to `plan://{planId}/status` and react to `notifications/resources/updated` after browser approval. Clients without resource notification support can call `get_plan_status` in a polling loop or `wait_for_plan_approval(planId, timeoutSeconds)` before retrying `execute_approved_plan`.
+MCP 2026-07-28 clients can include `plan://{planId}/status` in a `subscriptions/listen` request and react to the subscription-tagged `notifications/resources/updated` after browser approval. Clients without resource notification support can call `get_plan_status` in a polling loop or `wait_for_plan_approval(planId, timeoutSeconds)` before retrying `execute_approved_plan`.
 
 The MCP client never submits approval content. Approval challenges are bound to the plan id, current pending-plan hash, requester subject, expected Intent Digest, expected Review Digest, expiry, and Single-Execution status.
 

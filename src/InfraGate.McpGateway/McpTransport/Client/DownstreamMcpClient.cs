@@ -116,19 +116,17 @@ internal sealed class DownstreamMcpClient(
             }
 
             StdioClientTransportOptions transportOptions = CreateTransportOptions();
-            string? bootstrapLine = await CreateBootstrapLineAsync(cancellationToken).ConfigureAwait(false);
-            IClientTransport transport = bootstrapLine is null
-                ? new StdioClientTransport(transportOptions)
-                : new BootstrapStdioClientTransport(transportOptions, bootstrapLine, loggerFactory);
+            var transport = new StdioClientTransport(transportOptions, loggerFactory);
+            McpClientOptions clientOptions = await CreateClientOptionsAsync(cancellationToken).ConfigureAwait(false);
 
-            // The MCP 2025-11-25 schema allows initialize params to carry _meta, but the
-            // Microsoft MCP .NET SDK 1.3.0 CreateAsync path does not expose an initialize
-            // RequestOptions/Meta hook. Until the SDK catches up, the custom transport
-            // writes one InfraGate-private authorization line to stdin before CreateAsync
-            // sends initialize. Keep the per-request _meta below: it is still the auth
-            // boundary for tools/list and tools/call, and it handles token refresh after
-            // the one-time initialize bootstrap has completed.
-            client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken).ConfigureAwait(false);
+            // MCP 2026-07-28 uses per-request metadata, which is supplied by ListToolsAsync
+            // and CallToolAsync below. InitializeMeta covers the SDK's standards-compliant
+            // fallback when the peer negotiates an older initialize-based protocol revision.
+            client = await McpClient.CreateAsync(
+                transport,
+                clientOptions,
+                loggerFactory,
+                cancellationToken).ConfigureAwait(false);
 
             return client;
         }
@@ -181,33 +179,26 @@ internal sealed class DownstreamMcpClient(
         return meta;
     }
 
-    internal static string? BuildBootstrapLine(string token)
-    {
-        if (string.IsNullOrEmpty(token))
-        {
-            return null;
-        }
+    internal static McpClientOptions CreateClientOptions(string token) =>
+        new() { InitializeMeta = BuildAuthMeta(token) };
 
-        return $"{DownstreamAuthConventions.BootstrapLineKey}: {token}";
-    }
-
-    private async Task<string?> CreateBootstrapLineAsync(CancellationToken cancellationToken)
+    private async Task<McpClientOptions> CreateClientOptionsAsync(CancellationToken cancellationToken)
     {
         if (!IsDownstreamAuthRequired())
         {
-            return null;
+            return CreateClientOptions(string.Empty);
         }
 
         string token = await tokenProvider.GetServiceTokenAsync(cancellationToken).ConfigureAwait(false);
-        string? bootstrapLine = BuildBootstrapLine(token);
-        if (bootstrapLine is null)
+        McpClientOptions clientOptions = CreateClientOptions(token);
+        if (clientOptions.InitializeMeta is null)
         {
             throw new McpException(
                 $"{DownstreamAuthConventions.ErrorCodes.DownstreamAuthRequired}: " +
-                "downstream bootstrap credential is missing.");
+                "downstream initialization credential is missing.");
         }
 
-        return bootstrapLine;
+        return clientOptions;
     }
 
     private bool IsDownstreamAuthRequired() => descriptor.AuthRequired;

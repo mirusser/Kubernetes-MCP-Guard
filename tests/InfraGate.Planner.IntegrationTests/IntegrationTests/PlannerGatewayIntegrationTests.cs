@@ -319,7 +319,7 @@ public sealed class PlannerGatewayIntegrationTests
                     services.AddRouting();
                     services
                         .AddMcpServer()
-                        .WithHttpTransport(opt => { opt.Stateless = false; })
+                        .WithHttpTransport(opt => { opt.Stateless = true; })
                         .WithListToolsHandler((_, _) =>
                             new ValueTask<ListToolsResult>(new ListToolsResult { Tools = CreateTools() }))
                         .WithCallToolHandler((request, _) =>

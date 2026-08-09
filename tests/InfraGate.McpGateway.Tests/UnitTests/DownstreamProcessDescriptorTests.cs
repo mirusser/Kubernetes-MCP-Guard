@@ -61,7 +61,7 @@ public sealed class DownstreamProcessDescriptorTests
         DownstreamProcessDescriptor descriptor = DownstreamProcessDescriptor.ForKubernetesMcpServer(options);
 
         // AuthRequired is the exact field DownstreamMcpClient.IsDownstreamAuthRequired() reads to
-        // decide whether to send an InfraGate-private bootstrap-auth line before `initialize`.
+        // decide whether to attach InfraGate service-token metadata to downstream requests.
         // false here means the Go binary is treated purely as a stock, unauthenticated MCP stdio
         // process — no InfraGate protocol is ever spoken to it.
         Assert.False(descriptor.AuthRequired);

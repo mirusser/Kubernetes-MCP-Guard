@@ -5,7 +5,9 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using System.Threading.Channels;
 using InfraGate;
 using InfraGate.ApprovalUi;
 using InfraGate.AuditOutbox;
@@ -68,9 +70,11 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         using var server = CreateGatewayServer(new FakeDownstream("unused"), audit);
         using var client = server.CreateClient();
 
-        var missingResponse = await client.GetAsync(McpGatewayConventions.McpPath);
+        using var missingContent = CreateMcpRequestContent();
+        using var missingResponse = await client.PostAsync(McpGatewayConventions.McpPath, missingContent);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "wrong");
-        var wrongResponse = await client.GetAsync(McpGatewayConventions.McpPath);
+        using var wrongContent = CreateMcpRequestContent();
+        using var wrongResponse = await client.PostAsync(McpGatewayConventions.McpPath, wrongContent);
 
         Assert.Equal(HttpStatusCode.Unauthorized, missingResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, wrongResponse.StatusCode);
@@ -85,7 +89,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", "change-me");
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+        using var content = CreateMcpRequestContent();
+        using var response = await client.PostAsync(McpGatewayConventions.McpPath, content);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -162,6 +167,72 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         Assert.Equal(
             ApprovalConventions.PlanStatusValues.NotFound,
             document.RootElement.GetProperty(McpGatewayConventions.ToolResponseFields.Status).GetString());
+    }
+
+    [Fact]
+    public async Task McpEndpoint_SubscriptionsListen_StreamsPlanStatusUpdate()
+    {
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(new FakeDownstream("unused"), audit);
+        await using var client = await CreateHttpMcpClientAsync(server);
+        Assert.Equal("2026-07-28", client.NegotiatedProtocolVersion);
+        string planId = ApprovalIds.NewPlanId();
+        string resourceUri = NotificationsConventions.Resources.PlanStatusUri(planId);
+        var acknowledgementChannel = Channel.CreateUnbounded<JsonRpcNotification>();
+        var updateChannel = Channel.CreateUnbounded<JsonRpcNotification>();
+
+        await using var acknowledgementRegistration = client.RegisterNotificationHandler(
+            NotificationMethods.SubscriptionsAcknowledgedNotification,
+            (notification, _) =>
+            {
+                acknowledgementChannel.Writer.TryWrite(notification);
+                return default;
+            });
+        await using var updateRegistration = client.RegisterNotificationHandler(
+            NotificationMethods.ResourceUpdatedNotification,
+            (notification, _) =>
+            {
+                updateChannel.Writer.TryWrite(notification);
+                return default;
+            });
+
+        var listenRequest = new JsonRpcRequest
+        {
+            Id = new RequestId("plan-status-listen"),
+            Method = RequestMethods.SubscriptionsListen,
+            Params = JsonSerializer.SerializeToNode(
+                new SubscriptionsListenRequestParams
+                {
+                    Notifications = new SubscriptionsListenNotifications
+                    {
+                        ResourceSubscriptions = [resourceUri]
+                    }
+                },
+                McpJsonUtilities.DefaultOptions)
+        };
+        using var listenCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        Task listenTask = client.SendRequestAsync(listenRequest, listenCts.Token);
+
+        JsonRpcNotification acknowledgement = await acknowledgementChannel.Reader.ReadAsync(listenCts.Token);
+        await server.Services.GetRequiredService<IApprovalNotificationDispatcher>()
+            .NotifyPlanApprovedAsync(planId, listenCts.Token);
+        JsonRpcNotification update = await updateChannel.Reader.ReadAsync(listenCts.Token);
+
+        var acknowledgementParams = Assert.IsType<JsonObject>(acknowledgement.Params);
+        var updateParams = Assert.IsType<JsonObject>(update.Params);
+        Assert.Equal(
+            resourceUri,
+            acknowledgementParams["notifications"]?["resourceSubscriptions"]?[0]?.GetValue<string>());
+        Assert.Equal(resourceUri, updateParams["uri"]?.GetValue<string>());
+        Assert.Equal(
+            "plan-status-listen",
+            acknowledgementParams["_meta"]?[MetaKeys.SubscriptionId]?.GetValue<string>());
+        Assert.Equal(
+            "plan-status-listen",
+            updateParams["_meta"]?[MetaKeys.SubscriptionId]?.GetValue<string>());
+
+        await listenCts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => listenTask);
     }
 
     [Fact]
@@ -1106,6 +1177,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
                 services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
                 services.AddSingleton<PlanStatusResourceHandler>();
+                services.AddSingleton<PlanStatusSubscriptionsListenHandler>();
                 services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
                 services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
                 services.AddSingleton<IApprovalAccessCodeStore, InMemoryApprovalAccessCodeStore>();
@@ -1168,7 +1240,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                     })
                     .WithHttpTransport(transportOptions =>
                     {
-                        transportOptions.Stateless = false;
+                        transportOptions.Stateless = true;
                     })
                     .WithListToolsHandler((RequestContext<ListToolsRequestParams> request, CancellationToken ct) =>
                     {
@@ -1190,15 +1262,10 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                         var resourceHandler = ResolvePlanStatusResourceHandler(request.Services, serverServices);
                         return new ValueTask<ReadResourceResult>(resourceHandler.ReadAsync(request.Params, ct));
                     })
-                    .WithSubscribeToResourcesHandler((RequestContext<SubscribeRequestParams> request, CancellationToken ct) =>
+                    .WithSubscriptionsListenHandler((RequestContext<SubscriptionsListenRequestParams> request, CancellationToken ct) =>
                     {
-                        var resourceHandler = ResolvePlanStatusResourceHandler(request.Services, serverServices);
-                        return new ValueTask<EmptyResult>(resourceHandler.Subscribe(request.Server.SessionId, request.Params));
-                    })
-                    .WithUnsubscribeFromResourcesHandler((RequestContext<UnsubscribeRequestParams> request, CancellationToken ct) =>
-                    {
-                        var resourceHandler = ResolvePlanStatusResourceHandler(request.Services, serverServices);
-                        return new ValueTask<EmptyResult>(resourceHandler.Unsubscribe(request.Server.SessionId, request.Params));
+                        var listenHandler = ResolvePlanStatusSubscriptionsListenHandler(request.Services, serverServices);
+                        return listenHandler.ListenAsync(request, ct);
                     });
             })
             .Configure(app =>
@@ -1230,6 +1297,12 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         IServiceProvider? serverServices) =>
         (requestServices ?? serverServices)?.GetRequiredService<PlanStatusResourceHandler>()
         ?? throw new InvalidOperationException("PlanStatusResourceHandler not available.");
+
+    private static PlanStatusSubscriptionsListenHandler ResolvePlanStatusSubscriptionsListenHandler(
+        IServiceProvider? requestServices,
+        IServiceProvider? serverServices) =>
+        (requestServices ?? serverServices)?.GetRequiredService<PlanStatusSubscriptionsListenHandler>()
+        ?? throw new InvalidOperationException("PlanStatusSubscriptionsListenHandler not available.");
 
     private static McpGatewayOptions CreateGatewayOptions(string downstreamProject, string testRoot, string workingDirectory) =>
         new(
@@ -1271,6 +1344,12 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             transport,
             cancellationToken: CancellationToken.None);
     }
+
+    private static StringContent CreateMcpRequestContent() =>
+        new(
+            """{"jsonrpc":"2.0","id":"auth-test","method":"server/discover","params":{}}""",
+            Encoding.UTF8,
+            "application/json");
 
     private static async Task<HttpClient> CreateAuthenticatedApprovalBrowserAsync(
         TestServer server,

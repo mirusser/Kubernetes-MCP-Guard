@@ -291,7 +291,7 @@ public sealed class ObserverGatewayIntegrationTests
                         .AddMcpServer()
                         .WithHttpTransport(transportOptions =>
                         {
-                            transportOptions.Stateless = false;
+                            transportOptions.Stateless = true;
                         })
                         .WithListToolsHandler((_, _) =>
                             new ValueTask<ListToolsResult>(new ListToolsResult { Tools = CreateTools() }))

@@ -1,5 +1,6 @@
+using System.Net;
 using InfraGate.McpGateway;
-using Microsoft.AspNetCore.Http;
+using ModelContextProtocol.Client;
 
 namespace InfraGate.Safety.E2E.Tests.Workflows;
 
@@ -15,11 +16,24 @@ public sealed class SmokeTests(SafetyE2EFixture fixture)
             return;
         }
 
-        using var client = fixture.CreateGatewayHttpClient();
+        using var httpClient = fixture.CreateGatewayHttpClient();
+        await using var transport = new HttpClientTransport(
+            new HttpClientTransportOptions
+            {
+                Endpoint = new Uri(httpClient.BaseAddress!, McpGatewayConventions.McpPath),
+                Name = "infra-gate-safety-e2e-unauthenticated",
+                TransportMode = HttpTransportMode.StreamableHttp
+            },
+            httpClient);
 
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(async () =>
+        {
+            await using var unexpectedClient = await McpClient.CreateAsync(
+                transport,
+                cancellationToken: CancellationToken.None);
+        });
 
-        Assert.Equal(StatusCodes.Status401Unauthorized, (int)response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, exception.StatusCode);
     }
 
     [Fact]
@@ -30,12 +44,8 @@ public sealed class SmokeTests(SafetyE2EFixture fixture)
             return;
         }
 
-        string token = await fixture.AcquireTokenAsync();
-        using var client = fixture.CreateGatewayHttpClient(token);
+        await using var client = await fixture.CreateHttpMcpClientAsync(CancellationToken.None);
 
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
-
-        Assert.NotEqual(StatusCodes.Status401Unauthorized, (int)response.StatusCode);
-        Assert.NotEqual(StatusCodes.Status403Forbidden, (int)response.StatusCode);
+        Assert.NotEmpty(client.Subject);
     }
 }

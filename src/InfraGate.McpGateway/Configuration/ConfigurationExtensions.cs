@@ -125,6 +125,7 @@ internal static class ConfigurationExtensions
             builder.Services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
             builder.Services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
             builder.Services.AddSingleton<PlanStatusResourceHandler>();
+            builder.Services.AddSingleton<PlanStatusSubscriptionsListenHandler>();
         }
 
         private void ConfigureUrls()

@@ -600,6 +600,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
 
                 services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
                 services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
+                services.AddSingleton<PlanStatusSubscriptionsListenHandler>();
 
                 services
                     .AddMcpServer(serverOptions =>
@@ -609,18 +610,15 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                             Resources = new ResourcesCapability { Subscribe = true }
                         };
                     })
-                    .WithHttpTransport()
+                    .WithHttpTransport(options => options.Stateless = true)
                     .WithListToolsHandler((RequestContext<ListToolsRequestParams> request, CancellationToken ct) =>
                         new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().ListToolsAsync(request.Params, ct)))
                     .WithCallToolHandler((RequestContext<CallToolRequestParams> request, CancellationToken ct) =>
-                    {
-                        if (request.Services!.GetService<IHttpContextAccessor>() is { HttpContext: { } httpCtx })
-                        {
-                            httpCtx.Items[NotificationsConventions.McpSessionIdItemKey] = request.Server.SessionId;
-                        }
-                        var textTask = request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct);
-                        return new ValueTask<CallToolResult>(textTask);
-                    });
+                        new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>()
+                            .CallToolAsync(request.Params, ct)))
+                    .WithSubscriptionsListenHandler((RequestContext<SubscriptionsListenRequestParams> request, CancellationToken ct) =>
+                        request.Services!.GetRequiredService<PlanStatusSubscriptionsListenHandler>()
+                            .ListenAsync(request, ct));
             })
             .Configure(app =>
             {

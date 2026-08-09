@@ -10,8 +10,8 @@ public sealed record class KubernetesMcpServerProcessOptions(
     IReadOnlyList<string> Arguments,
     string WorkingDirectory)
 {
-    // Always false: this downstream only understands stock MCP stdio, not
-    // InfraGate's private bootstrap-auth protocol. Trust relies on trusted
+    // Always false: this stock downstream does not participate in InfraGate's
+    // service-token _meta convention. Trust relies on trusted
     // launch + process containment instead (see Gateway README security
     // priority order, where the downstream token already ranks last).
     public const bool AuthRequired = false;

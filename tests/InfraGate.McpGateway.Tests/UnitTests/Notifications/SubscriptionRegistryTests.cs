@@ -5,79 +5,79 @@ namespace InfraGate.McpGateway.Tests.UnitTests.Notifications;
 public sealed class SubscriptionRegistryTests
 {
     [Fact]
-    public void GetSessionsForPlan_NothingSubscribed_ReturnsEmpty()
+    public void GetSubscribersForPlan_NothingSubscribed_ReturnsEmpty()
     {
         var registry = new SubscriptionRegistry();
 
-        var result = registry.GetSessionsForPlan("plan-1");
+        var result = registry.GetSubscribersForPlan("plan-1");
 
         Assert.Empty(result);
     }
 
     [Fact]
-    public void SubscribeToPlan_RegisteredSession_AppearsInGetSessionsForPlan()
+    public void SubscribeToPlan_RegisteredSubscriber_AppearsInGetSubscribersForPlan()
     {
         var registry = new SubscriptionRegistry();
-        var notifier = new FakeSessionNotifier("session-1");
-        registry.RegisterSession("session-1", notifier);
-        registry.SubscribeToPlan("session-1", "plan-1");
+        var notifier = new FakeSubscriptionNotifier("listen-1");
+        registry.RegisterSubscriber("listen-1", notifier);
+        registry.SubscribeToPlan("listen-1", "plan-1");
 
-        var result = registry.GetSessionsForPlan("plan-1");
+        var result = registry.GetSubscribersForPlan("plan-1");
 
         Assert.Single(result);
         Assert.Same(notifier, result[0]);
     }
 
     [Fact]
-    public void SubscribeToPlan_UnknownSessionId_IsIgnored()
+    public void SubscribeToPlan_UnknownRegistrationId_IsIgnored()
     {
         var registry = new SubscriptionRegistry();
 
-        registry.SubscribeToPlan("unknown-session", "plan-1");
+        registry.SubscribeToPlan("unknown-listen", "plan-1");
 
-        Assert.Empty(registry.GetSessionsForPlan("plan-1"));
+        Assert.Empty(registry.GetSubscribersForPlan("plan-1"));
     }
 
     [Fact]
-    public void UnsubscribeFromPlan_RemovesSessionFromPlan()
+    public void UnsubscribeFromPlan_RemovesSubscriberFromPlan()
     {
         var registry = new SubscriptionRegistry();
-        var notifier = new FakeSessionNotifier("session-1");
-        registry.RegisterSession("session-1", notifier);
-        registry.SubscribeToPlan("session-1", "plan-1");
+        var notifier = new FakeSubscriptionNotifier("listen-1");
+        registry.RegisterSubscriber("listen-1", notifier);
+        registry.SubscribeToPlan("listen-1", "plan-1");
 
-        registry.UnsubscribeFromPlan("session-1", "plan-1");
+        registry.UnsubscribeFromPlan("listen-1", "plan-1");
 
-        Assert.Empty(registry.GetSessionsForPlan("plan-1"));
+        Assert.Empty(registry.GetSubscribersForPlan("plan-1"));
     }
 
     [Fact]
-    public void RemoveSession_ClearsAllSubscriptionsForSession()
+    public void RemoveSubscriber_ClearsAllSubscriptionsForRegistration()
     {
         var registry = new SubscriptionRegistry();
-        var notifier = new FakeSessionNotifier("session-1");
-        registry.RegisterSession("session-1", notifier);
-        registry.SubscribeToPlan("session-1", "plan-1");
-        registry.SubscribeToPlan("session-1", "plan-2");
+        var notifier = new FakeSubscriptionNotifier("listen-1");
+        registry.RegisterSubscriber("listen-1", notifier);
+        registry.SubscribeToPlan("listen-1", "plan-1");
+        registry.SubscribeToPlan("listen-1", "plan-2");
 
-        registry.RemoveSession("session-1");
+        registry.RemoveSubscriber("listen-1");
 
-        Assert.Empty(registry.GetSessionsForPlan("plan-1"));
-        Assert.Empty(registry.GetSessionsForPlan("plan-2"));
+        Assert.Empty(registry.GetSubscribersForPlan("plan-1"));
+        Assert.Empty(registry.GetSubscribersForPlan("plan-2"));
     }
 
     [Fact]
-    public void GetSessionsForPlan_MultipleSessions_ReturnsAll()
+    public void GetSubscribersForPlan_MultipleSubscribers_ReturnsAll()
     {
         var registry = new SubscriptionRegistry();
-        var notifier1 = new FakeSessionNotifier("session-1");
-        var notifier2 = new FakeSessionNotifier("session-2");
-        registry.RegisterSession("session-1", notifier1);
-        registry.RegisterSession("session-2", notifier2);
-        registry.SubscribeToPlan("session-1", "plan-1");
-        registry.SubscribeToPlan("session-2", "plan-1");
+        var notifier1 = new FakeSubscriptionNotifier("listen-1");
+        var notifier2 = new FakeSubscriptionNotifier("listen-2");
+        registry.RegisterSubscriber("listen-1", notifier1);
+        registry.RegisterSubscriber("listen-2", notifier2);
+        registry.SubscribeToPlan("listen-1", "plan-1");
+        registry.SubscribeToPlan("listen-2", "plan-1");
 
-        var result = registry.GetSessionsForPlan("plan-1");
+        var result = registry.GetSubscribersForPlan("plan-1");
 
         Assert.Equal(2, result.Count);
         Assert.Contains(notifier1, result);
@@ -85,55 +85,40 @@ public sealed class SubscriptionRegistryTests
     }
 
     [Fact]
-    public void RemoveSession_DoesNotAffectOtherSessions()
+    public void RemoveSubscriber_DoesNotAffectOtherSubscribers()
     {
         var registry = new SubscriptionRegistry();
-        var notifier1 = new FakeSessionNotifier("session-1");
-        var notifier2 = new FakeSessionNotifier("session-2");
-        registry.RegisterSession("session-1", notifier1);
-        registry.RegisterSession("session-2", notifier2);
-        registry.SubscribeToPlan("session-1", "plan-1");
-        registry.SubscribeToPlan("session-2", "plan-1");
+        var notifier1 = new FakeSubscriptionNotifier("listen-1");
+        var notifier2 = new FakeSubscriptionNotifier("listen-2");
+        registry.RegisterSubscriber("listen-1", notifier1);
+        registry.RegisterSubscriber("listen-2", notifier2);
+        registry.SubscribeToPlan("listen-1", "plan-1");
+        registry.SubscribeToPlan("listen-2", "plan-1");
 
-        registry.RemoveSession("session-1");
+        registry.RemoveSubscriber("listen-1");
 
-        var result = registry.GetSessionsForPlan("plan-1");
+        var result = registry.GetSubscribersForPlan("plan-1");
         Assert.Single(result);
         Assert.Same(notifier2, result[0]);
-    }
-
-    [Fact]
-    public void BindSubject_ThenSubscribeToPlan_AssociatesCorrectly()
-    {
-        var registry = new SubscriptionRegistry();
-        var notifier = new FakeSessionNotifier("session-1");
-        registry.RegisterSession("session-1", notifier);
-        registry.BindSubject("session-1", "user@example.com");
-        registry.SubscribeToPlan("session-1", "plan-1");
-
-        var result = registry.GetSessionsForPlan("plan-1");
-
-        Assert.Single(result);
-        Assert.Same(notifier, result[0]);
     }
 
     [Fact]
     public void SubscribeToPlan_DuplicateSubscription_OnlyAppearsOnce()
     {
         var registry = new SubscriptionRegistry();
-        var notifier = new FakeSessionNotifier("session-1");
-        registry.RegisterSession("session-1", notifier);
-        registry.SubscribeToPlan("session-1", "plan-1");
-        registry.SubscribeToPlan("session-1", "plan-1");
+        var notifier = new FakeSubscriptionNotifier("listen-1");
+        registry.RegisterSubscriber("listen-1", notifier);
+        registry.SubscribeToPlan("listen-1", "plan-1");
+        registry.SubscribeToPlan("listen-1", "plan-1");
 
-        var result = registry.GetSessionsForPlan("plan-1");
+        var result = registry.GetSubscribersForPlan("plan-1");
 
         Assert.Single(result);
     }
 
-    private sealed class FakeSessionNotifier(string sessionId) : ISessionNotifier
+    private sealed class FakeSubscriptionNotifier(string registrationId) : ISubscriptionNotifier
     {
-        public string? SessionId => sessionId;
+        public string RegistrationId => registrationId;
 
         public Task SendNotificationAsync<TParams>(string method, TParams @params, CancellationToken ct)
             where TParams : notnull =>

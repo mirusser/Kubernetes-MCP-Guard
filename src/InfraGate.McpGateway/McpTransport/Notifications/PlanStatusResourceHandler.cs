@@ -6,8 +6,7 @@ using ModelContextProtocol.Protocol;
 namespace InfraGate.McpGateway.Notifications;
 
 internal sealed class PlanStatusResourceHandler(
-    IApprovalPlanWorkflow approvalPlans,
-    ISubscriptionRegistry subscriptionRegistry)
+    IApprovalPlanWorkflow approvalPlans)
 {
     public ListResourceTemplatesResult ListTemplates() => new()
     {
@@ -43,51 +42,41 @@ internal sealed class PlanStatusResourceHandler(
         };
     }
 
-    public EmptyResult Subscribe(string? sessionId, SubscribeRequestParams request)
-    {
-        string planId = ParsePlanStatusUri(request.Uri);
-        if (!string.IsNullOrWhiteSpace(sessionId))
-        {
-            subscriptionRegistry.SubscribeToPlan(sessionId, planId);
-        }
-
-        return new EmptyResult();
-    }
-
-    public EmptyResult Unsubscribe(string? sessionId, UnsubscribeRequestParams request)
-    {
-        string planId = ParsePlanStatusUri(request.Uri);
-        if (!string.IsNullOrWhiteSpace(sessionId))
-        {
-            subscriptionRegistry.UnsubscribeFromPlan(sessionId, planId);
-        }
-
-        return new EmptyResult();
-    }
-
     private static string ParsePlanStatusUri(string? uri)
     {
+        if (!TryParsePlanStatusUri(uri, out string? planId) || planId is null)
+        {
+            throw InvalidPlanStatusUri(uri);
+        }
+
+        return planId;
+    }
+
+    internal static bool TryParsePlanStatusUri(string? uri, out string? planId)
+    {
+        planId = null;
         if (string.IsNullOrWhiteSpace(uri) ||
             !uri.StartsWith(NotificationsConventions.Resources.PlanStatusUriPrefix, StringComparison.Ordinal) ||
             !uri.EndsWith(NotificationsConventions.Resources.PlanStatusUriSuffix, StringComparison.Ordinal))
         {
-            throw InvalidPlanStatusUri(uri);
+            return false;
         }
 
         int start = NotificationsConventions.Resources.PlanStatusUriPrefix.Length;
         int length = uri.Length - start - NotificationsConventions.Resources.PlanStatusUriSuffix.Length;
         if (length <= 0)
         {
-            throw InvalidPlanStatusUri(uri);
+            return false;
         }
 
-        string planId = uri[start..(start + length)];
+        planId = uri[start..(start + length)];
         if (!IsSafePlanId(planId))
         {
-            throw InvalidPlanStatusUri(uri);
+            planId = null;
+            return false;
         }
 
-        return planId;
+        return true;
     }
 
     private static bool IsSafePlanId(string planId) =>
