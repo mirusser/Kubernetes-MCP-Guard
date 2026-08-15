@@ -176,11 +176,6 @@ public sealed class PlannerConventionsTests
         Assert.Equal("get_allowed_namespaces", PlannerConventions.ToolNames.GetAllowedNamespaces);
         Assert.Equal("get_k8s_status", PlannerConventions.ToolNames.GetK8sStatus);
         Assert.Equal("get_k8s_events", PlannerConventions.ToolNames.GetK8sEvents);
-        Assert.Equal("get_k8s_pods", PlannerConventions.ToolNames.GetK8sPods);
-        Assert.Equal("describe_k8s_resource", PlannerConventions.ToolNames.DescribeK8sResource);
-        Assert.Equal("get_k8s_deployments", PlannerConventions.ToolNames.GetK8sDeployments);
-        Assert.Equal("get_k8s_services", PlannerConventions.ToolNames.GetK8sServices);
-        Assert.Equal("get_k8s_endpoints", PlannerConventions.ToolNames.GetK8sEndpoints);
     }
 
     [Fact]

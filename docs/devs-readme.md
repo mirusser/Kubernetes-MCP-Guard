@@ -181,7 +181,7 @@ export InfraGate__Gateway__KubernetesMcpServer__AllowedNamespaces__0="mcp-nginx-
 
 The viewer kubeconfig is distinct from `.kube/mcp-nginx-demo.config`, which remains the primary mutation-capable credential. Missing, wildcard, or shared secondary credentials fail configuration validation.
 
-The local installer requires Go 1.26.3 or newer. Docker builds compile the pinned binary in the Gateway image's Go builder stage instead. See the [configuration reference](configuration.md#mcpgateway) for the process settings and [ADR-0033](adr/0033-kubernetes-mcp-server-readonly-secondary-downstream.md) for the trust boundary and architectural decision.
+The local installer requires `curl`, `sha256sum`, and `jq`; no Go toolchain is needed. It downloads the official release binary and verifies it against the pinned version and per-platform SHA-256 in `scripts/kubernetes-mcp-server.manifest.json` before trusting it — Docker builds use the same manifest and installer in a dedicated Alpine stage. See the [configuration reference](configuration.md#mcpgateway) for the process settings and [ADR-0033](adr/0033-kubernetes-mcp-server-readonly-secondary-downstream.md) for the trust boundary and architectural decision.
 
 ### Downstream stdio service token auth
 

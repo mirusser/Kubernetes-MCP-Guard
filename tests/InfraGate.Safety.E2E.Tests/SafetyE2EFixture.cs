@@ -576,10 +576,11 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
                 services.AddKubernetesAdapter();
                 services.AddSingleton<DownstreamToolRegistry>();
+                services.AddSingleton<DownstreamToolCatalog>();
                 services.AddSingleton<IReadOnlyList<GatewayToolDispatcher.ReadOnlySource>>(sp =>
                     new List<GatewayToolDispatcher.ReadOnlySource>
                     {
-                        new(sp.GetRequiredService<DownstreamToolRegistry>(), sp.GetRequiredService<GuardedToolRunner>())
+                        new(McpGatewayConventions.DownstreamSources.Primary, sp.GetRequiredService<DownstreamToolRegistry>(), sp.GetRequiredService<GuardedToolRunner>())
                     });
                 services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
                 services.AddSingleton<IToolScopeGuard, ToolScopeGuard>();

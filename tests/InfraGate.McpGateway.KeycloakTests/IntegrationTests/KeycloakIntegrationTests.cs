@@ -1192,10 +1192,11 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
                 services.AddKubernetesAdapter();
                 services.AddSingleton<DownstreamToolRegistry>();
+                services.AddSingleton<DownstreamToolCatalog>();
                 services.AddSingleton<IReadOnlyList<GatewayToolDispatcher.ReadOnlySource>>(sp =>
                     new List<GatewayToolDispatcher.ReadOnlySource>
                     {
-                        new(sp.GetRequiredService<DownstreamToolRegistry>(), sp.GetRequiredService<GuardedToolRunner>())
+                        new(McpGatewayConventions.DownstreamSources.Primary, sp.GetRequiredService<DownstreamToolRegistry>(), sp.GetRequiredService<GuardedToolRunner>())
                     });
                 services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
                 services.AddHttpContextAccessor();
@@ -1250,11 +1251,11 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
 
     private sealed class NullDownstreamClient : IDownstreamMcpClient
     {
-        public Task<string> CallToolAsync(
+        public Task<DownstreamCallResult> CallToolAsync(
             string toolName,
             IReadOnlyDictionary<string, object?> arguments,
             CancellationToken cancellationToken) =>
-            Task.FromResult("{}");
+            Task.FromResult(DownstreamCallResult.FromText("{}"));
 
         public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<DownstreamTool>>([]);

@@ -48,6 +48,10 @@ This is an intentional test-boundary choice documented in the [implementation pl
 - **Browser approval token validation**: The Safety E2E fixture still uses `FakeApprovalOAuthBackchannel` for brittle edge cases, while `InfraGate.McpGateway.KeycloakTests` covers the same gateway OAuth callback/cookie path with a real Keycloak-issued token. Real Keycloak JWT validation for MCP endpoints is covered by `SmokeTests`.
 - **RBAC matrix test uses direct server subprocess**: `RbacMatrixTests` spawns a second McpServer subprocess with a read-only SA kubeconfig, bypassing the gateway. This is sufficient because the architecture uses a static SA for the gateway-to-server connection — there is no dynamic identity forwarding to test at the gateway layer. If dynamic SAs are added in the future, a gateway-path RBAC test should be added.
 
+### Future: mutation downstream conformance
+
+If a Kubernetes MCP downstream other than `InfraGate.McpServer` is ever proposed for mutation routing, it must pass a conformance suite built against this project's own test-tier structure (real Keycloak JWTs, real gateway HTTP host, real Kubernetes API) before that proposal can be evaluated. [`docs/mutation-evidence-parity-contract.md`](../../docs/mutation-evidence-parity-contract.md) specifies exactly what that suite must prove, per mutation operation, using the table in this file's "What it covers" section as the pattern each safety property must be reproduced against. No such suite exists yet — the current candidate assessment is `no-go` for reasons unrelated to test coverage (see that document's §4).
+
 ## Prerequisites
 
 You need **all four** of the following before any test will exercise the live safety flow:

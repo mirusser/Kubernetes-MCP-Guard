@@ -1,5 +1,4 @@
 using System.Collections.Frozen;
-using InfraGate;
 using InfraGate.RuntimeSafety;
 
 namespace InfraGate.McpGateway;
@@ -22,14 +21,47 @@ internal static class McpGatewayConventions
     {
         public const string MeterName = "InfraGate.McpGateway";
         public const string MeterVersion = "1.0";
+        public const string ActivitySourceName = "InfraGate.McpGateway";
         public const string GuardrailAuditWriteFailedCounterName = "infragate.gateway.guardrail.audit_write.failed";
         public const string EmailFailedCounterName = "infragate.gateway.email.failed";
+        public const string GuardrailPolicyDenialCounterName = "infragate.gateway.guardrail.policy_denial";
+        public const string DownstreamCallCounterName = "infragate.gateway.downstream.call";
+        public const string DownstreamCallDurationHistogramName = "infragate.gateway.downstream.call.duration";
+        public const string DownstreamRestartCounterName = "infragate.gateway.downstream.restart";
+        public const string DownstreamCatalogPublishCounterName = "infragate.gateway.downstream.catalog.publish";
+        public const string DownstreamDegradedDurationHistogramName = "infragate.gateway.downstream.degraded.duration";
+
+        public static class Activities
+        {
+            public const string DownstreamCallTool = "gateway.downstream.call_tool";
+        }
+
+        public static class MetaKeys
+        {
+            public const string TraceParent = "traceparent";
+            public const string TraceState = "tracestate";
+        }
 
         public static class Tags
         {
             public const string ToolName = "tool.name";
             public const string GuardrailDirection = "guardrail.direction";
             public const string GuardrailAction = "guardrail.action";
+            public const string Source = "downstream.source";
+            public const string Outcome = "outcome";
+            public const string GuardrailCategory = "guardrail.category";
+        }
+
+        public static class Outcomes
+        {
+            public const string Success = "success";
+            public const string McpError = "mcp_error";
+            public const string TransportError = "transport_error";
+            public const string RestartAttemptFailed = "restart_attempt_failed";
+            public const string RestartSucceeded = "restart_succeeded";
+            public const string RestartExhausted = "restart_exhausted";
+            public const string CatalogPublished = "published";
+            public const string CatalogRejected = "rejected";
         }
     }
 
@@ -61,6 +93,9 @@ internal static class McpGatewayConventions
         public const string KubernetesMcpServerContextKey = "Context";
         public const string KubernetesMcpServerKubeconfigKey = "Kubeconfig";
         public const string KubernetesMcpServerWorkingDirectoryKey = "WorkingDirectory";
+        public const string KubernetesMcpServerSupervisorMinBackoffMillisecondsKey = "Supervisor:MinBackoffMilliseconds";
+        public const string KubernetesMcpServerSupervisorMaxBackoffMillisecondsKey = "Supervisor:MaxBackoffMilliseconds";
+        public const string KubernetesMcpServerSupervisorMaxAttemptsKey = "Supervisor:MaxAttempts";
         public const string PrimaryKubeconfig = "InfraGate:Kubernetes:KubeConfig";
         public const string OperatorEmail = "InfraGate:Approval:OperatorEmail";
         public const string OperatorGroup = "InfraGate:Approval:OperatorGroup";
@@ -101,6 +136,14 @@ internal static class McpGatewayConventions
         public const string AuditFileName = "audit.jsonl";
     }
 
+    public static class DownstreamSources
+    {
+        // Tool catalog source identifiers. Never use a raw string literal at
+        // ReadOnlySource/DownstreamToolCatalog call sites — reference these instead.
+        public const string Primary = "primary";
+        public const string Secondary = "secondary";
+    }
+
     public static class SecondaryDownstream
     {
         // Keyed-DI service key for the kubernetes-mcp-server downstream client/registry/runner
@@ -109,6 +152,8 @@ internal static class McpGatewayConventions
         public const string Name = "kubernetes-mcp-server";
         public const string KubeconfigArgument = "--kubeconfig";
         public const string ConfigArgument = "--config";
+        public const string VersionArgument = "--version";
+        public const string ManifestFileName = "kubernetes-mcp-server.manifest.json";
         public const string DropInConfigurationDirectoryName = "conf.d";
         public const string TomlSearchPattern = "*.toml";
         public const string KubeconfigEnvironmentVariable = "KUBECONFIG";
@@ -313,6 +358,7 @@ internal static class McpGatewayConventions
         public const string SensitiveData = "sensitive-data";
         public const string KubernetesRequestPolicy = "kubernetes-request-policy";
         public const string ResponseSize = "response-size";
+        public const string UnsupportedContentType = "unsupported-content-type";
     }
 
     public static class SensitiveDataRedaction

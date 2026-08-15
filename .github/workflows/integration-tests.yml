@@ -1,10 +1,33 @@
 name: Integration Tests
 
-# Automatic pull_request/push triggers are disabled for now: this job runs on a
-# self-hosted runner and no runner is currently available, so it would just sit
-# queued on every PR/push. Trigger manually via workflow_dispatch once a runner
-# is back online, then restore the pull_request/push triggers below.
+# This job was migrated from the (now unregistered) self-hosted "vaporwave"
+# runner to ubuntu-latest, provisioning its own disposable minikube cluster
+# and demo workload per run (see
+# .agents/Plans/2026-08-14-migrate-integration-tests-ci-to-hosted-runner.md).
+# Automatic pull_request/push triggers stay commented out until a couple of
+# manual `workflow_dispatch` runs confirm the migrated job is green — once
+# confirmed, uncomment the `pull_request`/`push` blocks below (their path
+# filters already match Task 18's acceptance criteria: integration, Gateway
+# transport/policy, RBAC, run profiles, installer, and container files).
 on:
+  # pull_request:
+  #   paths: &integration-paths
+  #     - 'src/InfraGate.McpGateway/**'
+  #     - 'src/InfraGate.RunProfiles/**'
+  #     - 'tests/InfraGate.McpGateway.Tests/**'
+  #     - 'tests/InfraGate.McpServer.Tests/**'
+  #     - 'scripts/install-kubernetes-mcp-server.sh'
+  #     - 'scripts/install-kubernetes-mcp-server.tests.sh'
+  #     - 'scripts/kubernetes-mcp-server.manifest.json'
+  #     - 'scripts/minikube.manifest.json'
+  #     - 'scripts/create-demo-kubeconfig.sh'
+  #     - 'deploy/minikube/rbac.yaml'
+  #     - 'deploy/minikube/nginx-demo-workload.yaml'
+  #     - 'deploy/docker/mcp-gateway.Dockerfile'
+  #     - '.github/workflows/integration-tests.yml'
+  # push:
+  #   branches: [main, dev]
+  #   paths: *integration-paths
   workflow_dispatch:
 
 permissions:
@@ -19,9 +42,7 @@ env:
 
 jobs:
   integration-tests:
-    runs-on:
-      - self-hosted
-      - linux
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -32,10 +53,8 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6.5.0
-        with:
-          go-version: '1.26'
+      - name: Validate kubernetes-mcp-server installer
+        run: ./scripts/install-kubernetes-mcp-server.tests.sh
 
       - name: Install kubernetes-mcp-server
         run: ./scripts/install-kubernetes-mcp-server.sh
@@ -49,13 +68,34 @@ jobs:
       - name: Validate run profiles
         run: dotnet run --project src/InfraGate.RunProfiles -- validate
 
+      - name: Install minikube
+        run: |
+          set -euo pipefail
+          version="$(jq -r '.version' scripts/minikube.manifest.json)"
+          expected_sha256="$(jq -r '.checksums["linux-amd64"]' scripts/minikube.manifest.json)"
+          curl -fsSL -o /tmp/minikube "https://github.com/kubernetes/minikube/releases/download/${version}/minikube-linux-amd64"
+          actual_sha256="$(sha256sum /tmp/minikube | awk '{print $1}')"
+          if [[ "${actual_sha256}" != "${expected_sha256}" ]]; then
+            echo "error: minikube checksum mismatch for ${version}. expected ${expected_sha256}, got ${actual_sha256}." >&2
+            exit 1
+          fi
+          chmod +x /tmp/minikube
+          sudo install /tmp/minikube /usr/local/bin/minikube
+          minikube version
+
       - name: Ensure Minikube is running
         run: |
-          minikube start --wait=apiserver,system_pods --wait-timeout=5m
+          minikube start --driver=docker --wait=apiserver,system_pods --wait-timeout=5m
           minikube update-context
           kubectl config use-context minikube
           kubectl --request-timeout=10s get --raw=/readyz
           kubectl wait --for=condition=Ready node --all --timeout=120s
+
+      - name: Apply demo RBAC and workload
+        run: |
+          kubectl apply --validate=false -f deploy/minikube/rbac.yaml
+          kubectl apply -f deploy/minikube/nginx-demo-workload.yaml
+          kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=nginx-demo -n mcp-nginx-demo --timeout=120s
 
       - name: Create demo kubeconfig
         run: ./scripts/create-demo-kubeconfig.sh
@@ -63,9 +103,44 @@ jobs:
       - name: Run MCP server integration tests
         env:
           KUBECONFIG: ${{ github.workspace }}/.kube/mcp-nginx-demo.config
-        run: INFRA_GATE_RUN_INTEGRATION=1 dotnet test tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj --configuration Release --no-build
+        run: >
+          INFRA_GATE_RUN_INTEGRATION=1 dotnet test tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj
+          --configuration Release --no-build
+          --logger "trx;LogFileName=mcp-server-integration.trx"
+          --results-directory ${{ github.workspace }}/TestResults
 
       - name: Run gateway integration tests
         env:
           KUBECONFIG: ${{ github.workspace }}/.kube/mcp-nginx-demo.config
-        run: INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --configuration Release --no-build --filter "Category!=Keycloak"
+        run: >
+          INFRA_GATE_REQUIRE_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj
+          --configuration Release --no-build --filter "Category!=Keycloak"
+          --logger "trx;LogFileName=gateway-integration.trx"
+          --results-directory ${{ github.workspace }}/TestResults
+
+      # Bounded, credential-free diagnostics so a failure can be attributed to
+      # acquisition (binary/cluster provisioning), RBAC (viewer permissions),
+      # process (kubernetes-mcp-server subprocess), policy, or protocol
+      # without anyone needing repro access to the ephemeral cluster.
+      # Deliberately excludes .kube/*.config: those carry the viewer/admin
+      # service account bearer tokens and must never leave the runner.
+      - name: Collect diagnostics
+        if: failure()
+        run: |
+          mkdir -p ci-diagnostics
+          kubectl get all -n mcp-nginx-demo -o wide > ci-diagnostics/resources.txt 2>&1 || true
+          kubectl describe pods -n mcp-nginx-demo > ci-diagnostics/describe-pods.txt 2>&1 || true
+          kubectl get events -n mcp-nginx-demo --sort-by=.lastTimestamp > ci-diagnostics/events.txt 2>&1 || true
+          kubectl get rolebindings,roles -n mcp-nginx-demo -o yaml > ci-diagnostics/rbac.yaml 2>&1 || true
+          kubectl auth can-i --list --as=system:serviceaccount:mcp-nginx-demo:infra-gate-mcp-view -n mcp-nginx-demo > ci-diagnostics/viewer-can-i.txt 2>&1 || true
+          minikube logs --file=ci-diagnostics/minikube.log || true
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: integration-test-diagnostics
+          path: |
+            ci-diagnostics/
+            TestResults/
+          retention-days: 7

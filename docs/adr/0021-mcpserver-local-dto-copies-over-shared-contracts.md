@@ -54,3 +54,5 @@ With the local copy, `KubernetesObjectRef` in `InfraGate.McpServer.Models` and `
 - If the swap never happens and the shared DTO surface grows substantially, revisit whether a contracts project is warranted at that point.
 
 See [ADR-0033](0033-kubernetes-mcp-server-readonly-secondary-downstream.md) for the constrained secondary-read decision and its fail-closed boundary.
+
+See [`docs/mutation-evidence-parity-contract.md`](../mutation-evidence-parity-contract.md) for the operation-by-operation matrix and conformance-test specification that turns this ADR's evidence-parity requirement (dry-run validation, diff and freshness evidence, approval-grant binding, audit behavior, failure semantics, and rollback) into a reviewable, per-operation checklist. Its current assessment against the only known candidate is `no-go`.

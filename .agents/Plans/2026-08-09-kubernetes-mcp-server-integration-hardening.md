@@ -1,7 +1,7 @@
 # Kubernetes MCP Server Integration Hardening Plan
 
 **Date:** 2026-08-09
-**Status:** In progress; Checkpoint B awaiting human review
+**Status:** Implementation complete (Tasks 1–21, Checkpoints A–H); all human-review checkpoint sign-offs still await the user. The Task 18 hosted-CI proof is no longer blocked on an offline self-hosted runner — `.github/workflows/integration-tests.yml` has been migrated to `ubuntu-latest` with its own disposable minikube cluster and demo workload per `.agents/Plans/2026-08-14-migrate-integration-tests-ci-to-hosted-runner.md`, but a live validated hosted run (and re-enabling `pull_request`/`push` triggers) is still pending. Nothing in this plan has been committed or pushed.
 **Target branch:** `feature/mcp-server`
 
 ## Goal
@@ -215,9 +215,9 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] `IDownstreamMcpClient` returns a typed result containing all downstream MCP result fields needed by the Gateway.
-- [ ] Text, multiple content blocks, structured content, metadata, MCP errors, and transport errors have separate unit coverage.
-- [ ] No successful downstream result is flattened to text before policy and sanitization.
+- [x] `IDownstreamMcpClient` returns a typed result containing all downstream MCP result fields needed by the Gateway.
+- [x] Text, multiple content blocks, structured content, metadata, MCP errors, and transport errors have separate unit coverage.
+- [x] No successful downstream result is flattened to text before policy and sanitization.
 
 **Verification:** Run `rtk dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --filter DownstreamMcpClient`.
 
@@ -233,9 +233,9 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] Sanitization preserves safe multi-block and structured results while redacting sensitive or injected text at any supported nesting level.
-- [ ] `isError` remains unchanged through sanitization, and an unsupported secondary content type becomes an explicit policy error.
-- [ ] Audit events retain source, tool, direction, finding category, and resolved identity without storing the sensitive payload.
+- [x] Sanitization preserves safe multi-block and structured results while redacting sensitive or injected text at any supported nesting level.
+- [x] `isError` remains unchanged through sanitization, and an unsupported secondary content type becomes an explicit policy error.
+- [x] Audit events retain source, tool, direction, finding category, and resolved identity without storing the sensitive payload.
 
 **Verification:** Run focused `GuardedToolRunner` and prompt-injection/sensitive-redaction tests over typed fixtures.
 
@@ -251,9 +251,9 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] Gateway `tools/call` preserves safe content, structured content, metadata, and `isError` end to end.
-- [ ] Downstream/tool/transport/policy failures cannot produce `status: success` or `isError: false`.
-- [ ] Existing primary tool response behavior remains compatible, with explicit regression tests for approval and read flows.
+- [x] Gateway `tools/call` preserves safe content, structured content, metadata, and `isError` end to end.
+- [x] Downstream/tool/transport/policy failures cannot produce `status: success` or `isError: false`.
+- [x] Existing primary tool response behavior remains compatible, with explicit regression tests for approval and read flows.
 
 **Verification:** Run focused `GatewayToolDispatcherTests` plus Gateway HTTP MCP integration tests for successful and failing calls.
 
@@ -265,9 +265,9 @@ Trust decision and safe defaults
 
 ### Checkpoint C: MCP Semantics (after Tasks 6–8)
 
-- [ ] Contract tests cover every MCP result field the downstream SDK exposes.
-- [ ] A real or protocol-faithful downstream `isError: true` reaches the client as an error without losing sanitized diagnostic content.
-- [ ] Primary approval-flow regression tests still pass.
+- [x] Contract tests cover every MCP result field the downstream SDK exposes.
+- [x] A real or protocol-faithful downstream `isError: true` reaches the client as an error without losing sanitized diagnostic content.
+- [x] Primary approval-flow regression tests still pass.
 
 ### Phase 4: Make Federation Deterministic and Failure-Isolated
 
@@ -277,9 +277,9 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] Every exposed tool maps to exactly one configured source and its reviewed input schema.
-- [ ] Duplicate names, schema drift, forbidden annotations, or unexpected tools reject the entire optional secondary snapshot and record a degraded reason.
-- [ ] Calls route through the published catalog entry, not a second independent name lookup.
+- [x] Every exposed tool maps to exactly one configured source and its reviewed input schema.
+- [x] Duplicate names, schema drift, forbidden annotations, or unexpected tools reject the entire optional secondary snapshot and record a degraded reason.
+- [x] Calls route through the published catalog entry, not a second independent name lookup.
 
 **Verification:** Run registry and dispatcher tests for valid federation, duplicate names, schema mismatches, unknown tools, and correct source routing.
 
@@ -295,9 +295,9 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] Primary tools remain listable and callable for every covered secondary failure mode.
-- [ ] A failed secondary snapshot is never partially published or served from an unvalidated list.
-- [ ] Health and logs expose a stable degraded reason without leaking credentials or response bodies.
+- [x] Primary tools remain listable and callable for every covered secondary failure mode.
+- [x] A failed secondary snapshot is never partially published or served from an unvalidated list.
+- [x] Health and logs expose a stable degraded reason without leaking credentials or response bodies.
 
 **Verification:** Run `GatewayToolDispatcherTests` and Gateway HTTP integration tests with secondary unavailable, timing out, colliding, and returning malformed catalog data.
 
@@ -313,9 +313,9 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] Concurrent callers observe either the old valid source generation or the new valid generation, never a partially initialized catalog.
-- [ ] A restarted secondary cannot serve calls until its replacement catalog passes validation.
-- [ ] No polling or `tools/list_changed` implementation is introduced.
+- [x] Concurrent callers observe either the old valid source generation or the new valid generation, never a partially initialized catalog.
+- [x] A restarted secondary cannot serve calls until its replacement catalog passes validation.
+- [x] No polling or `tools/list_changed` implementation is introduced.
 
 **Verification:** Run deterministic concurrency tests around restart, validation failure, and snapshot replacement.
 
@@ -327,9 +327,9 @@ Trust decision and safe defaults
 
 ### Checkpoint D: Catalog Federation (after Tasks 9–11)
 
-- [ ] One catalog is the routing authority for list and call operations.
-- [ ] Optional-secondary failure never removes or blocks primary tools.
-- [ ] Collision/schema/restart behavior is deterministic and covered by concurrency tests.
+- [x] One catalog is the routing authority for list and call operations.
+- [x] Optional-secondary failure never removes or blocks primary tools.
+- [x] Collision/schema/restart behavior is deterministic and covered by concurrency tests.
 
 ### Phase 5: Supervise and Observe the Secondary
 
@@ -339,9 +339,9 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] Concurrent failures trigger only one restart attempt, with configured lower/upper backoff bounds and cancellation on Gateway shutdown.
-- [ ] A restart creates a fresh transport/session and notifies the catalog lifecycle; stale clients cannot receive new calls.
-- [ ] Exhausted attempts leave the optional secondary degraded without taking down the primary downstream or Gateway.
+- [x] Concurrent failures trigger only one restart attempt, with configured lower/upper backoff bounds and cancellation on Gateway shutdown.
+- [x] A restart creates a fresh transport/session and notifies the catalog lifecycle; stale clients cannot receive new calls.
+- [x] Exhausted attempts leave the optional secondary degraded without taking down the primary downstream or Gateway.
 
 **Verification:** Use a real controllable subprocess fixture (not a mocking package) to test exit, broken pipe, concurrent calls, backoff, recovery, and shutdown.
 
@@ -357,9 +357,9 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] Health output distinguishes mandatory primary failure from optional secondary degradation.
-- [ ] Secondary readiness requires a live transport plus a validated catalog for the current process generation.
-- [ ] Health details contain no kubeconfig paths, tokens, arguments, or downstream payloads.
+- [x] Health output distinguishes mandatory primary failure from optional secondary degradation.
+- [x] Secondary readiness requires a live transport plus a validated catalog for the current process generation.
+- [x] Health details contain no kubeconfig paths, tokens, arguments, or downstream payloads.
 
 **Verification:** Run health endpoint tests for startup, healthy, restart, catalog rejection, exhausted recovery, and shutdown states.
 
@@ -375,9 +375,9 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] Metrics/logs identify primary versus Kubernetes source and stable tool names without high-cardinality arguments or payload data.
-- [ ] Downstream calls contain valid W3C trace context in MCP `_meta` and retain the same trace across Gateway policy/dispatch spans.
-- [ ] Telemetry tests verify success, MCP error, transport error, policy denial, restart, and catalog rejection signals.
+- [x] Metrics/logs identify primary versus Kubernetes source and stable tool names without high-cardinality arguments or payload data.
+- [x] Downstream calls contain valid W3C trace context in MCP `_meta` and retain the same trace across Gateway policy/dispatch spans.
+- [x] Telemetry tests verify success, MCP error, transport error, policy denial, restart, and catalog rejection signals.
 
 **Verification:** Run focused observability tests using an in-memory listener/exporter and a real protocol fixture for request metadata.
 
@@ -389,9 +389,9 @@ Trust decision and safe defaults
 
 ### Checkpoint E: Runtime Reliability (after Tasks 12–14)
 
-- [ ] Killing the real secondary process produces a bounded degraded interval, preserves primary reads/mutations, and recovers a newly validated catalog.
-- [ ] Health, logs, metrics, and traces explain the failure and recovery without sensitive data.
-- [ ] Shutdown leaves no orphan child process.
+- [x] Killing the real secondary process produces a bounded degraded interval, preserves primary reads/mutations, and recovers a newly validated catalog.
+- [x] Health, logs, metrics, and traces explain the failure and recovery without sensitive data.
+- [x] Shutdown leaves no orphan child process.
 
 ### Phase 6: Make Acquisition a Verified Adapter Bundle
 
@@ -401,9 +401,9 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] The reviewed linux-amd64 entry pins `v0.0.66` and SHA-256 `692a7b283a96140311fd46f13b8373657b2e9bfe660a36bb6434e8c42d899dbc`.
-- [ ] Local and Docker acquisition use the same manifest/installer path; `go install` and the duplicate Dockerfile pin are removed.
-- [ ] Checksum mismatch, unsupported platform, or reported-version mismatch fails before the binary is used.
+- [x] The reviewed linux-amd64 entry pins `v0.0.66` and SHA-256 `692a7b283a96140311fd46f13b8373657b2e9bfe660a36bb6434e8c42d899dbc`.
+- [x] Local and Docker acquisition use the same manifest/installer path; `go install` and the duplicate Dockerfile pin are removed.
+- [x] Checksum mismatch, unsupported platform, or reported-version mismatch fails before the binary is used.
 
 **Verification:** Run installer tests for success and each failure mode, then execute `rtk proxy .tools/bin/kubernetes-mcp-server --version` on the installed artifact and verify `v0.0.66`.
 
@@ -419,9 +419,9 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] Enabling the secondary through real configuration resolves exactly one Kubernetes downstream using the verified executable, TOML, working directory, and viewer credential.
-- [ ] Startup validation rejects missing files, unexpected versions, writable/ambiguous credential selection, and profile/policy tool mismatches.
-- [ ] Disabling the secondary leaves the primary graph unchanged and creates no child process.
+- [x] Enabling the secondary through real configuration resolves exactly one Kubernetes downstream using the verified executable, TOML, working directory, and viewer credential.
+- [x] Startup validation rejects missing files, unexpected versions, writable/ambiguous credential selection, and profile/policy tool mismatches.
+- [x] Disabling the secondary leaves the primary graph unchanged and creates no child process.
 
 **Verification:** Run `GatewayDiWiringTests`, `KubernetesMcpServerProcessOptionsTests`, `DownstreamProcessDescriptorTests`, and a container configuration smoke test.
 
@@ -433,9 +433,9 @@ Trust decision and safe defaults
 
 ### Checkpoint F: Reproducible Bundle (after Tasks 15–16)
 
-- [ ] Local and container installs yield the same verified upstream version.
-- [ ] The generated profile, source policy, descriptor, and live `tools/list` agree exactly.
-- [ ] The Gateway can still start with the integration disabled.
+- [x] Local and container installs yield the same verified upstream version.
+- [x] The generated profile, source policy, descriptor, and live `tools/list` agree exactly.
+- [x] The Gateway can still start with the integration disabled.
 
 ### Phase 7: Prove the Real Integration and Put It in CI
 
@@ -445,9 +445,9 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] The test calls `pods_list_in_namespace` with its actual `v0.0.66` schema, asserts `isError == false`, and proves a known pod from the allowed namespace is returned.
-- [ ] The same suite proves cluster-wide list, Secret/raw-resource read, mutation, namespace escape, absent/oversized log tail, and oversized result are denied.
-- [ ] The test fails with a clear prerequisite error in required CI mode; local opt-in skipping remains explicit and reported rather than silently passing.
+- [x] The test calls `pods_list_in_namespace` with its actual `v0.0.66` schema, asserts `isError == false`, and proves a known pod from the allowed namespace is returned.
+- [x] The same suite proves cluster-wide list, Secret/raw-resource read, mutation, namespace escape, absent/oversized log tail, and oversized result are denied.
+- [x] The test fails with a clear prerequisite error in required CI mode; local opt-in skipping remains explicit and reported rather than silently passing.
 
 **Verification:** Run the focused integration test against the repository's real Kubernetes test environment and capture the successful tool result plus live RBAC denial output.
 
@@ -463,11 +463,11 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] Pull requests that change integration, Gateway transport/policy, RBAC, run profiles, installer, or container files run the real contract job.
-- [ ] Missing binary, checksum mismatch, absent cluster, or skipped test fails the job.
-- [ ] CI uploads bounded diagnostics sufficient to distinguish acquisition, RBAC, process, policy, and protocol failures without uploading credentials.
+- [~] Pull requests that change integration, Gateway transport/policy, RBAC, run profiles, installer, or container files run the real contract job. Path-filtered `pull_request`/`push` triggers are implemented and validated (anchor/alias path lists parse and match correctly when uncommented) but left commented out: the job was migrated off the self-hosted "vaporwave" runner (deregistered entirely — `gh api repos/:owner/:repo/actions/runners` returns zero runners, not merely one offline) to `ubuntu-latest`, per `.agents/Plans/2026-08-14-migrate-integration-tests-ci-to-hosted-runner.md`. Triggers stay commented out until a couple of manual `workflow_dispatch` runs confirm the migrated job is green.
+- [x] Missing binary, checksum mismatch, absent cluster, or skipped test fails the job. Gateway integration step switched to `INFRA_GATE_REQUIRE_GATEWAY_INTEGRATION=1` (fails loudly instead of skipping); verified locally that missing-binary fails with a clear message, and `install-kubernetes-mcp-server.tests.sh` (now also run as a CI step) verified passing — its four cases already prove checksum-mismatch/unsupported-platform/version-mismatch/absent-cluster fail closed.
+- [x] CI uploads bounded diagnostics sufficient to distinguish acquisition, RBAC, process, policy, and protocol failures without uploading credentials. Added a `Collect diagnostics`/`Upload diagnostics` step pair (`if: failure()`, 7-day retention) capturing pod/resource state, describe output, events, RBAC role/rolebinding specs, a live `kubectl auth can-i --list` for the viewer SA, minikube logs, and the dotnet test TRX files. Verified locally against the real cluster: RBAC output shows only the scoped `pods`/`pods/log` get/list grants with no tokens/certs present.
 
-**Verification:** Run the workflow locally where supported, then confirm one hosted CI execution provisions the cluster and reports a non-skipped successful `pods_list_in_namespace` contract.
+**Verification:** Run the workflow locally where supported, then confirm one hosted CI execution provisions the cluster and reports a non-skipped successful `pods_list_in_namespace` contract. **Not yet done**: everything reproducible without a live runner (installer fail-closed gates, TRX/diagnostics collection, REQUIRE-mode fail-fast, the underlying contract test itself) was run and verified locally; the hosted-CI-execution half now requires a live `workflow_dispatch` run of the migrated `ubuntu-latest` workflow (`.agents/Plans/2026-08-14-migrate-integration-tests-ci-to-hosted-runner.md`), which has not yet happened.
 
 **Dependencies:** Tasks 15–17.
 
@@ -477,9 +477,9 @@ Trust decision and safe defaults
 
 ### Checkpoint G: Real Evidence (after Tasks 17–18)
 
-- [ ] A hosted CI run proves the exact official binary, real viewer RBAC, production DI path, and successful read.
-- [ ] Negative contracts prove all intended fail-closed boundaries.
-- [ ] No integration success depends only on a hand-written fake or a silent skip.
+- [ ] A hosted CI run proves the exact official binary, real viewer RBAC, production DI path, and successful read. **Pending**, not blocked: the self-hosted runner dependency has been removed — `integration-tests.yml` now runs on `ubuntu-latest` with its own disposable minikube cluster and demo workload (`.agents/Plans/2026-08-14-migrate-integration-tests-ci-to-hosted-runner.md`) — but a live validated run hasn't happened yet. The equivalent evidence was captured via real local execution instead (see Task 17's captured `pods_list_in_namespace` output against the live minikube cluster) — this satisfies everything the checkpoint is protecting against except the "hosted" delivery mechanism itself, pending that live run.
+- [x] Negative contracts prove all intended fail-closed boundaries. All 6 of Task 17's negative-path assertions (unknown/non-curated tool, namespace escape, absent/oversized log tail) plus Task 18's REQUIRE-mode fail-fast and the installer's 3 fail-closed cases were run for real and passed.
+- [x] No integration success depends only on a hand-written fake or a silent skip. The positive-path result comes from a real subprocess talking to a real cluster through the real production DI composition (not `FakeDownstream`), and CI now uses `INFRA_GATE_REQUIRE_GATEWAY_INTEGRATION=1`, which fails the job instead of skipping when prerequisites are missing.
 
 ### Phase 8: Project One Agent Diagnostic-Read Profile
 
@@ -489,11 +489,11 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] The profile includes only reviewed primary diagnostic reads and the approved Kubernetes secondary tools.
-- [ ] `AgentMcpToolset` does not authorize arbitrary tools solely because `ReadOnlyHint` is true.
-- [ ] Unknown, destructive, schema-drifted, or unprofiled tools are excluded with a stable diagnostic reason.
+- [x] The profile includes only reviewed primary diagnostic reads and the approved Kubernetes secondary tools. `DiagnosticCapabilityProfile.ProfiledTools` pins 8 primary reads (`InfraGate.McpServer.KubernetesConventions.ToolNames`) and 3 approved secondary tools (`InfraGate.McpGateway.McpGatewayConventions.SecondaryDownstream.ApprovedTools`), each with its exact expected input-property set.
+- [x] `AgentMcpToolset` does not authorize arbitrary tools solely because `ReadOnlyHint` is true. `DiagnosticCapabilityProfile.IsAuthorized` requires the tool name to be in `ProfiledTools` AND its declared schema properties to match the pinned set, in addition to `ReadOnlyHint == true`.
+- [x] Unknown, destructive, schema-drifted, or unprofiled tools are excluded with a stable diagnostic reason. `DiagnosticCapabilityExclusionReason` enumerates `NotReadOnly` (destructive/mutation), `NotProfiled` (unknown or reviewed-but-excluded dry-run/diff/check tools), and `SchemaDrifted`; `AgentMcpToolset.ListToolsFilteredAsync` logs the reason per excluded tool.
 
-**Verification:** Run `AgentMcpToolsetTests` and profile unit tests using actual MCP tool descriptors for primary, approved secondary, and adversarial entries.
+**Verification:** Ran `AgentMcpToolsetTests` (9/9 passed, including new adversarial cases `GetAgentToolsAsync_WhenConnected_ExcludesReadOnlyToolsNotInProfile` and `GetAgentToolsAsync_WhenConnected_ExcludesSchemaDriftedTools`) against real SDK-constructed `McpClientTool` instances via `InProcessMcpServerFixture`'s in-process HTTP MCP transport with adversarial tool descriptors (unprofiled read-only, profiled-but-schema-drifted, non-read-only mutation). Full solution build and full-solution `dotnet test InfraGate.slnx --no-build --filter "Category!=Keycloak"` both green with no regressions.
 
 **Dependencies:** Tasks 3–5 and 9.
 
@@ -507,11 +507,11 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] Observer can call approved diagnostic reads but no mutation or plan tools beyond its existing contract.
-- [ ] Planner can call approved diagnostic reads and its existing plan-proposal/status tools, while upstream mutations remain blocked.
-- [ ] Agent tests prove approved upstream reads execute and a newly discovered unprofiled read-only tool is still blocked.
+- [x] Observer can call approved diagnostic reads but no mutation or plan tools beyond its existing contract. `src/InfraGate.Observer/Program.cs`'s `AgentGuardrailPolicy` registration now builds directly from `DiagnosticCapabilityProfile.ToolNames` (replacing the hard-coded 8-name `ObserverConventions.ToolNames.*` enumeration), so Observer's LLM-facing guardrail and cross-agent inbound whitelist (`ObserverInboundAgentHandler`) can never drift from what `AgentMcpToolset` actually discovers.
+- [x] Planner can call approved diagnostic reads and its existing plan-proposal/status tools, while upstream mutations remain blocked. `src/InfraGate.Planner/Program.cs`'s `AgentGuardrailPolicy` registration now builds from `DiagnosticCapabilityProfile.ToolNames` plus its one genuine explicit additional capability, `AskObserverTool.FunctionName` (`ask_observer_to_inspect`) — replacing a previous hard-coded list, 5 of whose 8 entries (`get_k8s_pods`, `describe_k8s_resource`, `get_k8s_deployments`, `get_k8s_services`, `get_k8s_endpoints`) named tools that do not exist anywhere in the real system, meaning real profiled reads (e.g. `get_k8s_resource`, `get_deployment_diagnostics`) were previously always blocked for Planner. `propose_plan`/`get_plan_status` remain correctly excluded from the allow-list (they're invoked deterministically via `CallToolAsync`, never offered to the LLM). The now-fully-unused fictional constants were removed from `PlannerConventions.ToolNames`.
+- [x] Agent tests prove approved upstream reads execute and a newly discovered unprofiled read-only tool is still blocked. New `tests/InfraGate.AgentGuardrails.Tests/UnitTests/DiagnosticCapabilityGuardrailPolicyTests.cs` builds the exact same `AgentGuardrailPolicy` expressions Observer's and Planner's `Program.cs` now use and drives them through the real `ToolCallGuardrailExtensions.UseToolCallGuardrail` middleware (not a re-implementation): every one of the 11 real `DiagnosticCapabilityProfile.ToolNames` executes for both agents (22 theory cases); the known unprofiled adversarial name `get_k8s_pods` (matching `InProcessMcpServerFixture.UnprofiledReadOnlyToolName` in `InfraGate.AgentMcp.Tests`) stays blocked for both; `propose_plan` stays blocked for both; `ask_observer_to_inspect` is allowed for Planner and blocked for Observer. 28 new tests, all passing.
 
-**Verification:** Run focused `InfraGate.AgentGuardrails`, `InfraGate.Observer`, `InfraGate.Planner`, and AgentMcp integration tests.
+**Verification:** Ran focused `InfraGate.AgentGuardrails.Tests` (75/75, incl. 28 new), `InfraGate.Observer.Tests` (310/310), `InfraGate.Observer.IntegrationTests` (3/3), `InfraGate.Planner.Tests` (226/226), `InfraGate.Planner.IntegrationTests` (23/23), and `InfraGate.AgentMcp.Tests` (9/9) — all green. Then ran the full-solution build (`dotnet build InfraGate.slnx`: 56 projects, 0 errors, 0 warnings) and full-solution test (`dotnet test InfraGate.slnx --filter "Category!=Keycloak"`: all 29 test-project assemblies report `Passed!`/`Failed: 0`, 836/836 on the largest, `InfraGate.McpGateway.Tests`) — no regressions anywhere in the solution.
 
 **Dependencies:** Task 19 and the successful real contract in Task 17.
 
@@ -521,9 +521,9 @@ Trust decision and safe defaults
 
 ### Checkpoint H: Agent Consumption (after Tasks 19–20)
 
-- [ ] Observer and Planner tool discovery and enforcement use the same diagnostic profile.
-- [ ] The real namespaced upstream read reaches each intended agent path without weakening mutation guards.
-- [ ] An annotation-only or unexpected tool remains unavailable.
+- [x] Observer and Planner tool discovery and enforcement use the same diagnostic profile. `AgentMcpToolset.ListToolsFilteredAsync` (discovery) and both agents' `AgentGuardrailPolicy` registrations (enforcement) now all derive from the single `DiagnosticCapabilityProfile` in `InfraGate.AgentMcp` — Planner's registration additionally unions in only its one genuine extra capability, `ask_observer_to_inspect`.
+- [x] The real namespaced upstream read reaches each intended agent path without weakening mutation guards. Task 17's live-cluster contract test already proves the discovery path end-to-end; `DiagnosticCapabilityGuardrailPolicyTests` proves every profiled name additionally clears the enforcement gate for both agents, while `propose_plan` and every Destructive=true tool remain excluded from discovery (Task 19) and blocked by enforcement (Task 20) in both agents.
+- [x] An annotation-only or unexpected tool remains unavailable. `get_k8s_pods` (ReadOnlyHint=true, not profiled) is excluded from discovery (`AgentMcpToolsetTests.GetAgentToolsAsync_WhenConnected_ExcludesReadOnlyToolsNotInProfile`) and independently still blocked by enforcement even if offered anyway (`DiagnosticCapabilityGuardrailPolicyTests.*UnprofiledReadOnlyTool_RemainsBlocked`), for both agents.
 
 ### Phase 9: Define—but Do Not Begin—the Full Upstream Swap
 
@@ -533,9 +533,9 @@ Trust decision and safe defaults
 
 **Acceptance criteria:**
 
-- [ ] Every current mutation operation maps to required input, preview/diff, freshness evidence, approval binding, execution output, audit events, and negative tests.
-- [ ] A candidate upstream release must pass the contract through real Kubernetes and OAuth/approval infrastructure; roadmap statements or annotations are not evidence.
-- [ ] Missing capability is represented as `no-go`, with no compatibility shim permitted to bypass the existing pre-execution gate.
+- [x] Every current mutation operation maps to required input, preview/diff, freshness evidence, approval binding, execution output, audit events, and negative tests. `docs/mutation-evidence-parity-contract.md` §1 is the matrix (Apply/Delete/Scale/Restart/Set-Image rows), verified against the actual `FreshnessPolicy` composition in `KubernetesBuilderInfrastructure.BuildFreshnessPolicy` and the 5-step Gate 7/8 order in `KubernetesPlanExecutor.CheckPreExecutionAsync`, not just the conventions constants.
+- [x] A candidate upstream release must pass the contract through real Kubernetes and OAuth/approval infrastructure; roadmap statements or annotations are not evidence. §3's conformance-test specification requires reproducing the `InfraGate.Safety.E2E.Tests` real-Keycloak/real-gateway/real-Kubernetes tier structure, plus 5 net-new per-operation properties; §4 states explicitly that CI passing with skipped real integration does not satisfy the contract.
+- [x] Missing capability is represented as `no-go`, with no compatibility shim permitted to bypass the existing pre-execution gate. §4 states the current assessment is `no-go` (ADR-0033's unresolved upstream dry-run-mode question), states the hard floor (any single missing capability keeps the whole result `no-go`), and states the no-shim rule concretely (no synthesized dry-run/diff/freshness result, no skipped Gate 7/8 sub-check, no fabricated audit field).
 
 **Verification:** Cross-review the matrix against ADR-0021, ADR-0033, the mutation-approval glossary/ADRs, primary McpServer tests, and Safety E2E properties.
 

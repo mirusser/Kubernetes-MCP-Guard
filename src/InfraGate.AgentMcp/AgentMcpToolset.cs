@@ -1,4 +1,5 @@
 using InfraGate.ClientCredentials;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace InfraGate.AgentMcp;
 
@@ -7,6 +8,10 @@ internal sealed class AgentMcpToolset(
     IClientCredentialsTokenProvider tokenProvider,
     ILoggerFactory loggerFactory) : IAgentMcpToolset
 {
+    private readonly ILogger logger = loggerFactory is null
+        ? NullLogger.Instance
+        : loggerFactory.CreateLogger<AgentMcpToolset>();
+
     private McpClient? mcpClient;
 
     public string GatewayBaseUrl => options.GatewayBaseUrl;
@@ -95,10 +100,24 @@ internal sealed class AgentMcpToolset(
     {
         var tools = await mcpClient!.ListToolsAsync(cancellationToken: cancellationToken)
             .ConfigureAwait(false);
-        return tools
-            .Where(t => t.ProtocolTool.Annotations?.ReadOnlyHint == true)
-            .Cast<AITool>()
-            .ToList();
+
+        var authorized = new List<AITool>();
+        foreach (McpClientTool tool in tools)
+        {
+            if (DiagnosticCapabilityProfile.IsAuthorized(tool, out DiagnosticCapabilityExclusionReason reason))
+            {
+                authorized.Add(tool);
+            }
+            else
+            {
+                logger.LogDebug(
+                    "Excluded MCP tool '{ToolName}' from agent discovery: {Reason}.",
+                    tool.ProtocolTool.Name,
+                    reason);
+            }
+        }
+
+        return authorized;
     }
 
     private async Task ReconnectAsync(CancellationToken cancellationToken)

@@ -402,7 +402,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         await using var downstream = new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(CreateGatewayOptions(serverProject, testRoot, repoRoot)), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
 
-        var result = await downstream.CallToolAsync(
+        var callResult = await downstream.CallToolAsync(
             KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
             new Dictionary<string, object?>
             {
@@ -410,6 +410,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [KubernetesAdapterConventions.ToolArguments.Manifest] = CleanConfigMapManifest
             },
             timeout.Token);
+        var result = string.Join(
+            Environment.NewLine,
+            callResult.Content.OfType<TextContentBlock>().Select(content => content.Text));
 
         Assert.Contains("\"policyBlocked\": false", result);
         Assert.Contains("Server-side dry-run succeeded.", result);
@@ -449,7 +452,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             [$"{KubernetesAdapterConventions.ApiVersions.AppsV1} {KubernetesAdapterConventions.ResourceKinds.Deployment} {NamespaceName}/demo"] =
                 resourceVersion
         };
-        var result = await downstream.CallToolAsync(
+        var callResult = await downstream.CallToolAsync(
             KubernetesAdapterConventions.EvidenceTools.CheckResourceVersion,
             new Dictionary<string, object?>
             {
@@ -457,6 +460,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [KubernetesAdapterConventions.EvidenceArguments.DiffsJson] = JsonSerializer.Serialize(diffs)
             },
             timeout.Token);
+        var result = string.Join(
+            Environment.NewLine,
+            callResult.Content.OfType<TextContentBlock>().Select(content => content.Text));
 
         Assert.Equal(KubernetesAdapterConventions.DriftCheckResults.NoDrift, result);
     }
@@ -1190,11 +1196,12 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
                 services.AddKubernetesAdapter();
                 services.AddSingleton<DownstreamToolRegistry>();
+                services.AddSingleton<DownstreamToolCatalog>();
                 services.AddSingleton<IReadOnlyList<GatewayToolDispatcher.ReadOnlySource>>(sp =>
                 {
                     var sources = new List<GatewayToolDispatcher.ReadOnlySource>
                     {
-                        new(sp.GetRequiredService<DownstreamToolRegistry>(), sp.GetRequiredService<GuardedToolRunner>())
+                        new(McpGatewayConventions.DownstreamSources.Primary, sp.GetRequiredService<DownstreamToolRegistry>(), sp.GetRequiredService<GuardedToolRunner>())
                     };
 
                     DownstreamToolRegistry? secondaryRegistry = sp.GetKeyedService<DownstreamToolRegistry>(
@@ -1213,6 +1220,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                         && secondaryResponsePolicy is not null)
                     {
                         sources.Add(new GatewayToolDispatcher.ReadOnlySource(
+                            McpGatewayConventions.DownstreamSources.Secondary,
                             secondaryRegistry,
                             secondaryRunner,
                             secondaryRequestPolicy,
@@ -2047,24 +2055,28 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
         public List<DownstreamCall> Calls { get; } = [];
 
-        public Task<string> CallToolAsync(
+        public Task<DownstreamCallResult> CallToolAsync(
             string toolName,
             IReadOnlyDictionary<string, object?> arguments,
             CancellationToken cancellationToken)
         {
             Calls.Add(new DownstreamCall(toolName, arguments));
 
-            return Task.FromResult(response);
+            return Task.FromResult(DownstreamCallResult.FromText(response));
         }
 
         public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(tools);
 
-        Task<string> IToolCaller.CallAsync(
+        async Task<string> IToolCaller.CallAsync(
             string toolName,
             IReadOnlyDictionary<string, object?> arguments,
-            CancellationToken ct) =>
-            CallToolAsync(toolName, arguments, ct);
+            CancellationToken ct)
+        {
+            DownstreamCallResult result = await CallToolAsync(toolName, arguments, ct).ConfigureAwait(false);
+            return string.Join(Environment.NewLine,
+                result.Content.OfType<TextContentBlock>().Select(c => c.Text));
+        }
 
         private static IReadOnlyList<DownstreamTool> CreateDefaultDownstreamTools()
         {

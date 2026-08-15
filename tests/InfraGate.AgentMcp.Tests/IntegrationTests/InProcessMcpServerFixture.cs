@@ -9,9 +9,23 @@ internal sealed class InProcessMcpServerFixture : IAsyncDisposable
 {
     public const string McpPath = "/mcp";
 
+    // Profiled primary diagnostic read (DiagnosticCapabilityProfile), correct name and schema.
     public const string ReadOnlyToolName = "get_k8s_status";
-    public const string AnotherReadOnlyToolName = "get_k8s_pods";
+
+    // Profiled secondary diagnostic read (DiagnosticCapabilityProfile), correct name and schema.
+    public const string SecondaryReadOnlyToolName = "pods_get";
+
+    // ReadOnlyHint=true but not a name DiagnosticCapabilityProfile recognizes at all — the
+    // "unknown/unprofiled" adversarial case.
+    public const string UnprofiledReadOnlyToolName = "get_k8s_pods";
+
+    // A profiled name (get_k8s_resource) whose declared schema no longer matches the pinned
+    // property set — the "schema-drifted" adversarial case.
+    public const string SchemaDriftedToolName = "get_k8s_resource";
+
+    // Not ReadOnlyHint=true at all — the "destructive/mutation" case.
     public const string MutationToolName = "propose_plan";
+
     public const string ReadOnlyToolResponse = """{"status": "healthy"}""";
     public const string MutationToolResponse = """{"planId": "plan-abc-123"}""";
 
@@ -43,7 +57,10 @@ internal sealed class InProcessMcpServerFixture : IAsyncDisposable
                             ?? throw new InvalidOperationException("MCP call missing tool name.");
                         string text = toolName switch
                         {
-                            ReadOnlyToolName or AnotherReadOnlyToolName => ReadOnlyToolResponse,
+                            ReadOnlyToolName
+                                or SecondaryReadOnlyToolName
+                                or UnprofiledReadOnlyToolName
+                                or SchemaDriftedToolName => ReadOnlyToolResponse,
                             MutationToolName => MutationToolResponse,
                             _ => throw new InvalidOperationException($"Unexpected tool '{toolName}'."),
                         };
@@ -120,28 +137,61 @@ internal sealed class InProcessMcpServerFixture : IAsyncDisposable
 
     private static IList<Tool> CreateTools()
     {
-        var schema = JsonSerializer.SerializeToElement(new { type = "object" });
+        var emptySchema = JsonSerializer.SerializeToElement(new { type = "object" });
+        var statusSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new { @namespace = new { type = "string" }, labelSelector = new { type = "string" } },
+        });
+        var podsGetSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new { @namespace = new { type = "string" }, name = new { type = "string" } },
+            required = new[] { "name" },
+        });
+        // Drifted: real get_k8s_resource takes {namespace, kind, name}; this schema is missing
+        // "kind" and adds an unreviewed "unexpectedParam" instead.
+        var driftedSchema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object",
+            properties = new { @namespace = new { type = "string" }, unexpectedParam = new { type = "string" } },
+        });
+
         return
         [
             new Tool
             {
                 Name = ReadOnlyToolName,
                 Description = "Read-only: get k8s status.",
-                InputSchema = schema,
+                InputSchema = statusSchema,
                 Annotations = new ToolAnnotations { ReadOnlyHint = true },
             },
             new Tool
             {
-                Name = AnotherReadOnlyToolName,
-                Description = "Read-only: get k8s pods.",
-                InputSchema = schema,
+                Name = SecondaryReadOnlyToolName,
+                Description = "Read-only: get a pod (kubernetes-mcp-server).",
+                InputSchema = podsGetSchema,
+                Annotations = new ToolAnnotations { ReadOnlyHint = true },
+            },
+            new Tool
+            {
+                Name = UnprofiledReadOnlyToolName,
+                Description = "Read-only: get k8s pods (not in the diagnostic profile).",
+                InputSchema = emptySchema,
+                Annotations = new ToolAnnotations { ReadOnlyHint = true },
+            },
+            new Tool
+            {
+                Name = SchemaDriftedToolName,
+                Description = "Read-only: get k8s resource, with a drifted schema.",
+                InputSchema = driftedSchema,
                 Annotations = new ToolAnnotations { ReadOnlyHint = true },
             },
             new Tool
             {
                 Name = MutationToolName,
                 Description = "Mutation: propose a plan.",
-                InputSchema = schema,
+                InputSchema = emptySchema,
             },
         ];
     }

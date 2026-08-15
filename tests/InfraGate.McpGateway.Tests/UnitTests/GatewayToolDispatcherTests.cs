@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using System.Security.Claims;
 using System.Text.Json;
 using InfraGate.Approvals;
@@ -89,6 +90,236 @@ public sealed class GatewayToolDispatcherTests
         Assert.Contains(result.Tools, t => t.Name == McpGatewayConventions.SecondaryDownstream.PodsLogTool);
         Assert.DoesNotContain(result.Tools,
             t => t.Name is "pods_list" or "events_list" or "resources_get" or "unknown_raw");
+    }
+
+    [Fact]
+    public async Task ListToolsAsync_SecondarySourceCollidesWithPrimaryToolName_RejectsSecondarySnapshotButKeepsPrimaryTools()
+    {
+        var collidingDownstream = new FakeCollidingSecondaryDownstream();
+        var registry = new DownstreamToolRegistry(collidingDownstream);
+        var audit = new InMemoryAuditStore();
+        var runner = new GuardedToolRunner(
+            collidingDownstream,
+            audit,
+            null,
+            new SensitiveDataRedactor(
+                McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                NullLogger<SensitiveDataRedactor>.Instance),
+            NullLogger<GuardedToolRunner>.Instance);
+        TestContext context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            secondaryRegistry: registry,
+            secondaryRunner: runner);
+
+        var result = await context.Dispatcher.ListToolsAsync(new ListToolsRequestParams(), CancellationToken.None);
+
+        // Primary's tool set is unaffected by the rejected secondary snapshot, and the colliding
+        // name is published exactly once (owned by primary, never overwritten by secondary).
+        Assert.Single(result.Tools, t => t.Name == "get_allowed_namespaces");
+    }
+
+    [Fact]
+    public async Task ListToolsAsync_SecondarySourceThrows_OmitsSecondaryButKeepsPrimaryToolsListable()
+    {
+        var throwingDownstream = new FakeThrowingSecondaryDownstream();
+        var registry = new DownstreamToolRegistry(throwingDownstream);
+        var audit = new InMemoryAuditStore();
+        var runner = new GuardedToolRunner(
+            throwingDownstream,
+            audit,
+            null,
+            new SensitiveDataRedactor(
+                McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                NullLogger<SensitiveDataRedactor>.Instance),
+            NullLogger<GuardedToolRunner>.Instance);
+        TestContext context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            secondaryRegistry: registry,
+            secondaryRunner: runner);
+
+        var result = await context.Dispatcher.ListToolsAsync(new ListToolsRequestParams(), CancellationToken.None);
+
+        Assert.Single(result.Tools, t => t.Name == "get_allowed_namespaces");
+        Assert.DoesNotContain(result.Tools,
+            t => t.Name == McpGatewayConventions.SecondaryDownstream.PodsListInNamespaceTool);
+    }
+
+    [Fact]
+    public async Task ListToolsAsync_SecondarySourceThrows_RecordsSanitizedDegradedReasonWithoutLeakingExceptionText()
+    {
+        var throwingDownstream = new FakeThrowingSecondaryDownstream();
+        var registry = new DownstreamToolRegistry(throwingDownstream);
+        var audit = new InMemoryAuditStore();
+        var runner = new GuardedToolRunner(
+            throwingDownstream,
+            audit,
+            null,
+            new SensitiveDataRedactor(
+                McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                NullLogger<SensitiveDataRedactor>.Instance),
+            NullLogger<GuardedToolRunner>.Instance);
+        TestContext context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            secondaryRegistry: registry,
+            secondaryRunner: runner);
+
+        await context.Dispatcher.ListToolsAsync(new ListToolsRequestParams(), CancellationToken.None);
+
+        (string sourceId, string reason) = Assert.Single(context.Catalog.GetDegradedSources());
+        Assert.Equal(McpGatewayConventions.DownstreamSources.Secondary, sourceId, StringComparer.Ordinal);
+        Assert.Equal(McpGatewayMessages.ToolCatalog.SourceUnavailable, reason);
+        Assert.DoesNotContain("super-secret-token", reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("10.0.0.42", reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_PrimaryTool_RemainsCallableWhenSecondarySourceThrows()
+    {
+        var throwingDownstream = new FakeThrowingSecondaryDownstream();
+        var registry = new DownstreamToolRegistry(throwingDownstream);
+        var audit = new InMemoryAuditStore();
+        var runner = new GuardedToolRunner(
+            throwingDownstream,
+            audit,
+            null,
+            new SensitiveDataRedactor(
+                McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                NullLogger<SensitiveDataRedactor>.Instance),
+            NullLogger<GuardedToolRunner>.Instance);
+        TestContext context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            secondaryRegistry: registry,
+            secondaryRunner: runner);
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams { Name = "get_allowed_namespaces", Arguments = JsonArguments() },
+            CancellationToken.None);
+
+        Assert.True(result.IsError is not true);
+    }
+
+    [Fact]
+    public async Task RegenerateSourceAsync_SecondaryToolsChanged_CatalogReflectsNewGeneration()
+    {
+        var recordedPublishes = new List<Measurement<long>>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == McpGatewayConventions.Telemetry.DownstreamCatalogPublishCounterName)
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+            recordedPublishes.Add(new Measurement<long>(value, tags)));
+        listener.Start();
+
+        var mutableDownstream = new FakeMutableSecondaryDownstream();
+        var registry = new DownstreamToolRegistry(mutableDownstream);
+        var audit = new InMemoryAuditStore();
+        var runner = new GuardedToolRunner(
+            mutableDownstream,
+            audit,
+            null,
+            new SensitiveDataRedactor(
+                McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                NullLogger<SensitiveDataRedactor>.Instance),
+            NullLogger<GuardedToolRunner>.Instance);
+        TestContext context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            secondaryRegistry: registry,
+            secondaryRunner: runner);
+
+        await context.Dispatcher.ListToolsAsync(new ListToolsRequestParams(), CancellationToken.None);
+
+        Assert.Equal(1, context.Catalog.GetSourceGeneration(McpGatewayConventions.DownstreamSources.Secondary));
+        Assert.NotNull(context.Catalog.GetCatalogEntry("tool_v1"));
+
+        mutableDownstream.CurrentTools =
+        [
+            new DownstreamTool(
+                "tool_v2",
+                "Version 2 tool.",
+                true,
+                false,
+                JsonSerializer.SerializeToElement(new { type = "object" }))
+        ];
+
+        await context.Dispatcher.RegenerateSourceAsync(McpGatewayConventions.DownstreamSources.Secondary, CancellationToken.None);
+
+        // The new generation replaces the old one wholesale: the stale name is gone, not merely
+        // shadowed, and the generation counter proves this went through a real republish rather
+        // than a no-op.
+        Assert.Equal(2, context.Catalog.GetSourceGeneration(McpGatewayConventions.DownstreamSources.Secondary));
+        Assert.NotNull(context.Catalog.GetCatalogEntry("tool_v2"));
+        Assert.Null(context.Catalog.GetCatalogEntry("tool_v1"));
+
+        Assert.Contains(recordedPublishes, m =>
+            (string?)TagValue(m, McpGatewayConventions.Telemetry.Tags.Source) == McpGatewayConventions.DownstreamSources.Secondary &&
+            (string?)TagValue(m, McpGatewayConventions.Telemetry.Tags.Outcome) == McpGatewayConventions.Telemetry.Outcomes.CatalogPublished);
+    }
+
+    [Fact]
+    public async Task RegenerateSourceAsync_ReplacementSnapshotFailsValidation_LeavesPriorGenerationAndPrimaryUnaffected()
+    {
+        var recordedPublishes = new List<Measurement<long>>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == McpGatewayConventions.Telemetry.DownstreamCatalogPublishCounterName)
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+            recordedPublishes.Add(new Measurement<long>(value, tags)));
+        listener.Start();
+
+        var mutableDownstream = new FakeMutableSecondaryDownstream();
+        var registry = new DownstreamToolRegistry(mutableDownstream);
+        var audit = new InMemoryAuditStore();
+        var runner = new GuardedToolRunner(
+            mutableDownstream,
+            audit,
+            null,
+            new SensitiveDataRedactor(
+                McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                NullLogger<SensitiveDataRedactor>.Instance),
+            NullLogger<GuardedToolRunner>.Instance);
+        TestContext context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            secondaryRegistry: registry,
+            secondaryRunner: runner);
+
+        await context.Dispatcher.ListToolsAsync(new ListToolsRequestParams(), CancellationToken.None);
+        Assert.Equal(1, context.Catalog.GetSourceGeneration(McpGatewayConventions.DownstreamSources.Secondary));
+
+        // A "restart" that comes back claiming a primary-owned tool name — the replacement
+        // catalog must fail validation exactly like an initial publish would.
+        mutableDownstream.CurrentTools =
+        [
+            new DownstreamTool(
+                "get_allowed_namespaces",
+                "Colliding replacement tool.",
+                true,
+                false,
+                JsonSerializer.SerializeToElement(new { type = "object" }))
+        ];
+
+        await context.Dispatcher.RegenerateSourceAsync(McpGatewayConventions.DownstreamSources.Secondary, CancellationToken.None);
+
+        // The failed regeneration must not have touched the prior generation.
+        Assert.Equal(1, context.Catalog.GetSourceGeneration(McpGatewayConventions.DownstreamSources.Secondary));
+        Assert.NotNull(context.Catalog.GetCatalogEntry("tool_v1"));
+        Assert.Equal(
+            McpGatewayConventions.DownstreamSources.Primary,
+            context.Catalog.GetCatalogEntry("get_allowed_namespaces")?.SourceId);
+
+        Assert.Contains(recordedPublishes, m =>
+            (string?)TagValue(m, McpGatewayConventions.Telemetry.Tags.Source) == McpGatewayConventions.DownstreamSources.Secondary &&
+            (string?)TagValue(m, McpGatewayConventions.Telemetry.Tags.Outcome) == McpGatewayConventions.Telemetry.Outcomes.CatalogRejected);
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams { Name = "get_allowed_namespaces", Arguments = JsonArguments() },
+            CancellationToken.None);
+
+        Assert.True(result.IsError is not true);
     }
 
     [Fact]
@@ -842,7 +1073,8 @@ public sealed class GatewayToolDispatcherTests
             },
             CancellationToken.None);
 
-        Assert.True(result.IsError is not true);
+        // Task 8: Downstream exceptions must set isError = true at MCP level
+        Assert.True(result.IsError);
         string text = Assert.Single(result.Content.OfType<TextContentBlock>()).Text;
         using var document = JsonDocument.Parse(text);
         JsonElement root = document.RootElement;
@@ -1021,6 +1253,188 @@ public sealed class GatewayToolDispatcherTests
         Assert.Single(context.GuardrailAudit.Events);
     }
 
+    #region Task 8: Typed Result Preservation Tests
+
+    [Fact]
+    public async Task CallToolAsync_ReadOnlyTool_PreservesIsErrorFalse()
+    {
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            downstreamResponse: "success result");
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams { Name = "get_allowed_namespaces" },
+            CancellationToken.None);
+
+        Assert.True(result.IsError is not true);
+        Assert.NotEmpty(result.Content);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_ReadOnlyTool_PreservesStructuredContent()
+    {
+        SecondaryTestContext secondary = CreateSecondaryContext("test content");
+
+        var result = await secondary.Context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.SecondaryDownstream.PodsListInNamespaceTool,
+                Arguments = JsonArguments(("namespace", SecondaryNamespace))
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError is not true);
+        Assert.NotEmpty(result.Content);
+        var textBlocks = result.Content.OfType<TextContentBlock>().ToList();
+        Assert.NotEmpty(textBlocks);
+        // Each text block is wrapped in an envelope, so verify the envelope structure
+        var firstBlock = textBlocks[0];
+        using var doc = JsonDocument.Parse(firstBlock.Text);
+        Assert.True(doc.RootElement.TryGetProperty(McpGatewayConventions.ModelVisibleToolResult.Untrusted, out var untrusted));
+        Assert.True(untrusted.TryGetProperty(McpGatewayConventions.ModelVisibleToolResult.UntrustedPayload, out var payload));
+        Assert.Contains("test content", payload.GetString()!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_DownstreamException_SetsIsErrorTrue()
+    {
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            downstreamException: new InvalidOperationException("test failure"));
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams { Name = "get_allowed_namespaces" },
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        var text = string.Join(" ", result.Content.OfType<TextContentBlock>().Select(b => b.Text));
+        Assert.Contains("Tool call failed", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_PolicyDenial_SetsIsErrorTrue()
+    {
+        SecondaryTestContext secondary = CreateSecondaryContext("content");
+
+        var result = await secondary.Context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.SecondaryDownstream.PodsGetTool,
+                Arguments = JsonArguments(("namespace", "kube-system"), ("name", "demo"))
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        var text = string.Join(" ", result.Content.OfType<TextContentBlock>().Select(b => b.Text));
+        Assert.Contains("Refused", text, StringComparison.Ordinal);
+        Assert.Contains("kube-system", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_ReadOnlySuccess_StatusSuccessInEnvelope()
+    {
+        SecondaryTestContext secondary = CreateSecondaryContext("success");
+
+        var result = await secondary.Context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.SecondaryDownstream.PodsListInNamespaceTool,
+                Arguments = JsonArguments(("namespace", SecondaryNamespace))
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError is not true);
+        var firstBlock = Assert.IsType<TextContentBlock>(result.Content[0]);
+        using var doc = JsonDocument.Parse(firstBlock.Text);
+        Assert.Equal(McpGatewayConventions.ModelVisibleToolResult.StatusSuccess,
+            doc.RootElement.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Status).GetString());
+    }
+
+    [Fact]
+    public async Task CallToolAsync_DownstreamError_StatusErrorInEnvelope()
+    {
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)),
+            downstreamException: new TimeoutException("timeout"));
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams { Name = "get_allowed_namespaces" },
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        var firstBlock = Assert.IsType<TextContentBlock>(result.Content[0]);
+        using var doc = JsonDocument.Parse(firstBlock.Text);
+        Assert.Equal(McpGatewayConventions.ModelVisibleToolResult.StatusError,
+            doc.RootElement.GetProperty(McpGatewayConventions.ModelVisibleToolResult.Status).GetString());
+    }
+
+    [Fact]
+    public async Task CallToolAsync_ReadOnlyTool_EnvelopeContainsGuardrailMetadata()
+    {
+        SecondaryTestContext secondary = CreateSecondaryContext("clean result");
+
+        var result = await secondary.Context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.SecondaryDownstream.PodsListInNamespaceTool,
+                Arguments = JsonArguments(("namespace", SecondaryNamespace))
+            },
+            CancellationToken.None);
+
+        var firstBlock = Assert.IsType<TextContentBlock>(result.Content[0]);
+        using var doc = JsonDocument.Parse(firstBlock.Text);
+        Assert.True(doc.RootElement.TryGetProperty(McpGatewayConventions.ModelVisibleToolResult.Guardrail, out var guardrail));
+        Assert.True(guardrail.TryGetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailAction, out _));
+        Assert.True(guardrail.TryGetProperty(McpGatewayConventions.ModelVisibleToolResult.GuardrailCategoriesKey, out _));
+    }
+
+    [Fact]
+    public async Task CallToolAsync_PrimaryApprovalFlow_StillWorks()
+    {
+        var envelope = CreatePlanEnvelope("test-ns");
+        var context = CreateContext(
+            new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("applied successfully", null)),
+            planBuilder: new CapturingDomainPlanBuilder(PlanBuildResult.Success(envelope, envelope.Id, "test-ns")));
+
+        await context.Workflow.CreatePlanAsync(envelope, "test-ns", CancellationToken.None);
+        await context.Workflow.CreateGrantAsync(envelope, Subject, "challenge-1", CancellationToken.None);
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.ApplyApprovedPlan,
+                Arguments = JsonArguments(("planId", envelope.Id))
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError is not true);
+        var text = Assert.Single(result.Content.OfType<TextContentBlock>()).Text;
+        Assert.Contains("applied successfully", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CallToolAsync_GetPlanStatus_StillReturnsJson()
+    {
+        var envelope = CreatePlanEnvelope("test-ns");
+        var context = CreateContext(new FakeDomainPlanExecutor(DomainPlanExecutionResult.Success("unused", null)));
+        await context.Workflow.CreatePlanAsync(envelope, "test-ns", CancellationToken.None);
+
+        var result = await context.Dispatcher.CallToolAsync(
+            new CallToolRequestParams
+            {
+                Name = McpGatewayConventions.ToolNames.GetPlanStatus,
+                Arguments = JsonArguments(("planId", envelope.Id))
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsError is not true);
+        var text = Assert.Single(result.Content.OfType<TextContentBlock>()).Text;
+        using var doc = JsonDocument.Parse(text);
+        Assert.Equal(envelope.Id, doc.RootElement.GetProperty("planId").GetString());
+    }
+
+    #endregion
+
     private static CallToolRequestParams CreateUnsafeSecondaryRequest(string scenario) =>
         scenario switch
         {
@@ -1193,11 +1607,12 @@ public sealed class GatewayToolDispatcherTests
 
         var readOnlySources = new List<GatewayToolDispatcher.ReadOnlySource>
         {
-            new(new DownstreamToolRegistry(downstream), guardedRunner)
+            new(McpGatewayConventions.DownstreamSources.Primary, new DownstreamToolRegistry(downstream), guardedRunner)
         };
         if (secondaryRegistry is not null && secondaryRunner is not null)
         {
             readOnlySources.Add(new GatewayToolDispatcher.ReadOnlySource(
+                McpGatewayConventions.DownstreamSources.Secondary,
                 secondaryRegistry,
                 secondaryRunner,
                 new KubernetesMcpServerRequestPolicy(
@@ -1205,6 +1620,7 @@ public sealed class GatewayToolDispatcherTests
                 new KubernetesMcpServerResponsePolicy()));
         }
 
+        var catalog = new DownstreamToolCatalog();
         return new TestContext(
             new GatewayToolDispatcher(
                 new DownstreamToolRegistry(downstream),
@@ -1219,12 +1635,14 @@ public sealed class GatewayToolDispatcherTests
                 new ToolScopeGuard(httpContextAccessor, guardrailAudit, NullLogger<ToolScopeGuard>.Instance),
                 httpContextAccessor,
                 readOnlySources,
+                catalog,
                 NullLogger<GatewayToolDispatcher>.Instance),
             workflow,
             downstream,
             httpContext,
             guardrailAudit,
-            emailSender);
+            emailSender,
+            catalog);
     }
 
     private static async Task<PlanEnvelope> CreateGrantedPlanAsync(
@@ -1343,7 +1761,7 @@ public sealed class GatewayToolDispatcherTests
 
         public List<string> Calls { get; } = [];
 
-        public Task<string> CallToolAsync(
+        public Task<DownstreamCallResult> CallToolAsync(
             string toolName,
             IReadOnlyDictionary<string, object?> arguments,
             CancellationToken cancellationToken)
@@ -1351,10 +1769,10 @@ public sealed class GatewayToolDispatcherTests
             Calls.Add(toolName);
             if (exception is not null)
             {
-                return Task.FromException<string>(exception);
+                return Task.FromException<DownstreamCallResult>(exception);
             }
 
-            return Task.FromResult(responseText);
+            return Task.FromResult(DownstreamCallResult.FromText(responseText));
         }
 
         public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
@@ -1374,13 +1792,13 @@ public sealed class GatewayToolDispatcherTests
 
         public List<(string ToolName, IReadOnlyDictionary<string, object?> Arguments)> Calls { get; } = [];
 
-        public Task<string> CallToolAsync(
+        public Task<DownstreamCallResult> CallToolAsync(
             string toolName,
             IReadOnlyDictionary<string, object?> arguments,
             CancellationToken cancellationToken)
         {
             Calls.Add((toolName, arguments));
-            return Task.FromResult(responseText);
+            return Task.FromResult(DownstreamCallResult.FromText(responseText));
         }
 
         public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
@@ -1417,6 +1835,65 @@ public sealed class GatewayToolDispatcherTests
                 new DownstreamTool("resources_get", "Gets raw resources.", true, false, DefaultSchema),
                 new DownstreamTool("unknown_raw", "Unknown raw read.", true, false, DefaultSchema)
             ]);
+    }
+
+    // Used only to prove that a secondary source advertising a tool name that collides with an
+    // already-published primary tool has its entire snapshot rejected, while primary tools remain
+    // listed (Task 9 acceptance criterion (b): collisions reject the offending source's snapshot,
+    // never the whole catalog).
+    private sealed class FakeCollidingSecondaryDownstream : IDownstreamMcpClient
+    {
+        private static readonly JsonElement DefaultSchema = JsonSerializer.SerializeToElement(new { type = "object" });
+
+        public Task<DownstreamCallResult> CallToolAsync(
+            string toolName,
+            IReadOnlyDictionary<string, object?> arguments,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Must not be invoked: the colliding snapshot is rejected before dispatch.");
+
+        public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DownstreamTool>>(
+            [
+                new DownstreamTool("get_allowed_namespaces", "Colliding tool name.", true, false, DefaultSchema)
+            ]);
+    }
+
+    // Used only to prove that an optional secondary source failing at the transport/I-O boundary
+    // (timeout, unreachable process, etc.) is isolated: primary tools remain listable/callable and
+    // the recorded degraded reason is the stable sanitized constant, never the raw exception text
+    // (Task 10 acceptance criteria (a) and (c)).
+    private sealed class FakeThrowingSecondaryDownstream : IDownstreamMcpClient
+    {
+        public Task<DownstreamCallResult> CallToolAsync(
+            string toolName,
+            IReadOnlyDictionary<string, object?> arguments,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Must not be invoked: the secondary source never publishes a snapshot.");
+
+        public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
+            throw new IOException("connection refused to 10.0.0.42:9443 (credential=super-secret-token)");
+    }
+
+    // Used only to prove RegenerateSourceAsync's end-to-end plumbing (registry invalidation +
+    // catalog swap): its advertised tool list can be swapped between calls to model a supervised
+    // process restart that comes back with a different tool set (Task 11).
+    private sealed class FakeMutableSecondaryDownstream : IDownstreamMcpClient
+    {
+        private static readonly JsonElement DefaultSchema = JsonSerializer.SerializeToElement(new { type = "object" });
+
+        public IReadOnlyList<DownstreamTool> CurrentTools { get; set; } =
+        [
+            new DownstreamTool("tool_v1", "Version 1 tool.", true, false, DefaultSchema)
+        ];
+
+        public Task<DownstreamCallResult> CallToolAsync(
+            string toolName,
+            IReadOnlyDictionary<string, object?> arguments,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(DownstreamCallResult.FromText("ok"));
+
+        public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(CurrentTools);
     }
 
     private sealed class FakeDomainAdapter(
@@ -1570,7 +2047,8 @@ public sealed class GatewayToolDispatcherTests
         FakeDownstream Downstream,
         DefaultHttpContext HttpContext,
         InMemoryAuditStore GuardrailAudit,
-        FakeApprovalEmailSender EmailSender);
+        FakeApprovalEmailSender EmailSender,
+        DownstreamToolCatalog Catalog);
 
     private sealed record class SecondaryTestContext(
         TestContext Context,
@@ -1584,5 +2062,11 @@ public sealed class GatewayToolDispatcherTests
 
         public Task NotifyPlanApprovedAsync(string planId, CancellationToken ct) =>
             Task.CompletedTask;
+    }
+
+    private static object? TagValue(Measurement<long> measurement, string key)
+    {
+        KeyValuePair<string, object?>[] tags = measurement.Tags.ToArray();
+        return tags.First(t => t.Key == key).Value;
     }
 }

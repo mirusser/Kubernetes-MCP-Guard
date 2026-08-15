@@ -59,6 +59,15 @@ internal static class McpGatewayMessages
             $"Approval plan '{planId}' created. To execute, submit with {McpGatewayConventions.ToolNames.ApplyApprovedPlan}({McpGatewayConventions.ToolArguments.PlanId}=\"{planId}\").";
     }
 
+    public static class ToolCatalog
+    {
+        public const string SourceUnavailable =
+            "Optional downstream source is unavailable; its tools are omitted from the catalog.";
+
+        public const string RestartAttemptsExhausted =
+            "Optional downstream source exhausted its supervised restart attempts; its tools are omitted from the catalog.";
+    }
+
     public static class KubernetesMcpServerPolicy
     {
         public static string ToolNotAllowed(string toolName) =>

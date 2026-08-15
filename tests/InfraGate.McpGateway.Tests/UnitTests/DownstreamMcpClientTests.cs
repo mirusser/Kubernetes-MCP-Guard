@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Text.Json.Nodes;
 using InfraGate.Approvals;
 using InfraGate.Approvals.Plan;
@@ -6,14 +8,175 @@ using InfraGate.DownstreamAuth;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
+using InfraGate.McpGateway.Tests.Fakes;
 using InfraGate.RuntimeSafety;
 using Microsoft.Extensions.Logging.Abstractions;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol;
 
 namespace InfraGate.McpGateway.Tests.UnitTests;
 
 public sealed class DownstreamMcpClientTests
 {
+    [Fact]
+    public async Task CallToolAsync_Success_RecordsSuccessMetricAndPropagatesTraceContext()
+    {
+        var recordedCalls = new List<Measurement<long>>();
+        using var meterListener = new MeterListener();
+        meterListener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == McpGatewayConventions.Telemetry.DownstreamCallCounterName)
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        meterListener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+            recordedCalls.Add(new Measurement<long>(value, tags)));
+        meterListener.Start();
+
+        using var activityListener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == McpGatewayConventions.Telemetry.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData
+        };
+        ActivitySource.AddActivityListener(activityListener);
+
+        string controlDir = ControlFile.CreateDirectory();
+        await using DownstreamMcpClient client = CreateFixtureClient(controlDir);
+
+        DownstreamCallResult result = await client.CallToolAsync(
+            "echo-meta",
+            new Dictionary<string, object?>(StringComparer.Ordinal),
+            CancellationToken.None);
+
+        Assert.False(result.IsError);
+        var textBlock = Assert.IsType<TextContentBlock>(Assert.Single(result.Content));
+        JsonObject echoedMeta = JsonNode.Parse(textBlock.Text)!.AsObject();
+        string traceparent = echoedMeta[McpGatewayConventions.Telemetry.MetaKeys.TraceParent]!.GetValue<string>();
+        Assert.Matches("^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$", traceparent);
+
+        Measurement<long> measurement = Assert.Single(recordedCalls);
+        Assert.Equal(McpGatewayConventions.Telemetry.Outcomes.Success, TagValue(measurement, McpGatewayConventions.Telemetry.Tags.Outcome));
+        Assert.Equal("echo-meta", TagValue(measurement, McpGatewayConventions.Telemetry.Tags.ToolName));
+        Assert.Equal(McpGatewayConventions.DownstreamSources.Primary, TagValue(measurement, McpGatewayConventions.Telemetry.Tags.Source));
+    }
+
+    [Fact]
+    public async Task CallToolAsync_ToolReturnsError_RecordsMcpErrorMetric()
+    {
+        var recordedCalls = new List<Measurement<long>>();
+        using var meterListener = new MeterListener();
+        meterListener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == McpGatewayConventions.Telemetry.DownstreamCallCounterName)
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        meterListener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+            recordedCalls.Add(new Measurement<long>(value, tags)));
+        meterListener.Start();
+
+        string controlDir = ControlFile.CreateDirectory();
+        await using DownstreamMcpClient client = CreateFixtureClient(controlDir);
+
+        DownstreamCallResult result = await client.CallToolAsync(
+            "fail",
+            new Dictionary<string, object?>(StringComparer.Ordinal),
+            CancellationToken.None);
+
+        Assert.True(result.IsError);
+        Assert.False(result.IsTransportFault);
+
+        Measurement<long> measurement = Assert.Single(recordedCalls);
+        Assert.Equal(McpGatewayConventions.Telemetry.Outcomes.McpError, TagValue(measurement, McpGatewayConventions.Telemetry.Tags.Outcome));
+        Assert.Equal("fail", TagValue(measurement, McpGatewayConventions.Telemetry.Tags.ToolName));
+    }
+
+    [Fact]
+    public async Task CallToolAsync_ProcessCrashes_RecordsTransportErrorMetric()
+    {
+        var recordedCalls = new List<Measurement<long>>();
+        using var meterListener = new MeterListener();
+        meterListener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == McpGatewayConventions.Telemetry.DownstreamCallCounterName)
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        meterListener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+            recordedCalls.Add(new Measurement<long>(value, tags)));
+        meterListener.Start();
+
+        string controlDir = ControlFile.CreateDirectory();
+        await using DownstreamMcpClient client = CreateFixtureClient(controlDir);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+
+        DownstreamCallResult warmup = await client.CallToolAsync("ping", new Dictionary<string, object?>(StringComparer.Ordinal), cts.Token);
+        Assert.False(warmup.IsError);
+
+        ControlFile.WriteCommand(controlDir, "crash");
+        await Task.Delay(TimeSpan.FromMilliseconds(150), TimeProvider.System, cts.Token);
+
+        DownstreamCallResult result = await client.CallToolAsync("ping", new Dictionary<string, object?>(StringComparer.Ordinal), cts.Token);
+
+        Assert.True(result.IsError);
+        Assert.True(result.IsTransportFault);
+
+        Measurement<long> transportErrorMeasurement = Assert.Single(
+            recordedCalls,
+            m => (string?)TagValue(m, McpGatewayConventions.Telemetry.Tags.Outcome) == McpGatewayConventions.Telemetry.Outcomes.TransportError);
+        Assert.Equal("ping", TagValue(transportErrorMeasurement, McpGatewayConventions.Telemetry.Tags.ToolName));
+    }
+
+    [Fact]
+    public async Task DisposeAsync_AfterEstablishedConnection_TerminatesChildProcessWithNoOrphan()
+    {
+        string controlDir = ControlFile.CreateDirectory();
+        DownstreamMcpClient client = CreateFixtureClient(controlDir);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+
+        DownstreamCallResult warmup = await client.CallToolAsync("ping", new Dictionary<string, object?>(StringComparer.Ordinal), cts.Token);
+        Assert.False(warmup.IsError);
+
+        int pid = ControlFile.ReadPid(controlDir);
+        using Process childProcess = Process.GetProcessById(pid);
+        Assert.False(childProcess.HasExited);
+
+        await client.DisposeAsync();
+
+        var stopwatch = Stopwatch.StartNew();
+        while (!childProcess.HasExited && stopwatch.Elapsed < TimeSpan.FromSeconds(10))
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(25), TimeProvider.System, cts.Token);
+        }
+
+        Assert.True(childProcess.HasExited, "Child process was not terminated after DisposeAsync.");
+    }
+
+    private static DownstreamMcpClient CreateFixtureClient(string controlDir)
+    {
+        string fixtureDllPath = ProcessFixtureLocator.ResolveDllPath();
+        var descriptor = new DownstreamProcessDescriptor(
+            "process-fixture",
+            "dotnet",
+            [fixtureDllPath, "--control-dir", controlDir],
+            Directory.GetCurrentDirectory(),
+            AuthRequired: false,
+            new HashSet<string>(StringComparer.Ordinal),
+            new Dictionary<string, string?>(StringComparer.Ordinal));
+
+        return new DownstreamMcpClient(
+            descriptor,
+            new NullDownstreamServiceTokenProvider(),
+            NullLogger<DownstreamMcpClient>.Instance,
+            NullLoggerFactory.Instance);
+    }
+
+    private static object? TagValue(Measurement<long> measurement, string key) =>
+        measurement.Tags.ToArray().First(t => t.Key == key).Value;
+
     [Fact]
     public void CreateTransportOptions_ExcludesGatewayClientSecret()
     {
@@ -456,6 +619,108 @@ public sealed class DownstreamMcpClientTests
 
         Assert.NotNull(ex.InnerException);
         Assert.IsType<McpException>(ex.InnerException);
+    }
+
+    [Fact]
+    public void DownstreamCallResult_FromCallToolResult_PreservesTextContent()
+    {
+        var callToolResult = new CallToolResult
+        {
+            Content = [new TextContentBlock { Text = "pod-name: nginx-123" }],
+            IsError = false
+        };
+
+        DownstreamCallResult result = DownstreamCallResult.FromCallToolResult(callToolResult);
+
+        Assert.Single(result.Content);
+        var textBlock = Assert.IsType<TextContentBlock>(result.Content[0]);
+        Assert.Equal("pod-name: nginx-123", textBlock.Text);
+        Assert.False(result.IsError);
+    }
+
+    [Fact]
+    public void DownstreamCallResult_FromCallToolResult_PreservesMultipleContentBlocks()
+    {
+        var callToolResult = new CallToolResult
+        {
+            Content =
+            [
+                new TextContentBlock { Text = "First block" },
+                new TextContentBlock { Text = "Second block" }
+            ],
+            IsError = false
+        };
+
+        DownstreamCallResult result = DownstreamCallResult.FromCallToolResult(callToolResult);
+
+        Assert.Equal(2, result.Content.Count);
+        Assert.Equal("First block", ((TextContentBlock)result.Content[0]).Text);
+        Assert.Equal("Second block", ((TextContentBlock)result.Content[1]).Text);
+    }
+
+    [Fact]
+    public void DownstreamCallResult_FromCallToolResult_PreservesIsError()
+    {
+        var callToolResult = new CallToolResult
+        {
+            Content = [new TextContentBlock { Text = "error detail" }],
+            IsError = true
+        };
+
+        DownstreamCallResult result = DownstreamCallResult.FromCallToolResult(callToolResult);
+
+        Assert.True(result.IsError);
+    }
+
+    [Fact]
+    public void DownstreamCallResult_FromCallToolResult_PreservesMeta()
+    {
+        var meta = new JsonObject { ["traceId"] = "abc123" };
+        var callToolResult = new CallToolResult
+        {
+            Content = [new TextContentBlock { Text = "result" }],
+            IsError = false,
+            Meta = meta
+        };
+
+        DownstreamCallResult result = DownstreamCallResult.FromCallToolResult(callToolResult);
+
+        Assert.NotNull(result.Meta);
+        Assert.Equal("abc123", result.Meta["traceId"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void DownstreamCallResult_FromTransportException_CreatesErrorResult()
+    {
+        var exception = new InvalidOperationException("Connection lost");
+
+        DownstreamCallResult result = DownstreamCallResult.FromTransportException(exception);
+
+        Assert.True(result.IsError);
+        Assert.Single(result.Content);
+        var textBlock = Assert.IsType<TextContentBlock>(result.Content[0]);
+        Assert.Contains("InvalidOperationException", textBlock.Text);
+        Assert.Contains("Connection lost", textBlock.Text);
+    }
+
+    [Fact]
+    public void DownstreamCallResult_FromTransportException_DoesNotLeakStackTrace()
+    {
+        Exception exception;
+        try
+        {
+            throw new InvalidOperationException("Simulated transport error");
+        }
+        catch (Exception ex)
+        {
+            exception = ex;
+        }
+
+        DownstreamCallResult result = DownstreamCallResult.FromTransportException(exception);
+
+        var textBlock = Assert.IsType<TextContentBlock>(result.Content[0]);
+        Assert.DoesNotContain("at InfraGate", textBlock.Text);
+        Assert.DoesNotContain("StackTrace", textBlock.Text);
     }
 
     private static DownstreamMcpClient CreateDownstreamMcpClient(IDownstreamServiceTokenProvider tokenProvider)

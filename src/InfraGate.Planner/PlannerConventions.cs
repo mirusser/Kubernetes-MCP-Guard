@@ -143,12 +143,6 @@ internal static class PlannerConventions
         public const string GetAllowedNamespaces = "get_allowed_namespaces";
         public const string GetK8sStatus = "get_k8s_status";
         public const string GetK8sEvents = "get_k8s_events";
-        public const string GetK8sPods = "get_k8s_pods";
-        public const string DescribeK8sResource = "describe_k8s_resource";
-        public const string GetK8sDeployments = "get_k8s_deployments";
-        public const string GetK8sServices = "get_k8s_services";
-        public const string GetK8sEndpoints = "get_k8s_endpoints";
-
     }
 
     public static class PlanStatusValues

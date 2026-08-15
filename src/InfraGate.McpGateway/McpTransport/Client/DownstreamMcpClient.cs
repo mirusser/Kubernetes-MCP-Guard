@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Text.Json.Nodes;
 using InfraGate.Approvals.Execution;
 using InfraGate.DownstreamAuth;
@@ -12,24 +14,43 @@ internal sealed class DownstreamMcpClient(
     DownstreamProcessDescriptor descriptor,
     IDownstreamServiceTokenProvider tokenProvider,
     ILogger<DownstreamMcpClient> logger,
-    ILoggerFactory loggerFactory) : IDownstreamMcpClient, IToolCaller, IAsyncDisposable
+    ILoggerFactory loggerFactory,
+    string sourceId = McpGatewayConventions.DownstreamSources.Primary) : IDownstreamMcpClient, IToolCaller, IAsyncDisposable
 {
+    private static readonly Meter Meter = new(
+        McpGatewayConventions.Telemetry.MeterName,
+        McpGatewayConventions.Telemetry.MeterVersion);
+
+    private static readonly ActivitySource ActivitySource = new(
+        McpGatewayConventions.Telemetry.ActivitySourceName);
+
+    private static readonly Counter<long> DownstreamCallCounter =
+        Meter.CreateCounter<long>(McpGatewayConventions.Telemetry.DownstreamCallCounterName);
+
+    private static readonly Histogram<double> DownstreamCallDurationHistogram =
+        Meter.CreateHistogram<double>(McpGatewayConventions.Telemetry.DownstreamCallDurationHistogramName, unit: "ms");
+
     private readonly SemaphoreSlim clientLock = new(1, 1);
     private readonly SemaphoreSlim callLock = new(1, 1);
     private McpClient? client;
 
-    public async Task<string> CallToolAsync(
+    public async Task<DownstreamCallResult> CallToolAsync(
         string toolName,
         IReadOnlyDictionary<string, object?> arguments,
         CancellationToken cancellationToken)
     {
         McpClient mcpClient = await GetClientAsync(cancellationToken).ConfigureAwait(false);
         await callLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        using Activity? activity = ActivitySource.StartActivity(
+            McpGatewayConventions.Telemetry.Activities.DownstreamCallTool, ActivityKind.Client);
+        activity?.SetTag(McpGatewayConventions.Telemetry.Tags.Source, sourceId);
+        activity?.SetTag(McpGatewayConventions.Telemetry.Tags.ToolName, toolName);
+        long startTimestamp = Stopwatch.GetTimestamp();
         try
         {
-            return await WithAuthRetryAsync(async token =>
+            DownstreamCallResult callResult = await WithAuthRetryAsync(async token =>
             {
-                JsonObject? meta = BuildAuthMeta(token);
+                JsonObject? meta = BuildRequestMeta(token, activity);
                 RequestOptions? requestOptions = meta is not null ? new RequestOptions { Meta = meta } : null;
                 CallToolResult result = await mcpClient.CallToolAsync(
                     toolName,
@@ -38,25 +59,37 @@ internal sealed class DownstreamMcpClient(
                     options: requestOptions,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
-                string text = string.Join(
-                    Environment.NewLine,
-                    result.Content.OfType<TextContentBlock>().Select(content => content.Text));
-
                 if (result.IsError == true)
                 {
+                    string text = string.Join(
+                        Environment.NewLine,
+                        result.Content.OfType<TextContentBlock>().Select(content => content.Text));
                     logger.LogError("Downstream tool '{ToolName}' returned IsError=true. Args={ArgKeys}: {Text}",
                         toolName,
                         string.Join(",", arguments.Keys),
                         text);
                 }
 
-                return text;
+                return DownstreamCallResult.FromCallToolResult(result);
             }, cancellationToken).ConfigureAwait(false);
+
+            string outcome = callResult.IsError
+                ? McpGatewayConventions.Telemetry.Outcomes.McpError
+                : McpGatewayConventions.Telemetry.Outcomes.Success;
+            if (callResult.IsError)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error);
+            }
+
+            RecordCallCompleted(toolName, outcome, startTimestamp);
+            return callResult;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Downstream call to '{ToolName}' threw an unhandled exception", toolName);
-            return $"(DownstreamCallFailed) {ex.GetType().Name}: {ex.Message}";
+            activity?.SetStatus(ActivityStatusCode.Error);
+            RecordCallCompleted(toolName, McpGatewayConventions.Telemetry.Outcomes.TransportError, startTimestamp);
+            return DownstreamCallResult.FromTransportException(ex);
         }
         finally
         {
@@ -69,7 +102,7 @@ internal sealed class DownstreamMcpClient(
         McpClient mcpClient = await GetClientAsync(cancellationToken).ConfigureAwait(false);
         return await WithAuthRetryAsync(async token =>
         {
-            JsonObject? meta = BuildAuthMeta(token);
+            JsonObject? meta = BuildRequestMeta(token, Activity.Current);
             RequestOptions? requestOptions = meta is not null ? new RequestOptions { Meta = meta } : null;
             IList<McpClientTool> tools = await mcpClient.ListToolsAsync(requestOptions, cancellationToken: cancellationToken).ConfigureAwait(false);
             return tools
@@ -83,11 +116,48 @@ internal sealed class DownstreamMcpClient(
         }, cancellationToken).ConfigureAwait(false);
     }
 
-    Task<string> IToolCaller.CallAsync(
+    private void RecordCallCompleted(string toolName, string outcome, long startTimestamp)
+    {
+        double elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+        KeyValuePair<string, object?> sourceTag = new(McpGatewayConventions.Telemetry.Tags.Source, sourceId);
+        KeyValuePair<string, object?> toolTag = new(McpGatewayConventions.Telemetry.Tags.ToolName, toolName);
+        KeyValuePair<string, object?> outcomeTag = new(McpGatewayConventions.Telemetry.Tags.Outcome, outcome);
+        DownstreamCallCounter.Add(1, sourceTag, toolTag, outcomeTag);
+        DownstreamCallDurationHistogram.Record(elapsedMs, sourceTag, toolTag, outcomeTag);
+    }
+
+    private static JsonObject? BuildRequestMeta(string token, Activity? activity)
+    {
+        JsonObject? meta = BuildAuthMeta(token);
+        if (activity is null)
+        {
+            return meta;
+        }
+
+        meta ??= [];
+        meta[McpGatewayConventions.Telemetry.MetaKeys.TraceParent] = activity.Id;
+        if (!string.IsNullOrEmpty(activity.TraceStateString))
+        {
+            meta[McpGatewayConventions.Telemetry.MetaKeys.TraceState] = activity.TraceStateString;
+        }
+
+        return meta;
+    }
+
+    async Task<string> IToolCaller.CallAsync(
         string toolName,
         IReadOnlyDictionary<string, object?> arguments,
-        CancellationToken ct) =>
-        CallToolAsync(toolName, arguments, ct);
+        CancellationToken ct)
+    {
+        DownstreamCallResult result = await CallToolAsync(toolName, arguments, ct).ConfigureAwait(false);
+
+        // Extract text from content blocks for backward compatibility with IToolCaller
+        string text = string.Join(
+            Environment.NewLine,
+            result.Content.OfType<TextContentBlock>().Select(content => content.Text));
+
+        return text;
+    }
 
     public async ValueTask DisposeAsync()
     {
@@ -98,6 +168,29 @@ internal sealed class DownstreamMcpClient(
 
         clientLock.Dispose();
         callLock.Dispose();
+    }
+
+    /// <summary>
+    /// Disposes and clears the cached session so the next call spawns a fresh downstream process.
+    /// Used by <see cref="DownstreamProcessSupervisor"/> to recover from a detected transport fault.
+    /// Takes the same lock as <see cref="GetClientAsync"/>, so it cannot race with an in-flight
+    /// initial connection.
+    /// </summary>
+    internal async Task ResetAsync(CancellationToken cancellationToken)
+    {
+        await clientLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (client is not null)
+            {
+                await client.DisposeAsync().ConfigureAwait(false);
+                client = null;
+            }
+        }
+        finally
+        {
+            clientLock.Release();
+        }
     }
 
     private async Task<McpClient> GetClientAsync(CancellationToken cancellationToken)

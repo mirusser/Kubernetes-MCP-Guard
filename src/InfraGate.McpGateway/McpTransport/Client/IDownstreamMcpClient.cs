@@ -2,7 +2,7 @@ namespace InfraGate.McpGateway;
 
 public interface IDownstreamMcpClient
 {
-    Task<string> CallToolAsync(
+    Task<DownstreamCallResult> CallToolAsync(
         string toolName,
         IReadOnlyDictionary<string, object?> arguments,
         CancellationToken cancellationToken);

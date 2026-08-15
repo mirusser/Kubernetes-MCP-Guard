@@ -1,6 +1,8 @@
 using System.Diagnostics.Metrics;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using InfraGate.McpGateway.Auth;
+using ModelContextProtocol.Protocol;
 
 namespace InfraGate.McpGateway;
 
@@ -11,6 +13,8 @@ internal sealed partial class GuardedToolRunner
         McpGatewayConventions.Telemetry.MeterVersion);
     private static readonly Counter<long> AuditWriteFailedCounter =
         Meter.CreateCounter<long>(McpGatewayConventions.Telemetry.GuardrailAuditWriteFailedCounterName);
+    private static readonly Counter<long> PolicyDenialCounter =
+        Meter.CreateCounter<long>(McpGatewayConventions.Telemetry.GuardrailPolicyDenialCounterName);
 
     internal const string Warning =
         "Guardrail warning: Potential prompt-injection content was detected. Model-visible high-risk text was redacted where applicable.";
@@ -64,7 +68,10 @@ internal sealed partial class GuardedToolRunner
         string downstreamText;
         try
         {
-            downstreamText = await downstream.CallToolAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
+            DownstreamCallResult result = await downstream.CallToolAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
+            downstreamText = string.Join(
+                Environment.NewLine,
+                result.Content.OfType<TextContentBlock>().Select(content => content.Text));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -94,6 +101,196 @@ internal sealed partial class GuardedToolRunner
             DetermineGuardrailAction(requestScan, response));
     }
 
+    /// <summary>
+    /// Calls a downstream tool and returns a typed result preserving structured content blocks.
+    /// </summary>
+    internal async Task<TypedGuardedToolCallResult> CallForTypedResponseAsync(
+        string toolName,
+        IReadOnlyDictionary<string, object?> arguments,
+        CancellationToken cancellationToken)
+    {
+        GuardScanResult requestScan = await ScanAndAuditRequestAsync(toolName, arguments, cancellationToken)
+            .ConfigureAwait(false);
+
+        DownstreamCallResult downstreamResult;
+        try
+        {
+            downstreamResult = await downstream.CallToolAsync(toolName, arguments, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Downstream call to '{ToolName}' threw an exception", toolName);
+            return new TypedGuardedToolCallResult(
+                [new TextContentBlock { Text = $"Tool call failed: {ex.GetType().Name}: {ex.Message}" }],
+                IsError: true,
+                Meta: null,
+                McpGatewayConventions.ModelVisibleToolResult.StatusError,
+                requestScan.Categories,
+                requestScan.HasFindings
+                    ? McpGatewayConventions.GuardrailAudit.WarnAction
+                    : McpGatewayConventions.ModelVisibleToolResult.GuardrailActionAllow);
+        }
+
+        // Sanitize typed content while preserving structure
+        SanitizedContentResult sanitized = PromptInjectionGuard.SanitizeTypedContent(
+            downstreamResult.Content,
+            downstreamResult.IsError,
+            downstreamResult.Meta);
+
+        // Apply sensitive data redaction to each text block
+        var redactedBlocks = new List<object>(sanitized.Content.Count);
+        bool anyRedacted = false;
+        var redactionResults = new List<RedactionResult>();
+
+        foreach (var block in sanitized.Content)
+        {
+            if (block is TextContentBlock textBlock)
+            {
+                RedactionResult redacted = redactor.Redact(textBlock.Text);
+                redactedBlocks.Add(new TextContentBlock { Text = redacted.Text });
+                if (redacted.WasRedacted)
+                {
+                    anyRedacted = true;
+                    redactionResults.Add(redacted);
+                }
+            }
+            else
+            {
+                // Preserve non-text blocks as-is (though sanitization fails closed on them)
+                redactedBlocks.Add(block);
+            }
+        }
+
+        // Write audit records if any guardrail was triggered
+        if (sanitized.HasFindings || sanitized.ManifestRedacted || anyRedacted || sanitized.IsPolicyError)
+        {
+            await WriteTypedGuardrailAuditAsync(toolName, arguments, sanitized, redactionResults, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        // Collect all categories
+        string[] categories = requestScan.Categories
+            .Concat(sanitized.Findings.Select(f => f.Category))
+            .Concat(anyRedacted ? [McpGatewayConventions.GuardrailCategories.SensitiveData] : [])
+            .Concat(sanitized.IsPolicyError ? [McpGatewayConventions.GuardrailCategories.UnsupportedContentType] : [])
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(category => category, StringComparer.Ordinal)
+            .ToArray();
+
+        // Determine final status and guardrail action
+        string status = sanitized.IsPolicyError
+            ? McpGatewayConventions.ModelVisibleToolResult.StatusError
+            : (sanitized.IsError
+                ? McpGatewayConventions.ModelVisibleToolResult.StatusError
+                : McpGatewayConventions.ModelVisibleToolResult.StatusSuccess);
+
+        string guardrailAction = DetermineTypedGuardrailAction(requestScan, sanitized, anyRedacted);
+
+        return new TypedGuardedToolCallResult(
+            redactedBlocks,
+            sanitized.IsError || sanitized.IsPolicyError,
+            sanitized.Meta,
+            status,
+            categories,
+            guardrailAction);
+    }
+
+    private async Task WriteTypedGuardrailAuditAsync(
+        string toolName,
+        IReadOnlyDictionary<string, object?> arguments,
+        SanitizedContentResult sanitized,
+        IReadOnlyList<RedactionResult> redactionResults,
+        CancellationToken cancellationToken)
+    {
+        AuditIdentity auditIdentity = GetAuditIdentity();
+        string? planId = ExtractPlanId(arguments, null);
+
+        // Write policy error audit if present
+        if (sanitized.IsPolicyError)
+        {
+            await TryWriteAuditAsync(
+                new GuardrailAuditEvent(
+                    toolName,
+                    McpGatewayConventions.GuardrailAudit.ResponseDirection,
+                    McpGatewayConventions.GuardrailAudit.PolicyDenyAction,
+                    [McpGatewayConventions.GuardrailCategories.UnsupportedContentType],
+                    planId,
+                    auditIdentity.Subject,
+                    auditIdentity.AuthenticationType,
+                    auditIdentity.IdentityKind),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        // Write prompt injection / manifest audit if present
+        if (sanitized.HasFindings || sanitized.ManifestRedacted)
+        {
+            string[] auditCategories = sanitized.HasFindings
+                ? sanitized.Findings.Select(f => f.Category).Distinct(StringComparer.Ordinal).OrderBy(c => c, StringComparer.Ordinal).ToArray()
+                : [McpGatewayConventions.GuardrailCategories.ManifestEchoCategory];
+
+            await TryWriteAuditAsync(
+                new GuardrailAuditEvent(
+                    toolName,
+                    McpGatewayConventions.GuardrailAudit.ResponseDirection,
+                    sanitized.HasFindings
+                        ? McpGatewayConventions.GuardrailAudit.WarnRedactAction
+                        : McpGatewayConventions.GuardrailAudit.RedactManifestAction,
+                    auditCategories,
+                    planId,
+                    auditIdentity.Subject,
+                    auditIdentity.AuthenticationType,
+                    auditIdentity.IdentityKind),
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        // Write sensitive data redaction audits (one per redaction result)
+        foreach (var redacted in redactionResults)
+        {
+            if (redacted.WasRedacted)
+            {
+                await TryWriteAuditAsync(
+                    GuardrailAuditEventFactory.SensitiveData(
+                        toolName,
+                        planId,
+                        auditIdentity.Subject,
+                        auditIdentity.AuthenticationType,
+                        auditIdentity.IdentityKind,
+                        redacted),
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static string DetermineTypedGuardrailAction(
+        GuardScanResult requestScan,
+        SanitizedContentResult sanitized,
+        bool anyRedacted)
+    {
+        if (sanitized.IsPolicyError)
+        {
+            return McpGatewayConventions.GuardrailAudit.PolicyDenyAction;
+        }
+
+        if (sanitized.HasFindings)
+        {
+            return McpGatewayConventions.GuardrailAudit.WarnRedactAction;
+        }
+
+        if (sanitized.ManifestRedacted)
+        {
+            return McpGatewayConventions.GuardrailAudit.RedactManifestAction;
+        }
+
+        if (anyRedacted)
+        {
+            return McpGatewayConventions.GuardrailAudit.RedactSensitiveDataAction;
+        }
+
+        return requestScan.HasFindings
+            ? McpGatewayConventions.GuardrailAudit.WarnAction
+            : McpGatewayConventions.ModelVisibleToolResult.GuardrailActionAllow;
+    }
+
     internal async Task<bool> AuditRequestAsync(
         string toolName,
         IReadOnlyDictionary<string, object?> arguments,
@@ -113,6 +310,11 @@ internal sealed partial class GuardedToolRunner
         IReadOnlyDictionary<string, object?>? metadata,
         CancellationToken cancellationToken)
     {
+        PolicyDenialCounter.Add(1,
+            new KeyValuePair<string, object?>(McpGatewayConventions.Telemetry.Tags.ToolName, toolName),
+            new KeyValuePair<string, object?>(McpGatewayConventions.Telemetry.Tags.GuardrailDirection, direction),
+            new KeyValuePair<string, object?>(McpGatewayConventions.Telemetry.Tags.GuardrailCategory, category));
+
         AuditIdentity auditIdentity = GetAuditIdentity();
         return TryWriteAuditAsync(
             new GuardrailAuditEvent(
