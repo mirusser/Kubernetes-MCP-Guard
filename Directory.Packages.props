@@ -51,9 +51,9 @@
     <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageVersion Include="System.ClientModel" Version="1.15.0" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />
-    <PackageVersion Include="Testcontainers.K3s" Version="4.13.0" />
-    <PackageVersion Include="Testcontainers.Keycloak" Version="4.13.0" />
-    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
+    <PackageVersion Include="Testcontainers.K3s" Version="4.14.0" />
+    <PackageVersion Include="Testcontainers.Keycloak" Version="4.14.0" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.14.0" />
     <PackageVersion Include="TngTech.ArchUnitNET" Version="0.13.3" />
     <PackageVersion Include="TngTech.ArchUnitNET.xUnit" Version="0.13.3" />
     <PackageVersion Include="xunit" Version="2.9.3" />
