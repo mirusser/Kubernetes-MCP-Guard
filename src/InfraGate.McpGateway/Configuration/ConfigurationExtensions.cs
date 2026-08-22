@@ -271,7 +271,10 @@ internal static class ConfigurationExtensions
                         secondaryRegistry,
                         secondaryRunner,
                         secondaryRequestPolicy,
-                        secondaryResponsePolicy));
+                        secondaryResponsePolicy,
+                        McpGatewayConventions.SecondaryDownstream.ApprovedTools,
+                        KubernetesMcpServerCapabilityManifest.V0066,
+                        KubernetesMcpServerProcessRole.PublicViewer));
                 }
 
                 return sources;

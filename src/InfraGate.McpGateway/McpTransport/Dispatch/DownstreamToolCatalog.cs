@@ -44,7 +44,48 @@ internal sealed class DownstreamToolCatalog(TimeProvider? timeProvider = null)
         IReadOnlyDictionary<string, JsonElement>? expectedToolSchemas = null,
         KubernetesMcpServerRequestPolicy? requestPolicy = null,
         KubernetesMcpServerResponsePolicy? responsePolicy = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        PublishSnapshotCore(
+            sourceId,
+            tools,
+            expectedTools,
+            expectedToolSchemas,
+            requestPolicy,
+            responsePolicy,
+            capabilityManifest: null,
+            capabilityRole: null,
+            cancellationToken);
+
+    internal Task<ToolCatalogSnapshot> PublishCapabilitySnapshotAsync(
+        string sourceId,
+        IReadOnlyList<DownstreamTool> tools,
+        IReadOnlySet<string> expectedTools,
+        KubernetesMcpServerRequestPolicy? requestPolicy,
+        KubernetesMcpServerResponsePolicy? responsePolicy,
+        KubernetesMcpServerCapabilityManifest capabilityManifest,
+        KubernetesMcpServerProcessRole capabilityRole,
+        CancellationToken cancellationToken = default) =>
+        PublishSnapshotCore(
+            sourceId,
+            tools,
+            expectedTools,
+            expectedToolSchemas: null,
+            requestPolicy,
+            responsePolicy,
+            capabilityManifest,
+            capabilityRole,
+            cancellationToken);
+
+    private Task<ToolCatalogSnapshot> PublishSnapshotCore(
+        string sourceId,
+        IReadOnlyList<DownstreamTool> tools,
+        IReadOnlySet<string>? expectedTools,
+        IReadOnlyDictionary<string, JsonElement>? expectedToolSchemas,
+        KubernetesMcpServerRequestPolicy? requestPolicy,
+        KubernetesMcpServerResponsePolicy? responsePolicy,
+        KubernetesMcpServerCapabilityManifest? capabilityManifest,
+        KubernetesMcpServerProcessRole? capabilityRole,
+        CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
         ArgumentNullException.ThrowIfNull(tools);
@@ -53,6 +94,8 @@ internal sealed class DownstreamToolCatalog(TimeProvider? timeProvider = null)
             tools,
             expectedTools,
             expectedToolSchemas,
+            capabilityManifest,
+            capabilityRole,
             out string? degradedReason))
         {
             return Task.FromResult(new ToolCatalogSnapshot(
@@ -195,8 +238,16 @@ internal sealed class DownstreamToolCatalog(TimeProvider? timeProvider = null)
         IReadOnlyList<DownstreamTool> tools,
         IReadOnlySet<string>? expectedTools,
         IReadOnlyDictionary<string, JsonElement>? expectedToolSchemas,
+        KubernetesMcpServerCapabilityManifest? capabilityManifest,
+        KubernetesMcpServerProcessRole? capabilityRole,
         out string? degradedReason)
     {
+        if (capabilityManifest is not null && capabilityRole is null)
+        {
+            degradedReason = "Capability admission requires an explicit process role.";
+            return false;
+        }
+
         // Check for duplicate tool names within the snapshot
         var seenNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (DownstreamTool tool in tools)
@@ -219,6 +270,15 @@ internal sealed class DownstreamToolCatalog(TimeProvider? timeProvider = null)
                     return false;
                 }
             }
+
+            foreach (string expectedTool in expectedTools)
+            {
+                if (!seenNames.Contains(expectedTool))
+                {
+                    degradedReason = $"Expected tool '{expectedTool}' is missing from snapshot.";
+                    return false;
+                }
+            }
         }
 
         // Check for schema drift
@@ -233,6 +293,18 @@ internal sealed class DownstreamToolCatalog(TimeProvider? timeProvider = null)
                         degradedReason = $"Schema drift detected for tool '{tool.Name}'.";
                         return false;
                     }
+                }
+            }
+        }
+
+        if (capabilityManifest is not null)
+        {
+            foreach (DownstreamTool tool in tools)
+            {
+                if (!capabilityManifest.TryValidateTool(tool, capabilityRole!.Value, out string error))
+                {
+                    degradedReason = error;
+                    return false;
                 }
             }
         }

@@ -55,7 +55,10 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         DownstreamToolRegistry Registry,
         GuardedToolRunner Runner,
         KubernetesMcpServerRequestPolicy? RequestPolicy = null,
-        KubernetesMcpServerResponsePolicy? ResponsePolicy = null);
+        KubernetesMcpServerResponsePolicy? ResponsePolicy = null,
+        IReadOnlySet<string>? ExpectedTools = null,
+        KubernetesMcpServerCapabilityManifest? CapabilityManifest = null,
+        KubernetesMcpServerProcessRole? CapabilityRole = null);
 
     private async Task EnsureCatalogPopulatedAsync(CancellationToken ct)
     {
@@ -159,14 +162,26 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         // RequestPolicy.IsToolAllowed, and dispatch of an unlisted-but-known tool name is
         // still denied (with an audit trail) by RequestPolicy.TryValidate in
         // HandleReadOnlyAsync — see KubernetesMcpServerRequestPolicy.
-        ToolCatalogSnapshot snapshot = await catalog.PublishSnapshotAsync(
-            source.SourceId,
-            tools,
-            expectedTools: null,
-            expectedToolSchemas: null,
-            source.RequestPolicy,
-            source.ResponsePolicy,
-            ct).ConfigureAwait(false);
+        ToolCatalogSnapshot snapshot = source.CapabilityManifest is null
+            ? await catalog.PublishSnapshotAsync(
+                source.SourceId,
+                tools,
+                expectedTools: null,
+                expectedToolSchemas: null,
+                source.RequestPolicy,
+                source.ResponsePolicy,
+                ct).ConfigureAwait(false)
+            : await catalog.PublishCapabilitySnapshotAsync(
+                source.SourceId,
+                tools,
+                source.ExpectedTools ?? throw new InvalidOperationException(
+                    "Capability admission requires an exact expected tool set."),
+                source.RequestPolicy,
+                source.ResponsePolicy,
+                source.CapabilityManifest,
+                source.CapabilityRole ?? throw new InvalidOperationException(
+                    "A capability manifest requires an explicit process role."),
+                ct).ConfigureAwait(false);
 
         if (!snapshot.IsValid)
         {

@@ -123,6 +123,30 @@ public sealed class DownstreamToolCatalogTests
     }
 
     [Fact]
+    public async Task PublishSnapshot_MissingExpectedTool_RejectsSnapshot()
+    {
+        var catalog = new DownstreamToolCatalog();
+        var expectedTools = new HashSet<string>(StringComparer.Ordinal) { "tool1", "tool2" };
+        var tools = new List<DownstreamTool>
+        {
+            new("tool1", "Tool 1", IsReadOnly: true, IsDestructive: false, DefaultSchema)
+        };
+
+        ToolCatalogSnapshot result = await catalog.PublishSnapshotAsync(
+            SecondarySourceId,
+            tools,
+            expectedTools,
+            null,
+            null,
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.IsValid);
+        Assert.Contains("missing", result.DegradedReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(result.Entries);
+    }
+
+    [Fact]
     public async Task PublishSnapshot_SchemaDrift_RejectsSnapshot()
     {
         var catalog = new DownstreamToolCatalog();

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using InfraGate.Approvals.Execution;
 using InfraGate.DownstreamAuth;
@@ -111,7 +112,10 @@ internal sealed class DownstreamMcpClient(
                     t.Description ?? string.Empty,
                     t.ProtocolTool.Annotations?.ReadOnlyHint ?? false,
                     t.ProtocolTool.Annotations?.DestructiveHint ?? false,
-                    t.JsonSchema))
+                    t.JsonSchema)
+                {
+                    Annotations = JsonSerializer.SerializeToElement(t.ProtocolTool.Annotations)
+                })
                 .ToList() as IReadOnlyList<DownstreamTool>;
         }, cancellationToken).ConfigureAwait(false);
     }

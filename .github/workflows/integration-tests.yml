@@ -19,6 +19,7 @@ on:
   #     - 'scripts/install-kubernetes-mcp-server.sh'
   #     - 'scripts/install-kubernetes-mcp-server.tests.sh'
   #     - 'scripts/kubernetes-mcp-server.manifest.json'
+  #     - 'scripts/install-minikube.sh'
   #     - 'scripts/minikube.manifest.json'
   #     - 'scripts/create-demo-kubeconfig.sh'
   #     - 'deploy/minikube/rbac.yaml'
@@ -69,19 +70,7 @@ jobs:
         run: dotnet run --project src/InfraGate.RunProfiles -- validate
 
       - name: Install minikube
-        run: |
-          set -euo pipefail
-          version="$(jq -r '.version' scripts/minikube.manifest.json)"
-          expected_sha256="$(jq -r '.checksums["linux-amd64"]' scripts/minikube.manifest.json)"
-          curl -fsSL -o /tmp/minikube "https://github.com/kubernetes/minikube/releases/download/${version}/minikube-linux-amd64"
-          actual_sha256="$(sha256sum /tmp/minikube | awk '{print $1}')"
-          if [[ "${actual_sha256}" != "${expected_sha256}" ]]; then
-            echo "error: minikube checksum mismatch for ${version}. expected ${expected_sha256}, got ${actual_sha256}." >&2
-            exit 1
-          fi
-          chmod +x /tmp/minikube
-          sudo install /tmp/minikube /usr/local/bin/minikube
-          minikube version
+        run: ./scripts/install-minikube.sh
 
       - name: Ensure Minikube is running
         run: |
