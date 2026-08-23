@@ -1,34 +1,31 @@
 name: Integration Tests
 
-# This job was migrated from the (now unregistered) self-hosted "vaporwave"
-# runner to ubuntu-latest, provisioning its own disposable minikube cluster
-# and demo workload per run (see
-# .agents/Plans/2026-08-14-migrate-integration-tests-ci-to-hosted-runner.md).
-# Automatic pull_request/push triggers stay commented out until a couple of
-# manual `workflow_dispatch` runs confirm the migrated job is green — once
-# confirmed, uncomment the `pull_request`/`push` blocks below (their path
-# filters already match Task 18's acceptance criteria: integration, Gateway
-# transport/policy, RBAC, run profiles, installer, and container files).
+# This job runs on ubuntu-latest (GitHub-hosted), provisioning its own
+# disposable minikube cluster and demo workload per run (see
+# .agents/Plans/2026-08-14-migrate-integration-tests-ci-to-hosted-runner.md
+# for the hosted-runner migration history). Confirmed green via two manual
+# `workflow_dispatch` runs on 2026-08-23 before restoring the automatic
+# pull_request/push triggers below.
 on:
-  # pull_request:
-  #   paths: &integration-paths
-  #     - 'src/InfraGate.McpGateway/**'
-  #     - 'src/InfraGate.RunProfiles/**'
-  #     - 'tests/InfraGate.McpGateway.Tests/**'
-  #     - 'tests/InfraGate.McpServer.Tests/**'
-  #     - 'scripts/install-kubernetes-mcp-server.sh'
-  #     - 'scripts/install-kubernetes-mcp-server.tests.sh'
-  #     - 'scripts/kubernetes-mcp-server.manifest.json'
-  #     - 'scripts/install-minikube.sh'
-  #     - 'scripts/minikube.manifest.json'
-  #     - 'scripts/create-demo-kubeconfig.sh'
-  #     - 'deploy/minikube/rbac.yaml'
-  #     - 'deploy/minikube/nginx-demo-workload.yaml'
-  #     - 'deploy/docker/mcp-gateway.Dockerfile'
-  #     - '.github/workflows/integration-tests.yml'
-  # push:
-  #   branches: [main, dev]
-  #   paths: *integration-paths
+  pull_request:
+    paths: &integration-paths
+      - 'src/InfraGate.McpGateway/**'
+      - 'src/InfraGate.RunProfiles/**'
+      - 'tests/InfraGate.McpGateway.Tests/**'
+      - 'tests/InfraGate.McpServer.Tests/**'
+      - 'scripts/install-kubernetes-mcp-server.sh'
+      - 'scripts/install-kubernetes-mcp-server.tests.sh'
+      - 'scripts/kubernetes-mcp-server.manifest.json'
+      - 'scripts/install-minikube.sh'
+      - 'scripts/minikube.manifest.json'
+      - 'scripts/create-demo-kubeconfig.sh'
+      - 'deploy/minikube/rbac.yaml'
+      - 'deploy/minikube/nginx-demo-workload.yaml'
+      - 'deploy/docker/mcp-gateway.Dockerfile'
+      - '.github/workflows/integration-tests.yml'
+  push:
+    branches: [main, dev]
+    paths: *integration-paths
   workflow_dispatch:
 
 permissions:
@@ -84,7 +81,13 @@ jobs:
         run: |
           kubectl apply --validate=false -f deploy/minikube/rbac.yaml
           kubectl apply -f deploy/minikube/nginx-demo-workload.yaml
-          kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=nginx-demo -n mcp-nginx-demo --timeout=120s
+          # kubectl wait on a pod label selector races the Deployment
+          # controller: right after apply, no Pod object exists yet, so
+          # `wait` sees zero matches and exits immediately with "no
+          # matching resources found" instead of waiting. The Deployment
+          # itself is created synchronously by apply, so wait on its
+          # rollout status instead.
+          kubectl rollout status deployment/nginx-demo -n mcp-nginx-demo --timeout=120s
 
       - name: Create demo kubeconfig
         run: ./scripts/create-demo-kubeconfig.sh
