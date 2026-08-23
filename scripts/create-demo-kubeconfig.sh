@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Kubeconfigs contain bearer tokens. Restrict the file from its first write,
+# before the explicit chmod/ACL handling below adjusts final container access.
+umask 077
+
 # Always use the admin kubeconfig for cluster setup, not any service-account
 # kubeconfig that may be set in the caller's environment.
 unset KUBECONFIG
@@ -8,10 +12,13 @@ unset KUBECONFIG
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NAMESPACE="mcp-nginx-demo"
 SERVICE_ACCOUNT="infra-gate-mcp"
+VIEWER_SERVICE_ACCOUNT="infra-gate-mcp-view"
 SA_NAME_FLAG=false
 COMPOSE_MODE=false
 OUT="${ROOT}/.kube/mcp-nginx-demo.config"
 COMPOSE_OUT="${ROOT}/.kube/mcp-nginx-demo.compose.config"
+VIEWER_OUT="${ROOT}/.kube/mcp-nginx-demo-viewer.config"
+VIEWER_COMPOSE_OUT="${ROOT}/.kube/mcp-nginx-demo-viewer.compose.config"
 # UID/GID the gateway container runs as (aspnet:10.0-noble-chiseled APP_UID).
 # Must match scripts/setup-development-deploy.sh and the Dockerfile's USER directive.
 GATEWAY_APP_UID="1654"
@@ -21,9 +28,9 @@ usage() {
   cat <<EOF
 Usage: $0 [--compose] [--sa-name NAME]
 
-Creates ${OUT}.
-With --compose, also creates ${COMPOSE_OUT} and local persistence directories for Docker Compose.
-With --sa-name, uses the named ServiceAccount instead of the default ${SERVICE_ACCOUNT}.
+By default, creates ${OUT} and ${VIEWER_OUT}.
+With --compose, also creates ${COMPOSE_OUT}, ${VIEWER_COMPOSE_OUT}, and local persistence directories for Docker Compose.
+With --sa-name, creates only the named ServiceAccount's kubeconfig instead of the default pair.
 EOF
 }
 
@@ -59,12 +66,15 @@ fi
 
 if [[ "${SERVICE_ACCOUNT}" != "infra-gate-mcp" ]]; then
   OUT="${ROOT}/.kube/mcp-nginx-demo-${SERVICE_ACCOUNT}.config"
+  COMPOSE_OUT="${ROOT}/.kube/mcp-nginx-demo-${SERVICE_ACCOUNT}.compose.config"
 fi
 
 write_kubeconfig() {
   local out="$1"
   local server="$2"
-  local tls_server_name="${3:-}"
+  local service_account="$3"
+  local token="$4"
+  local tls_server_name="${5:-}"
 
   mkdir -p "$(dirname "${out}")"
 
@@ -86,14 +96,14 @@ EOF
 
   cat >> "${out}" <<EOF
 users:
-  - name: ${SERVICE_ACCOUNT}
+  - name: ${service_account}
     user:
-      token: ${TOKEN}
+      token: ${token}
 contexts:
   - name: minikube-mcp
     context:
       cluster: minikube
-      user: ${SERVICE_ACCOUNT}
+      user: ${service_account}
       namespace: ${NAMESPACE}
 current-context: minikube-mcp
 EOF
@@ -129,10 +139,24 @@ grant_container_read() {
     return
   fi
 
-  # Fallback for systems without ACL support. The token is short-lived (24h)
-  # and the file is gitignored, so a world-readable kubeconfig is acceptable
-  # for local development.
-  chmod 644 "${target}"
+  if chown "${GATEWAY_APP_UID}" "${target}" 2>/dev/null; then
+    return
+  fi
+
+  if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    sudo chown "${GATEWAY_APP_UID}" "${target}"
+    return
+  fi
+
+  cat >&2 <<EOF
+Could not grant the gateway container UID ${GATEWAY_APP_UID} read access to:
+  ${target}
+
+This file contains a Kubernetes bearer token and will not be made
+world-readable. Install setfacl, run this script with sudo, or run:
+  sudo chown ${GATEWAY_APP_UID} "${target}"
+EOF
+  exit 1
 }
 
 prepare_compose_persistence_dirs() {
@@ -197,6 +221,12 @@ ensure_cluster_ready() {
     exit 1
   fi
 
+  if [[ "${context}" != "minikube" ]]; then
+    echo "Refusing to apply demo RBAC to non-demo Kubernetes context '${context}'." >&2
+    echo "Select the default minikube context first: kubectl config use-context minikube" >&2
+    exit 1
+  fi
+
   if ! kubectl --request-timeout=10s get --raw=/readyz >/dev/null 2>&1; then
     echo "Current Kubernetes context '${context}' is not reachable at ${server}." >&2
     echo "Start or repair minikube first: minikube start" >&2
@@ -215,7 +245,12 @@ if [[ -z "${CA_DATA}" ]]; then
 fi
 TOKEN="$(kubectl -n "${NAMESPACE}" create token "${SERVICE_ACCOUNT}" --duration=24h)"
 
-write_kubeconfig "${OUT}" "${SERVER}"
+write_kubeconfig "${OUT}" "${SERVER}" "${SERVICE_ACCOUNT}" "${TOKEN}"
+
+if [[ "${SERVICE_ACCOUNT}" == "infra-gate-mcp" ]]; then
+  VIEWER_TOKEN="$(kubectl -n "${NAMESPACE}" create token "${VIEWER_SERVICE_ACCOUNT}" --duration=24h)"
+  write_kubeconfig "${VIEWER_OUT}" "${SERVER}" "${VIEWER_SERVICE_ACCOUNT}" "${VIEWER_TOKEN}"
+fi
 
 if [[ "${COMPOSE_MODE}" == "true" ]]; then
   COMPOSE_SERVER="${SERVER}"
@@ -226,12 +261,32 @@ if [[ "${COMPOSE_MODE}" == "true" ]]; then
     TLS_SERVER_NAME="$(server_host "${SERVER}")"
   fi
 
-  write_kubeconfig "${COMPOSE_OUT}" "${COMPOSE_SERVER}" "${TLS_SERVER_NAME}"
+  write_kubeconfig \
+    "${COMPOSE_OUT}" \
+    "${COMPOSE_SERVER}" \
+    "${SERVICE_ACCOUNT}" \
+    "${TOKEN}" \
+    "${TLS_SERVER_NAME}"
   grant_container_read "${COMPOSE_OUT}"
+  if [[ "${SERVICE_ACCOUNT}" == "infra-gate-mcp" ]]; then
+    write_kubeconfig \
+      "${VIEWER_COMPOSE_OUT}" \
+      "${COMPOSE_SERVER}" \
+      "${VIEWER_SERVICE_ACCOUNT}" \
+      "${VIEWER_TOKEN}" \
+      "${TLS_SERVER_NAME}"
+    grant_container_read "${VIEWER_COMPOSE_OUT}"
+  fi
   prepare_compose_persistence_dirs
 fi
 
 echo "${OUT}"
+if [[ "${SERVICE_ACCOUNT}" == "infra-gate-mcp" ]]; then
+  echo "${VIEWER_OUT}"
+fi
 if [[ "${COMPOSE_MODE}" == "true" ]]; then
   echo "${COMPOSE_OUT}"
+  if [[ "${SERVICE_ACCOUNT}" == "infra-gate-mcp" ]]; then
+    echo "${VIEWER_COMPOSE_OUT}"
+  fi
 fi

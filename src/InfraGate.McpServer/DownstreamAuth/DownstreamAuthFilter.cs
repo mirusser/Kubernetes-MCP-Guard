@@ -8,15 +8,12 @@ using ModelContextProtocol.Server;
 namespace InfraGate.McpServer.DownstreamAuth;
 
 /// <summary>
-/// MCP request filter that validates the downstream service JWT on listTools and callTool requests.
+/// MCP request filter that validates the downstream service JWT on tools/list and tools/call requests.
 /// The token must appear in request params _meta under the key defined by
 /// <see cref="DownstreamAuthConventions.MetaKey"/> as a Bearer token.
 /// </summary>
 internal static class DownstreamAuthFilter
 {
-    // TODO (Task 6/bootstrap gate): Startup validation without a valid service credential // NOSONAR:S1135 — Tracked in task backlog
-    // is not handled here — that belongs to the bootstrap gate for 'initialize'.
-
     internal static McpRequestFilter<ListToolsRequestParams, ListToolsResult> ListTools()
     {
         return next => (request, cancellationToken) =>

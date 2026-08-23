@@ -3,7 +3,7 @@ namespace InfraGate.AgentMcp.Tests.IntegrationTests;
 public sealed class AgentMcpToolsetTests
 {
     [Fact]
-    public async Task GetAgentToolsAsync_WhenConnected_ReturnsOnlyReadOnlyHintedTools()
+    public async Task GetAgentToolsAsync_WhenConnected_ReturnsOnlyProfiledDiagnosticTools()
     {
         await using var fixture = InProcessMcpServerFixture.Create();
         await using var toolset = await fixture.CreateToolsetAsync();
@@ -13,7 +13,7 @@ public sealed class AgentMcpToolsetTests
         var names = tools.OfType<AIFunction>().Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
         Assert.Equal(2, tools.Count);
         Assert.Contains(InProcessMcpServerFixture.ReadOnlyToolName, names);
-        Assert.Contains(InProcessMcpServerFixture.AnotherReadOnlyToolName, names);
+        Assert.Contains(InProcessMcpServerFixture.SecondaryReadOnlyToolName, names);
     }
 
     [Fact]
@@ -26,6 +26,34 @@ public sealed class AgentMcpToolsetTests
 
         var names = tools.OfType<AIFunction>().Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
         Assert.DoesNotContain(InProcessMcpServerFixture.MutationToolName, names);
+    }
+
+    [Fact]
+    public async Task GetAgentToolsAsync_WhenConnected_ExcludesReadOnlyToolsNotInProfile()
+    {
+        // ReadOnlyHint=true alone must not be sufficient authority: this tool is read-only but
+        // its name is not one of the reviewed diagnostic reads.
+        await using var fixture = InProcessMcpServerFixture.Create();
+        await using var toolset = await fixture.CreateToolsetAsync();
+
+        var tools = await toolset.GetAgentToolsAsync(CancellationToken.None);
+
+        var names = tools.OfType<AIFunction>().Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+        Assert.DoesNotContain(InProcessMcpServerFixture.UnprofiledReadOnlyToolName, names);
+    }
+
+    [Fact]
+    public async Task GetAgentToolsAsync_WhenConnected_ExcludesSchemaDriftedTools()
+    {
+        // Same profiled name, but a declared schema that no longer matches the pinned property
+        // set must still be excluded rather than trusted.
+        await using var fixture = InProcessMcpServerFixture.Create();
+        await using var toolset = await fixture.CreateToolsetAsync();
+
+        var tools = await toolset.GetAgentToolsAsync(CancellationToken.None);
+
+        var names = tools.OfType<AIFunction>().Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+        Assert.DoesNotContain(InProcessMcpServerFixture.SchemaDriftedToolName, names);
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using System.Text.Json;
 using InfraGate.Approvals;
 using InfraGate.Approvals.PreExecution;
@@ -22,28 +23,229 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
     IApprovalAuditOutbox auditOutbox,
     IApprovalPreExecutionGate preExecutionGate,
     IProposePlanHandler proposePlanHandler,
-    ISubscriptionRegistry subscriptionRegistry,
     IToolScopeGuard scopeGuard,
     IHttpContextAccessor httpContextAccessor,
+    IReadOnlyList<GatewayToolDispatcher.ReadOnlySource> readOnlySources,
+    DownstreamToolCatalog catalog,
     ILogger<GatewayToolDispatcher> logger) : IGatewayToolDispatcher
 {
     private static readonly TimeSpan WaitForPlanApprovalPollInterval = TimeSpan.FromMilliseconds(250);
 
-#pragma warning disable MA0041
-    private string? CurrentSessionId =>
-        httpContextAccessor.HttpContext?.Items[NotificationsConventions.McpSessionIdItemKey] as string;
-#pragma warning restore MA0041
+    private static readonly Meter Meter = new(
+        McpGatewayConventions.Telemetry.MeterName,
+        McpGatewayConventions.Telemetry.MeterVersion);
+
+    private static readonly Counter<long> CatalogPublishCounter =
+        Meter.CreateCounter<long>(McpGatewayConventions.Telemetry.DownstreamCatalogPublishCounterName);
+
+    private readonly SemaphoreSlim catalogInitLock = new(1, 1);
+    private volatile bool catalogPopulated;
+
+    // Primary + optional secondary (e.g. kubernetes-mcp-server) read-only downstream sources,
+    // composed once in the composition root (see ConfigurationExtensions.RegisterReadOnlySources)
+    // rather than resolved here via IServiceProvider — this class takes plain constructor
+    // injection only. Only the primary ever participates in destructive/request_* routing —
+    // see IsDestructiveToolAsync and ListToolsAsync, which read `registry` directly, never this list.
+    // Read-only routing (ListToolsAsync/DispatchDownstreamToolAsync) goes through `catalog`,
+    // populated once from these sources by EnsureCatalogPopulatedAsync — see Task 9 of
+    // docs/plans (one catalog with immutable source ownership; calls route through the
+    // published catalog entry, not a per-source name lookup).
+    internal sealed record class ReadOnlySource(
+        string SourceId,
+        DownstreamToolRegistry Registry,
+        GuardedToolRunner Runner,
+        KubernetesMcpServerRequestPolicy? RequestPolicy = null,
+        KubernetesMcpServerResponsePolicy? ResponsePolicy = null,
+        IReadOnlySet<string>? ExpectedTools = null,
+        KubernetesMcpServerCapabilityManifest? CapabilityManifest = null,
+        KubernetesMcpServerProcessRole? CapabilityRole = null);
+
+    private async Task EnsureCatalogPopulatedAsync(CancellationToken ct)
+    {
+        if (catalogPopulated)
+        {
+            return;
+        }
+
+        await catalogInitLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (catalogPopulated)
+            {
+                return;
+            }
+
+            foreach (ReadOnlySource source in readOnlySources)
+            {
+                bool isMandatory = string.Equals(
+                    source.SourceId, McpGatewayConventions.DownstreamSources.Primary, StringComparison.Ordinal);
+
+                await PublishSourceSnapshotAsync(source, isMandatory, ct).ConfigureAwait(false);
+            }
+
+            catalogPopulated = true;
+        }
+        finally
+        {
+            catalogInitLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Re-lists and re-validates a single optional secondary source's tools and atomically swaps
+    /// its catalog entries — see <see cref="IGatewayToolDispatcher.RegenerateSourceAsync"/>. Task
+    /// 12's process supervisor calls this once a replacement process's session is ready; here it
+    /// is exercised directly to prove the swap is atomic and failure-isolated (Task 11).
+    /// </summary>
+    public async Task RegenerateSourceAsync(string sourceId, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
+
+        ReadOnlySource? source = FindSourceById(sourceId);
+        bool isMandatory = string.Equals(
+            sourceId, McpGatewayConventions.DownstreamSources.Primary, StringComparison.Ordinal);
+        if (source is null || isMandatory)
+        {
+            return;
+        }
+
+        await catalogInitLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            // The registry caches its last successful ListToolsAsync result forever; without
+            // invalidating it first, PublishSourceSnapshotAsync would just re-publish the same
+            // stale tool list instead of observing the replacement process's new one.
+            await source.Registry.InvalidateAsync(ct).ConfigureAwait(false);
+            await PublishSourceSnapshotAsync(source, isMandatory: false, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            catalogInitLock.Release();
+        }
+    }
+
+    private async Task PublishSourceSnapshotAsync(ReadOnlySource source, bool isMandatory, CancellationToken ct)
+    {
+        IReadOnlyList<DownstreamTool> tools;
+        if (isMandatory)
+        {
+            // Primary publication is mandatory: a failure here means the Gateway cannot
+            // route anything, so it propagates rather than being silently swallowed.
+            tools = await source.Registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
+        }
+        else
+        {
+            try
+            {
+                tools = await source.Registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                // Optional secondary source (timeout, unreachable process, transport
+                // fault, etc.): omit it for this cycle and keep primary tools flowing.
+                // The stable reason is logged separately from the exception detail so it
+                // stays safe to surface via health/readiness reporting later (Task 13).
+                logger.LogWarning(
+                    ex,
+                    "Optional downstream source '{SourceId}' failed to list tools; omitting its snapshot.",
+                    source.SourceId);
+                catalog.RecordSourceDegraded(
+                    source.SourceId, McpGatewayMessages.ToolCatalog.SourceUnavailable);
+                RecordCatalogPublishOutcome(source.SourceId, McpGatewayConventions.Telemetry.Outcomes.CatalogRejected);
+                return;
+            }
+        }
+
+        // No expectedTools admission gate here: a source may legitimately advertise more
+        // read-only tools than the Gateway chooses to expose (e.g. the real
+        // kubernetes-mcp-server binary). Visibility is filtered per-entry below via
+        // RequestPolicy.IsToolAllowed, and dispatch of an unlisted-but-known tool name is
+        // still denied (with an audit trail) by RequestPolicy.TryValidate in
+        // HandleReadOnlyAsync — see KubernetesMcpServerRequestPolicy.
+        ToolCatalogSnapshot snapshot = source.CapabilityManifest is null
+            ? await catalog.PublishSnapshotAsync(
+                source.SourceId,
+                tools,
+                expectedTools: null,
+                expectedToolSchemas: null,
+                source.RequestPolicy,
+                source.ResponsePolicy,
+                ct).ConfigureAwait(false)
+            : await catalog.PublishCapabilitySnapshotAsync(
+                source.SourceId,
+                tools,
+                source.ExpectedTools ?? throw new InvalidOperationException(
+                    "Capability admission requires an exact expected tool set."),
+                source.RequestPolicy,
+                source.ResponsePolicy,
+                source.CapabilityManifest,
+                source.CapabilityRole ?? throw new InvalidOperationException(
+                    "A capability manifest requires an explicit process role."),
+                ct).ConfigureAwait(false);
+
+        if (!snapshot.IsValid)
+        {
+            logger.LogWarning(
+                "Tool catalog snapshot from source '{SourceId}' was rejected: {Reason}",
+                source.SourceId,
+                snapshot.DegradedReason);
+
+            RecordCatalogPublishOutcome(source.SourceId, McpGatewayConventions.Telemetry.Outcomes.CatalogRejected);
+
+            if (isMandatory)
+            {
+                throw new InvalidOperationException(
+                    $"Mandatory downstream source '{source.SourceId}' published an invalid tool catalog snapshot: {snapshot.DegradedReason}");
+            }
+
+            catalog.RecordSourceDegraded(source.SourceId, snapshot.DegradedReason ?? McpGatewayMessages.ToolCatalog.SourceUnavailable);
+        }
+        else
+        {
+            if (!isMandatory)
+            {
+                catalog.RecordSourceHealthy(source.SourceId);
+            }
+
+            RecordCatalogPublishOutcome(source.SourceId, McpGatewayConventions.Telemetry.Outcomes.CatalogPublished);
+        }
+    }
+
+    private static void RecordCatalogPublishOutcome(string sourceId, string outcome)
+    {
+        CatalogPublishCounter.Add(1,
+            new KeyValuePair<string, object?>(McpGatewayConventions.Telemetry.Tags.Source, sourceId),
+            new KeyValuePair<string, object?>(McpGatewayConventions.Telemetry.Tags.Outcome, outcome));
+    }
+
+    private ReadOnlySource? FindSourceById(string sourceId)
+    {
+        foreach (ReadOnlySource source in readOnlySources)
+        {
+            if (string.Equals(source.SourceId, sourceId, StringComparison.Ordinal))
+            {
+                return source;
+            }
+        }
+
+        return null;
+    }
 
     public async Task<ListToolsResult> ListToolsAsync(
         ListToolsRequestParams request,
         CancellationToken ct)
     {
-        var tools = new List<Tool>();
+        await EnsureCatalogPopulatedAsync(ct).ConfigureAwait(false);
 
-        IReadOnlyList<DownstreamTool> readOnly = await registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
-        foreach (DownstreamTool dt in readOnly)
+        var tools = new List<Tool>();
+        foreach (ToolCatalogEntry entry in catalog.GetAllEntries())
         {
-            tools.Add(ToolDefinitionFactory.CreateForwardedTool(dt));
+            if (entry.RequestPolicy is not null && !entry.RequestPolicy.IsToolAllowed(entry.ToolName))
+            {
+                continue;
+            }
+
+            tools.Add(ToolDefinitionFactory.CreateForwardedTool(entry.Tool));
         }
 
         IReadOnlyList<DownstreamTool> destructive = await registry.GetDestructiveAsync(ct).ConfigureAwait(false);
@@ -145,9 +347,16 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
     private async Task<CallToolResult> DispatchDownstreamToolAsync(
         string toolName, CallToolRequestParams request, CancellationToken ct)
     {
-        if (await IsReadOnlyToolAsync(toolName, ct).ConfigureAwait(false))
+        await EnsureCatalogPopulatedAsync(ct).ConfigureAwait(false);
+
+        ToolCatalogEntry? entry = catalog.GetCatalogEntry(toolName);
+        if (entry is not null)
         {
-            return await HandleReadOnlyAsync(toolName, request, ct).ConfigureAwait(false);
+            ReadOnlySource? source = FindSourceById(entry.SourceId);
+            if (source is not null)
+            {
+                return await HandleReadOnlyAsync(entry, source.Runner, toolName, request, ct).ConfigureAwait(false);
+            }
         }
 
         if (await IsDestructiveToolAsync(toolName, ct).ConfigureAwait(false))
@@ -159,12 +368,6 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         return ErrorResult(McpGatewayMessages.ToolRouting.UnknownTool(toolName));
     }
 
-    private async Task<bool> IsReadOnlyToolAsync(string toolName, CancellationToken ct)
-    {
-        IReadOnlyList<DownstreamTool> readOnlyTools = await registry.GetReadOnlyAsync(ct).ConfigureAwait(false);
-        return readOnlyTools.Any(tool => string.Equals(tool.Name, toolName, StringComparison.Ordinal));
-    }
-
     private async Task<bool> IsDestructiveToolAsync(string toolName, CancellationToken ct)
     {
         IReadOnlyList<DownstreamTool> destructiveTools = await registry.GetDestructiveAsync(ct).ConfigureAwait(false);
@@ -172,6 +375,8 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
     }
 
     private async Task<CallToolResult> HandleReadOnlyAsync(
+        ToolCatalogEntry entry,
+        GuardedToolRunner runner,
         string toolName,
         CallToolRequestParams request,
         CancellationToken ct)
@@ -184,13 +389,55 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         }
 
         IReadOnlyDictionary<string, object?> arguments = ToolArgumentConverter.ConvertArguments(request.Arguments);
-        GuardedToolCallResult result = await guardedRunner.CallForModelVisibleResponseAsync(toolName, arguments, ct)
+        if (entry.RequestPolicy is not null
+            && !entry.RequestPolicy.TryValidate(toolName, arguments, out string policyError))
+        {
+            await runner.AuditPolicyDenialAsync(
+                toolName,
+                arguments,
+                McpGatewayConventions.GuardrailAudit.RequestDirection,
+                McpGatewayConventions.GuardrailCategories.KubernetesRequestPolicy,
+                metadata: null,
+                ct).ConfigureAwait(false);
+            return ErrorResult(policyError);
+        }
+
+        TypedGuardedToolCallResult result = await runner.CallForTypedResponseAsync(toolName, arguments, ct)
             .ConfigureAwait(false);
-        string envelope = ModelVisibleToolResultEnvelope.Serialize(toolName, result, TimeProvider.System.GetUtcNow());
+
+        (IReadOnlyList<object> envelopedContent, bool isError, System.Text.Json.Nodes.JsonObject? meta) =
+            ModelVisibleToolResultEnvelope.CreateTypedEnvelope(toolName, result, TimeProvider.System.GetUtcNow());
+
+        // Apply response policy against the combined text of every block, not just the first,
+        // so the 256 KiB limit is enforced on the complete serialized envelope.
+        if (entry.ResponsePolicy is not null && envelopedContent.Count > 0)
+        {
+            string combinedText = string.Concat(envelopedContent.OfType<TextContentBlock>().Select(block => block.Text));
+            KubernetesMcpServerResponsePolicyResult policyResult = entry.ResponsePolicy.Apply(toolName, combinedText);
+            if (!policyResult.IsAllowed)
+            {
+                var metadata = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    [McpGatewayConventions.GuardrailAudit.EntryFields.ActualBytes] = policyResult.Utf8ByteCount,
+                    [McpGatewayConventions.GuardrailAudit.EntryFields.MaximumBytes] =
+                        KubernetesMcpServerResponsePolicy.MaximumResponseBytes
+                };
+                await runner.AuditPolicyDenialAsync(
+                    toolName,
+                    arguments,
+                    McpGatewayConventions.GuardrailAudit.ResponseDirection,
+                    McpGatewayConventions.GuardrailCategories.ResponseSize,
+                    metadata,
+                    ct).ConfigureAwait(false);
+                return ErrorResult(policyResult.Error);
+            }
+        }
 
         return new CallToolResult
         {
-            Content = [new TextContentBlock { Text = envelope }]
+            Content = envelopedContent.Cast<ContentBlock>().ToList(),
+            IsError = isError,
+            Meta = meta
         };
     }
 
@@ -206,8 +453,6 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         {
             return ErrorResult(McpGatewayMessages.Authorization.MutationRequiresAuth);
         }
-
-        string? sessionId = CurrentSessionId;
 
         IReadOnlyDictionary<string, object?> args = ToolArgumentConverter.ConvertArguments(request.Arguments);
         bool requestHasFindings = await guardedRunner.AuditRequestAsync(toolName, args, ct).ConfigureAwait(false);
@@ -239,12 +484,6 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
             planResult.Envelope,
             planResult.TargetNamespace,
             ct).ConfigureAwait(false);
-
-        if (sessionId is not null)
-        {
-            subscriptionRegistry.BindSubject(sessionId, identity.Subject);
-            subscriptionRegistry.SubscribeToPlan(sessionId, planResult.PlanId);
-        }
 
         string message = McpGatewayMessages.ToolRouting.PlanCreated(planResult.PlanId);
         if (requestHasFindings || GuardrailContext.HasResponseFindings)

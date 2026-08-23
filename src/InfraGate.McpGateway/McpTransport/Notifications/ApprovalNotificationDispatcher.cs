@@ -6,8 +6,8 @@ internal sealed class ApprovalNotificationDispatcher(ISubscriptionRegistry regis
 {
     public async Task NotifyPlanApprovedAsync(string planId, CancellationToken ct)
     {
-        IReadOnlyList<ISessionNotifier> sessions = registry.GetSessionsForPlan(planId);
-        if (sessions.Count == 0)
+        IReadOnlyList<ISubscriptionNotifier> subscribers = registry.GetSubscribersForPlan(planId);
+        if (subscribers.Count == 0)
         {
             return;
         }
@@ -15,17 +15,14 @@ internal sealed class ApprovalNotificationDispatcher(ISubscriptionRegistry regis
         string resourceUri = NotificationsConventions.Resources.PlanStatusUri(planId);
         var @params = new ResourceUpdatedNotificationParams { Uri = resourceUri };
 
-        await Task.WhenAll(sessions.Select(async session =>
+        await Task.WhenAll(subscribers.Select(async subscriber =>
         {
-            await session.SendNotificationAsync(
+            await subscriber.SendNotificationAsync(
                 NotificationsConventions.Methods.ResourcesUpdated,
                 @params,
                 ct).ConfigureAwait(false);
 
-            if (session.SessionId is not null)
-            {
-                registry.UnsubscribeFromPlan(session.SessionId, planId);
-            }
+            registry.UnsubscribeFromPlan(subscriber.RegistrationId, planId);
         })).ConfigureAwait(false);
     }
 }

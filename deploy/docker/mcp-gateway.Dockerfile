@@ -4,6 +4,17 @@ COPY src/ src/
 RUN mkdir /out && \
     find src -name '*.csproj' | tar -cf - -T - | tar -xf - -C /out
 
+# Secondary, read-only-only downstream MCP process (see docs/adr for the
+# decision record). The official release binary is statically linked -- the
+# chiseled runtime image below has no shell/libc for a dynamically-linked
+# binary to link against. Version and per-platform SHA-256 are pinned once,
+# in kubernetes-mcp-server.manifest.json; the installer verifies the
+# checksum and the binary's own --version output before trusting it.
+FROM alpine:3.21 AS k8s-mcp-build
+RUN apk add --no-cache bash coreutils curl jq
+COPY scripts/install-kubernetes-mcp-server.sh scripts/kubernetes-mcp-server.manifest.json /src/scripts/
+RUN KUBERNETES_MCP_SERVER_INSTALL_DIR=/out /src/scripts/install-kubernetes-mcp-server.sh
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
@@ -57,6 +68,8 @@ COPY --from=build /app/gateway .
 COPY --from=build /app/server /app/server
 COPY --from=build /app/healthcheck /app/healthcheck
 COPY --from=build /data /data
+COPY --from=k8s-mcp-build /out/kubernetes-mcp-server /app/k8s-mcp-server/kubernetes-mcp-server
+COPY --from=k8s-mcp-build /out/kubernetes-mcp-server.manifest.json /app/k8s-mcp-server/kubernetes-mcp-server.manifest.json
 ENV InfraGate__Runtime__Environment=Production
 USER $APP_UID
 HEALTHCHECK --interval=5s --timeout=5s --retries=10 --start-period=15s \

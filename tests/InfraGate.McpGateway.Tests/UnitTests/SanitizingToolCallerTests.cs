@@ -195,7 +195,7 @@ public sealed class SanitizingToolCallerTests
             this.error = error;
         }
 
-        public Task<string> CallToolAsync(
+        public Task<DownstreamCallResult> CallToolAsync(
             string toolName,
             IReadOnlyDictionary<string, object?> arguments,
             CancellationToken cancellationToken)
@@ -205,7 +205,7 @@ public sealed class SanitizingToolCallerTests
                 throw error;
             }
 
-            return Task.FromResult(response!);
+            return Task.FromResult(DownstreamCallResult.FromText(response!));
         }
 
         public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>

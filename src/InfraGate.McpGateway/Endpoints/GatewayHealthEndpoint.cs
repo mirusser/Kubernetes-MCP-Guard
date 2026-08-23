@@ -1,5 +1,3 @@
-using Npgsql;
-
 namespace InfraGate.McpGateway.Endpoints;
 
 internal static class GatewayHealthEndpoint
@@ -10,24 +8,26 @@ internal static class GatewayHealthEndpoint
             Results.Json(new { status = "healthy" }));
 
         endpoints.MapGet(McpGatewayConventions.Health.ReadinessPath, async (
-            NpgsqlDataSource dataSource,
+            GatewayReadinessChecker readinessChecker,
             CancellationToken cancellationToken) =>
         {
-            try
+            GatewayReadinessReport report = await readinessChecker.CheckAsync(cancellationToken).ConfigureAwait(false);
+
+            var body = new
             {
-                var connection = await dataSource.OpenConnectionAsync(cancellationToken)
-                    .ConfigureAwait(false);
-                await using (connection.ConfigureAwait(false))
+                status = report.IsReady ? "healthy" : "unhealthy",
+                postgres = report.PostgresHealthy ? "healthy" : "unhealthy",
+                primary = report.PrimaryHealthy ? "healthy" : "unhealthy",
+                secondary = new
                 {
-                    return Results.Json(new { status = "healthy" });
-                }
-            }
-            catch (Exception ex)
-            {
-                return Results.Json(
-                    new { status = "unhealthy", reason = "postgres_unavailable", error = ex.Message },
-                    statusCode: 503);
-            }
+                    status = report.Secondary.Status.ToString(),
+                    processGeneration = report.Secondary.ProcessGeneration,
+                    catalogGeneration = report.Secondary.CatalogGeneration,
+                    reason = report.Secondary.DegradedReason,
+                },
+            };
+
+            return Results.Json(body, statusCode: report.IsReady ? 200 : 503);
         });
 
         return endpoints;

@@ -46,7 +46,7 @@ public sealed class ToolCallGuardrailTests
         var listener = new MeterListener();
         listener.InstrumentPublished = (instrument, l) =>
         {
-            if (instrument.Name == AgentGuardrailConventions.ToolCallBlockedCounterName)
+            if (instrument.Name == AgentGuardrailConventions.ToolCallBlockedCounterName && instrument.Meter == testMeter)
                 l.EnableMeasurementEvents(instrument);
         };
         listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>

@@ -544,6 +544,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
             {
                 services.AddRouting();
                 services.AddSingleton(options);
+                services.AddSingleton(DownstreamProcessDescriptor.ForPrimary(options));
                 services.AddSingleton<IGuardrailAuditStore, GuardrailAuditStore>();
                 services.AddSingleton<IDownstreamServiceTokenProvider, NullDownstreamServiceTokenProvider>();
                 services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
@@ -575,6 +576,12 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
                 services.AddKubernetesAdapter();
                 services.AddSingleton<DownstreamToolRegistry>();
+                services.AddSingleton<DownstreamToolCatalog>();
+                services.AddSingleton<IReadOnlyList<GatewayToolDispatcher.ReadOnlySource>>(sp =>
+                    new List<GatewayToolDispatcher.ReadOnlySource>
+                    {
+                        new(McpGatewayConventions.DownstreamSources.Primary, sp.GetRequiredService<DownstreamToolRegistry>(), sp.GetRequiredService<GuardedToolRunner>())
+                    });
                 services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
                 services.AddSingleton<IToolScopeGuard, ToolScopeGuard>();
                 services.AddHttpContextAccessor();
@@ -594,6 +601,7 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
 
                 services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
                 services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
+                services.AddSingleton<PlanStatusSubscriptionsListenHandler>();
 
                 services
                     .AddMcpServer(serverOptions =>
@@ -603,18 +611,15 @@ public sealed partial class SafetyE2EFixture : IAsyncLifetime
                             Resources = new ResourcesCapability { Subscribe = true }
                         };
                     })
-                    .WithHttpTransport()
+                    .WithHttpTransport(options => options.Stateless = true)
                     .WithListToolsHandler((RequestContext<ListToolsRequestParams> request, CancellationToken ct) =>
                         new ValueTask<ListToolsResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>().ListToolsAsync(request.Params, ct)))
                     .WithCallToolHandler((RequestContext<CallToolRequestParams> request, CancellationToken ct) =>
-                    {
-                        if (request.Services!.GetService<IHttpContextAccessor>() is { HttpContext: { } httpCtx })
-                        {
-                            httpCtx.Items[NotificationsConventions.McpSessionIdItemKey] = request.Server.SessionId;
-                        }
-                        var textTask = request.Services!.GetRequiredService<IGatewayToolDispatcher>().CallToolAsync(request.Params, ct);
-                        return new ValueTask<CallToolResult>(textTask);
-                    });
+                        new ValueTask<CallToolResult>(request.Services!.GetRequiredService<IGatewayToolDispatcher>()
+                            .CallToolAsync(request.Params, ct)))
+                    .WithSubscriptionsListenHandler((RequestContext<SubscriptionsListenRequestParams> request, CancellationToken ct) =>
+                        request.Services!.GetRequiredService<PlanStatusSubscriptionsListenHandler>()
+                            .ListenAsync(request, ct));
             })
             .Configure(app =>
             {

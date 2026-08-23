@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using InfraGate.ApprovalUi;
 using InfraGate.Approvals;
 using InfraGate.Approvals.Plan;
@@ -32,6 +33,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using ModelContextProtocol;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -78,6 +80,9 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
     private const string PasswordGrantType = "password";
     private const string CodeResponseType = "code";
     private const string InvalidGrantOAuthError = "invalid_grant";
+    private const string McpMethodHeaderName = "Mcp-Method";
+    private const string McpProtocolVersion = "2026-07-28";
+    private const string McpProtocolVersionHeaderName = "MCP-Protocol-Version";
     private const string LoginFormId = "kc-form-login";
     private const string LoginActionAttribute = "action=\"";
     private const int MaxRedirects = 8;
@@ -116,10 +121,9 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         string token = await AcquireTokenAsync(SmokeClientId);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+        using var response = await SendMcpDiscoverAsync(client);
 
-        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -133,7 +137,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         string token = await AcquireTokenAsync(SmokeClientId);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+        using var response = await SendMcpDiscoverAsync(client);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -149,10 +153,9 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         string token = await AcquireTokenAsync(SmokeClientId);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+        using var response = await SendMcpDiscoverAsync(client);
 
-        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     // Justification: skipped intentionally — Keycloak self-contained access tokens do not reliably
@@ -176,7 +179,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
 
         // In a deterministic Keycloak setup, invalidate the user/session here, wait for the
         // introspection cache TTL, and assert the next gateway call returns Unauthorized.
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+        using var response = await SendMcpDiscoverAsync(client);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -192,7 +195,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
         string token = await AcquireTokenAsync(LimitedClientId, requestedScope: null);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+        using var response = await SendMcpDiscoverAsync(client);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -209,7 +212,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             "Bearer",
             CreateSelfSignedToken(RealmAuthority(), signingKey, kid: signingKey.KeyId));
 
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+        using var response = await SendMcpDiscoverAsync(client);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -226,7 +229,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             "Bearer",
             CreateSelfSignedToken(RealmAuthority(), signingKey, kid: null));
 
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+        using var response = await SendMcpDiscoverAsync(client);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -389,10 +392,9 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             GatewayAuthConventions.AuthorizationScheme,
             accessToken);
 
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+        using var response = await SendMcpDiscoverAsync(client);
 
-        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -491,9 +493,7 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
             NullLogger<ClientCredentialsTokenProvider>.Instance);
 
         string accessToken = await tokenProvider.GetTokenAsync(CancellationToken.None);
-        using var request = new HttpRequestMessage(
-            HttpMethod.Get,
-            new Uri(gatewayClient.BaseAddress!, McpGatewayConventions.McpPath));
+        using var request = CreateMcpDiscoverRequest(gatewayClient);
         request.Headers.Authorization = new AuthenticationHeaderValue(
             ClientCredentialsConventions.DPoP.AuthorizationScheme,
             accessToken);
@@ -503,8 +503,53 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
 
         using var response = await gatewayClient.SendAsync(request);
 
-        Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private static async Task<HttpResponseMessage> SendMcpDiscoverAsync(HttpClient client)
+    {
+        using var request = CreateMcpDiscoverRequest(client);
+        return await client.SendAsync(request, CancellationToken.None);
+    }
+
+    private static HttpRequestMessage CreateMcpDiscoverRequest(HttpClient client)
+    {
+        var clientInfo = new Implementation
+        {
+            Name = "infragate-keycloak-tests",
+            Version = "1.0"
+        };
+        var requestParams = new DiscoverRequestParams
+        {
+            Meta = new JsonObject
+            {
+                [MetaKeys.ProtocolVersion] = McpProtocolVersion,
+                [MetaKeys.ClientInfo] = JsonSerializer.SerializeToNode(
+                    clientInfo,
+                    McpJsonUtilities.DefaultOptions),
+                [MetaKeys.ClientCapabilities] = JsonSerializer.SerializeToNode(
+                    new ClientCapabilities(),
+                    McpJsonUtilities.DefaultOptions)
+            }
+        };
+        var rpcRequest = new JsonRpcRequest
+        {
+            Id = new RequestId(1),
+            Method = RequestMethods.ServerDiscover,
+            Params = JsonSerializer.SerializeToNode(requestParams, McpJsonUtilities.DefaultOptions)
+        };
+        var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            new Uri(client.BaseAddress!, McpGatewayConventions.McpPath))
+        {
+            Content = JsonContent.Create(rpcRequest, options: McpJsonUtilities.DefaultOptions)
+        };
+        request.Headers.Accept.ParseAdd("application/json");
+        request.Headers.Accept.ParseAdd("text/event-stream");
+        request.Headers.Add(McpProtocolVersionHeaderName, McpProtocolVersion);
+        request.Headers.Add(McpMethodHeaderName, RequestMethods.ServerDiscover);
+
+        return request;
     }
 
     private string RealmAuthority() =>
@@ -1147,6 +1192,12 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
                 services.AddKubernetesAdapter();
                 services.AddSingleton<DownstreamToolRegistry>();
+                services.AddSingleton<DownstreamToolCatalog>();
+                services.AddSingleton<IReadOnlyList<GatewayToolDispatcher.ReadOnlySource>>(sp =>
+                    new List<GatewayToolDispatcher.ReadOnlySource>
+                    {
+                        new(McpGatewayConventions.DownstreamSources.Primary, sp.GetRequiredService<DownstreamToolRegistry>(), sp.GetRequiredService<GuardedToolRunner>())
+                    });
                 services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
                 services.AddHttpContextAccessor();
                 services.AddLogging();
@@ -1200,11 +1251,11 @@ public sealed class KeycloakIntegrationTests : IAsyncLifetime
 
     private sealed class NullDownstreamClient : IDownstreamMcpClient
     {
-        public Task<string> CallToolAsync(
+        public Task<DownstreamCallResult> CallToolAsync(
             string toolName,
             IReadOnlyDictionary<string, object?> arguments,
             CancellationToken cancellationToken) =>
-            Task.FromResult("{}");
+            Task.FromResult(DownstreamCallResult.FromText("{}"));
 
         public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<DownstreamTool>>([]);

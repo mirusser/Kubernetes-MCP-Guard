@@ -46,6 +46,8 @@ Prefer configured MCP tools when available. In this environment they may appear 
 
 - `execute_approved_plan` — applies an out-of-band approved plan
 
+**Optional secondary read-only source (off by default):** the gateway can also spawn the upstream `containers/kubernetes-mcp-server` Go binary as a second, independent, read-only-only downstream — see `src/InfraGate.McpGateway/README.md` ("Secondary downstream (kubernetes-mcp-server) trust boundary"). When configured (`InfraGate:Gateway:KubernetesMcpServer:Command`), its curated tools (`pods_list`, `pods_get`, `pods_log`, `events_list`, `resources_list`, `resources_get`) appear in `tools/list` alongside the tools above. It trusts only trusted-launch + process containment (no downstream token — it's a stock binary that doesn't speak InfraGate's private stdio auth protocol), is read-only in two independent layers (the binary's own non-configurable `read_only=true` plus the gateway never routing it through the destructive/`request_*` path), and is not currently enabled in this repo's default demo deployment — check with the user before assuming these tools are present.
+
 If checking the raw HTTP endpoint, remember it is session-based MCP:
 
 ```bash

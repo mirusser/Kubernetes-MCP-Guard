@@ -16,4 +16,5 @@ internal sealed record class RunProfile(
     PlannerProfile? Planner,
     ExecutorProfile? Executor,
     AgentGuardrailsProfile? AgentGuardrails = null,
-    TelemetryProfile? Telemetry = null);
+    TelemetryProfile? Telemetry = null,
+    KubernetesMcpServerProfile? KubernetesMcpServer = null);

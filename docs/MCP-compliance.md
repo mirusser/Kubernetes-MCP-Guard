@@ -1,6 +1,6 @@
 # MCP Protocol Compliance & Architecture Flow
 
-This document details the compliance of the **InfraGate** project against the official Model Context Protocol (MCP) specifications (as of `2025-11-25`), specifically focusing on the HTTP Gateway + OAuth path. Keycloak is the supported local/test identity provider.
+This document details the compliance of the **InfraGate** project against the official Model Context Protocol (MCP) specifications (as of `2026-07-28`), specifically focusing on the HTTP Gateway + OAuth path. Keycloak is the supported local/test identity provider.
 
 ## Architecture & Request Flow
 
@@ -55,7 +55,8 @@ sequenceDiagram
         Gateway->>Gateway: Read pending plan + hash
         Gateway-->>Client: Approval URL
         opt Client supports MCP resources
-            Client->>Gateway: resources/subscribe plan://{planId}/status
+            Client->>Gateway: subscriptions/listen resourceSubscriptions=[plan://{planId}/status]
+            Gateway-->>Client: notifications/subscriptions/acknowledged
         end
         Client-->>Gateway: Browser opens /approvals/{challengeId}
         Gateway->>Gateway: OAuth cookie auth + same-subject check
@@ -76,15 +77,15 @@ sequenceDiagram
 
 The Gateway delegates the transport layer to the official `ModelContextProtocol.AspNetCore` SDK. 
 * **Key Mechanisms:**
-  * Uses `.WithHttpTransport()` in `Program.cs`.
+  * Uses `.WithHttpTransport(options => options.Stateless = true)` in `Program.cs`.
   * Clients send `POST` requests with JSON-RPC messages to `/mcp`.
   * Streamable HTTP response handling is delegated to the official SDK, including JSON-RPC responses and Server-Sent Events (SSE) where appropriate.
-  * The gateway runs stateful HTTP transport so subscribed resource notifications can be delivered to active sessions.
+  * The gateway runs stateless HTTP transport as required by MCP 2026-07-28. Approval notifications flow over the solicited, held-open `subscriptions/listen` response instead of an unsolicited session channel.
 
 ## 1.1. Resources Specification
 **Status: ✅ Compliant**
 
-The Gateway exposes `plan://{planId}/status` as an MCP resource template. Clients may read it to get the same JSON status contract as `get_plan_status`, or subscribe to it with `resources/subscribe` before waiting for a browser approval. When approval issues a grant, the gateway sends `notifications/resources/updated` for the subscribed plan-status URI. Clients without resource notification support can use `get_plan_status` or `wait_for_plan_approval`.
+The Gateway exposes `plan://{planId}/status` as an MCP resource template. Clients may read it to get the same JSON status contract as `get_plan_status`, or include it in `subscriptions/listen.notifications.resourceSubscriptions` before waiting for browser approval. The Gateway first sends `notifications/subscriptions/acknowledged`; when approval issues a grant, it sends `notifications/resources/updated` tagged with the listen request id in `_meta.subscriptionId`. Clients without resource notification support can use `get_plan_status` or `wait_for_plan_approval`.
 
 ---
 

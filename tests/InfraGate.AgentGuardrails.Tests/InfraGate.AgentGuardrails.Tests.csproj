@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\InfraGate.AgentGuardrails\InfraGate.AgentGuardrails.csproj" />
+    <ProjectReference Include="..\..\src\InfraGate.AgentMcp\InfraGate.AgentMcp.csproj" />
   </ItemGroup>
 
 </Project>

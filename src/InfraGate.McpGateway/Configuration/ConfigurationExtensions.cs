@@ -10,6 +10,7 @@ using InfraGate.McpGateway.Audit;
 using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.McpGateway.Email;
+using InfraGate.McpGateway.Endpoints;
 using InfraGate.McpGateway.Notifications;
 using InfraGate.Observability;
 using InfraGate.RuntimeSafety;
@@ -61,6 +62,7 @@ internal static class ConfigurationExtensions
             {
                 opt.ServiceName = "infragate-gateway";
                 opt.MeterNames = [McpGatewayConventions.Telemetry.MeterName];
+                opt.ActivitySourceNames = [McpGatewayConventions.Telemetry.ActivitySourceName];
             });
 
             ConfigureUrls(builder);
@@ -72,6 +74,7 @@ internal static class ConfigurationExtensions
                 .SetApplicationName(ApprovalConventions.Application.Name);
 
             builder.Services.AddSingleton(options);
+            builder.Services.AddSingleton(DownstreamProcessDescriptor.ForPrimary(options));
             builder.Services.AddSingleton<IGuardrailAuditStore, GuardrailAuditStore>();
             builder.Services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
             builder.Services.AddSingleton<GuardedToolRunner>(sp =>
@@ -81,6 +84,7 @@ internal static class ConfigurationExtensions
                     sp.GetRequiredService<IHttpContextAccessor>(),
                     sp.GetRequiredService<SensitiveDataRedactor>(),
                     sp.GetRequiredService<ILogger<GuardedToolRunner>>()));
+
             builder.Services.AddPostgresApprovalPersistence(
                 builder.Configuration[McpGatewayConventions.ConfigurationKeys.ApprovalPostgresConnectionString]);
             builder.Services.AddSingleton<AuditTimelineAssembler>();
@@ -117,10 +121,14 @@ internal static class ConfigurationExtensions
             builder.Services.AddGatewayAuthentication(options.Auth);
 
             RegisterDownstreamAuth(builder.Services, options);
+            RegisterKubernetesMcpServerDownstream(builder.Services, builder.Configuration);
+            RegisterReadOnlySources(builder.Services);
+            RegisterReadinessChecker(builder.Services);
 
             builder.Services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
             builder.Services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
             builder.Services.AddSingleton<PlanStatusResourceHandler>();
+            builder.Services.AddSingleton<PlanStatusSubscriptionsListenHandler>();
         }
 
         private void ConfigureUrls()
@@ -166,6 +174,123 @@ internal static class ConfigurationExtensions
             services.AddSingleton<IDownstreamServiceTokenProvider>(sp =>
                 new ClientCredentialsDownstreamServiceTokenProvider(
                     sp.GetRequiredService<IClientCredentialsTokenProvider>()));
+        }
+
+        // Optional/off-by-default second downstream: only wired when the operator has
+        // configured InfraGate:Gateway:KubernetesMcpServer:Command. Duplicates the primary's
+        // client/registry/runner triple under a keyed registration rather than generalizing
+        // those types to an N-way source — see docs/adr for the decision record.
+        internal void RegisterKubernetesMcpServerDownstream(IConfiguration configuration)
+        {
+            var kubernetesMcpServerOptions = KubernetesMcpServerProcessOptions.FromConfiguration(configuration);
+            if (kubernetesMcpServerOptions is null)
+            {
+                return;
+            }
+
+            KubernetesMcpServerStartupValidator.Validate(kubernetesMcpServerOptions);
+
+            var descriptor = DownstreamProcessDescriptor.ForKubernetesMcpServer(kubernetesMcpServerOptions);
+            var supervisorOptions = DownstreamProcessSupervisorOptions.FromConfiguration(configuration);
+
+            services.AddKeyedSingleton<IDownstreamMcpClient>(
+                McpGatewayConventions.SecondaryDownstream.ServiceKey,
+                (sp, _) =>
+                {
+                    var client = new DownstreamMcpClient(
+                        descriptor,
+                        new NullDownstreamServiceTokenProvider(),
+                        sp.GetRequiredService<ILogger<DownstreamMcpClient>>(),
+                        sp.GetRequiredService<ILoggerFactory>(),
+                        McpGatewayConventions.DownstreamSources.Secondary);
+
+                    return new DownstreamProcessSupervisor(
+                        client,
+                        McpGatewayConventions.DownstreamSources.Secondary,
+                        supervisorOptions,
+                        sp,
+                        TimeProvider.System,
+                        sp.GetRequiredService<ILogger<DownstreamProcessSupervisor>>(),
+                        sp.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping);
+                });
+
+            services.AddKeyedSingleton<DownstreamToolRegistry>(
+                McpGatewayConventions.SecondaryDownstream.ServiceKey,
+                (sp, key) => new DownstreamToolRegistry(sp.GetRequiredKeyedService<IDownstreamMcpClient>(key)));
+
+            services.AddKeyedSingleton<GuardedToolRunner>(
+                McpGatewayConventions.SecondaryDownstream.ServiceKey,
+                (sp, key) => new GuardedToolRunner(
+                    sp.GetRequiredKeyedService<IDownstreamMcpClient>(key),
+                    sp.GetRequiredService<IGuardrailAuditStore>(),
+                    sp.GetRequiredService<IHttpContextAccessor>(),
+                    sp.GetRequiredService<SensitiveDataRedactor>(),
+                    sp.GetRequiredService<ILogger<GuardedToolRunner>>()));
+
+            services.AddKeyedSingleton<KubernetesMcpServerRequestPolicy>(
+                McpGatewayConventions.SecondaryDownstream.ServiceKey,
+                (_, _) => new KubernetesMcpServerRequestPolicy(kubernetesMcpServerOptions.AllowedNamespaces));
+            services.AddKeyedSingleton<KubernetesMcpServerResponsePolicy>(
+                McpGatewayConventions.SecondaryDownstream.ServiceKey,
+                (_, _) => new KubernetesMcpServerResponsePolicy());
+        }
+
+        // Composes the primary + optional secondary read-only downstream sources once, here in
+        // the composition root, so GatewayToolDispatcher can take the result via ordinary
+        // constructor injection instead of resolving IServiceProvider itself at runtime.
+        private void RegisterReadOnlySources()
+        {
+            services.AddSingleton<DownstreamToolCatalog>();
+            services.AddSingleton<IReadOnlyList<GatewayToolDispatcher.ReadOnlySource>>(sp =>
+            {
+                var sources = new List<GatewayToolDispatcher.ReadOnlySource>
+                {
+                    new(
+                        McpGatewayConventions.DownstreamSources.Primary,
+                        sp.GetRequiredService<DownstreamToolRegistry>(),
+                        sp.GetRequiredService<GuardedToolRunner>())
+                };
+
+                DownstreamToolRegistry? secondaryRegistry = sp.GetKeyedService<DownstreamToolRegistry>(
+                    McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                GuardedToolRunner? secondaryRunner = sp.GetKeyedService<GuardedToolRunner>(
+                    McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                KubernetesMcpServerRequestPolicy? secondaryRequestPolicy =
+                    sp.GetKeyedService<KubernetesMcpServerRequestPolicy>(
+                        McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                KubernetesMcpServerResponsePolicy? secondaryResponsePolicy =
+                    sp.GetKeyedService<KubernetesMcpServerResponsePolicy>(
+                        McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                if (secondaryRegistry is not null
+                    && secondaryRunner is not null
+                    && secondaryRequestPolicy is not null
+                    && secondaryResponsePolicy is not null)
+                {
+                    sources.Add(new GatewayToolDispatcher.ReadOnlySource(
+                        McpGatewayConventions.DownstreamSources.Secondary,
+                        secondaryRegistry,
+                        secondaryRunner,
+                        secondaryRequestPolicy,
+                        secondaryResponsePolicy,
+                        McpGatewayConventions.SecondaryDownstream.ApprovedTools,
+                        KubernetesMcpServerCapabilityManifest.V0066,
+                        KubernetesMcpServerProcessRole.PublicViewer));
+                }
+
+                return sources;
+            });
+        }
+
+        // The optional secondary's client is only present in DI when Task 10's Kubernetes MCP
+        // server config is set; resolve it as nullable rather than requiring
+        // RegisterKubernetesMcpServerDownstream to have run first.
+        private void RegisterReadinessChecker()
+        {
+            services.AddSingleton(sp => new GatewayReadinessChecker(
+                sp.GetRequiredService<NpgsqlDataSource>(),
+                sp.GetRequiredService<IDownstreamMcpClient>(),
+                sp.GetKeyedService<IDownstreamMcpClient>(McpGatewayConventions.SecondaryDownstream.ServiceKey),
+                sp.GetRequiredService<DownstreamToolCatalog>()));
         }
     }
 

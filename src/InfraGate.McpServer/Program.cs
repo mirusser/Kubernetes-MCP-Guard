@@ -63,14 +63,6 @@ builder.Services
 var app = builder.Build();
 
 var appLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("InfraGate.McpServer");
-var bootstrapInput = Console.OpenStandardInput();
-if (!await DownstreamStdioBootstrapGate.ValidateAsync(app.Services, bootstrapInput, appLogger, CancellationToken.None)
-        .ConfigureAwait(false))
-{
-    Environment.ExitCode = 1;
-    return;
-}
-
 var k8sOptions = app.Services.GetRequiredService<KubernetesMcpOptions>();
 if (appLogger.IsEnabled(LogLevel.Information))
 {
@@ -100,7 +92,6 @@ using (var probeCts = new CancellationTokenSource(TimeSpan.FromSeconds(5)))
 }
 
 await app.RunAsync().ConfigureAwait(false);
-GC.KeepAlive(bootstrapInput);
 
 static void AddInfraGateConfiguration(IConfigurationBuilder configuration, string[] args)
 {

@@ -11,12 +11,16 @@ using InfraGate.KubernetesAdapter;
 using InfraGate.KubernetesAdapter.Approval;
 using InfraGate.McpGateway;
 using InfraGate.McpGateway.Auth;
+using InfraGate.McpGateway.DownstreamAuth;
 using InfraGate.McpGateway.Email;
 using InfraGate.McpGateway.Notifications;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Protocol;
 
 namespace InfraGate.McpGateway.Tests.UnitTests;
 
@@ -155,6 +159,12 @@ public sealed class GatewayDiWiringTests
             new ApprovalPageRenderer(sp, sp.GetRequiredService<ILoggerFactory>()));
         services.AddKubernetesAdapter();
         services.AddSingleton<DownstreamToolRegistry>();
+        services.AddSingleton<DownstreamToolCatalog>();
+        services.AddSingleton<IReadOnlyList<GatewayToolDispatcher.ReadOnlySource>>(sp =>
+            new List<GatewayToolDispatcher.ReadOnlySource>
+            {
+                new(McpGatewayConventions.DownstreamSources.Primary, sp.GetRequiredService<DownstreamToolRegistry>(), sp.GetRequiredService<GuardedToolRunner>())
+            });
         services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
         services.AddSingleton<IToolScopeGuard, ToolScopeGuard>();
         services.AddHttpContextAccessor();
@@ -171,6 +181,211 @@ public sealed class GatewayDiWiringTests
         Assert.NotNull(provider.GetRequiredService<IApprovalPreExecutionGate>());
         Assert.NotNull(provider.GetRequiredService<PlanStatusResourceHandler>());
         Assert.NotNull(provider.GetRequiredService<IGatewayToolDispatcher>());
+    }
+
+    [Fact]
+    public async Task Resolve_KeyedKubernetesMcpServerDownstream_Succeeds()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IGuardrailAuditStore, NullAuditStore>();
+        services.AddSingleton<SensitiveDataRedactor>(sp =>
+            new SensitiveDataRedactor(
+                McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                sp.GetRequiredService<ILogger<SensitiveDataRedactor>>()));
+        services.AddHttpContextAccessor();
+        services.AddLogging();
+
+        var descriptor = DownstreamProcessDescriptor.ForKubernetesMcpServer(
+            new KubernetesMcpServerProcessOptions(
+                "kubernetes-mcp-server",
+                ["--config", "deploy/generated/k8s-mcp.toml"],
+                Directory.GetCurrentDirectory(),
+                ".kube/mcp-nginx-demo-viewer.config",
+                "minikube-mcp",
+                new HashSet<string>(["mcp-nginx-demo"], StringComparer.Ordinal)));
+
+        services.AddKeyedSingleton<IDownstreamMcpClient>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey,
+            (sp, _) => new DownstreamMcpClient(
+                descriptor,
+                new NullDownstreamServiceTokenProvider(),
+                sp.GetRequiredService<ILogger<DownstreamMcpClient>>(),
+                sp.GetRequiredService<ILoggerFactory>()));
+        services.AddKeyedSingleton<DownstreamToolRegistry>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey,
+            (sp, key) => new DownstreamToolRegistry(sp.GetRequiredKeyedService<IDownstreamMcpClient>(key)));
+        services.AddKeyedSingleton<GuardedToolRunner>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey,
+            (sp, key) => new GuardedToolRunner(
+                sp.GetRequiredKeyedService<IDownstreamMcpClient>(key),
+                sp.GetRequiredService<IGuardrailAuditStore>(),
+                sp.GetRequiredService<IHttpContextAccessor>(),
+                sp.GetRequiredService<SensitiveDataRedactor>(),
+                sp.GetRequiredService<ILogger<GuardedToolRunner>>()));
+        services.AddKeyedSingleton<KubernetesMcpServerRequestPolicy>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey,
+            (_, _) => new KubernetesMcpServerRequestPolicy(
+                new HashSet<string>(["mcp-nginx-demo"], StringComparer.Ordinal)));
+        services.AddKeyedSingleton<KubernetesMcpServerResponsePolicy>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey,
+            (_, _) => new KubernetesMcpServerResponsePolicy());
+
+        // Primary (unkeyed, real McpGatewayOptions-derived) resolves alongside the keyed secondary.
+        services.AddSingleton(DownstreamProcessDescriptor.ForPrimary(CreateOptions()));
+        services.AddSingleton<IDownstreamServiceTokenProvider, NullDownstreamServiceTokenProvider>();
+        services.AddSingleton<IDownstreamMcpClient, DownstreamMcpClient>();
+
+        await using var provider = services.BuildServiceProvider();
+
+        Assert.NotNull(provider.GetRequiredService<IDownstreamMcpClient>());
+        Assert.NotNull(provider.GetRequiredKeyedService<IDownstreamMcpClient>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey));
+        Assert.NotNull(provider.GetRequiredKeyedService<DownstreamToolRegistry>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey));
+        Assert.NotNull(provider.GetRequiredKeyedService<GuardedToolRunner>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey));
+        Assert.NotNull(provider.GetRequiredKeyedService<KubernetesMcpServerRequestPolicy>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey));
+        Assert.NotNull(provider.GetRequiredKeyedService<KubernetesMcpServerResponsePolicy>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey));
+    }
+
+    [Fact]
+    public async Task RegisterKubernetesMcpServerDownstream_WithValidConfiguration_ResolvesExactlyOneKeyedSecondary()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string root = Path.Combine(
+            Path.GetTempPath(), "infra-gate-k8s-mcp-di-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            IConfiguration configuration = BuildValidSecondaryConfiguration(root);
+
+            var services = new ServiceCollection();
+            services.AddSingleton<IGuardrailAuditStore, NullAuditStore>();
+            services.AddSingleton<IHostApplicationLifetime, NullHostApplicationLifetime>();
+            services.AddSingleton<SensitiveDataRedactor>(sp =>
+                new SensitiveDataRedactor(
+                    McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                    sp.GetRequiredService<ILogger<SensitiveDataRedactor>>()));
+            services.AddHttpContextAccessor();
+            services.AddLogging();
+
+            services.RegisterKubernetesMcpServerDownstream(configuration);
+
+            await using var provider = services.BuildServiceProvider();
+
+            Assert.NotNull(provider.GetRequiredKeyedService<IDownstreamMcpClient>(
+                McpGatewayConventions.SecondaryDownstream.ServiceKey));
+            Assert.NotNull(provider.GetRequiredKeyedService<DownstreamToolRegistry>(
+                McpGatewayConventions.SecondaryDownstream.ServiceKey));
+            Assert.NotNull(provider.GetRequiredKeyedService<GuardedToolRunner>(
+                McpGatewayConventions.SecondaryDownstream.ServiceKey));
+            Assert.NotNull(provider.GetRequiredKeyedService<KubernetesMcpServerRequestPolicy>(
+                McpGatewayConventions.SecondaryDownstream.ServiceKey));
+            Assert.NotNull(provider.GetRequiredKeyedService<KubernetesMcpServerResponsePolicy>(
+                McpGatewayConventions.SecondaryDownstream.ServiceKey));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RegisterKubernetesMcpServerDownstream_WhenCommandNotConfigured_RegistersNoSecondaryServices()
+    {
+        IConfiguration configuration = new ConfigurationBuilder().Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IGuardrailAuditStore, NullAuditStore>();
+        services.AddSingleton<IHostApplicationLifetime, NullHostApplicationLifetime>();
+        services.AddSingleton<SensitiveDataRedactor>(sp =>
+            new SensitiveDataRedactor(
+                McpGatewayConventions.SensitiveDataRedaction.Defaults,
+                sp.GetRequiredService<ILogger<SensitiveDataRedactor>>()));
+        services.AddHttpContextAccessor();
+        services.AddLogging();
+
+        services.RegisterKubernetesMcpServerDownstream(configuration);
+
+        await using var provider = services.BuildServiceProvider();
+
+        Assert.Null(provider.GetKeyedService<IDownstreamMcpClient>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey));
+        Assert.Null(provider.GetKeyedService<DownstreamToolRegistry>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey));
+        Assert.Null(provider.GetKeyedService<GuardedToolRunner>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey));
+        Assert.Null(provider.GetKeyedService<KubernetesMcpServerRequestPolicy>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey));
+        Assert.Null(provider.GetKeyedService<KubernetesMcpServerResponsePolicy>(
+            McpGatewayConventions.SecondaryDownstream.ServiceKey));
+    }
+
+    private static IConfiguration BuildValidSecondaryConfiguration(string root)
+    {
+        const string pinnedVersion = "v0.0.66";
+        const string context = "minikube-mcp";
+
+        string command = Path.Combine(root, "kubernetes-mcp-server");
+        File.WriteAllText(command, $"#!/usr/bin/env bash\necho \"{pinnedVersion}\"\n");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(
+                command,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        File.WriteAllText(
+            Path.Combine(root, McpGatewayConventions.SecondaryDownstream.ManifestFileName),
+            "{\"version\": \"" + pinnedVersion + "\", \"checksums\": {\"linux-amd64\": \"deadbeef\"}}");
+
+        string configPath = Path.Combine(root, "k8s-mcp.toml");
+        string toolList = string.Join(
+            ", ",
+            McpGatewayConventions.SecondaryDownstream.ApprovedTools.Select(tool => $"\"{tool}\""));
+        File.WriteAllText(configPath, $"enabled_tools = [{toolList}]\n");
+
+        string kubeconfigPath = Path.Combine(root, "viewer.config");
+        File.WriteAllText(
+            kubeconfigPath,
+            "apiVersion: v1\n" +
+            "kind: Config\n" +
+            "clusters:\n" +
+            "- name: demo\n" +
+            "  cluster:\n" +
+            "    server: https://127.0.0.1\n" +
+            "contexts:\n" +
+            $"- name: {context}\n" +
+            "  context:\n" +
+            "    cluster: demo\n" +
+            "    user: viewer\n" +
+            $"current-context: {context}\n" +
+            "users:\n" +
+            "- name: viewer\n" +
+            "  user:\n" +
+            "    token: test-token\n");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(kubeconfigPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+
+        var entries = new Dictionary<string, string?>
+        {
+            [McpGatewayConventions.ConfigurationKeys.KubernetesMcpServerSection + ":Command"] = command,
+            [McpGatewayConventions.ConfigurationKeys.KubernetesMcpServerSection + ":Kubeconfig"] = kubeconfigPath,
+            [McpGatewayConventions.ConfigurationKeys.KubernetesMcpServerSection + ":Context"] = context,
+            [McpGatewayConventions.ConfigurationKeys.KubernetesMcpServerSection + ":AllowedNamespaces:0"] =
+                "mcp-nginx-demo",
+            [McpGatewayConventions.ConfigurationKeys.KubernetesMcpServerSection + ":Arguments:0"] = "--config",
+            [McpGatewayConventions.ConfigurationKeys.KubernetesMcpServerSection + ":Arguments:1"] = configPath,
+        };
+        return new ConfigurationBuilder().AddInMemoryCollection(entries).Build();
     }
 
     private static McpGatewayOptions CreateOptions()
@@ -197,17 +412,21 @@ public sealed class GatewayDiWiringTests
 
     private sealed class NullDownstreamClient : IDownstreamMcpClient, IToolCaller
     {
-        public Task<string> CallToolAsync(
+        public Task<DownstreamCallResult> CallToolAsync(
             string toolName,
             IReadOnlyDictionary<string, object?> arguments,
             CancellationToken cancellationToken) =>
-            Task.FromResult("{}");
+            Task.FromResult(DownstreamCallResult.FromText("{}"));
 
-        public Task<string> CallAsync(
+        public async Task<string> CallAsync(
             string toolName,
             IReadOnlyDictionary<string, object?> arguments,
-            CancellationToken ct) =>
-            CallToolAsync(toolName, arguments, ct);
+            CancellationToken ct)
+        {
+            DownstreamCallResult result = await CallToolAsync(toolName, arguments, ct).ConfigureAwait(false);
+            return string.Join(Environment.NewLine,
+                result.Content.OfType<TextContentBlock>().Select(c => c.Text));
+        }
 
         public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<DownstreamTool>>([]);
@@ -223,5 +442,18 @@ public sealed class GatewayDiWiringTests
     {
         public Task SendAsync(ApprovalEmailContent content, CancellationToken cancellationToken) =>
             Task.CompletedTask;
+    }
+
+    private sealed class NullHostApplicationLifetime : IHostApplicationLifetime
+    {
+        public CancellationToken ApplicationStarted => CancellationToken.None;
+
+        public CancellationToken ApplicationStopping => CancellationToken.None;
+
+        public CancellationToken ApplicationStopped => CancellationToken.None;
+
+        public void StopApplication()
+        {
+        }
     }
 }

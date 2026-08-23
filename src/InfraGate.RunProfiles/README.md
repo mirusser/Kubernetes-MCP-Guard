@@ -1,8 +1,8 @@
 # InfraGate.RunProfiles
 
-CLI tool that compiles named profiles from `deploy/run-profiles.yaml` into `.env` files for Docker Compose/deployment scripts and .NET runtime binding. It is the canonical source of truth for all runnable environment configuration.
+CLI tool that compiles named profiles from `deploy/run-profiles.yaml` into `.env` files for Docker Compose/.NET runtime binding and TOML configuration for the optional `kubernetes-mcp-server` downstream. It is the canonical source of truth for generated runnable configuration.
 
-**Owns:** named profile compilation, `.env` generation, configuration source of truth
+**Owns:** named profile compilation, `.env` generation, `kubernetes-mcp-server` TOML generation, configuration source of truth
 
 ## Commands
 
@@ -14,17 +14,20 @@ dotnet run --project src/InfraGate.RunProfiles -- list
 dotnet run --project src/InfraGate.RunProfiles -- validate
 
 # Generate an env file from a profile
-dotnet run --project src/InfraGate.RunProfiles -- generate <profile> [options]
+dotnet run --project src/InfraGate.RunProfiles -- generate <profile> --output <path> [options]
+
+# Generate read-only kubernetes-mcp-server TOML from a Kubernetes profile
+dotnet run --project src/InfraGate.RunProfiles -- generate-toml <profile> --output <path> [options]
 ```
 
-### `generate` options
+### `generate` and `generate-toml` options
 
 | Flag | Description |
 |---|---|
-| `--format` | Removed; passing it returns an error because generation now always writes one env file |
-| `--output <path>` | Write to a file instead of stdout |
+| `--format` | Removed; select the output type with `generate` or `generate-toml` |
+| `--output <path>` | Required output file path |
 | `--set section.field=value` | Override a single field after profile merge; repeatable |
-| `--force` | Overwrite an existing output file (default: refuse) |
+| `--force` | Overwrite a file that lacks the matching generated-profile header; matching generated files can be refreshed without it |
 | `--config <path>` | Use an alternate YAML file (default: `deploy/run-profiles.yaml`) |
 
 ## Profile catalogue
@@ -251,9 +254,29 @@ INFRA_GATE_BIND_ADDRESS=...
 
 Sections are omitted when the profile produces no values for them.
 
+`generate-toml` requires a dedicated `kubernetesMcpServer` profile with a viewer kubeconfig, context, and non-wildcard namespace allowlist. It always writes the supported fixed single-cluster policy and curated tool allowlist:
+
+```toml
+# Generated from run-profiles.yaml profile: <name>
+# Do not edit. Run: dotnet run --project src/InfraGate.RunProfiles -- generate-toml <name>
+
+kubeconfig = "<path>"
+cluster_provider_strategy = "disabled"
+cluster_auth_mode = "kubeconfig"
+toolsets = ["core"]
+stateless = true
+read_only = true
+disable_destructive = true
+enabled_tools = ["pods_list_in_namespace", "pods_get", "pods_log"]
+```
+
+The single-cluster, toolset, stateless, read-only, destructive-tool, and enabled-tool settings are intentionally not YAML-configurable because the secondary downstream is not connected to the mutation/approval path. The generated env projection includes viewer kubeconfig, context, and namespace values but does not emit `Command`, so the secondary remains disabled unless explicitly enabled.
+
+`events_list` is intentionally excluded because v0.0.66 has no server-side result limit; the Gateway's post-response byte limit cannot prevent the upstream process from materializing an unbounded event list.
+
 ## Output paths and gitignore
 
-Generated files belong in `deploy/generated/`, which is covered by `.gitignore`. The committed no-SDK release example is `deploy/local-oauth/release.env.example`, generated from the `smoke-release` profile:
+Generated `.env` and TOML files belong in `deploy/generated/`, which is covered by `.gitignore`. The committed no-SDK release example is `deploy/local-oauth/release.env.example`, generated from the `smoke-release` profile:
 
 ```bash
 dotnet run --project src/InfraGate.RunProfiles -- generate smoke-release \

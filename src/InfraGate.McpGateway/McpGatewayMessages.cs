@@ -59,6 +59,36 @@ internal static class McpGatewayMessages
             $"Approval plan '{planId}' created. To execute, submit with {McpGatewayConventions.ToolNames.ApplyApprovedPlan}({McpGatewayConventions.ToolArguments.PlanId}=\"{planId}\").";
     }
 
+    public static class ToolCatalog
+    {
+        public const string SourceUnavailable =
+            "Optional downstream source is unavailable; its tools are omitted from the catalog.";
+
+        public const string RestartAttemptsExhausted =
+            "Optional downstream source exhausted its supervised restart attempts; its tools are omitted from the catalog.";
+    }
+
+    public static class KubernetesMcpServerPolicy
+    {
+        public static string ToolNotAllowed(string toolName) =>
+            $"Refused: Kubernetes MCP tool '{toolName}' is not approved.";
+
+        public static string UnknownArgument(string toolName, string argumentName) =>
+            $"Refused: argument '{argumentName}' is not allowed for Kubernetes MCP tool '{toolName}'.";
+
+        public static string MissingOrInvalidArgument(string toolName, string argumentName) =>
+            $"Refused: Kubernetes MCP tool '{toolName}' requires a valid '{argumentName}' argument.";
+
+        public static string NamespaceNotAllowed(string namespaceName) =>
+            $"Refused: Kubernetes namespace '{namespaceName}' is not allowed.";
+
+        public const string LogTailOutOfRange =
+            "Refused: Kubernetes MCP log tail must be an integer between 0 and 200.";
+
+        public static string ResponseTooLarge(int actualBytes, int maximumBytes) =>
+            $"Refused: Kubernetes MCP response size {actualBytes} bytes exceeds the {maximumBytes}-byte limit.";
+    }
+
     public static class Approval
     {
         public const string ChallengeNotFound = "Approval challenge was not found.";

@@ -87,16 +87,9 @@ builder.Services.AddSingleton<ToolCallingAgentFactory>();
 builder.Services.AddModelVisibleContentGuard(modelVisibleContentOptions);
 builder.Services.AddSingleton(_ =>
 {
-    var allowedTools = new HashSet<string>(StringComparer.Ordinal)
+    var allowedTools = new HashSet<string>(DiagnosticCapabilityProfile.ToolNames, StringComparer.Ordinal)
     {
-        PlannerConventions.ToolNames.GetAllowedNamespaces,
-        PlannerConventions.ToolNames.GetK8sStatus,
-        PlannerConventions.ToolNames.GetK8sEvents,
-        PlannerConventions.ToolNames.GetK8sPods,
-        PlannerConventions.ToolNames.DescribeK8sResource,
-        PlannerConventions.ToolNames.GetK8sDeployments,
-        PlannerConventions.ToolNames.GetK8sServices,
-        PlannerConventions.ToolNames.GetK8sEndpoints,
+        AskObserverTool.FunctionName,
     };
     return new AgentGuardrailPolicy(allowedTools);
 });

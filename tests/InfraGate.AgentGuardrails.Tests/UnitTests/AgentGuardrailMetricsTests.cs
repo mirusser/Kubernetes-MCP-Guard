@@ -12,7 +12,7 @@ public sealed class AgentGuardrailMetricsTests
         using var listener = new MeterListener();
         listener.InstrumentPublished = (instrument, l) =>
         {
-            if (instrument.Name == AgentGuardrailConventions.ToolCallBlockedCounterName)
+            if (instrument.Name == AgentGuardrailConventions.ToolCallBlockedCounterName && instrument.Meter == testMeter)
                 l.EnableMeasurementEvents(instrument);
         };
         listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
@@ -40,7 +40,7 @@ public sealed class AgentGuardrailMetricsTests
         using var listener = new MeterListener();
         listener.InstrumentPublished = (instrument, l) =>
         {
-            if (instrument.Name == AgentGuardrailConventions.DecisionCounterName)
+            if (instrument.Name == AgentGuardrailConventions.DecisionCounterName && instrument.Meter == testMeter)
                 l.EnableMeasurementEvents(instrument);
         };
         listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
@@ -67,7 +67,7 @@ public sealed class AgentGuardrailMetricsTests
         using var listener = new MeterListener();
         listener.InstrumentPublished = (instrument, l) =>
         {
-            if (instrument.Name == AgentGuardrailConventions.DecisionCounterName)
+            if (instrument.Name == AgentGuardrailConventions.DecisionCounterName && instrument.Meter == testMeter)
                 l.EnableMeasurementEvents(instrument);
         };
         listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
@@ -104,7 +104,7 @@ public sealed class AgentGuardrailMetricsTests
         using var listener = new MeterListener();
         listener.InstrumentPublished = (instrument, l) =>
         {
-            if (instrument.Name == AgentGuardrailConventions.ToolCallBlockedCounterName)
+            if (instrument.Name == AgentGuardrailConventions.ToolCallBlockedCounterName && instrument.Meter.Name == AgentGuardrailConventions.MeterName)
                 l.EnableMeasurementEvents(instrument);
         };
         listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>

@@ -35,6 +35,11 @@ public static class TelemetryExtensions
                     .AddSource(TelemetryConventions.WorkflowsSourceName)
                     .AddHttpClientInstrumentation();
 
+                foreach (var sourceName in options.ActivitySourceNames)
+                {
+                    tracing.AddSource(sourceName);
+                }
+
                 tracing.AddProcessor(sp =>
                     new SerilogSpanProcessor(sp.GetRequiredService<ILogger<SerilogSpanProcessor>>()));
 

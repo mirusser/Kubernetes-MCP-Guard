@@ -344,7 +344,9 @@ public sealed class RunProfileCliTests
             """);
         string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "local-stdio.env");
         await File.WriteAllTextAsync(outputPath,
-            "# Generated from run-profiles.yaml profile: local-stdio\n# Do not edit.\n\nOLD_VAR=old\n");
+            "# Generated from run-profiles.yaml profile: local-stdio\n" +
+            "# Do not edit. Run: dotnet run --project src/InfraGate.RunProfiles -- generate local-stdio\n" +
+            "\nOLD_VAR=old\n");
         using var output = new StringWriter();
         using var error = new StringWriter();
 
@@ -790,6 +792,9 @@ public sealed class RunProfileCliTests
             "InfraGate__Auth__ApprovalOAuthTokenEndpoint",
             "InfraGate__Approval__Root",
             "InfraGate__DownstreamAuth__Required",
+            "InfraGate__Gateway__KubernetesMcpServer__Kubeconfig",
+            "InfraGate__Gateway__KubernetesMcpServer__Context",
+            "InfraGate__Gateway__KubernetesMcpServer__AllowedNamespaces__0",
             "InfraGate__Kubernetes__KubeConfig",
             "InfraGate__Kubernetes__AllowedNamespaces__0",
             "InfraGate__Observer__AspNetCoreUrls",
@@ -915,6 +920,14 @@ public sealed class RunProfileCliTests
             "InfraGate__Kubernetes__AllowedNamespaces__0"
         };
 
+    private static readonly HashSet<string> KubernetesMcpServerTestProfileKeys =
+        new(MinimalProfileKeys, StringComparer.Ordinal)
+        {
+            "InfraGate__Gateway__KubernetesMcpServer__Kubeconfig",
+            "InfraGate__Gateway__KubernetesMcpServer__Context",
+            "InfraGate__Gateway__KubernetesMcpServer__AllowedNamespaces__0"
+        };
+
     public static TheoryData<string, HashSet<string>> ProfileKeySetData = new()
     {
         { "local-compose", LocalComposeProfileKeys },
@@ -922,7 +935,7 @@ public sealed class RunProfileCliTests
         { "development", DevelopmentProfileKeys },
         { "production", ComposeStackProfileKeys },
         { "test-integration", MinimalProfileKeys },
-        { "test-gateway-integration", MinimalProfileKeys },
+        { "test-gateway-integration", KubernetesMcpServerTestProfileKeys },
         { "test-safety-e2e", MinimalProfileKeys },
         { "smoke-local", SmokeProfileKeys },
         { "smoke-release", SmokeProfileKeys }

@@ -104,6 +104,11 @@ profiles:
     kind: dotnet
     runtimeMode: Development
     gateway: {}
+    kubernetesMcpServer:
+      kubeconfig: .kube/mcp-nginx-demo-viewer.config
+      context: minikube-mcp
+      allowedNamespaces:
+        - mcp-nginx-demo
     identityProvider:
       realmImport: deploy/keycloak/infra-gate-realm.json
       authority: http://127.0.0.1:3010/realms/infra-gate
@@ -279,6 +284,11 @@ profiles:
   test-gateway-integration:
     kind: test
     runtimeMode: Development
+    kubernetesMcpServer:
+      kubeconfig: .kube/mcp-nginx-demo-viewer.config
+      context: minikube-mcp
+      allowedNamespaces:
+        - mcp-nginx-demo
     genericApprovalCore:
       approvalRoot: .mcp-approvals
     downstreamAuth:

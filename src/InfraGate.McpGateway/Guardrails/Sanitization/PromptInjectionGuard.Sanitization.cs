@@ -1,10 +1,48 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using ModelContextProtocol.Protocol;
 
 namespace InfraGate.McpGateway;
 
 public static partial class PromptInjectionGuard
 {
+    /// <summary>
+    /// Sanitizes typed content blocks from a downstream call result, preserving block structure.
+    /// </summary>
+    internal static SanitizedContentResult SanitizeTypedContent(
+        IReadOnlyList<object> content,
+        bool isError,
+        JsonObject? meta)
+    {
+        var sanitizedBlocks = new List<object>(content.Count);
+        var allFindings = new List<GuardrailFinding>();
+        bool anyManifestRedacted = false;
+
+        foreach (var block in content)
+        {
+            if (block is TextContentBlock textBlock)
+            {
+                ResponseSanitizationResult sanitized = SanitizeResponse(textBlock.Text);
+                sanitizedBlocks.Add(new TextContentBlock { Text = sanitized.Text });
+                allFindings.AddRange(sanitized.Findings);
+                anyManifestRedacted = anyManifestRedacted || sanitized.ManifestRedacted;
+            }
+            else
+            {
+                // Unsupported content type - fail closed
+                return SanitizedContentResult.CreatePolicyError(
+                    $"Unsupported content type: {block?.GetType().Name ?? "null"}");
+            }
+        }
+
+        return new SanitizedContentResult(
+            sanitizedBlocks,
+            isError,
+            meta,
+            allFindings,
+            anyManifestRedacted);
+    }
+
     public static ResponseSanitizationResult SanitizeResponse(string responseText)
     {
         var findings = new List<GuardrailFinding>();

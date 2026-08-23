@@ -191,11 +191,11 @@ The per-component, append-only audit record for one runtime component (currently
 _Avoid_: **Audit Trail** (currently scoped to approval-lifecycle only), **Adapter Audit Payload** (the domain-specific JSON inside one event), unified ledger across components
 
 **Notification Registry**:
-The in-memory mapping from active MCP session identifiers to their notification targets and from plan URIs to subscribed session sets, used to route **Approval Notifications** back to the right AI agent sessions.
-_Avoid_: Session store, connection pool
+The in-memory mapping from active MCP `subscriptions/listen` registration identifiers to their notification targets and from plan URIs to subscribed registration sets, used to route **Approval Notifications** back to the right AI agents.
+_Avoid_: MCP session store, connection pool
 
 **Approval Notification**:
-A server-to-client MCP `notifications/resources/updated` message sent when an **Approval Challenge** is approved, carrying the plan status resource URI so the AI agent's host can read the updated status and retry execution without manual prompting.
+A server-to-client MCP `notifications/resources/updated` message sent on an MCP 2026-07-28 `subscriptions/listen` stream when an **Approval Challenge** is approved, carrying the plan status resource URI and subscription identifier so the AI agent's host can read the updated status and retry execution without manual prompting.
 _Avoid_: Push event, callback
 
 **Prompt Library**:

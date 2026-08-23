@@ -414,6 +414,14 @@ Allowed manifest kinds: `apps/v1 Deployment`, `v1 Service`, `v1 ConfigMap`.
 
 ## Verification
 
+For a guided, mostly-automated run of everything below — checks for .NET/Docker/kubectl/minikube, offers to install minikube if missing, starts the cluster, applies the demo RBAC/workload (asking first if it would overwrite a mismatched existing Deployment), and runs every test tier your machine supports:
+
+```bash
+./scripts/local-integration-test.sh
+```
+
+Or run the steps individually:
+
 ```bash
 # Build
 dotnet build InfraGate.slnx

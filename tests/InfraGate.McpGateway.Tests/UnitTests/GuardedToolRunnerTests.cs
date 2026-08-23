@@ -188,6 +188,41 @@ public sealed class GuardedToolRunnerTests
     }
 
     [Fact]
+    public async Task AuditPolicyDenialAsync_RecordsPolicyDenialMetric()
+    {
+        var recorded = new List<Measurement<long>>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Name == McpGatewayConventions.Telemetry.GuardrailPolicyDenialCounterName)
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+            recorded.Add(new Measurement<long>(value, tags)));
+        listener.Start();
+
+        var downstream = new FakeDownstream("unused");
+        var runner = CreateRunner(downstream, new InMemoryAuditStore());
+
+        await runner.AuditPolicyDenialAsync(
+            "pods_list_in_namespace",
+            new Dictionary<string, object?> { ["namespace"] = "kube-system" },
+            McpGatewayConventions.GuardrailAudit.RequestDirection,
+            McpGatewayConventions.GuardrailCategories.KubernetesRequestPolicy,
+            metadata: null,
+            CancellationToken.None);
+
+        Assert.Single(recorded);
+        Assert.Equal(1L, recorded[0].Value);
+        Assert.Equal("pods_list_in_namespace",
+            TagValue(recorded[0], McpGatewayConventions.Telemetry.Tags.ToolName));
+        Assert.Equal(McpGatewayConventions.GuardrailAudit.RequestDirection,
+            TagValue(recorded[0], McpGatewayConventions.Telemetry.Tags.GuardrailDirection));
+        Assert.Equal(McpGatewayConventions.GuardrailCategories.KubernetesRequestPolicy,
+            TagValue(recorded[0], McpGatewayConventions.Telemetry.Tags.GuardrailCategory));
+    }
+
+    [Fact]
     public async Task CallAsync_AuditsOAuthSubject_WhenAuthenticated()
     {
         var downstream = new FakeDownstream("downstream response");
@@ -560,7 +595,7 @@ public sealed class GuardedToolRunnerTests
         public IReadOnlyDictionary<string, object?> Arguments { get; private set; } =
             new Dictionary<string, object?>();
 
-        public Task<string> CallToolAsync(
+        public Task<DownstreamCallResult> CallToolAsync(
             string toolName,
             IReadOnlyDictionary<string, object?> arguments,
             CancellationToken cancellationToken)
@@ -573,7 +608,7 @@ public sealed class GuardedToolRunnerTests
                 throw error;
             }
 
-            return Task.FromResult(response!);
+            return Task.FromResult(DownstreamCallResult.FromText(response!));
         }
 
         public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>

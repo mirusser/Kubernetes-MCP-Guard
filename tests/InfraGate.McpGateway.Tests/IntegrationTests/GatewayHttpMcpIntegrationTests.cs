@@ -5,7 +5,9 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using System.Threading.Channels;
 using InfraGate;
 using InfraGate.ApprovalUi;
 using InfraGate.AuditOutbox;
@@ -68,9 +70,11 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         using var server = CreateGatewayServer(new FakeDownstream("unused"), audit);
         using var client = server.CreateClient();
 
-        var missingResponse = await client.GetAsync(McpGatewayConventions.McpPath);
+        using var missingContent = CreateMcpRequestContent();
+        using var missingResponse = await client.PostAsync(McpGatewayConventions.McpPath, missingContent);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "wrong");
-        var wrongResponse = await client.GetAsync(McpGatewayConventions.McpPath);
+        using var wrongContent = CreateMcpRequestContent();
+        using var wrongResponse = await client.PostAsync(McpGatewayConventions.McpPath, wrongContent);
 
         Assert.Equal(HttpStatusCode.Unauthorized, missingResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, wrongResponse.StatusCode);
@@ -85,7 +89,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", "change-me");
-        var response = await client.GetAsync(McpGatewayConventions.McpPath);
+        using var content = CreateMcpRequestContent();
+        using var response = await client.PostAsync(McpGatewayConventions.McpPath, content);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -162,6 +167,72 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         Assert.Equal(
             ApprovalConventions.PlanStatusValues.NotFound,
             document.RootElement.GetProperty(McpGatewayConventions.ToolResponseFields.Status).GetString());
+    }
+
+    [Fact]
+    public async Task McpEndpoint_SubscriptionsListen_StreamsPlanStatusUpdate()
+    {
+        var audit = new InMemoryAuditStore();
+        using var server = CreateGatewayServer(new FakeDownstream("unused"), audit);
+        await using var client = await CreateHttpMcpClientAsync(server);
+        Assert.Equal("2026-07-28", client.NegotiatedProtocolVersion);
+        string planId = ApprovalIds.NewPlanId();
+        string resourceUri = NotificationsConventions.Resources.PlanStatusUri(planId);
+        var acknowledgementChannel = Channel.CreateUnbounded<JsonRpcNotification>();
+        var updateChannel = Channel.CreateUnbounded<JsonRpcNotification>();
+
+        await using var acknowledgementRegistration = client.RegisterNotificationHandler(
+            NotificationMethods.SubscriptionsAcknowledgedNotification,
+            (notification, _) =>
+            {
+                acknowledgementChannel.Writer.TryWrite(notification);
+                return default;
+            });
+        await using var updateRegistration = client.RegisterNotificationHandler(
+            NotificationMethods.ResourceUpdatedNotification,
+            (notification, _) =>
+            {
+                updateChannel.Writer.TryWrite(notification);
+                return default;
+            });
+
+        var listenRequest = new JsonRpcRequest
+        {
+            Id = new RequestId("plan-status-listen"),
+            Method = RequestMethods.SubscriptionsListen,
+            Params = JsonSerializer.SerializeToNode(
+                new SubscriptionsListenRequestParams
+                {
+                    Notifications = new SubscriptionsListenNotifications
+                    {
+                        ResourceSubscriptions = [resourceUri]
+                    }
+                },
+                McpJsonUtilities.DefaultOptions)
+        };
+        using var listenCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        Task listenTask = client.SendRequestAsync(listenRequest, listenCts.Token);
+
+        JsonRpcNotification acknowledgement = await acknowledgementChannel.Reader.ReadAsync(listenCts.Token);
+        await server.Services.GetRequiredService<IApprovalNotificationDispatcher>()
+            .NotifyPlanApprovedAsync(planId, listenCts.Token);
+        JsonRpcNotification update = await updateChannel.Reader.ReadAsync(listenCts.Token);
+
+        var acknowledgementParams = Assert.IsType<JsonObject>(acknowledgement.Params);
+        var updateParams = Assert.IsType<JsonObject>(update.Params);
+        Assert.Equal(
+            resourceUri,
+            acknowledgementParams["notifications"]?["resourceSubscriptions"]?[0]?.GetValue<string>());
+        Assert.Equal(resourceUri, updateParams["uri"]?.GetValue<string>());
+        Assert.Equal(
+            "plan-status-listen",
+            acknowledgementParams["_meta"]?[MetaKeys.SubscriptionId]?.GetValue<string>());
+        Assert.Equal(
+            "plan-status-listen",
+            updateParams["_meta"]?[MetaKeys.SubscriptionId]?.GetValue<string>());
+
+        await listenCts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => listenTask);
     }
 
     [Fact]
@@ -328,10 +399,10 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
-        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
+        await using var downstream = new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(CreateGatewayOptions(serverProject, testRoot, repoRoot)), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
 
-        var result = await downstream.CallToolAsync(
+        var callResult = await downstream.CallToolAsync(
             KubernetesAdapterConventions.EvidenceTools.DryRunApplyManifest,
             new Dictionary<string, object?>
             {
@@ -339,6 +410,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [KubernetesAdapterConventions.ToolArguments.Manifest] = CleanConfigMapManifest
             },
             timeout.Token);
+        var result = string.Join(
+            Environment.NewLine,
+            callResult.Content.OfType<TextContentBlock>().Select(content => content.Text));
 
         Assert.Contains("\"policyBlocked\": false", result);
         Assert.Contains("Server-side dry-run succeeded.", result);
@@ -367,7 +441,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
         await using var downstream = new DownstreamMcpClient(
-            CreateGatewayOptions(serverProject, testRoot, repoRoot),
+            DownstreamProcessDescriptor.ForPrimary(CreateGatewayOptions(serverProject, testRoot, repoRoot)),
             new NullDownstreamServiceTokenProvider(),
             NullLogger<DownstreamMcpClient>.Instance,
             NullLoggerFactory.Instance);
@@ -378,7 +452,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             [$"{KubernetesAdapterConventions.ApiVersions.AppsV1} {KubernetesAdapterConventions.ResourceKinds.Deployment} {NamespaceName}/demo"] =
                 resourceVersion
         };
-        var result = await downstream.CallToolAsync(
+        var callResult = await downstream.CallToolAsync(
             KubernetesAdapterConventions.EvidenceTools.CheckResourceVersion,
             new Dictionary<string, object?>
             {
@@ -386,6 +460,9 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 [KubernetesAdapterConventions.EvidenceArguments.DiffsJson] = JsonSerializer.Serialize(diffs)
             },
             timeout.Token);
+        var result = string.Join(
+            Environment.NewLine,
+            callResult.Content.OfType<TextContentBlock>().Select(content => content.Text));
 
         Assert.Equal(KubernetesAdapterConventions.DriftCheckResults.NoDrift, result);
     }
@@ -440,7 +517,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ApprovalBaseUrl: null,
             McpGatewayOptions.DefaultApprovalChallengeTtl,
             DownstreamAuth: authOptions);
-        await using var downstream = new DownstreamMcpClient(options, tokenProvider, NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
+        await using var downstream = new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(options), tokenProvider, NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
 
         var tools = await downstream.ListToolsAsync(timeout.Token);
@@ -499,7 +576,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ApprovalBaseUrl: null,
             McpGatewayOptions.DefaultApprovalChallengeTtl,
             DownstreamAuth: authOptions);
-        await using var downstream = new DownstreamMcpClient(options, tokenProvider, NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
+        await using var downstream = new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(options), tokenProvider, NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(downstream, audit, options);
         await using var client = await CreateHttpMcpClientAsync(server);
@@ -558,7 +635,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ApprovalBaseUrl: null,
             McpGatewayOptions.DefaultApprovalChallengeTtl,
             DownstreamAuth: authOptions);
-        await using var downstream = new DownstreamMcpClient(options, tokenProvider, NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
+        await using var downstream = new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(options), tokenProvider, NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
 
         var ex = await Assert.ThrowsAsync<McpException>(() => downstream.CallToolAsync(
@@ -588,7 +665,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
-        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
+        await using var downstream = new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(CreateGatewayOptions(serverProject, testRoot, repoRoot)), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(downstream, audit, CreateGatewayOptions(serverProject, testRoot, repoRoot));
         await using var client = await CreateHttpMcpClientAsync(server);
@@ -728,7 +805,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
         await using var downstream = new DownstreamMcpClient(
-            CreateGatewayOptions(serverProject, testRoot, repoRoot),
+            DownstreamProcessDescriptor.ForPrimary(CreateGatewayOptions(serverProject, testRoot, repoRoot)),
             new NullDownstreamServiceTokenProvider(),
             NullLogger<DownstreamMcpClient>.Instance,
             NullLoggerFactory.Instance);
@@ -771,7 +848,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
-        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
+        await using var downstream = new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(CreateGatewayOptions(serverProject, testRoot, repoRoot)), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(downstream, audit, CreateGatewayOptions(serverProject, testRoot, repoRoot));
         await using var client = await CreateHttpMcpClientAsync(server);
@@ -810,7 +887,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             ("InfraGate__Kubernetes__AllowedNamespaces__0", NamespaceName),
             (RuntimeSafetyConventions.EnvironmentVariables.ConfigPath, null),
             (DownstreamAuthConventions.EnvironmentVariables.Required, "false"));
-        await using var downstream = new DownstreamMcpClient(CreateGatewayOptions(serverProject, testRoot, repoRoot), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
+        await using var downstream = new DownstreamMcpClient(DownstreamProcessDescriptor.ForPrimary(CreateGatewayOptions(serverProject, testRoot, repoRoot)), new NullDownstreamServiceTokenProvider(), NullLogger<DownstreamMcpClient>.Instance, NullLoggerFactory.Instance);
         var audit = new InMemoryAuditStore();
         using var server = CreateGatewayServer(downstream, audit, CreateGatewayOptions(serverProject, testRoot, repoRoot));
         await using var client = await CreateHttpMcpClientAsync(server);
@@ -1071,7 +1148,8 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         IDownstreamMcpClient downstream,
         InMemoryAuditStore audit,
         McpGatewayOptions? gatewayOptions = null,
-        string approvalOAuthScope = Scope)
+        string approvalOAuthScope = Scope,
+        Action<IServiceCollection>? configureAdditionalServices = null)
     {
         var options = gatewayOptions ?? CreateGatewayOptions("unused", Path.GetTempPath(), Directory.GetCurrentDirectory());
 
@@ -1105,6 +1183,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<ISubscriptionRegistry, SubscriptionRegistry>();
                 services.AddSingleton<IApprovalNotificationDispatcher, ApprovalNotificationDispatcher>();
                 services.AddSingleton<PlanStatusResourceHandler>();
+                services.AddSingleton<PlanStatusSubscriptionsListenHandler>();
                 services.AddSingleton<IGatewayApprovalService, GatewayApprovalService>();
                 services.AddSingleton<IApprovalPreExecutionGate, ApprovalPreExecutionGate>();
                 services.AddSingleton<IApprovalAccessCodeStore, InMemoryApprovalAccessCodeStore>();
@@ -1117,10 +1196,44 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                 services.AddSingleton<IToolCaller>(sp => (IToolCaller)sp.GetRequiredService<IDownstreamMcpClient>());
                 services.AddKubernetesAdapter();
                 services.AddSingleton<DownstreamToolRegistry>();
+                services.AddSingleton<DownstreamToolCatalog>();
+                services.AddSingleton<IReadOnlyList<GatewayToolDispatcher.ReadOnlySource>>(sp =>
+                {
+                    var sources = new List<GatewayToolDispatcher.ReadOnlySource>
+                    {
+                        new(McpGatewayConventions.DownstreamSources.Primary, sp.GetRequiredService<DownstreamToolRegistry>(), sp.GetRequiredService<GuardedToolRunner>())
+                    };
+
+                    DownstreamToolRegistry? secondaryRegistry = sp.GetKeyedService<DownstreamToolRegistry>(
+                        McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                    GuardedToolRunner? secondaryRunner = sp.GetKeyedService<GuardedToolRunner>(
+                        McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                    KubernetesMcpServerRequestPolicy? secondaryRequestPolicy =
+                        sp.GetKeyedService<KubernetesMcpServerRequestPolicy>(
+                            McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                    KubernetesMcpServerResponsePolicy? secondaryResponsePolicy =
+                        sp.GetKeyedService<KubernetesMcpServerResponsePolicy>(
+                            McpGatewayConventions.SecondaryDownstream.ServiceKey);
+                    if (secondaryRegistry is not null
+                        && secondaryRunner is not null
+                        && secondaryRequestPolicy is not null
+                        && secondaryResponsePolicy is not null)
+                    {
+                        sources.Add(new GatewayToolDispatcher.ReadOnlySource(
+                            McpGatewayConventions.DownstreamSources.Secondary,
+                            secondaryRegistry,
+                            secondaryRunner,
+                            secondaryRequestPolicy,
+                            secondaryResponsePolicy));
+                    }
+
+                    return sources;
+                });
                 services.AddSingleton<IGatewayToolDispatcher, GatewayToolDispatcher>();
                 services.AddSingleton<IToolScopeGuard, ToolScopeGuard>();
                 services.AddHttpContextAccessor();
                 services.AddLogging();
+                configureAdditionalServices?.Invoke(services);
                 services.AddAntiforgery();
                 services.AddGatewayAuthentication(options.Auth);
                 services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, jwtOptions =>
@@ -1148,7 +1261,7 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                     })
                     .WithHttpTransport(transportOptions =>
                     {
-                        transportOptions.Stateless = false;
+                        transportOptions.Stateless = true;
                     })
                     .WithListToolsHandler((RequestContext<ListToolsRequestParams> request, CancellationToken ct) =>
                     {
@@ -1170,15 +1283,10 @@ public sealed partial class GatewayHttpMcpIntegrationTests
                         var resourceHandler = ResolvePlanStatusResourceHandler(request.Services, serverServices);
                         return new ValueTask<ReadResourceResult>(resourceHandler.ReadAsync(request.Params, ct));
                     })
-                    .WithSubscribeToResourcesHandler((RequestContext<SubscribeRequestParams> request, CancellationToken ct) =>
+                    .WithSubscriptionsListenHandler((RequestContext<SubscriptionsListenRequestParams> request, CancellationToken ct) =>
                     {
-                        var resourceHandler = ResolvePlanStatusResourceHandler(request.Services, serverServices);
-                        return new ValueTask<EmptyResult>(resourceHandler.Subscribe(request.Server.SessionId, request.Params));
-                    })
-                    .WithUnsubscribeFromResourcesHandler((RequestContext<UnsubscribeRequestParams> request, CancellationToken ct) =>
-                    {
-                        var resourceHandler = ResolvePlanStatusResourceHandler(request.Services, serverServices);
-                        return new ValueTask<EmptyResult>(resourceHandler.Unsubscribe(request.Server.SessionId, request.Params));
+                        var listenHandler = ResolvePlanStatusSubscriptionsListenHandler(request.Services, serverServices);
+                        return listenHandler.ListenAsync(request, ct);
                     });
             })
             .Configure(app =>
@@ -1210,6 +1318,12 @@ public sealed partial class GatewayHttpMcpIntegrationTests
         IServiceProvider? serverServices) =>
         (requestServices ?? serverServices)?.GetRequiredService<PlanStatusResourceHandler>()
         ?? throw new InvalidOperationException("PlanStatusResourceHandler not available.");
+
+    private static PlanStatusSubscriptionsListenHandler ResolvePlanStatusSubscriptionsListenHandler(
+        IServiceProvider? requestServices,
+        IServiceProvider? serverServices) =>
+        (requestServices ?? serverServices)?.GetRequiredService<PlanStatusSubscriptionsListenHandler>()
+        ?? throw new InvalidOperationException("PlanStatusSubscriptionsListenHandler not available.");
 
     private static McpGatewayOptions CreateGatewayOptions(string downstreamProject, string testRoot, string workingDirectory) =>
         new(
@@ -1251,6 +1365,12 @@ public sealed partial class GatewayHttpMcpIntegrationTests
             transport,
             cancellationToken: CancellationToken.None);
     }
+
+    private static StringContent CreateMcpRequestContent() =>
+        new(
+            """{"jsonrpc":"2.0","id":"auth-test","method":"server/discover","params":{}}""",
+            Encoding.UTF8,
+            "application/json");
 
     private static async Task<HttpClient> CreateAuthenticatedApprovalBrowserAsync(
         TestServer server,
@@ -1935,24 +2055,28 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
         public List<DownstreamCall> Calls { get; } = [];
 
-        public Task<string> CallToolAsync(
+        public Task<DownstreamCallResult> CallToolAsync(
             string toolName,
             IReadOnlyDictionary<string, object?> arguments,
             CancellationToken cancellationToken)
         {
             Calls.Add(new DownstreamCall(toolName, arguments));
 
-            return Task.FromResult(response);
+            return Task.FromResult(DownstreamCallResult.FromText(response));
         }
 
         public Task<IReadOnlyList<DownstreamTool>> ListToolsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(tools);
 
-        Task<string> IToolCaller.CallAsync(
+        async Task<string> IToolCaller.CallAsync(
             string toolName,
             IReadOnlyDictionary<string, object?> arguments,
-            CancellationToken ct) =>
-            CallToolAsync(toolName, arguments, ct);
+            CancellationToken ct)
+        {
+            DownstreamCallResult result = await CallToolAsync(toolName, arguments, ct).ConfigureAwait(false);
+            return string.Join(Environment.NewLine,
+                result.Content.OfType<TextContentBlock>().Select(c => c.Text));
+        }
 
         private static IReadOnlyList<DownstreamTool> CreateDefaultDownstreamTools()
         {

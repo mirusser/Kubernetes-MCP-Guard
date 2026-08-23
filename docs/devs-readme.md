@@ -157,6 +157,32 @@ For an external OAuth/OIDC issuer, use its issuer URL for `InfraGate__Auth__OAut
 
 For the supported Keycloak container path, the Compose file sets the internal metadata/token endpoints and approval redirect values for you.
 
+### Optional secondary read-only Kubernetes MCP downstream
+
+The Gateway can also start the pinned upstream `kubernetes-mcp-server` as an off-by-default secondary source for broader read-only Kubernetes inspection. This source never contributes destructive tools or `request_*` wrappers.
+
+For a source run, install the binary, generate its fixed read-only TOML, and set the optional process configuration before starting the Gateway:
+
+```bash
+./scripts/create-demo-kubeconfig.sh
+./scripts/install-kubernetes-mcp-server.sh
+dotnet run --project src/InfraGate.RunProfiles -- generate-toml local-source-gateway \
+  --output deploy/generated/local-source-gateway.kubernetes-mcp-server.toml
+
+export REPO_ROOT="$(pwd)"
+export InfraGate__Gateway__KubernetesMcpServer__Command="${REPO_ROOT}/.tools/bin/kubernetes-mcp-server"
+export InfraGate__Gateway__KubernetesMcpServer__Arguments__0="--config"
+export InfraGate__Gateway__KubernetesMcpServer__Arguments__1="${REPO_ROOT}/deploy/generated/local-source-gateway.kubernetes-mcp-server.toml"
+export InfraGate__Gateway__KubernetesMcpServer__WorkingDirectory="${REPO_ROOT}"
+export InfraGate__Gateway__KubernetesMcpServer__Kubeconfig="${REPO_ROOT}/.kube/mcp-nginx-demo-viewer.config"
+export InfraGate__Gateway__KubernetesMcpServer__Context="minikube-mcp"
+export InfraGate__Gateway__KubernetesMcpServer__AllowedNamespaces__0="mcp-nginx-demo"
+```
+
+The viewer kubeconfig is distinct from `.kube/mcp-nginx-demo.config`, which remains the primary mutation-capable credential. Missing, wildcard, or shared secondary credentials fail configuration validation.
+
+The local installer requires `curl`, `sha256sum`, and `jq`; no Go toolchain is needed. It downloads the official release binary and verifies it against the pinned version and per-platform SHA-256 in `scripts/kubernetes-mcp-server.manifest.json` before trusting it — Docker builds use the same manifest and installer in a dedicated Alpine stage. See the [configuration reference](configuration.md#mcpgateway) for the process settings and [ADR-0033](adr/0033-kubernetes-mcp-server-readonly-secondary-downstream.md) for the trust boundary and architectural decision.
+
 ### Downstream stdio service token auth
 
 The gateway proves its identity to the downstream stdio server using a short-lived OAuth client-credentials token. This is a defense-in-depth measure — not the primary security boundary. The primary boundary is the trusted-launch model (containment, human approval, and per-action authorization described in the security controls section of `src/InfraGate.McpGateway/README.md`).
@@ -279,7 +305,7 @@ Approval flow:
 4. Open the URL in a browser, sign in with the same OAuth identity, review the Gateway-rendered pending plan and dry-run status, and approve or deny it.
 5. Call `execute_approved_plan` again. The Gateway forwards only after an Approval Grant exists and still matches the pending plan's Intent Digest and Review Digest; the Kubernetes adapter repeats declared freshness checks immediately before the raw write.
 
-Clients that support MCP resources can subscribe to `plan://{planId}/status` and react to `notifications/resources/updated` after browser approval. Clients without resource notification support can call `get_plan_status` in a polling loop or `wait_for_plan_approval(planId, timeoutSeconds)` before retrying `execute_approved_plan`.
+MCP 2026-07-28 clients can include `plan://{planId}/status` in a `subscriptions/listen` request and react to the subscription-tagged `notifications/resources/updated` after browser approval. Clients without resource notification support can call `get_plan_status` in a polling loop or `wait_for_plan_approval(planId, timeoutSeconds)` before retrying `execute_approved_plan`.
 
 The MCP client never submits approval content. Approval challenges are bound to the plan id, current pending-plan hash, requester subject, expected Intent Digest, expected Review Digest, expiry, and Single-Execution status.
 

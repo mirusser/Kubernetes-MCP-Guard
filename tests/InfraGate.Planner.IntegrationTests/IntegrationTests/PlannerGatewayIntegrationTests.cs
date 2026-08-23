@@ -319,7 +319,7 @@ public sealed class PlannerGatewayIntegrationTests
                     services.AddRouting();
                     services
                         .AddMcpServer()
-                        .WithHttpTransport(opt => { opt.Stateless = false; })
+                        .WithHttpTransport(opt => { opt.Stateless = true; })
                         .WithListToolsHandler((_, _) =>
                             new ValueTask<ListToolsResult>(new ListToolsResult { Tools = CreateTools() }))
                         .WithCallToolHandler((request, _) =>
@@ -403,9 +403,9 @@ public sealed class PlannerGatewayIntegrationTests
             string[] readOnlyToolNames =
             [
                 PlannerConventions.ToolNames.GetAllowedNamespaces, PlannerConventions.ToolNames.GetK8sStatus,
-                PlannerConventions.ToolNames.GetK8sEvents, PlannerConventions.ToolNames.GetK8sPods,
-                PlannerConventions.ToolNames.DescribeK8sResource, PlannerConventions.ToolNames.GetK8sDeployments,
-                PlannerConventions.ToolNames.GetK8sServices, PlannerConventions.ToolNames.GetK8sEndpoints,
+                PlannerConventions.ToolNames.GetK8sEvents, "get_k8s_pods",
+                "describe_k8s_resource", "get_k8s_deployments",
+                "get_k8s_services", "get_k8s_endpoints",
             ];
             var tools = readOnlyToolNames
                 .Select(toolName => new Tool

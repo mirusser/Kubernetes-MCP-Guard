@@ -1,7 +1,7 @@
 # ADR-0011: Use a Stdio Bootstrap Line for Downstream Initialize Auth
 
 **Date:** 2026-05-21
-**Status:** Accepted
+**Status:** Superseded by the ModelContextProtocol 2.1.0 migration
 
 ---
 
@@ -13,7 +13,13 @@ The MCP 2025-11-25 schema allows request `_meta` on `initialize`, but the Micros
 
 Without an initialize credential path, a downstream server that enforces auth before startup cannot distinguish a real Gateway from an unauthenticated stdio client until after initialization.
 
-## Decision
+## Supersession
+
+ModelContextProtocol 2.1.0 supports both the handshake-free MCP 2026-07-28 revision and standards-compliant initialize metadata for older peers. InfraGate therefore removed the private bootstrap line, `BootstrapStdioClientTransport`, and the server bootstrap gate.
+
+The default 2026-07-28 path carries the Gateway Service Identity token in request `_meta` on `tools/list` and `tools/call`. If the SDK falls back to an older initialize-based protocol revision, the Gateway also supplies the token through `McpClientOptions.InitializeMeta`. Per-request validation remains the operation authorization boundary and supports token refresh.
+
+## Historical Decision
 
 The Gateway writes one InfraGate-private bootstrap line to the downstream process stdin before handing the stdio streams to `McpClient.CreateAsync`:
 

@@ -140,21 +140,7 @@ builder.Services.AddSingleton<IChatClient>(sp =>
 builder.Services.AddSingleton<IAnomalyDedupeStore, AnomalyDedupeStore>();
 builder.Services.AddSingleton<ToolCallingAgentFactory>();
 builder.Services.AddModelVisibleContentGuard(modelVisibleContentOptions);
-builder.Services.AddSingleton(_ =>
-{
-    var allowedTools = new HashSet<string>(StringComparer.Ordinal)
-    {
-        ObserverConventions.ToolNames.GetAllowedNamespaces,
-        ObserverConventions.ToolNames.GetK8sStatus,
-        ObserverConventions.ToolNames.GetK8sEvents,
-        ObserverConventions.ToolNames.GetPodLogs,
-        ObserverConventions.ToolNames.GetK8sResource,
-        ObserverConventions.ToolNames.GetDeploymentDiagnostics,
-        ObserverConventions.ToolNames.GetPodDiagnostics,
-        ObserverConventions.ToolNames.GetServiceDiagnostics,
-    };
-    return new AgentGuardrailPolicy(allowedTools);
-});
+builder.Services.AddSingleton(_ => new AgentGuardrailPolicy(DiagnosticCapabilityProfile.ToolNames));
 builder.Services.AddSingleton<IObservationCycleRunner>(sp =>
 {
     return new ObservationCycleRunner(

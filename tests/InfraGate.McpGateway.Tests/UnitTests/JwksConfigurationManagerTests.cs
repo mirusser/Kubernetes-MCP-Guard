@@ -3,6 +3,7 @@ using InfraGate.McpGateway.Auth;
 using InfraGate.McpGateway.Tests.Fakes;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.Configuration;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 
@@ -113,6 +114,8 @@ public sealed class JwksConfigurationManagerTests : IDisposable
 
         retriever.FailNext();
         manager.RequestRefresh();
+        using var refreshCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await retriever.WaitForFetchCountAsync(3, refreshCts.Token);
         var second = await manager.GetConfigurationAsync(CancellationToken.None);
 
         Assert.Contains(second.SigningKeys, k => k.KeyId == key.KeyId);
@@ -142,8 +145,10 @@ public sealed class JwksConfigurationManagerTests : IDisposable
         Assert.Contains(first.SigningKeys, k => k.KeyId == keyA.KeyId);
         Assert.DoesNotContain(first.SigningKeys, k => k.KeyId == keyB.KeyId);
 
+        var updateHandler = new ConfigurationUpdateHandler();
+        manager.ConfigurationEventHandler = updateHandler;
         manager.RequestRefresh();
-        var second = await manager.GetConfigurationAsync(CancellationToken.None);
+        var second = await updateHandler.Updated.WaitAsync(TimeSpan.FromSeconds(5), TimeProvider.System);
         Assert.Contains(second.SigningKeys, k => k.KeyId == keyB.KeyId);
         Assert.DoesNotContain(second.SigningKeys, k => k.KeyId == keyA.KeyId);
     }
@@ -193,6 +198,28 @@ public sealed class JwksConfigurationManagerTests : IDisposable
         };
 
         return new JsonWebTokenHandler().CreateToken(descriptor);
+    }
+
+    private sealed class ConfigurationUpdateHandler : IConfigurationEventHandler<OpenIdConnectConfiguration>
+    {
+        private readonly TaskCompletionSource<OpenIdConnectConfiguration> updated =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        internal Task<OpenIdConnectConfiguration> Updated => updated.Task;
+
+        public Task<ConfigurationEventHandlerResult<OpenIdConnectConfiguration>> BeforeRetrieveAsync(
+            string metadataAddress,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(ConfigurationEventHandlerResult<OpenIdConnectConfiguration>.NoResult);
+
+        public Task AfterUpdateAsync(
+            string metadataAddress,
+            OpenIdConnectConfiguration configuration,
+            CancellationToken cancellationToken = default)
+        {
+            updated.TrySetResult(configuration);
+            return Task.CompletedTask;
+        }
     }
 
 }

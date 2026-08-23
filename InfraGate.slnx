@@ -41,6 +41,7 @@
     <Project Path="tests/InfraGate.KubernetesAdapter.Tests/InfraGate.KubernetesAdapter.Tests.csproj" />
     <Project Path="tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj" />
     <Project Path="tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj" />
+    <Project Path="tests/InfraGate.McpGateway.Tests.ProcessFixture/InfraGate.McpGateway.Tests.ProcessFixture.csproj" />
     <Project Path="tests/InfraGate.McpServer.Tests/InfraGate.McpServer.Tests.csproj" />
     <Project Path="tests/InfraGate.RuntimeSafety.Tests/InfraGate.RuntimeSafety.Tests.csproj" />
     <Project Path="tests/InfraGate.Observability.Tests/InfraGate.Observability.Tests.csproj" />
