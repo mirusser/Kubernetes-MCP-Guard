@@ -31,7 +31,7 @@ public static partial class PromptInjectionGuard
             {
                 // Unsupported content type - fail closed
                 return SanitizedContentResult.CreatePolicyError(
-                    $"Unsupported content type: {block.GetType().Name}");
+                    $"Unsupported content type: {block?.GetType().Name ?? "null"}");
             }
         }
 

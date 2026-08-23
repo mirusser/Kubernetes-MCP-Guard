@@ -19,12 +19,15 @@
 # Re-evaluate at expiry: bump scripts/kubernetes-mcp-server.manifest.json if a newer release is out,
 # otherwise renew after re-checking upstream release notes.
 GHSA-hrxh-6v49-42gf # reason: vendored kubernetes-mcp-server v0.0.66 links google.golang.org/grpc v1.81.1; fix (1.82.1) not yet incorporated into an upstream kubernetes-mcp-server release | owner: @mirusser | expires: 2026-10-01
+GHSA-gcjh-h69q-9w9g # reason: vendored kubernetes-mcp-server v0.0.66 links github.com/google/cel-go v0.28.1; fix (0.29.0) not yet incorporated into an upstream kubernetes-mcp-server release | owner: @mirusser | expires: 2026-10-01
 CVE-2026-50163 # reason: vendored kubernetes-mcp-server v0.0.66 links oras.land/oras-go/v2 v2.6.1; fix (2.6.2) not yet incorporated into an upstream kubernetes-mcp-server release | owner: @mirusser | expires: 2026-10-01
 CVE-2026-27145 # reason: vendored kubernetes-mcp-server v0.0.66 built with Go stdlib v1.26.3; fix (1.25.11/1.26.4) not yet incorporated into an upstream kubernetes-mcp-server release | owner: @mirusser | expires: 2026-10-01
 CVE-2026-33818 # reason: vendored kubernetes-mcp-server v0.0.66 built with Go stdlib v1.26.3; fix (1.25.13/1.26.6) not yet incorporated into an upstream kubernetes-mcp-server release | owner: @mirusser | expires: 2026-10-01
 CVE-2026-39821 # reason: vendored kubernetes-mcp-server v0.0.66 built with Go stdlib v1.26.3; fix (1.25.13/1.26.6) not yet incorporated into an upstream kubernetes-mcp-server release | owner: @mirusser | expires: 2026-10-01
 CVE-2026-39822 # reason: vendored kubernetes-mcp-server v0.0.66 built with Go stdlib v1.26.3; fix (1.25.12/1.26.5) not yet incorporated into an upstream kubernetes-mcp-server release | owner: @mirusser | expires: 2026-10-01
 CVE-2026-42504 # reason: vendored kubernetes-mcp-server v0.0.66 built with Go stdlib v1.26.3; fix (1.25.11/1.26.4) not yet incorporated into an upstream kubernetes-mcp-server release | owner: @mirusser | expires: 2026-10-01
+CVE-2026-42505 # reason: vendored kubernetes-mcp-server v0.0.66 built with Go stdlib v1.26.3; fix (1.25.12/1.26.5/1.27.0-rc.2) not yet incorporated into an upstream kubernetes-mcp-server release | owner: @mirusser | expires: 2026-10-01
+CVE-2026-42507 # reason: vendored kubernetes-mcp-server v0.0.66 built with Go stdlib v1.26.3; fix (1.25.11/1.26.4) not yet incorporated into an upstream kubernetes-mcp-server release | owner: @mirusser | expires: 2026-10-01
 CVE-2026-46600 # reason: vendored kubernetes-mcp-server v0.0.66 built with Go stdlib v1.26.3; fix (1.26.6) not yet incorporated into an upstream kubernetes-mcp-server release | owner: @mirusser | expires: 2026-10-01
 CVE-2026-56853 # reason: vendored kubernetes-mcp-server v0.0.66 built with Go stdlib v1.26.3; fix (1.25.13/1.26.6) not yet incorporated into an upstream kubernetes-mcp-server release | owner: @mirusser | expires: 2026-10-01
 CVE-2026-56858 # reason: vendored kubernetes-mcp-server v0.0.66 built with Go stdlib v1.26.3; fix (1.25.13/1.26.6) not yet incorporated into an upstream kubernetes-mcp-server release | owner: @mirusser | expires: 2026-10-01

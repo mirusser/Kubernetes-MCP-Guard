@@ -139,10 +139,24 @@ grant_container_read() {
     return
   fi
 
-  # Fallback for systems without ACL support. The token is short-lived (24h)
-  # and the file is gitignored, so a world-readable kubeconfig is acceptable
-  # for local development.
-  chmod 644 "${target}"
+  if chown "${GATEWAY_APP_UID}" "${target}" 2>/dev/null; then
+    return
+  fi
+
+  if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    sudo chown "${GATEWAY_APP_UID}" "${target}"
+    return
+  fi
+
+  cat >&2 <<EOF
+Could not grant the gateway container UID ${GATEWAY_APP_UID} read access to:
+  ${target}
+
+This file contains a Kubernetes bearer token and will not be made
+world-readable. Install setfacl, run this script with sudo, or run:
+  sudo chown ${GATEWAY_APP_UID} "${target}"
+EOF
+  exit 1
 }
 
 prepare_compose_persistence_dirs() {

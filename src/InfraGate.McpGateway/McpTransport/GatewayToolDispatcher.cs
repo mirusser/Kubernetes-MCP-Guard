@@ -190,12 +190,15 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
                 source.SourceId,
                 snapshot.DegradedReason);
 
-            if (!isMandatory)
+            RecordCatalogPublishOutcome(source.SourceId, McpGatewayConventions.Telemetry.Outcomes.CatalogRejected);
+
+            if (isMandatory)
             {
-                catalog.RecordSourceDegraded(source.SourceId, snapshot.DegradedReason ?? McpGatewayMessages.ToolCatalog.SourceUnavailable);
+                throw new InvalidOperationException(
+                    $"Mandatory downstream source '{source.SourceId}' published an invalid tool catalog snapshot: {snapshot.DegradedReason}");
             }
 
-            RecordCatalogPublishOutcome(source.SourceId, McpGatewayConventions.Telemetry.Outcomes.CatalogRejected);
+            catalog.RecordSourceDegraded(source.SourceId, snapshot.DegradedReason ?? McpGatewayMessages.ToolCatalog.SourceUnavailable);
         }
         else
         {
@@ -405,10 +408,12 @@ internal sealed class GatewayToolDispatcher( // NOSONAR:S107 — DI constructor;
         (IReadOnlyList<object> envelopedContent, bool isError, System.Text.Json.Nodes.JsonObject? meta) =
             ModelVisibleToolResultEnvelope.CreateTypedEnvelope(toolName, result, TimeProvider.System.GetUtcNow());
 
-        // Apply response policy if configured (only checks the envelope metadata, not all blocks)
-        if (entry.ResponsePolicy is not null && envelopedContent.Count > 0 && envelopedContent[0] is TextContentBlock firstBlock)
+        // Apply response policy against the combined text of every block, not just the first,
+        // so the 256 KiB limit is enforced on the complete serialized envelope.
+        if (entry.ResponsePolicy is not null && envelopedContent.Count > 0)
         {
-            KubernetesMcpServerResponsePolicyResult policyResult = entry.ResponsePolicy.Apply(toolName, firstBlock.Text);
+            string combinedText = string.Concat(envelopedContent.OfType<TextContentBlock>().Select(block => block.Text));
+            KubernetesMcpServerResponsePolicyResult policyResult = entry.ResponsePolicy.Apply(toolName, combinedText);
             if (!policyResult.IsAllowed)
             {
                 var metadata = new Dictionary<string, object?>(StringComparer.Ordinal)

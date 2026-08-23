@@ -73,14 +73,28 @@ internal static class RunProfileCli
         if (string.Equals(command, RunProfileConventions.Commands.Generate, StringComparison.Ordinal))
         {
             return await HandleGenerateCommandAsync(
-                args, document, configPath, EnvFileRenderer.Render, output, error, cancellationToken)
+                args,
+                document,
+                configPath,
+                EnvFileRenderer.Render,
+                RunProfileConventions.GeneratedFile.DoNotEditLinePrefix,
+                output,
+                error,
+                cancellationToken)
                 .ConfigureAwait(false);
         }
 
         if (string.Equals(command, RunProfileConventions.Commands.GenerateToml, StringComparison.Ordinal))
         {
             return await HandleGenerateCommandAsync(
-                args, document, configPath, TomlFileRenderer.Render, output, error, cancellationToken)
+                args,
+                document,
+                configPath,
+                TomlFileRenderer.Render,
+                RunProfileConventions.GeneratedFile.TomlDoNotEditLinePrefix,
+                output,
+                error,
+                cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -97,6 +111,7 @@ internal static class RunProfileCli
         RunProfileDocument document,
         string configPath,
         Func<string, RunProfile, string> render,
+        string expectedDoNotEditPrefix,
         TextWriter output,
         TextWriter error,
         CancellationToken cancellationToken)
@@ -106,7 +121,8 @@ internal static class RunProfileCli
             return 1;
         }
 
-        if (!parsed.Force && !await CheckFileOverwriteAllowedAsync(parsed.OutputPath, parsed.ProfileName, cancellationToken)
+        if (!parsed.Force && !await CheckFileOverwriteAllowedAsync(
+            parsed.OutputPath, parsed.ProfileName, expectedDoNotEditPrefix, cancellationToken)
             .ConfigureAwait(false))
         {
             await error.WriteLineAsync(
@@ -170,7 +186,7 @@ internal static class RunProfileCli
     }
 
     private static async Task<bool> CheckFileOverwriteAllowedAsync(
-        string outputPath, string profileName, CancellationToken cancellationToken)
+        string outputPath, string profileName, string expectedDoNotEditPrefix, CancellationToken cancellationToken)
     {
         if (!File.Exists(outputPath))
         {
@@ -178,7 +194,7 @@ internal static class RunProfileCli
         }
 
         string existingContent = await File.ReadAllTextAsync(outputPath, cancellationToken).ConfigureAwait(false);
-        return IsGeneratedForProfile(existingContent, profileName);
+        return IsGeneratedForProfile(existingContent, profileName, expectedDoNotEditPrefix);
     }
 
     private static bool HasFlag(IReadOnlyList<string> args, string flag) =>
@@ -195,15 +211,14 @@ internal static class RunProfileCli
             $"{RunProfileConventions.Options.Format} is no longer supported; generate writes one env file.");
     }
 
-    private static bool IsGeneratedForProfile(string content, string profileName) =>
-        IsGeneratedEnvForProfile(content, profileName);
-
-    private static bool IsGeneratedEnvForProfile(string content, string profileName)
+    private static bool IsGeneratedForProfile(string content, string profileName, string expectedDoNotEditPrefix)
     {
         using var reader = new StringReader(content);
         string? firstLine = reader.ReadLine();
+        string? secondLine = reader.ReadLine();
         return firstLine?.StartsWith(RunProfileConventions.GeneratedFile.HeaderLinePrefix, StringComparison.Ordinal) == true &&
-            firstLine.EndsWith($"{RunProfileConventions.GeneratedFile.ProfileMarker}{profileName}", StringComparison.Ordinal);
+            firstLine.EndsWith($"{RunProfileConventions.GeneratedFile.ProfileMarker}{profileName}", StringComparison.Ordinal) &&
+            secondLine?.StartsWith(expectedDoNotEditPrefix, StringComparison.Ordinal) == true;
     }
 
     private static bool IsKnownCommand(string command) =>

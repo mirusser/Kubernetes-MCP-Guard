@@ -258,13 +258,15 @@ public sealed partial class GatewayHttpMcpIntegrationTests
 
         using var process = System.Diagnostics.Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start InfraGate.RunProfiles generate-toml.");
-        string stderr = await process.StandardError.ReadToEndAsync();
+        Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
+        Task<string> stderrTask = process.StandardError.ReadToEndAsync();
+        await Task.WhenAll(stdoutTask, stderrTask);
         await process.WaitForExitAsync();
 
         if (process.ExitCode != 0 || !File.Exists(outputPath))
         {
             throw new InvalidOperationException(
-                $"InfraGate.RunProfiles generate-toml failed (exit {process.ExitCode}): {stderr}");
+                $"InfraGate.RunProfiles generate-toml failed (exit {process.ExitCode}): {await stderrTask}{await stdoutTask}");
         }
     }
 

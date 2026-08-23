@@ -17,9 +17,9 @@ internal sealed class PlanStatusSubscriptionsListenHandler(ISubscriptionRegistry
         IReadOnlyList<PlanSubscription> grantedSubscriptions = GetGrantedSubscriptions(
             request.Params.Notifications.ResourceSubscriptions);
 
-        await SendAcknowledgementAsync(request, subscriptionId, grantedSubscriptions, cancellationToken)
-            .ConfigureAwait(false);
-
+        // Register before acknowledging: ApprovalNotificationDispatcher must be able to find this
+        // subscriber for any approval that races with this request, so registration has to be
+        // visible before the client can be told its subscriptions were granted.
         subscriptionRegistry.RegisterSubscriber(
             registrationId,
             new McpSubscriptionsListenNotifier(request.Server, registrationId, subscriptionId));
@@ -27,6 +27,9 @@ internal sealed class PlanStatusSubscriptionsListenHandler(ISubscriptionRegistry
         {
             subscriptionRegistry.SubscribeToPlan(registrationId, subscription.PlanId);
         }
+
+        await SendAcknowledgementAsync(request, subscriptionId, grantedSubscriptions, cancellationToken)
+            .ConfigureAwait(false);
 
         try
         {

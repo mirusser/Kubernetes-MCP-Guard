@@ -16,6 +16,8 @@ internal static partial class KubernetesMcpServerStartupValidator
     private static readonly UnixFileMode GroupOrOtherWrite =
         UnixFileMode.GroupWrite | UnixFileMode.OtherWrite;
 
+    private static readonly TimeSpan VersionCommandTimeout = TimeSpan.FromSeconds(10);
+
     public static void Validate(KubernetesMcpServerProcessOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -124,9 +126,24 @@ internal static partial class KubernetesMcpServerStartupValidator
         using Process process = Process.Start(startInfo)
             ?? throw new InvalidOperationException(
                 $"Failed to start Kubernetes MCP server '{command}' to check its version.");
-        string stdout = process.StandardOutput.ReadToEnd();
-        string stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
+
+        using var timeout = new CancellationTokenSource(VersionCommandTimeout);
+        Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
+        Task<string> stderrTask = process.StandardError.ReadToEndAsync(timeout.Token);
+        string stdout;
+        string stderr;
+        try
+        {
+            process.WaitForExitAsync(timeout.Token).GetAwaiter().GetResult();
+            stdout = stdoutTask.GetAwaiter().GetResult();
+            stderr = stderrTask.GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            process.Kill(entireProcessTree: true);
+            throw new InvalidOperationException(
+                $"Kubernetes MCP server '{command}' did not report its version within {VersionCommandTimeout}.");
+        }
 
         string combined = stdout.Length > 0 ? stdout : stderr;
         return WhitespacePattern().Replace(combined, string.Empty);

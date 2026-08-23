@@ -219,11 +219,24 @@ internal sealed class DownstreamMcpClient(
             // MCP 2026-07-28 uses per-request metadata, which is supplied by ListToolsAsync
             // and CallToolAsync below. InitializeMeta covers the SDK's standards-compliant
             // fallback when the peer negotiates an older initialize-based protocol revision.
-            client = await McpClient.CreateAsync(
-                transport,
-                clientOptions,
-                loggerFactory,
-                cancellationToken).ConfigureAwait(false);
+            try
+            {
+                client = await McpClient.CreateAsync(
+                    transport,
+                    clientOptions,
+                    loggerFactory,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (IsDownstreamAuthRejection(ex) && IsDownstreamAuthRequired())
+            {
+                logger.LogWarning(ex, "Downstream initialize auth rejected; refreshing the token and retrying once.");
+                string refreshedToken = await tokenProvider.RefreshServiceTokenAsync(cancellationToken).ConfigureAwait(false);
+                client = await McpClient.CreateAsync(
+                    new StdioClientTransport(CreateTransportOptions(), loggerFactory),
+                    CreateClientOptions(refreshedToken),
+                    loggerFactory,
+                    cancellationToken).ConfigureAwait(false);
+            }
 
             return client;
         }

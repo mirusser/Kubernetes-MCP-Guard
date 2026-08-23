@@ -17,9 +17,10 @@ internal sealed class SubscriptionRegistry : ISubscriptionRegistry
     {
         subscribers.TryRemove(registrationId, out _);
 
-        foreach ((string _, ConcurrentDictionary<string, byte>? planSubscribers) in planSubscriptions)
+        foreach ((string planId, ConcurrentDictionary<string, byte> planSubscribers) in planSubscriptions)
         {
             planSubscribers.TryRemove(registrationId, out _);
+            RemoveIfEmpty(planId, planSubscribers);
         }
     }
 
@@ -41,7 +42,22 @@ internal sealed class SubscriptionRegistry : ISubscriptionRegistry
         if (planSubscriptions.TryGetValue(planId, out ConcurrentDictionary<string, byte>? planSubscribers))
         {
             planSubscribers.TryRemove(registrationId, out _);
+            RemoveIfEmpty(planId, planSubscribers);
         }
+    }
+
+    // Conditional removal: only deletes the planId entry if it still points at the exact
+    // subscriber set instance we just emptied. Guards against removing an entry that
+    // SubscribeToPlan's GetOrAdd has since resolved to a different instance for the same planId.
+    private void RemoveIfEmpty(string planId, ConcurrentDictionary<string, byte> planSubscribers)
+    {
+        if (!planSubscribers.IsEmpty)
+        {
+            return;
+        }
+
+        ((ICollection<KeyValuePair<string, ConcurrentDictionary<string, byte>>>)planSubscriptions)
+            .Remove(new KeyValuePair<string, ConcurrentDictionary<string, byte>>(planId, planSubscribers));
     }
 
     public IReadOnlyList<ISubscriptionNotifier> GetSubscribersForPlan(string planId)

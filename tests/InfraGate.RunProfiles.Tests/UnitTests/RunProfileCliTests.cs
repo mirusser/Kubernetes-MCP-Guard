@@ -344,7 +344,9 @@ public sealed class RunProfileCliTests
             """);
         string outputPath = Path.Combine(Path.GetDirectoryName(configPath)!, "local-stdio.env");
         await File.WriteAllTextAsync(outputPath,
-            "# Generated from run-profiles.yaml profile: local-stdio\n# Do not edit.\n\nOLD_VAR=old\n");
+            "# Generated from run-profiles.yaml profile: local-stdio\n" +
+            "# Do not edit. Run: dotnet run --project src/InfraGate.RunProfiles -- generate local-stdio\n" +
+            "\nOLD_VAR=old\n");
         using var output = new StringWriter();
         using var error = new StringWriter();
 
