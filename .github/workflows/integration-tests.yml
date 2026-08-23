@@ -84,7 +84,13 @@ jobs:
         run: |
           kubectl apply --validate=false -f deploy/minikube/rbac.yaml
           kubectl apply -f deploy/minikube/nginx-demo-workload.yaml
-          kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=nginx-demo -n mcp-nginx-demo --timeout=120s
+          # kubectl wait on a pod label selector races the Deployment
+          # controller: right after apply, no Pod object exists yet, so
+          # `wait` sees zero matches and exits immediately with "no
+          # matching resources found" instead of waiting. The Deployment
+          # itself is created synchronously by apply, so wait on its
+          # rollout status instead.
+          kubectl rollout status deployment/nginx-demo -n mcp-nginx-demo --timeout=120s
 
       - name: Create demo kubeconfig
         run: ./scripts/create-demo-kubeconfig.sh
