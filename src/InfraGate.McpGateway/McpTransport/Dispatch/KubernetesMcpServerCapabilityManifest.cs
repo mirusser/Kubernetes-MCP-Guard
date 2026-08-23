@@ -407,9 +407,9 @@ internal sealed class KubernetesMcpServerCapabilityManifest
     {
         var buffer = new ArrayBufferWriter<byte>();
         using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions
-               {
-                   Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-               }))
+        {
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        }))
         {
             WriteCanonical(writer, element);
         }
