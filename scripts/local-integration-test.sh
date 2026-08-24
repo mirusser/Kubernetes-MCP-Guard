@@ -165,8 +165,13 @@ fi
 if [[ "${APPLY_WORKLOAD}" == "true" ]]; then
   kubectl apply -f "${REPO_ROOT}/deploy/minikube/nginx-demo-workload.yaml" \
     || die "Could not apply deploy/minikube/nginx-demo-workload.yaml."
-  kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=nginx-demo -n mcp-nginx-demo --timeout=120s \
-    || die "nginx-demo pod did not become Ready in time."
+  # kubectl wait on a pod label selector races the Deployment controller:
+  # right after apply, no Pod object exists yet, so `wait` sees zero
+  # matches and exits immediately with "no matching resources found"
+  # instead of waiting. The Deployment itself is created synchronously by
+  # apply, so wait on its rollout status instead.
+  kubectl rollout status deployment/nginx-demo -n mcp-nginx-demo --timeout=120s \
+    || die "nginx-demo Deployment did not become ready in time."
   echo -e "  ${GREEN}✓${NC} nginx-demo workload ready"
 fi
 
