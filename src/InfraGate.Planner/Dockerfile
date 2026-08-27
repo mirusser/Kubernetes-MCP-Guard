@@ -8,6 +8,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
 
 COPY Directory.Build.props .
+COPY Directory.Packages.props .
 COPY .editorconfig .
 COPY --from=filter /out/src/ ./src/
 RUN dotnet restore src/InfraGate.Planner/InfraGate.Planner.csproj

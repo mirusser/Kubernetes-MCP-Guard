@@ -78,6 +78,46 @@ write_kubeconfig() {
 
   mkdir -p "$(dirname "${out}")"
 
+  if [[ -d "${out}" ]]; then
+    cat >&2 <<EOF
+Expected a kubeconfig file at:
+  ${out}
+but found a directory instead. This usually happens when 'docker compose up'
+runs before this script and Docker auto-creates a missing bind-mount source
+as a root-owned directory. Remove it and re-run this script:
+  sudo rm -rf "${out}"
+EOF
+    exit 1
+  fi
+
+  if [[ -e "${out}" && ! -w "${out}" ]]; then
+    # grant_container_read() below may have chowned a prior kubeconfig to
+    # GATEWAY_APP_UID via passwordless sudo (its setfacl-unavailable
+    # fallback). We're about to regenerate this file's contents anyway, so
+    # reclaiming it here is safe and breaks that fix-it/re-lock-it cycle.
+    if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+      sudo chown "$(id -u):$(id -g)" "${out}" 2>/dev/null || true
+    fi
+  fi
+
+  if [[ -e "${out}" && ! -w "${out}" ]]; then
+    local current_owner
+    current_owner="$(stat -c '%U (uid %u)' "${out}" 2>/dev/null || echo 'unknown')"
+    cat >&2 <<EOF
+Cannot write to existing file:
+  ${out}
+Current owner: ${current_owner}
+
+This is likely left over from a prior 'sudo' run of this script, or from
+Docker auto-creating a missing bind-mount source before this script ran.
+Reclaim or remove it and re-run:
+  sudo chown $(id -u):$(id -g) "${out}"
+  # or, since this file is fully regenerated every run:
+  sudo rm -f "${out}"
+EOF
+    exit 1
+  fi
+
   cat > "${out}" <<EOF
 apiVersion: v1
 kind: Config
@@ -164,6 +204,19 @@ prepare_compose_persistence_dirs() {
   local guardrail_dir="${ROOT}/.mcp-guardrails"
   local dataprotection_dir="${ROOT}/.mcp-dataprotection-keys"
   local logs_dir="${ROOT}/.mcp-logs"
+
+  # A prior run's setfacl-unavailable fallback (below) chowns these to
+  # GATEWAY_APP_UGID and strips go permissions, locking the invoking user
+  # out entirely. Reclaim access first via the same passwordless-sudo trust
+  # boundary that locked it, so this doesn't require manual recovery.
+  local persistence_dir
+  for persistence_dir in "${approval_dir}" "${guardrail_dir}" "${dataprotection_dir}" "${logs_dir}"; do
+    if [[ -e "${persistence_dir}" && ! -r "${persistence_dir}" ]] &&
+      command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+      sudo chown -R "$(id -u):$(id -g)" "${persistence_dir}" 2>/dev/null || true
+      sudo chmod -R u+rwX "${persistence_dir}" 2>/dev/null || true
+    fi
+  done
 
   # Pre-create approval subdirectories so the container finds them host-owned
   # rather than creating them as UID 1654, which would break chmod on re-runs.

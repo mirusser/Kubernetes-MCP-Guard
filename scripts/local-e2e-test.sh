@@ -215,6 +215,14 @@ fi
 
 echo ""
 
+# ────────────────── Demo kubeconfig ──────────────────
+
+echo -e "${CYAN}Regenerating demo kubeconfig...${NC}"
+"${SCRIPT_DIR}/create-demo-kubeconfig.sh" --compose \
+  || die "create-demo-kubeconfig.sh failed. See output above."
+echo -e "  ${GREEN}✓${NC} Demo kubeconfig regenerated"
+echo ""
+
 # ────────────────── OpenRouter API key (for the agentic remediation tiers) ──────────────────
 
 echo -e "${CYAN}Checking for an OpenRouter API key (needed for the real agentic remediation flow)...${NC}"
