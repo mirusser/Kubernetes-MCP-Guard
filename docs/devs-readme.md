@@ -345,6 +345,11 @@ INFRA_GATE_RUN_INTEGRATION=1 dotnet test InfraGate.slnx --no-build --filter "Cat
 INFRA_GATE_RUN_GATEWAY_INTEGRATION=1 dotnet test tests/InfraGate.McpGateway.Tests/InfraGate.McpGateway.Tests.csproj --no-build
 dotnet test tests/InfraGate.Observer.IntegrationTests/InfraGate.Observer.IntegrationTests.csproj --no-build
 dotnet test tests/InfraGate.Observer.E2E.Tests/InfraGate.Observer.E2E.Tests.csproj --no-build --filter "Category=ObserverE2E"
+# Full agentic Observer -> Planner -> Approval -> Executor loop against the live compose
+# stack, a real Keycloak login, and a real Mailpit inbox; requires the compose stack
+# running (Keycloak, Mailpit), minikube + RBAC + the broken nginx-demo deployment from
+# Step 1, a usable KUBECONFIG, and a real InfraGate__OpenRouter__ApiKey (billed calls)
+INFRA_GATE_RUN_REMEDIATION_E2E=1 INFRA_GATE_OBSERVER_REAL_LLM=1 dotnet test tests/InfraGate.Remediation.E2E.Tests/InfraGate.Remediation.E2E.Tests.csproj --no-build --filter "Category=RemediationE2E"
 dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.KeycloakTests.csproj --no-build --filter "Category=Keycloak"  # requires Docker
 ./scripts/coverage.sh
 kubectl --kubeconfig .kube/mcp-nginx-demo.config -n mcp-nginx-demo get deployment,service,configmap,pods,replicasets -o wide

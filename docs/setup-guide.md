@@ -304,6 +304,7 @@ If the network is missing (e.g. minikube was started with a different driver), a
 |---|---|
 | `demo` | `demo` |
 | `demo2` | `demo2` |
+| `demo-operator` | `operator` |
 
 **Pre-configured clients and scopes**:
 
@@ -414,10 +415,10 @@ Allowed manifest kinds: `apps/v1 Deployment`, `v1 Service`, `v1 ConfigMap`.
 
 ## Verification
 
-For a guided, mostly-automated run of everything below — checks for .NET/Docker/kubectl/minikube, offers to install minikube if missing, starts the cluster, applies the demo RBAC/workload (asking first if it would overwrite a mismatched existing Deployment), and runs every test tier your machine supports:
+For a guided, mostly-automated run of everything below — checks for .NET/Docker/kubectl/minikube, offers to install minikube if missing, starts the cluster, applies the demo RBAC/workload (asking first if it would overwrite a mismatched existing Deployment), prompts for and persists an OpenRouter API key if one isn't already configured, starts the local docker-compose agentic stack, and runs every test tier your machine supports — including the real agentic Remediation E2E and Observer E2E tiers, which make real, billed OpenRouter calls:
 
 ```bash
-./scripts/local-integration-test.sh
+./scripts/local-e2e-test.sh
 ```
 
 Or run the steps individually:
@@ -443,6 +444,19 @@ dotnet test tests/InfraGate.McpGateway.KeycloakTests/InfraGate.McpGateway.Keyclo
 
 # Safety E2E tests (requires Docker + minikube + RBAC from Step 1)
 INFRA_GATE_RUN_SAFETY_E2E=1 dotnet test tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj --no-build
+
+# Observer E2E tests (requires the local docker-compose agentic stack running
+# and a real InfraGate__OpenRouter__ApiKey — makes real, billed LLM calls)
+INFRA_GATE_RUN_OBSERVER_E2E=1 INFRA_GATE_OBSERVER_REAL_LLM=1 \
+  dotnet test tests/InfraGate.Observer.E2E.Tests/InfraGate.Observer.E2E.Tests.csproj --no-build --filter "Category=ObserverE2E"
+
+# Remediation E2E tests: full Observer -> Planner -> Approval -> Executor loop
+# against the live stack, a real Keycloak login, and a real Mailpit inbox
+# (requires the local docker-compose agentic stack running, minikube + RBAC
+# from Step 1, and a real InfraGate__OpenRouter__ApiKey — makes real, billed
+# LLM calls)
+INFRA_GATE_RUN_REMEDIATION_E2E=1 INFRA_GATE_OBSERVER_REAL_LLM=1 \
+  dotnet test tests/InfraGate.Remediation.E2E.Tests/InfraGate.Remediation.E2E.Tests.csproj --no-build --filter "Category=RemediationE2E"
 
 # Compose config validation
 ./scripts/generate-env.sh local-compose

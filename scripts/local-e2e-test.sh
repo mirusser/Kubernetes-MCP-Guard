@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# local-integration-test.sh — guided, mostly-automated local run of the same
-# path .github/workflows/integration-tests.yml exercises in CI: provision a
-# working minikube cluster, apply the demo RBAC + workload, mint a demo
-# kubeconfig, then run every test tier that infrastructure allows.
+# local-e2e-test.sh — guided, mostly-automated local run of every test tier
+# this repo has, including the real agentic Observer -> Planner -> Approval
+# -> Executor remediation loop against live services and a real LLM call.
 #
 # Unlike CI's disposable runner, your local minikube cluster is a persistent,
 # long-lived dev environment -- this script never stops or deletes it, and
@@ -10,26 +9,40 @@
 # look like the CI demo workload (e.g. a manually-applied example fixture).
 #
 # What this script does for you automatically:
-#   - Checks for .NET, Docker, kubectl, minikube.
+#   - Checks for .NET, Docker, kubectl, minikube, curl.
 #   - Installs the pinned minikube binary if it's missing (via
 #     install-minikube.sh) -- asks first, since that's a system-wide install.
 #   - Starts minikube if it isn't already running.
 #   - Applies deploy/minikube/rbac.yaml and (with confirmation, see above)
 #     deploy/minikube/nginx-demo-workload.yaml.
-#   - Regenerates the demo kubeconfig and delegates to run-tests.sh, which
-#     auto-detects what's available and runs/skips tiers accordingly.
+#   - Regenerates the demo kubeconfig.
+#   - Checks for an OpenRouter API key (needed for the real agentic
+#     remediation tiers) and, if missing, offers to prompt for one and save
+#     it to dev-secrets.env for future runs.
+#   - Starts the local docker-compose agentic stack (deploy/local-oauth/
+#     compose.yaml) if it isn't already running, and waits for it to report
+#     ready.
+#   - Delegates to run-tests.sh, which auto-detects what's available and
+#     runs/skips tiers accordingly. run-tests.sh itself re-applies the
+#     broken examples/failing-deployment/deployment.yaml fixture immediately
+#     before the Safety E2E and Remediation E2E tiers, so nginx-demo starts
+#     each of those tiers broken regardless of what an earlier tier left it as.
 #
 # What it will ask you about:
 #   - Installing minikube system-wide, if missing.
 #   - Overwriting an existing nginx-demo Deployment that doesn't match the
 #     expected CI demo workload image.
+#   - Entering and persisting an OpenRouter API key, if one isn't already
+#     configured. This key is used to make real, billed calls to OpenRouter
+#     once the agentic remediation tiers run, so this step is always
+#     confirmed explicitly before proceeding.
 #
 # What it will NOT do for you (prints instructions and stops instead):
 #   - Install Docker or kubectl. These need system package manager / daemon /
 #     group-membership changes this script won't make unsupervised.
 #
 # Usage:
-#   ./scripts/local-integration-test.sh
+#   ./scripts/local-e2e-test.sh
 
 set -uo pipefail
 
@@ -42,6 +55,18 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 EXPECTED_WORKLOAD_IMAGE="nginx:1.27-alpine"
+DEV_SECRETS_FILE="${REPO_ROOT}/dev-secrets.env"
+DEV_SECRETS_EXAMPLE_FILE="${REPO_ROOT}/dev-secrets.env.example"
+OPENROUTER_KEY_VAR="InfraGate__OpenRouter__ApiKey"
+COMPOSE_FILE="${REPO_ROOT}/deploy/local-oauth/compose.yaml"
+COMPOSE_ENV_FILE="${REPO_ROOT}/deploy/generated/local-compose.env"
+COMPOSE_STACK_READY_TIMEOUT=300
+COMPOSE_READYZ_URLS=(
+  "http://127.0.0.1:3001/readyz" # mcp-gateway
+  "http://127.0.0.1:3003/readyz" # observer
+  "http://127.0.0.1:3004/readyz" # planner
+  "http://127.0.0.1:3005/readyz" # executor
+)
 
 die() {
   echo -e "${RED}error:${NC} $1" >&2
@@ -66,7 +91,14 @@ confirm() {
   [[ "${reply}" =~ ^[Yy] ]]
 }
 
-echo -e "${CYAN}=== local-integration-test.sh ===${NC}"
+if [[ -f "${DEV_SECRETS_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${DEV_SECRETS_FILE}"
+  set +a
+fi
+
+echo -e "${CYAN}=== local-e2e-test.sh ===${NC}"
 echo ""
 
 # ────────────────── Prerequisite checks ──────────────────
@@ -83,6 +115,12 @@ if command -v jq >/dev/null 2>&1; then
   echo -e "  ${GREEN}✓${NC} jq: $(command -v jq)"
 else
   die "'jq' is required. Install it with your package manager (e.g. apt install jq / brew install jq)."
+fi
+
+if command -v curl >/dev/null 2>&1; then
+  echo -e "  ${GREEN}✓${NC} curl: $(command -v curl)"
+else
+  die "'curl' is required. Install it with your package manager (e.g. apt install curl / brew install curl)."
 fi
 
 if docker info >/dev/null 2>&1; then
@@ -176,6 +214,87 @@ if [[ "${APPLY_WORKLOAD}" == "true" ]]; then
 fi
 
 echo ""
+
+# ────────────────── OpenRouter API key (for the agentic remediation tiers) ──────────────────
+
+echo -e "${CYAN}Checking for an OpenRouter API key (needed for the real agentic remediation flow)...${NC}"
+
+RUN_AGENTIC_STAGES=true
+
+if [[ -n "${!OPENROUTER_KEY_VAR:-}" ]]; then
+  echo -e "  ${GREEN}✓${NC} ${OPENROUTER_KEY_VAR} is set"
+else
+  echo -e "  ${YELLOW}−${NC} ${OPENROUTER_KEY_VAR} is not set."
+  if confirm "Enter an OpenRouter API key now to run the real agentic remediation E2E tiers?"; then
+    read -r -s -p "OpenRouter API key: " openrouter_key
+    echo ""
+    if [[ -z "${openrouter_key}" ]]; then
+      echo -e "  ${YELLOW}−${NC} No key entered; skipping the agentic remediation stages."
+      RUN_AGENTIC_STAGES=false
+    else
+      [[ -f "${DEV_SECRETS_FILE}" ]] || cp "${DEV_SECRETS_EXAMPLE_FILE}" "${DEV_SECRETS_FILE}"
+      if grep -q "^${OPENROUTER_KEY_VAR}=" "${DEV_SECRETS_FILE}" 2>/dev/null; then
+        sed -i.bak "s#^${OPENROUTER_KEY_VAR}=.*#${OPENROUTER_KEY_VAR}=${openrouter_key}#" "${DEV_SECRETS_FILE}"
+        rm -f "${DEV_SECRETS_FILE}.bak"
+      else
+        echo "${OPENROUTER_KEY_VAR}=${openrouter_key}" >> "${DEV_SECRETS_FILE}"
+      fi
+      set -a
+      # shellcheck disable=SC1090
+      source "${DEV_SECRETS_FILE}"
+      set +a
+      echo -e "  ${GREEN}✓${NC} Saved to $(basename "${DEV_SECRETS_FILE}") for future runs"
+    fi
+  else
+    echo -e "  ${YELLOW}−${NC} Skipping the agentic remediation stages (Remediation E2E and Observer E2E will report as skipped)."
+    RUN_AGENTIC_STAGES=false
+  fi
+fi
+
+if $RUN_AGENTIC_STAGES; then
+  echo -e "  ${YELLOW}−${NC} Running the agentic remediation tiers starts the local docker-compose stack (if not already up) and makes real, billed OpenRouter calls."
+  if ! confirm "Continue with the agentic remediation stages?"; then
+    RUN_AGENTIC_STAGES=false
+    echo -e "  ${YELLOW}−${NC} Skipping the agentic remediation stages (Remediation E2E and Observer E2E will report as skipped)."
+  fi
+fi
+
+echo ""
+
+# ────────────────── Local agentic stack (docker compose) ──────────────────
+
+compose_stack_ready() {
+  local url
+  for url in "${COMPOSE_READYZ_URLS[@]}"; do
+    curl --fail --silent --max-time 3 "$url" >/dev/null 2>&1 || return 1
+  done
+  return 0
+}
+
+if $RUN_AGENTIC_STAGES; then
+  echo -e "${CYAN}Checking local agentic stack (docker compose)...${NC}"
+
+  if [[ -f "${COMPOSE_ENV_FILE}" ]] && compose_stack_ready; then
+    echo -e "  ${GREEN}✓${NC} Compose stack already running"
+  else
+    echo -e "  ${YELLOW}−${NC} Compose stack not running; generating env and starting it in the background (first build can take a few minutes)..."
+    "${SCRIPT_DIR}/generate-env.sh" local-compose \
+      || die "generate-env.sh failed. See output above."
+    (cd "${REPO_ROOT}" && docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" up -d --build) \
+      || die "docker compose up failed. See output above."
+  fi
+
+  echo -e "  ${YELLOW}−${NC} Waiting for Gateway/Observer/Planner/Executor to report ready..."
+  deadline=$((SECONDS + COMPOSE_STACK_READY_TIMEOUT))
+  until compose_stack_ready; do
+    if (( SECONDS >= deadline )); then
+      die "Local agentic stack did not become ready within ${COMPOSE_STACK_READY_TIMEOUT}s. Check: docker compose --env-file ${COMPOSE_ENV_FILE} -f ${COMPOSE_FILE} logs"
+    fi
+    sleep 5
+  done
+  echo -e "  ${GREEN}✓${NC} Local agentic stack ready"
+  echo ""
+fi
 
 # ────────────────── Delegate to run-tests.sh ──────────────────
 

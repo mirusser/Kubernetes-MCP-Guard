@@ -3,8 +3,9 @@ set -uo pipefail
 
 # run-tests.sh — Auto-detect available infrastructure and run all possible test tiers.
 # Regenerates the test kubeconfig with a fresh 24h SA token before running
-# K8s-dependent tiers. Skips tiers that need Docker or Kubernetes if those
-# aren't available. Reports what ran, what passed, and what was skipped.
+# K8s-dependent tiers. Skips tiers that need Docker, Kubernetes, or the local
+# agentic stack (deploy/local-oauth/compose.yaml) if those aren't available.
+# Reports what ran, what passed, and what was skipped.
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -109,6 +110,33 @@ fi
 
 echo ""
 
+# ────────────────── Local agentic stack (compose) readiness ──────────────────
+
+COMPOSE_STACK_OK=false
+COMPOSE_READYZ_URLS=(
+    "http://127.0.0.1:3001/readyz" # mcp-gateway
+    "http://127.0.0.1:3003/readyz" # observer
+    "http://127.0.0.1:3004/readyz" # planner
+    "http://127.0.0.1:3005/readyz" # executor
+)
+
+compose_stack_ready() {
+    local url
+    for url in "${COMPOSE_READYZ_URLS[@]}"; do
+        curl --fail --silent --max-time 3 "$url" >/dev/null 2>&1 || return 1
+    done
+    return 0
+}
+
+if compose_stack_ready; then
+    echo -e "  ${GREEN}✓${NC} Local agentic stack reachable (Gateway/Observer/Planner/Executor)"
+    COMPOSE_STACK_OK=true
+else
+    echo -e "  ${YELLOW}−${NC} Local agentic stack not reachable — skipping Remediation E2E and Observer E2E tiers"
+fi
+
+echo ""
+
 # ────────────────── Helper ──────────────────
 
 run_tier() {
@@ -129,17 +157,17 @@ run_tier() {
     return 0
 }
 
-prepare_safety_e2e_workload() {
+prepare_nginx_demo_fixture() {
     local kubeconfig_file="$1"
 
-    echo -e "${CYAN}Preparing Safety E2E demo workload...${NC}"
+    echo -e "${CYAN}Preparing nginx-demo broken-deployment fixture...${NC}"
     if kubectl --kubeconfig "$kubeconfig_file" apply -f "${REPO_ROOT}/examples/failing-deployment/deployment.yaml" >/dev/null 2>&1; then
-        echo -e "  ${GREEN}✓${NC} Safety E2E demo Deployment applied"
+        echo -e "  ${GREEN}✓${NC} nginx-demo broken Deployment applied"
         echo ""
         return 0
     fi
 
-    echo -e "  ${RED}✗${NC} Could not apply Safety E2E demo Deployment"
+    echo -e "  ${RED}✗${NC} Could not apply nginx-demo broken Deployment"
     echo ""
     return 1
 }
@@ -183,7 +211,7 @@ fi
 # ────────────────── Tier 5: Safety E2E ──────────────────
 
 if $DOCKER_OK && $K8S_OK; then
-    if prepare_safety_e2e_workload "$KUBECONFIG_FILE"; then
+    if prepare_nginx_demo_fixture "$KUBECONFIG_FILE"; then
         run_tier \
             "Safety E2E" \
             "INFRA_GATE_RUN_SAFETY_E2E=1 KUBECONFIG=\"$KUBECONFIG_FILE\" dotnet test tests/InfraGate.Safety.E2E.Tests/InfraGate.Safety.E2E.Tests.csproj --filter \"Category=SafetyE2E\""
@@ -197,6 +225,38 @@ else
     else
         SKIPPED_TIERS+=("Safety E2E (K8s cluster not reachable)")
     fi
+fi
+
+# ────────────────── Tier 6: Remediation E2E ──────────────────
+
+# Tier 5 immediately above may leave nginx-demo fixed as a side effect of its own
+# approval/execution flow, so re-apply the broken fixture before this tier expects
+# to find it broken again.
+if $COMPOSE_STACK_OK && $K8S_OK; then
+    if prepare_nginx_demo_fixture "$KUBECONFIG_FILE"; then
+        run_tier \
+            "Remediation E2E" \
+            "INFRA_GATE_RUN_REMEDIATION_E2E=1 INFRA_GATE_OBSERVER_REAL_LLM=1 KUBECONFIG=\"$KUBECONFIG_FILE\" dotnet test tests/InfraGate.Remediation.E2E.Tests/InfraGate.Remediation.E2E.Tests.csproj --filter \"Category=RemediationE2E\""
+    else
+        FAILED_TIERS+=("Remediation E2E setup (demo Deployment unavailable)")
+        FAILED=1
+    fi
+else
+    if ! $COMPOSE_STACK_OK; then
+        SKIPPED_TIERS+=("Remediation E2E (local agentic stack not reachable)")
+    else
+        SKIPPED_TIERS+=("Remediation E2E (K8s cluster not reachable)")
+    fi
+fi
+
+# ────────────────── Tier 6a: Observer E2E ──────────────────
+
+if $COMPOSE_STACK_OK; then
+    run_tier \
+        "Observer E2E" \
+        'INFRA_GATE_RUN_OBSERVER_E2E=1 INFRA_GATE_OBSERVER_REAL_LLM=1 dotnet test tests/InfraGate.Observer.E2E.Tests/InfraGate.Observer.E2E.Tests.csproj --filter "Category=ObserverE2E"'
+else
+    SKIPPED_TIERS+=("Observer E2E (local agentic stack not reachable)")
 fi
 
 # ────────────────── Summary ──────────────────

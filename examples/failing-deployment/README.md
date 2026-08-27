@@ -46,7 +46,7 @@ Within 2 observation cycles (default), the Observer emits `Status=Resolved` repo
 
 The [InfraGate.Planner](../../src/InfraGate.Planner/README.md) and [InfraGate.Executor](../../src/InfraGate.Executor/README.md) can consume Observer output, propose an approval-pending plan, send an Approval Access Code through Mailpit, and execute the approved plan through the gateway. The required handoff and SMTP settings are documented in [docs/configuration.md](../../docs/configuration.md).
 
-Current fixture caveat: `deployment.yaml` uses an invalid image. The v1 Planner operation menu is limited to `restart_deployment` and `scale_deployment`, so the autonomous path can demonstrate proposal, approval, and execution, but it does not replace the image by itself. Apply `fix.yaml` after the approved execution if you want to observe the Observer's `Resolved` reports for this fixture.
+Current fixture caveat: `deployment.yaml` uses an invalid image. The Planner's operation menu includes `restart_deployment`, `scale_deployment`, and `set_deployment_image` — the LLM decides which one to propose, so an approved execution may resolve the anomaly outright (`set_deployment_image`) or leave the invalid image in place (`restart_deployment`/`scale_deployment`). If the image wasn't fixed, apply `fix.yaml` after the approved execution to observe the Observer's `Resolved` reports for this fixture.
 
 **Prerequisites:** Bring up the local OAuth stack with Observer, Planner, Executor, Gateway, Keycloak, PostgreSQL, and Mailpit; then apply the broken deployment:
 
