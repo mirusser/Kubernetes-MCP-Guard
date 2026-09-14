@@ -5,6 +5,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Agents.AI" />
+    <PackageReference Include="Microsoft.Agents.AI.Workflows" />
     <InternalsVisibleTo Include="InfraGate.Executor.Tests" />
     <InternalsVisibleTo Include="InfraGate.Executor.IntegrationTests" />
     <InternalsVisibleTo Include="InfraGate.Remediation.E2E.Tests" />
